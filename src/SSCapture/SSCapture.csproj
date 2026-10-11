@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <InformationalVersion>0.1.0</InformationalVersion>
+    <Version>0.1.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AppHostDotNetSearch>AppRelative;Global</AppHostDotNetSearch>
+    <AppHostRelativeDotNet>../../.tools/dotnet</AppHostRelativeDotNet>
+  </PropertyGroup>
+  <ItemGroup><InternalsVisibleTo Include="SSCapture.Tests" /></ItemGroup>
+  <ItemGroup><PackageReference Include="NAudio.Wasapi" Version="3.1.0" /></ItemGroup>
+</Project>
