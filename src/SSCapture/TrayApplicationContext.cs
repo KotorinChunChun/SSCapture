@@ -10,6 +10,7 @@ namespace SSCapture;
 internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly Control dispatcher = new();
+    private readonly KotorinToys.Integration.ManagementEndpoint management;
     private readonly NotifyIcon tray;
     private readonly Icon icon;
     private readonly ContextMenuStrip menu;
@@ -87,6 +88,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         RefreshMenu();
         if (warning is not null) Post(() => Report(warning, true));
         else if (showSettings) Post(ShowSettings);
+        management = new("ss-capture", dispatcher, ShowSettings, ExitThread);
     }
     private void Post(Action action)
     {
@@ -628,6 +630,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (disposing)
         {
             exiting = true;
+            management.Dispose();
             SystemEvents.SessionSwitch -= OnSessionSwitch;
             signalWait.Unregister(null); settingsSignal.Dispose();
             hook?.Dispose(); tray.Dispose(); icon.Dispose(); menu.Dispose();
