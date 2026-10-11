@@ -161,7 +161,7 @@ internal static partial class Program
         Run("設定9タブの入力欄とボタンが表示領域に収まる", () =>
         {
             using var form = NewSettings();
-            Equal("設定 - SSCapture ver0.1.0", form.Text);
+            Equal("設定 - SSCapture - ver 0.1.0", form.Text);
             form.Size = form.MinimumSize;
             _ = form.Handle;
             foreach (Control child in Descendants(form)) _ = child.Handle;

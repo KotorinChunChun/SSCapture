@@ -25,7 +25,7 @@ internal sealed class CaptureOverlay : Form
         BackColor = Color.Black;
         DoubleBuffered = true;
         SetStyle(ControlStyles.ResizeRedraw, true);
-        Text = "SSCapture Capture";
+        Text = WindowTitle.Create("範囲選択");
     }
 
     protected override bool ShowWithoutActivation => true;

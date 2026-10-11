@@ -27,7 +27,7 @@ internal sealed class RecordingControlForm : Form
         this.excludeFromCapture = excludeFromCapture;
         recordingSize = region.Size;
         Name = "RecordingControl";
-        Text = "SSCapture — 録画";
+        Text = WindowTitle.Create("録画");
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Yu Gothic UI", 12F);
         BackColor = Color.FromArgb(247, 249, 251);

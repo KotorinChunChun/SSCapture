@@ -21,7 +21,7 @@ internal static class Program
         if (args.Contains("--recording-ui-preview"))
         {
             using var preview = new UI.RecordingControlForm(new Rectangle(0, 0, 640, 480), new Services.AppSettings(), false);
-            preview.Text = "SSCapture — 録画プレビュー";
+            preview.Text = WindowTitle.Create("録画プレビュー");
             preview.StartRequested += preview.SetRecording;
             preview.StopRequested += preview.Finish;
             preview.CancelRequested += preview.Finish;

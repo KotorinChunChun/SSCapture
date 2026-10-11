@@ -11,7 +11,7 @@ internal sealed class RegionPreviewForm : Form
     {
         if (bounds.Width <= 0 || bounds.Height <= 0) throw new ArgumentException("範囲の幅と高さは1px以上です。");
         Name = "RegionPreviewForm";
-        Text = "SSCapture — 範囲確認（Escで閉じる）";
+        Text = WindowTitle.Create("範囲確認");
         AutoScaleMode = AutoScaleMode.None;
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.Manual;

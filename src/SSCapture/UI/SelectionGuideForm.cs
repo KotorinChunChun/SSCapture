@@ -12,7 +12,7 @@ internal sealed class SelectionGuideForm : Form
         this.handleKey = handleKey;
         this.modifiersChanged = modifiersChanged;
         Name = "SelectionGuide";
-        Text = intent == CaptureIntent.Recording ? "録画範囲の選択 — ドラッグで移動" : "撮影範囲の選択 — ドラッグで移動";
+        Text = WindowTitle.Create(intent == CaptureIntent.Recording ? "録画範囲の選択" : "撮影範囲の選択");
         Font = new Font("Yu Gothic UI", 11F);
         AutoScaleMode = AutoScaleMode.Dpi;
         FormBorderStyle = FormBorderStyle.FixedToolWindow;

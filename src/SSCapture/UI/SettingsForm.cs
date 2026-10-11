@@ -29,8 +29,7 @@ internal sealed class SettingsForm : Form
         initial = settings;
         save = onSave;
         this.now = now ?? (() => DateTimeOffset.Now);
-        string version = typeof(SettingsForm).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion;
-        Text = $"設定 - SSCapture ver{version}";
+        Text = WindowTitle.Create("設定");
         Name = "SettingsForm";
         MinimizeBox = false;
         MaximizeBox = false;

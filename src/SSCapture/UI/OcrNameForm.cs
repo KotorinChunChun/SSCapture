@@ -30,7 +30,7 @@ internal sealed class OcrNameForm : Form
     {
         image = (Bitmap)source.Clone(); this.settings = settings; this.intent = intent; this.capturedAt = capturedAt;
         this.recognize = recognize ?? OneOcr.RecognizeAsync;
-        Text = "SSCapture — OCRファイル名"; Name = "OcrNameForm";
+        Text = WindowTitle.Create("OCRファイル名"); Name = "OcrNameForm";
         MinimizeBox = false; MaximizeBox = false;
         AutoScaleMode = AutoScaleMode.Dpi; Font = new Font("Yu Gothic UI", 12F);
         ClientSize = new Size(980, 712); MinimumSize = new Size(860, 702);

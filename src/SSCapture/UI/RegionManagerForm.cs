@@ -34,7 +34,7 @@ internal sealed class RegionManagerForm : Form
         this.selectAnchoredRegion = selectAnchoredRegion;
         this.saveRegions = saveRegions;
         this.displays = displays ?? RegionCoordinates.ReadDisplays;
-        Text = "SSCapture — 登録範囲";
+        Text = WindowTitle.Create("登録範囲");
         Name = "RegionManagerForm";
         MinimizeBox = MaximizeBox = false;
         AutoScaleMode = AutoScaleMode.Dpi;

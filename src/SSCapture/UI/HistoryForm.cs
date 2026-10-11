@@ -19,7 +19,7 @@ internal sealed class HistoryForm : Form
         this.copy = copy;
         this.edit = edit;
         Name = "HistoryForm";
-        Text = "SSCapture — 撮影履歴";
+        Text = WindowTitle.Create("撮影履歴");
         MinimizeBox = MaximizeBox = false;
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Yu Gothic UI", 12F);

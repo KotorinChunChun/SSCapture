@@ -27,7 +27,7 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
         this.show = show ?? ShowNative;
         this.location = location;
         Name = "CaptureToastForm";
-        Text = "SSCapture — 完了";
+        Text = WindowTitle.Create("完了");
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.Manual;
         AutoScaleMode = AutoScaleMode.None;
