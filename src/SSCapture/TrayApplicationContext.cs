@@ -88,7 +88,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         RefreshMenu();
         if (warning is not null) Post(() => Report(warning, true));
         else if (showSettings) Post(ShowSettings);
-        management = new("ss-capture", dispatcher, ShowSettings, ExitThread);
+        management = new("ss-capture", dispatcher, ShowSettings, ExitThread,
+            () => busy || recorder is not null || recordingTransition ? "撮影・録画を完了またはキャンセルしてから終了してください。" : null);
     }
     private void Post(Action action)
     {

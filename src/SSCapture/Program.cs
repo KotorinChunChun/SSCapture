@@ -37,6 +37,7 @@ internal static class Program
         using var mutex = new Mutex(true, @"Local\SSCapture.Singleton", out bool firstInstance);
         if (!firstInstance)
         {
+            if (args.Contains("--startup")) return;
             try { using var signal = EventWaitHandle.OpenExisting(@"Local\SSCapture.ShowSettings"); signal.Set(); }
             catch (WaitHandleCannotBeOpenedException) { }
             return;
