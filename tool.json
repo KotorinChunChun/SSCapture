@@ -11,7 +11,7 @@
   "manual": "README.md",
   "readme": "README.md",
   "shortcuts": "config/shortcuts.json",
-  "distributionStatus": "unpublished",
+  "distributionStatus": "published",
   "supportedEnvironment": "windows11-x64",
   "investigationStatus": "confirmed",
   "icon": null,

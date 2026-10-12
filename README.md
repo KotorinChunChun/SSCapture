@@ -1,5 +1,11 @@
 # SSCapture v0.1.0
 
+## GitHub開発版インストーラー
+
+[Releases](https://github.com/KotorinChunChun/SSCapture/releases)でWindows 11 x64向けのランタイム同梱インストーラーを配布します。未署名の開発版です。設定・保存した撮影結果は削除時も保持します。
+
+公開インストーラーにはFFmpeg／FFprobeとOneOCRの外部ファイルを同梱しません。録画には信頼できる配布元から取得した`ffmpeg.exe`と`ffprobe.exe`を導入先の`tools`へ配置する必要があります。[FFmpeg公式の取得案内](https://ffmpeg.org/download.html)を参照してください。録画依存物がない場合も画面撮影は利用できます。
+
 Windows 11用の常駐スクリーンショット・領域録画ツールです。クリップボード・ファイル保存・外部アプリへの出力を個別にON/OFFできます。既定はクリップボードだけONです。編集は指定した外部アプリで行います。
 
 ## 起動
