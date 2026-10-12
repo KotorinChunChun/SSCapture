@@ -12,8 +12,9 @@
     <Version>0.1.0</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <AppHostDotNetSearch>AppRelative;Global</AppHostDotNetSearch>
-    <AppHostRelativeDotNet>../../.tools/dotnet</AppHostRelativeDotNet>
+    <AppHostDotNetSearch Condition="'$(SelfContained)' != 'true'">AppRelative;Global</AppHostDotNetSearch>
+    <AppHostRelativeDotNet Condition="'$(SelfContained)' != 'true'">../../.tools/dotnet</AppHostRelativeDotNet>
+    <AppHostDotNetSearch Condition="'$(SelfContained)' == 'true'">AppLocal</AppHostDotNetSearch>
   </PropertyGroup>
   <ItemGroup><InternalsVisibleTo Include="SSCapture.Tests" /></ItemGroup>
   <ItemGroup><PackageReference Include="NAudio.Wasapi" Version="3.1.0" /></ItemGroup>
