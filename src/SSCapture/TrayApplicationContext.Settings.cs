@@ -6,6 +6,7 @@ using SSCapture.Services;
 using SSCapture.UI;
 
 namespace SSCapture;
+
 internal sealed partial class TrayApplicationContext
 {
     private void ShowSettings()
@@ -75,7 +76,7 @@ internal sealed partial class TrayApplicationContext
     {
         pause.Enabled = settings.HasShortcuts;
         pause.Checked = hook is null || !hook.Enabled;
-        foreach (var(mode, item)in modeItems)
+        foreach (var (mode, item) in modeItems)
         {
             item.Checked = settings.DefaultMode == mode;
             item.Enabled = !busy && pendingRecording is null;
@@ -104,7 +105,7 @@ internal sealed partial class TrayApplicationContext
             Directory.CreateDirectory(settings.SaveDirectory);
             Process.Start(new ProcessStartInfo(settings.SaveDirectory) { UseShellExecute = true });
         }
-        catch (Exception ex)when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
             Report("保存先を開けません: " + ex.Message, true);
         }

@@ -6,6 +6,7 @@ using SSCapture.Services;
 using SSCapture.UI;
 
 namespace SSCapture;
+
 internal sealed partial class TrayApplicationContext
 {
     private async Task TakeInstantAsync(int number)
@@ -152,7 +153,8 @@ internal sealed partial class TrayApplicationContext
                     {
                         namingFinished.TrySetResult();
                     }
-                } : null;
+                }
+                : null;
                 var delivery = DeliverAndRememberAsync(outcome.Image, outcome.Selection.Destination, captureSettings, fileName, namePlan, remembered, sequence, capturedAt, outcome.Selection.Bounds, requestFileName);
                 Report(await AwaitDeliveryAsync(delivery, requestFileName is null ? null : namingFinished.Task), false);
             }

@@ -6,6 +6,7 @@ using SSCapture.Services;
 using SSCapture.UI;
 
 namespace SSCapture;
+
 internal sealed partial class TrayApplicationContext
 {
     protected override void ExitThreadCore()
