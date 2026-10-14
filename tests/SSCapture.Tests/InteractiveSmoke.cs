@@ -604,7 +604,8 @@ internal static partial class Program
             : [bounds];
         var snapshot = new DesktopSnapshot(pixels, bounds, monitors);
         Task<CaptureOutcome> capture = CaptureSession.SelectAsync(
-            new CaptureOptions(mode, CaptureIntent.Screenshot, OutputDestination.Clipboard, FixedSize: fixedSize, FixedAnchor: fixedAnchor), snapshot, windows ?? [bounds]);
+            new CaptureOptions(mode, CaptureIntent.Screenshot, OutputDestination.Clipboard, FixedSize: fixedSize, FixedAnchor: fixedAnchor,
+                LimitToStartingMonitor: false), snapshot, windows ?? [bounds]);
         bool returned = false;
         try
         {

@@ -11,6 +11,7 @@ internal static partial class Program
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         if (args.Contains("--overlay-placement-smoke")) return RunOverlayPlacementSmoke();
+        if (args.Contains("--selection-monitor-smoke")) return RunSelectionMonitorSmoke();
         if (args.Contains("--ocr-smoke")) return RunOcrSmoke();
         if (args.Contains("--ocr-ui-preview")) return OcrPreview();
         if (args.Contains("--display-routing-smoke")) return DisplayRoutingSmoke();
@@ -32,6 +33,7 @@ internal static partial class Program
         Run("5つの撮影モード", () => Equal(5, Enum.GetValues<CaptureMode>().Length));
         CaptureTests();
         OverlayWindowTests();
+        SelectionMonitorTests();
         ServiceTests();
         UiTests();
         RecordingTests();

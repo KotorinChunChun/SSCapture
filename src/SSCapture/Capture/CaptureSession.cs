@@ -6,17 +6,18 @@ internal static class CaptureSession
     public static Task<CaptureOutcome> SelectAsync(CaptureOptions options)
     {
         ValidateCall(options);
+        Point initialPointer = CaptureNative.CursorPosition();
         // Freeze before showing any overlay or menu, with no intentional capture delay.
         DesktopSnapshot snapshot = DesktopSnapshot.Take(options.IncludeCursor);
         IReadOnlyList<Rectangle> windows;
         try { windows = CaptureNative.WindowBounds(snapshot.Bounds); }
         catch { snapshot.Dispose(); throw; }
-        return SelectAsync(options, snapshot, windows, () => CaptureNative.TakeAfterOverlaysClosed(options.IncludeCursor));
+        return SelectAsync(options, snapshot, windows, () => CaptureNative.TakeAfterOverlaysClosed(options.IncludeCursor), initialPointer);
     }
 
     /// <summary>Consumes snapshot. Never reads desktop pixels or enumerates real windows.</summary>
     internal static Task<CaptureOutcome> SelectAsync(CaptureOptions options, DesktopSnapshot snapshot,
-        IReadOnlyList<Rectangle>? windows = null, Func<DesktopSnapshot>? currentFrameFactory = null)
+        IReadOnlyList<Rectangle>? windows = null, Func<DesktopSnapshot>? currentFrameFactory = null, Point? initialPointer = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         try
@@ -24,7 +25,8 @@ internal static class CaptureSession
             ValidateCall(options);
             if (!options.FreezeFrame && options.Intent == CaptureIntent.Screenshot && currentFrameFactory is null)
                 throw new ArgumentException("画面固定OFFの合成画像検証には画像取得関数を指定してください。", nameof(currentFrameFactory));
-            SessionController session = new(options, snapshot, windows ?? [], currentFrameFactory);
+            SessionController session = new(options, snapshot, windows ?? [], currentFrameFactory,
+                initialPointer ?? CaptureNative.CursorPosition());
             session.Start();
             return session.Completion;
         }
@@ -63,6 +65,10 @@ internal sealed class SessionController
     private readonly CaptureOptions options;
     private readonly Func<DesktopSnapshot>? currentFrameFactory;
     private readonly SelectionGesture gesture;
+    private readonly Point initialPointer;
+    private readonly Rectangle? selectionBounds;
+    private readonly Func<Rectangle, IDisposable> confineCursor;
+    private IDisposable? cursorConfinement;
     private CaptureOverlay? dragOwner;
     private CaptureOverlay? menuOwner;
     private UI.SelectionGuideForm? guide;
@@ -83,17 +89,30 @@ internal sealed class SessionController
     internal Rectangle Selection => gesture.Selection;
     internal List<Point> Points => gesture.Points;
     internal OutputDestination Destination { get; private set; }
+    internal IReadOnlyList<Rectangle> SelectionMonitors { get; }
     internal CaptureContextMenu SelectionMenu { get; }
     internal bool FixedSelectionValid => Mode != CaptureMode.FixedRegion || gesture.FixedSelection(Destination) is not null;
 
     internal SessionController(CaptureOptions options, DesktopSnapshot snapshot,
-        IReadOnlyList<Rectangle> windows, Func<DesktopSnapshot>? currentFrameFactory = null)
+        IReadOnlyList<Rectangle> windows, Func<DesktopSnapshot>? currentFrameFactory = null,
+        Point? initialPointer = null, Func<Rectangle, IDisposable>? confineCursor = null)
     {
         this.options = options;
         this.currentFrameFactory = currentFrameFactory;
+        this.initialPointer = initialPointer ?? snapshot.Monitors[0].Location;
+        this.confineCursor = confineCursor ?? CursorConfinement.Acquire;
         Snapshot = snapshot;
         Destination = options.Destination;
-        gesture = new SelectionGesture(options.Mode, snapshot.Monitors, windows.ToArray(), options.FixedSize, options.FixedAnchor);
+        if (options.LimitToStartingMonitor && options.Mode != CaptureMode.FullScreen)
+        {
+            selectionBounds = snapshot.Monitors.FirstOrDefault(monitor => monitor.Contains(this.initialPointer));
+            if (selectionBounds.Value.IsEmpty) throw new InvalidOperationException("開始位置のモニタが見つかりません。もう一度選択してください。");
+            SelectionMonitors = [selectionBounds.Value];
+            windows = windows.Select(window => Rectangle.Intersect(window, selectionBounds.Value))
+                .Where(CaptureGeometry.IsUsable).ToArray();
+        }
+        else SelectionMonitors = snapshot.Monitors;
+        gesture = new SelectionGesture(options.Mode, SelectionMonitors, windows.ToArray(), options.FixedSize, options.FixedAnchor);
         SelectionMenu = new CaptureContextMenu(Destination, destination => Destination = destination,
             () => FinishCommand(true), Cancel);
         SelectionMenu.Closed += MenuClosed;
@@ -108,9 +127,9 @@ internal sealed class SessionController
                 CompleteSelection(new CaptureSelection(Snapshot.Bounds, null, Destination));
                 return;
             }
-            foreach (Rectangle bounds in Snapshot.Monitors) overlays.Add(new CaptureOverlay(this, bounds));
+            foreach (Rectangle bounds in SelectionMonitors) overlays.Add(new CaptureOverlay(this, bounds));
             foreach (CaptureOverlay overlay in overlays) overlay.Show();
-            MoveTo(CaptureNative.CursorPosition(), CaptureNative.AltPressed());
+            MoveTo(initialPointer, CaptureNative.AltPressed());
             CaptureOverlay active = overlays.FirstOrDefault(overlay => overlay.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
             active.Activate();
             active.Focus();
@@ -120,6 +139,7 @@ internal sealed class SessionController
             active.Activate();
             active.Focus();
             starting = false;
+            if (selectionBounds is Rectangle monitorBounds) cursorConfinement = confineCursor(monitorBounds);
             if (Mode is CaptureMode.Rectangle or CaptureMode.FixedRegion)
             {
                 // Key messages can be routed to the movable guide or a captured
@@ -146,6 +166,9 @@ internal sealed class SessionController
     internal void MoveTo(Point physicalPosition, bool snap = false)
     {
         if (completed || menuOpen || menuTransition) return;
+        if (selectionBounds is Rectangle bounds)
+            physicalPosition = new Point(Math.Clamp(physicalPosition.X, bounds.Left, bounds.Right - 1),
+                Math.Clamp(physicalPosition.Y, bounds.Top, bounds.Bottom - 1));
         // Keyboard nudges must survive synthetic mouse messages at the unchanged cursor
         // location, including the click used to confirm an adjusted fixed rectangle.
         if (Mode == CaptureMode.FixedRegion && lastPointerPosition == physicalPosition && lastSnap == snap) return;
@@ -290,19 +313,30 @@ internal sealed class SessionController
 
     private void CloseOverlays()
     {
-        snapTimer?.Stop();
-        snapTimer?.Dispose();
-        snapTimer = null;
-        ReleasePointer();
-        gesture.Reset();
-        SelectionMenu.Dispose();
-        guide?.Dispose();
-        foreach (CaptureOverlay overlay in overlays) overlay.Dispose();
+        try
+        {
+            snapTimer?.Stop();
+            snapTimer?.Dispose();
+            snapTimer = null;
+            ReleasePointer();
+            gesture.Reset();
+            SelectionMenu.Dispose();
+            guide?.Dispose();
+            foreach (CaptureOverlay overlay in overlays) overlay.Dispose();
+        }
+        finally
+        {
+            IDisposable? confinement = cursorConfinement;
+            cursorConfinement = null;
+            confinement?.Dispose();
+        }
     }
 
     internal void CompleteSelection(CaptureSelection selection)
     {
         if (completed) return;
+        if (selectionBounds is Rectangle bounds && (!bounds.Contains(selection.Bounds)
+            || selection.Polygon?.Any(point => !bounds.Contains(point)) == true)) return;
         if (Mode == CaptureMode.FixedRegion && (selection.Polygon is not null
             || selection.Bounds.Size != options.FixedSize || !CaptureGeometry.IsFullyCovered(selection.Bounds, Snapshot.Monitors))) return;
         completed = true;

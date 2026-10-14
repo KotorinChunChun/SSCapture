@@ -11,7 +11,7 @@ internal sealed class SettingsForm : Form
     private readonly TextBox directory, imageEditor, videoEditor, imageArguments, videoArguments, fileNamePattern, ocrSeparator, oneOcrDirectory;
     private readonly HotkeyEditor screenshot1, screenshot2, recording1, recording2, lastRegionKey;
     private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration;
-    private readonly CheckBox includeCursor, keepHistory, playCaptureSound;
+    private readonly CheckBox includeCursor, keepHistory, playCaptureSound, limitToStartingMonitor;
     private readonly ComboBox notificationCorner, notificationDisplay, fixedCaptureAnchor;
     private readonly HotkeyEditor[] instantKeys = new HotkeyEditor[10];
     private readonly ComboBox mode, microphone;
@@ -62,6 +62,7 @@ internal sealed class SettingsForm : Form
         { Text = text, Name = name, AutoSize = true, Checked = settings.DefaultDestination.HasFlag(value), Margin = new Padding(0, 3, 12, 0) };
         freeze = Toggle(basic, "画像", "FreezeFrame", "キーを押した時点の画面を固定", settings.FreezeFrame, 3);
         openFolderAfterSave = Toggle(basic, "保存後", "OpenFolderAfterSave", "保存フォルダを開く", settings.OpenFolderAfterSave, 4);
+        limitToStartingMonitor = Toggle(basic, "範囲選択", "LimitToStartingMonitor", "開始画面内だけで選択", settings.LimitToStartingMonitor, 5);
         var naming = Page(tabs, "ファイル名");
         fileNamePattern = Field(naming, "パターン", "FileNamePattern", settings.FileNamePattern, 0);
         ocrSeparator = Field(naming, "OCR区切り", "OcrSeparator", settings.OcrSeparator, 1);
@@ -224,7 +225,8 @@ internal sealed class SettingsForm : Form
                 OpenFolderAfterSave = openFolderAfterSave.Checked,
                 FileNamePattern = fileNamePattern.Text, OcrSeparator = ocrSeparator.Text, OneOcrDirectory = Expand(oneOcrDirectory.Text),
                 DefaultDestination = (clipboardOutput.Checked ? OutputDestination.Clipboard : 0) | (fileOutput.Checked ? OutputDestination.File : 0) | (externalOutput.Checked ? OutputDestination.ExternalApp : 0),
-                FreezeFrame = freeze.Checked, ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
+                FreezeFrame = freeze.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
+                ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
                 RecordingShortcut1 = recording1.Value, RecordingShortcut2 = recording2.Value,
                 LastRegionShortcut = lastRegionKey.Value, FixedWidth = (int)fixedWidth.Value, FixedHeight = (int)fixedHeight.Value,
                 FixedCaptureAnchor = ((CaptureAnchorItem)fixedCaptureAnchor.SelectedItem!).Value,

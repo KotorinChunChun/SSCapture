@@ -218,7 +218,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         try
         {
             using var outcome = await CaptureSession.SelectAsync(new CaptureOptions(size is null ? CaptureMode.Rectangle : CaptureMode.FixedRegion,
-                CaptureIntent.Recording, OutputDestination.None, FixedSize: size, FixedAnchor: anchor));
+                CaptureIntent.Recording, OutputDestination.None, FixedSize: size, FixedAnchor: anchor,
+                LimitToStartingMonitor: settings.LimitToStartingMonitor));
             return outcome.Selection?.Bounds;
         }
         finally { busy = false; if (!exiting) { RefreshMenu(); FlushFeedback(); } }
@@ -344,7 +345,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, settings.DefaultDestination, settings.FreezeFrame,
                 IncludeRecordingImage: intent == CaptureIntent.Recording && FileNamePattern.UsesOcr(settings.FileNamePattern),
-                IncludeCursor: settings.IncludeCursor, FixedSize: new Size(settings.FixedWidth, settings.FixedHeight), FixedAnchor: settings.FixedCaptureAnchor));
+                IncludeCursor: settings.IncludeCursor, FixedSize: new Size(settings.FixedWidth, settings.FixedHeight), FixedAnchor: settings.FixedCaptureAnchor,
+                LimitToStartingMonitor: settings.LimitToStartingMonitor));
             openSettings = outcome.OpenSettings;
             if (outcome.Selection is null) { StoreStatus("選択をキャンセルしました。"); return; }
             if (outcome.Selection.Destination == OutputDestination.None) { Report("出力先がすべてOFFです。", false); return; }

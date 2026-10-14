@@ -105,6 +105,14 @@ dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --o
 
 FancyZonesの「新規ウィンドウを現在のアクティブモニタへ移動」が有効な環境では、表示後の物理座標・クライアントサイズ・自動移動印を確認します。FancyZonesが停止中の成功は、FancyZonesとの併用確認を意味しません。通常テストでは、非表示の実HWNDとハンドル再作成後のツールウィンドウ属性を確認します。
 
+開始画面限定設定とポインタ制限の実機検証は次のコマンドで行います。単色の選択画面を表示して実ポインタを動かすため、実行中はPC操作を控えてください。画面画像・音声・クリップボードは取得しません。
+
+```powershell
+dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --selection-monitor-smoke
+```
+
+各実モニタで設定ON/OFF、4辺からのポインタ逸脱防止、確定・Esc・非アクティブ化・設定へ移動・画像取得例外の終了経路を確認します。終了後は元のポインタ位置と制限へ戻します。
+
 ## ファイルと配布の扱い
 
 | 場所 | 内容 |
