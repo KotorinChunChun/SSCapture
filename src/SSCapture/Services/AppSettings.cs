@@ -32,6 +32,7 @@ internal sealed record AppSettings
     public NotificationCorner NotificationCorner { get; init; } = Services.NotificationCorner.BottomRight;
     public bool FreezeFrame { get; init; } = true;
     public bool LimitToStartingMonitor { get; init; } = true;
+    public bool Grid20 { get; init; }
     public OutputDestination DefaultDestination { get; init; } = OutputDestination.Clipboard;
     public bool RecordSystemAudio { get; init; }
     public bool RecordMicrophone { get; init; }

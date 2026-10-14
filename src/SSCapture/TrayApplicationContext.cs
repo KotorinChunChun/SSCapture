@@ -219,7 +219,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             using var outcome = await CaptureSession.SelectAsync(new CaptureOptions(size is null ? CaptureMode.Rectangle : CaptureMode.FixedRegion,
                 CaptureIntent.Recording, OutputDestination.None, FixedSize: size, FixedAnchor: anchor,
-                LimitToStartingMonitor: settings.LimitToStartingMonitor));
+                LimitToStartingMonitor: settings.LimitToStartingMonitor, Grid20: settings.Grid20), SaveGrid20);
             return outcome.Selection?.Bounds;
         }
         finally { busy = false; if (!exiting) { RefreshMenu(); FlushFeedback(); } }
@@ -276,7 +276,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (lastStatus?.IsExpired(DateTimeOffset.Now) == true) lastStatus = null;
         if (form is null || form.IsDisposed)
         {
-            form = new SettingsForm(settings, next => SaveSettings(next with { SavedRegions = settings.SavedRegions }), OpenFolder,
+            form = new SettingsForm(settings, next => SaveSettings(next with { SavedRegions = settings.SavedRegions, Grid20 = settings.Grid20 }), OpenFolder,
                 openRegions: ShowRegions, openHistory: ShowHistory);
             form.FormClosed += (_, _) => form = null;
             form.SetStatus(lastStatus);
@@ -305,6 +305,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
             return null;
         }
         catch (Exception ex) { replacement?.Dispose(); return "設定を保存できません: " + ex.Message; }
+    }
+    private void SaveGrid20(bool enabled)
+    {
+        AppSettings next = settings with { Grid20 = enabled };
+        store.Save(next);
+        settings = next;
     }
     private void ToggleShortcut()
     {
@@ -346,7 +352,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, settings.DefaultDestination, settings.FreezeFrame,
                 IncludeRecordingImage: intent == CaptureIntent.Recording && FileNamePattern.UsesOcr(settings.FileNamePattern),
                 IncludeCursor: settings.IncludeCursor, FixedSize: new Size(settings.FixedWidth, settings.FixedHeight), FixedAnchor: settings.FixedCaptureAnchor,
-                LimitToStartingMonitor: settings.LimitToStartingMonitor));
+                LimitToStartingMonitor: settings.LimitToStartingMonitor, Grid20: settings.Grid20), SaveGrid20);
             openSettings = outcome.OpenSettings;
             if (outcome.Selection is null) { StoreStatus("選択をキャンセルしました。"); return; }
             if (outcome.Selection.Destination == OutputDestination.None) { Report("出力先がすべてOFFです。", false); return; }

@@ -106,8 +106,8 @@ internal sealed class SelectionGesture
     internal Rectangle WindowAt(Point point) => windows.FirstOrDefault(window => window.Contains(point));
 
     internal CaptureSelection? WindowSelection(Point point, OutputDestination destination) => FromBounds(WindowAt(point), destination);
-    internal CaptureSelection? MonitorSelection(Point point, OutputDestination destination) => mode == CaptureMode.FixedRegion
-        ? null : FromBounds(monitors.FirstOrDefault(monitor => monitor.Contains(point)), destination);
+    internal CaptureSelection? MonitorSelection(Point point, OutputDestination destination) =>
+        FromBounds(monitors.FirstOrDefault(monitor => monitor.Contains(point)), destination);
 
     internal CaptureSelection? FixedSelection(OutputDestination destination) =>
         mode == CaptureMode.FixedRegion && CaptureGeometry.IsFullyCovered(Selection, monitors)

@@ -76,6 +76,53 @@ internal static partial class Program
             g.Begin(new(300, 300), new(8, 8));
             Equal(new Rectangle(300, 300, 80, 90), g.End(new(380, 390), OutputDestination.File)!.Bounds);
         });
+        Run("20px設定は旧設定でOFF・保存往復で保持", () => WithServiceDirectory(directory =>
+        {
+            var path = Path.Combine(directory, "settings.json");
+            var store = new Services.SettingsStore(path);
+            File.WriteAllText(path, "{}");
+            Check(!store.Load(out _).Grid20, "旧設定でON");
+            foreach (bool enabled in new[] { true, false })
+            {
+                store.Save(new Services.AppSettings { Grid20 = enabled });
+                Equal(enabled, store.Load(out _).Grid20);
+            }
+        }));
+        Run("一時モードと20pxメニューの状態・呼出し・全画面確定", () =>
+        {
+            var session = MonitorSession(true);
+            try
+            {
+                var modeMenu = (ToolStripMenuItem)session.SelectionMenu.Items["CaptureModeMenu"]!;
+                Equal(5, modeMenu.DropDownItems.Count);
+                ((ToolStripMenuItem)modeMenu.DropDownItems.Cast<ToolStripMenuItem>().Single(i => (CaptureMode)i.Tag! == CaptureMode.Window)).PerformClick();
+                Equal(CaptureMode.Window, session.Mode);
+                session.MoveTo(new(-100, 20)); Equal(SelectionTestMonitors[0], session.Selection);
+                var grid = (ToolStripMenuItem)session.SelectionMenu.Items["Grid20"]!;
+                grid.PerformClick(); Check(session.Grid20 && grid.Checked, "20pxが有効にならない");
+                session.ChangeMode(CaptureMode.FixedRegion);
+                Check(session.Grid20, "モード変更で20px設定が失われた");
+                Equal(new Size(100, 100), session.Selection.Size);
+                session.ChangeMode(CaptureMode.FullScreen);
+                using var result = session.Completion.GetAwaiter().GetResult();
+                Equal(SelectionTestMonitors[0], result.Selection!.Bounds);
+            }
+            finally { session.Cancel(); }
+        });
+        Run("固定サイズから対象モニタ全体を明示確定・限定OFFの位置", () =>
+        {
+            foreach (bool limited in new[] { false, true })
+            {
+                var session = MonitorSession(limited, CaptureMode.FixedRegion);
+                try
+                {
+                    session.CaptureDesktop(limited ? new(-100, 20) : new(200, 100));
+                    using var result = session.Completion.GetAwaiter().GetResult();
+                    Equal(SelectionTestMonitors[limited ? 0 : 1], result.Selection!.Bounds);
+                }
+                finally { session.Cancel(); }
+            }
+        });
     }
 
     private static SelectionGesture RectangleGesture() => new(CaptureMode.Rectangle, [new(0, 0, 1000, 1000)], []);
