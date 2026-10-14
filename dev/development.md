@@ -122,6 +122,15 @@ dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --s
 dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --window-hit-smoke
 ```
 
+## ペイントと具体的な通知の実機検証
+
+通常テストをビルドした後、生成PNGだけを使って保存ON/OFFの実ペイント起動を確認します。検証用に新規作成されたウィンドウだけを正常終了し、開始前のペイントは保持します。通知試験は短時間の実表示・折返し・画面取得除外を確認します。デスクトップ画像・個人クリップボード・音声は取得しません。
+
+```powershell
+dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --paint-launch-smoke C:/develop/test/SSCapture/dev/temp/paint-launch-check
+dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --capture-target-toast-smoke
+```
+
 ## ファイルと配布の扱い
 
 | 場所 | 内容 |

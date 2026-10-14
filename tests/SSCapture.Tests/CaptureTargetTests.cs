@@ -6,6 +6,31 @@ namespace SSCapture.Tests;
 
 internal static partial class Program
 {
+    private static int RunCaptureTargetToastSmoke()
+    {
+        try
+        {
+            using var toast = new CaptureToastForm();
+            foreach (string target in new[] { "デスクトップ1全体", "デスクトップ1の100,100～200,200" })
+            {
+                var delivery = new CaptureDelivery(CaptureIntent.Screenshot, (OutputDestination)7, OutputDestination.None, CaptureDescription: target);
+                Check(toast.TryShow(delivery.Message, false, NotificationCorner.BottomRight, out string? warning), warning ?? "通知を表示できない");
+                Application.DoEvents();
+                Check(FeedbackNative.IsWindowVisible(toast.Handle), "実通知が表示されない");
+                Check(FeedbackNative.GetWindowDisplayAffinity(toast.Handle, out uint affinity) && affinity == 0x11, "画面取得除外がない");
+                var label = toast.Controls.Find("CaptureToastMessage", true).Single();
+                Size measured = TextRenderer.MeasureText(label.Text, label.Font, new Size(label.Width, int.MaxValue),
+                    TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+                Check(measured.Height <= label.Height, "具体的な通知が見切れる");
+                Thread.Sleep(200);
+                toast.Hide();
+                Console.WriteLine("PASS TOAST " + target + " 複数出力の実表示・折返し・画面取得除外");
+            }
+            return 0;
+        }
+        catch (Exception ex) { Console.WriteLine("FAIL TOAST " + ex.Message); return 1; }
+    }
+
     private static readonly DisplayTarget[] TargetDisplays =
     [new("upper", new(-200, -300, 500, 300)), new("main", new(0, 0, 400, 300), true), new("right", new(400, 0, 300, 200))];
 
