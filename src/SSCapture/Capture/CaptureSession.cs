@@ -156,6 +156,7 @@ internal sealed class SessionController
             Mode = mode;
             gesture = CreateGesture(mode, grid20);
             SelectionMenu.SetMode(mode);
+            if (SelectionMenu.Visible) SelectionMenu.Close(ToolStripDropDownCloseReason.ItemClicked);
             if (mode == CaptureMode.FullScreen)
             {
                 CompleteSelection(new CaptureSelection(selectionBounds ?? Snapshot.Bounds, null, Destination));
@@ -177,6 +178,12 @@ internal sealed class SessionController
         guide = new UI.SelectionGuideForm(owner.MonitorBounds, options.Intent, Cancel,
             Mode == CaptureMode.FixedRegion ? options.FixedSize ?? new Size(1280, 720) : null, HandleCommandKey, options.FixedAnchor, AltKeyChanged, Mode);
         guide.Show(owner);
+        owner.BeginInvoke((Action)(() =>
+        {
+            if (completed || owner.IsDisposed || menuOpen || !CaptureNative.OwnsForegroundWindow()) return;
+            owner.Activate();
+            owner.Focus();
+        }));
     }
 
     internal void CaptureDesktop(Point point)

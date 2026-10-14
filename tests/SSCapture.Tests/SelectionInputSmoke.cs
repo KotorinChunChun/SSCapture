@@ -130,6 +130,8 @@ internal static partial class Program
                         input.LeftDown(); await Task.Delay(50); input.LeftUp(); await Task.Delay(120);
                         Check(OverlaySession(overlay).Mode == CaptureMode.Window,
                             $"mode={OverlaySession(overlay).Mode}, disposed={overlay.IsDisposed}, completion={OverlaySession(overlay).Completion.Status}, submenu={root.DropDown.Visible}");
+                        Check(!overlay.SelectionMenu.Visible && !root.DropDown.Visible, "モード確定後に親/子メニューが残る");
+                        NativeSmokeInput.RequireForeground(overlay.Handle);
                         await Down(overlay, 120, 80); input.LeftUp();
                     }, token);
                     Equal(bounds, result.Selection!.Bounds);
