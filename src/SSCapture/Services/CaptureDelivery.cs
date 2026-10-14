@@ -12,15 +12,14 @@ internal sealed record CaptureDelivery(CaptureIntent Intent, OutputDestination C
         get
         {
             List<string> lines = [];
-            string? subject = CaptureDescription is { Length: > 0 } description
-                ? description + (Intent == CaptureIntent.Recording ? (description.EndsWith('】') ? " の動画" : "の動画") : "") : null;
-            string? prefix = subject is null ? null : subject + (subject.EndsWith('】') ? " を" : "を");
+            string? prefix = CreateSubjectPrefix();
             Add(OutputDestination.Clipboard, prefix is null ? "コピーが完了しました" : prefix + "コピーしました",
-                prefix is null ? "コピーできませんでした" : prefix + "コピーできませんでした");
-            Add(OutputDestination.File, prefix is null ? Intent == CaptureIntent.Recording ? "動画を保存しました" : "スクリーンショットを保存しました" : prefix + "保存しました",
-                prefix is null ? "保存できませんでした" : prefix + "保存できませんでした");
-            Add(OutputDestination.ExternalApp, prefix is null ? "外部アプリへ送りました" : prefix + "外部アプリへ送りました",
-                prefix is null ? "外部アプリへ送れませんでした" : prefix + "外部アプリへ送れませんでした");
+                (prefix ?? "") + "コピーできませんでした");
+            string defaultSaved = Intent == CaptureIntent.Recording ? "動画を保存しました" : "スクリーンショットを保存しました";
+            Add(OutputDestination.File, prefix is null ? defaultSaved : prefix + "保存しました",
+                (prefix ?? "") + "保存できませんでした");
+            Add(OutputDestination.ExternalApp, (prefix ?? "") + "外部アプリへ送りました",
+                (prefix ?? "") + "外部アプリへ送れませんでした");
             if (FolderOpenFailed) lines.Add("保存フォルダを開けませんでした");
             return string.Join(Environment.NewLine, lines);
 
@@ -30,5 +29,13 @@ internal sealed record CaptureDelivery(CaptureIntent Intent, OutputDestination C
                 if (Failed.HasFlag(output)) lines.Add(failure);
             }
         }
+    }
+
+    private string? CreateSubjectPrefix()
+    {
+        if (CaptureDescription is not { Length: > 0 } description) return null;
+        if (Intent == CaptureIntent.Recording)
+            description += description.EndsWith('】') ? " の動画" : "の動画";
+        return description + (description.EndsWith('】') ? " を" : "を");
     }
 }
