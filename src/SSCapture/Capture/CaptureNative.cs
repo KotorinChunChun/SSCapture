@@ -80,6 +80,15 @@ internal static class CaptureNative
     internal static bool AltPressed(bool queuedKeyState = false) =>
         ((queuedKeyState ? GetKeyState(0x12 /* VK_MENU */) : GetAsyncKeyState(0x12)) & 0x8000) != 0;
 
+    internal static Keys Modifiers(bool queuedKeyState = false)
+    {
+        bool Down(int key) => ((queuedKeyState ? GetKeyState(key) : GetAsyncKeyState(key)) & 0x8000) != 0;
+        return (Down(0x10) ? Keys.Shift : Keys.None) | (Down(0x11) ? Keys.Control : Keys.None) | (Down(0x12) ? Keys.Alt : Keys.None);
+    }
+
+    internal static bool IsModifierTransition(int message, nint key) =>
+        (message is 0x0100 or 0x0101 or 0x0104 or 0x0105) && (key.ToInt32() is 0x10 or 0x11 or 0x12 or >= 0xa0 and <= 0xa5);
+
     internal static bool IsAltTransition(int message, nint key) =>
         (message is 0x0100 or 0x0101 or 0x0104 or 0x0105) && (key.ToInt32() is 0x12 or 0xa4 or 0xa5);
 

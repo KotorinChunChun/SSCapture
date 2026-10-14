@@ -35,13 +35,13 @@ internal sealed class SelectionGuideForm : Form
     protected override bool ShowWithoutActivation => true;
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if (keyData == Keys.Escape) { cancel(); return true; }
         if (handleKey?.Invoke(keyData) == true) return true;
+        if (keyData == Keys.Escape) { cancel(); return true; }
         return base.ProcessCmdKey(ref msg, keyData);
     }
     protected override void WndProc(ref Message m)
     {
-        if (SSCapture.Capture.CaptureNative.IsAltTransition(m.Msg, m.WParam))
+        if (SSCapture.Capture.CaptureNative.IsModifierTransition(m.Msg, m.WParam))
         {
             modifiersChanged?.Invoke();
             return;

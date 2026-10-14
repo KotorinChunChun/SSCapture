@@ -73,7 +73,7 @@ internal sealed class CaptureOverlay : Form
 
     protected override void WndProc(ref Message m)
     {
-        if (CaptureNative.IsAltTransition(m.Msg, m.WParam))
+        if (CaptureNative.IsModifierTransition(m.Msg, m.WParam))
         {
             session.AltKeyChanged();
             return;

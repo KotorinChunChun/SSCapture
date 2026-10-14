@@ -79,6 +79,9 @@ internal sealed class SessionController
     private bool menuOpen;
     private Point? lastPointerPosition;
     private bool lastSnap;
+    private bool lastHeightLock, lastWidthLock;
+    private Keys ignoredModifiers;
+    private MouseButtons suppressedButtons;
     private System.Windows.Forms.Timer? snapTimer;
 
     internal CaptureMode Mode => options.Mode;
@@ -122,6 +125,7 @@ internal sealed class SessionController
     {
         try
         {
+            ignoredModifiers = CaptureNative.Modifiers() & (Keys.Shift | Keys.Control);
             if (Mode == CaptureMode.FullScreen)
             {
                 CompleteSelection(new CaptureSelection(Snapshot.Bounds, null, Destination));
@@ -140,7 +144,7 @@ internal sealed class SessionController
             active.Focus();
             starting = false;
             if (selectionBounds is Rectangle monitorBounds) cursorConfinement = confineCursor(monitorBounds);
-            if (Mode is CaptureMode.Rectangle or CaptureMode.FixedRegion)
+            if (Mode != CaptureMode.FullScreen)
             {
                 // Key messages can be routed to the movable guide or a captured
                 // overlay. Only while selecting, poll Alt to cover either route.
@@ -158,12 +162,14 @@ internal sealed class SessionController
         if (completed || menuOpen || menuTransition) return;
         try
         {
-            MoveTo(CaptureNative.CursorPosition(), CaptureNative.AltPressed(queuedKeyState));
+            Keys modifiers = ReadModifiers(queuedKeyState);
+            MoveTo(CaptureNative.CursorPosition(), (modifiers & Keys.Alt) != 0,
+                (modifiers & Keys.Shift) != 0, (modifiers & Keys.Control) != 0);
         }
         catch (Exception ex) { Fail(ex); }
     }
 
-    internal void MoveTo(Point physicalPosition, bool snap = false)
+    internal void MoveTo(Point physicalPosition, bool snap = false, bool lockHeight = false, bool lockWidth = false)
     {
         if (completed || menuOpen || menuTransition) return;
         if (selectionBounds is Rectangle bounds)
@@ -174,7 +180,9 @@ internal sealed class SessionController
         if (Mode == CaptureMode.FixedRegion && lastPointerPosition == physicalPosition && lastSnap == snap) return;
         lastPointerPosition = physicalPosition;
         lastSnap = snap;
-        gesture.Move(physicalPosition, snap);
+        lastHeightLock = lockHeight;
+        lastWidthLock = lockWidth;
+        gesture.Move(physicalPosition, snap, lockHeight, lockWidth);
         RefreshOverlays();
     }
 
@@ -186,15 +194,22 @@ internal sealed class SessionController
         if (completed || menuOpen || menuTransition || Mode is not (CaptureMode.Rectangle or CaptureMode.FixedRegion)) return;
         try
         {
-            bool snap = CaptureNative.AltPressed(queuedKeyState);
-            if (snap != lastSnap && lastPointerPosition is Point point) MoveTo(point, snap);
+            if (Control.MouseButtons == MouseButtons.None) suppressedButtons = MouseButtons.None;
+            Keys modifiers = ReadModifiers(queuedKeyState);
+            bool snap = (modifiers & Keys.Alt) != 0, height = (modifiers & Keys.Shift) != 0, width = (modifiers & Keys.Control) != 0;
+            if ((snap != lastSnap || height != lastHeightLock || width != lastWidthLock) && lastPointerPosition is Point point)
+                MoveTo(point, snap, height, width);
         }
         catch (Exception ex) { Fail(ex); }
     }
 
     internal bool HandleCommandKey(Keys keyData)
     {
-        if ((keyData & Keys.KeyCode) == Keys.Escape) { Cancel(); return true; }
+        if ((keyData & Keys.KeyCode) == Keys.Escape)
+        {
+            if (gesture.IsPressed) AbortSelection(); else Cancel();
+            return true;
+        }
         if (completed || menuOpen || menuTransition || Mode != CaptureMode.FixedRegion) return false;
         if (keyData == Keys.Enter)
         {
@@ -215,30 +230,51 @@ internal sealed class SessionController
     internal void MouseDown(CaptureOverlay overlay, MouseButtons button)
     {
         if (completed || menuOpen || menuTransition) return;
-        if (button == MouseButtons.Right) { ShowMenu(overlay); return; }
+        if (suppressedButtons != MouseButtons.None) return;
+        if (button == MouseButtons.Right)
+        {
+            if (gesture.IsPressed) { AbortSelection(); suppressedButtons |= MouseButtons.Right; overlay.Capture = false; }
+            else ShowMenu(overlay);
+            return;
+        }
         if (Mode == CaptureMode.FixedRegion && button == MouseButtons.Middle) return;
         if (button is not (MouseButtons.Left or MouseButtons.Middle) || pressedButton != MouseButtons.None) return;
         Move(true);
         if (completed) return;
         dragOwner = overlay;
         pressedButton = button;
-        if (button == MouseButtons.Left) gesture.Begin(gesture.RawCurrent, CaptureNative.DragThreshold(overlay.DeviceDpi), lastSnap);
+        if (button == MouseButtons.Left) gesture.Begin(gesture.RawCurrent, CaptureNative.DragThreshold(overlay.DeviceDpi), lastSnap, lastHeightLock, lastWidthLock);
         overlay.Capture = true;
         if (!overlay.Capture) Cancel();
     }
 
     internal void MouseUp(MouseButtons button)
     {
+        if ((suppressedButtons & button) != 0) { suppressedButtons &= ~button; return; }
         if (completed || menuOpen || menuTransition || button != pressedButton || pressedButton == MouseButtons.None) return;
         Move(true);
         if (completed) return;
         CaptureSelection? selection = button == MouseButtons.Middle
             ? gesture.MonitorSelection(gesture.RawCurrent, Destination)
-            : gesture.End(gesture.RawCurrent, Destination, lastSnap);
+            : gesture.End(gesture.RawCurrent, Destination, lastSnap, lastHeightLock, lastWidthLock);
         ReleasePointer();
-        if (selection is null && Mode != CaptureMode.FixedRegion) Cancel();
-        else if (selection is null) RefreshOverlays();
+        if (selection is null) { gesture.Reset(); RefreshOverlays(); }
         else CompleteSelection(selection);
+    }
+
+    private Keys ReadModifiers(bool queuedKeyState)
+    {
+        Keys modifiers = CaptureNative.Modifiers(queuedKeyState);
+        ignoredModifiers &= modifiers;
+        return modifiers & ~ignoredModifiers;
+    }
+
+    internal void AbortSelection()
+    {
+        suppressedButtons |= pressedButton;
+        gesture.Reset();
+        ReleasePointer();
+        RefreshOverlays();
     }
 
     private void ShowMenu(CaptureOverlay overlay)

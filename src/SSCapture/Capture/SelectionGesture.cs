@@ -14,6 +14,9 @@ internal sealed class SelectionGesture
     private Size threshold;
     private bool pointerInitialized;
     private bool previousSnap;
+    private readonly DragAxis horizontal = new();
+    private readonly DragAxis vertical = new();
+    internal bool Grid20 { get; set; }
     internal bool IsPressed { get; private set; }
     internal bool HasDragged { get; private set; }
     internal Point Current { get; private set; }
@@ -34,18 +37,20 @@ internal sealed class SelectionGesture
             fixedAnchor is CaptureAnchor.BottomLeft or CaptureAnchor.BottomRight ? fixedDimensions.Height : 0);
     }
 
-    internal void Begin(Point point, Size dragThreshold, bool snap = false)
+    internal void Begin(Point point, Size dragThreshold, bool snap = false, bool lockHeight = false, bool lockWidth = false)
     {
         rawStart = point;
         start = Resolve(point, snap);
         threshold = dragThreshold;
         IsPressed = true;
         HasDragged = false;
+        horizontal.Reset();
+        vertical.Reset();
         Points.Clear();
-        Move(point, snap);
+        Move(point, snap, lockHeight, lockWidth);
     }
 
-    internal void Move(Point point, bool snap = false)
+    internal void Move(Point point, bool snap = false, bool lockHeight = false, bool lockWidth = false)
     {
         bool unchanged = pointerInitialized && RawCurrent == point && previousSnap == snap;
         RawCurrent = point;
@@ -58,6 +63,7 @@ internal sealed class SelectionGesture
             if (!unchanged) PositionFixed(Resolve(point, snap));
             return;
         }
+        Point previous = Current;
         Current = Resolve(point, snap);
         if (mode == CaptureMode.Window)
         {
@@ -66,16 +72,26 @@ internal sealed class SelectionGesture
         }
         if (!IsPressed) return;
         HasDragged |= ExceedsThreshold(rawStart, point, threshold);
+        if (mode == CaptureMode.Rectangle)
+        {
+            int x = horizontal.Prepare(point.X, lockWidth, previous.X, previous.X != start.X, HasDragged);
+            int y = vertical.Prepare(point.Y, lockHeight, previous.Y, previous.Y != start.Y, HasDragged);
+            Point adjusted = new(x, y);
+            Point quantized = Grid20 || snap ? new(Quantize(x, start.X, true), Quantize(y, start.Y, false)) : adjusted;
+            Point snapped = snap ? snapEdges.Apply(adjusted) : adjusted;
+            Current = new Point(horizontal.IsLocked ? horizontal.Value : snapped.X != adjusted.X ? snapped.X : quantized.X,
+                vertical.IsLocked ? vertical.Value : snapped.Y != adjusted.Y ? snapped.Y : quantized.Y);
+        }
         if (Points.Count == 0 || Points[^1] != point) Points.Add(point);
         Selection = HasDragged
             ? mode == CaptureMode.Freeform ? CaptureGeometry.PolygonBounds(Points) : CaptureGeometry.FromDrag(start, Current)
             : Rectangle.Empty;
     }
 
-    internal CaptureSelection? End(Point point, OutputDestination destination, bool snap = false)
+    internal CaptureSelection? End(Point point, OutputDestination destination, bool snap = false, bool lockHeight = false, bool lockWidth = false)
     {
         if (!IsPressed) return null;
-        Move(point, snap);
+        Move(point, snap, lockHeight, lockWidth);
         IsPressed = false;
         if (mode == CaptureMode.FixedRegion) return FixedSelection(destination);
         if (mode == CaptureMode.Window) return FromBounds(WindowAt(point), destination);
@@ -115,6 +131,8 @@ internal sealed class SelectionGesture
     {
         IsPressed = false;
         HasDragged = false;
+        horizontal.Reset();
+        vertical.Reset();
         if (mode != CaptureMode.FixedRegion) Selection = Rectangle.Empty;
         Points.Clear();
     }
@@ -125,6 +143,43 @@ internal sealed class SelectionGesture
 
     private Point Resolve(Point point, bool snap) => snap && (mode is CaptureMode.Rectangle or CaptureMode.FixedRegion)
         ? snapEdges.Apply(point) : point;
+
+    private int Quantize(int coordinate, int origin, bool horizontalAxis)
+    {
+        long delta = (long)coordinate - origin;
+        long units = (Math.Abs(delta) + 10) / 20;
+        long result = origin + Math.Sign(delta) * units * 20;
+        if (monitors.Count == 1)
+        {
+            Rectangle monitor = monitors[0];
+            int first = horizontalAxis ? monitor.Left : monitor.Top;
+            int last = horizontalAxis ? monitor.Right : monitor.Bottom;
+            if (result < first) result = origin - ((long)origin - first) / 20 * 20;
+            if (result > last) result = origin + ((long)last - origin) / 20 * 20;
+        }
+        return (int)Math.Clamp(result, int.MinValue, int.MaxValue);
+    }
+
+    private sealed class DragAxis
+    {
+        internal bool IsLocked { get; private set; }
+        internal int Value { get; private set; }
+        private long offset;
+
+        internal int Prepare(int raw, bool pressed, int previous, bool hasDimension, bool dragged)
+        {
+            if (IsLocked && !pressed) { offset = (long)Value - raw; IsLocked = false; }
+            int adjusted = (int)Math.Clamp(raw + offset, int.MinValue, int.MaxValue);
+            if (!IsLocked && pressed && dragged)
+            {
+                Value = hasDimension ? previous : adjusted;
+                IsLocked = true;
+            }
+            return adjusted;
+        }
+
+        internal void Reset() { IsLocked = false; offset = 0; }
+    }
 
     private void PositionFixed(Point point) => PositionFixed(point.X, point.Y);
 

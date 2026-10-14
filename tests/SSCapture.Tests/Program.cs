@@ -56,6 +56,7 @@ internal static partial class Program
         DeliveryTests();
         FeedbackTests();
         SnapTests();
+        SelectionInteractionTests();
         StatusTests();
         Console.WriteLine($"RESULT: {passed} passed, {failed} failed");
         return failed == 0 ? 0 : 1;
