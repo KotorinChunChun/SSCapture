@@ -10,7 +10,6 @@
   "appId": "KotorinToys.SSCapture",
   "manual": "README.md",
   "readme": "README.md",
-  "shortcuts": "config/shortcuts.json",
   "distributionStatus": "published",
   "supportedEnvironment": "windows11-x64",
   "investigationStatus": "confirmed",

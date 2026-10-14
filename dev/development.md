@@ -10,15 +10,17 @@
 - [v0.1.0の実装計画・点検報告](history/v0.1.0/v0.1.0-imp.md)
 - [v0.1.0の進捗](history/v0.1.0/v0.1.0-task.md)
 - [共通ルール](../AGENTS.md) / [対応しない事項](reject.md)
+- [v0.1.1の要求](history/v0.1.1/v0.1.1-req.md) / [実装計画・報告](history/v0.1.1/v0.1.1-imp.md)
+- [公開用ビルド手順](../docs/DEVELOPERS_GUIDE.md) / [Release規則](RELEASE_RULE.md)
 
-現在の版は `v0.1.0` です。以後は `vX.Y.Z` の通常の連番を使い、過去の `v0.YYYYMMDD.Z` の文書は履歴として維持します。新しい版の要求・計画を `dev/vX.Y.Z-req.md`・`dev/vX.Y.Z-imp.md` に記録し、必要な場合にだけ `task.md` を作成します。フェーズごとに検証結果を記録し、問題がなければコミットします。却下事項にはユーザーが明示したものだけを記録し、未検証項目は [validation.md](validation.md) に分けます。
+現在の版は `v0.1.1` です。以後は `vX.Y.Z` の通常の連番を使い、過去の `v0.YYYYMMDD.Z` の文書は履歴として維持します。新しい版の要求・計画を `dev/vX.Y.Z-req.md`・`dev/vX.Y.Z-imp.md` に記録し、必要な場合にだけ `task.md` を作成します。フェーズごとに検証結果を記録し、問題がなければコミットします。却下事項にはユーザーが明示したものだけを記録し、未検証項目は [validation.md](validation.md) に分けます。
 
 ## 主要構成と変更時の不変条件
 
 | 場所 | 役割・守ること |
 | --- | --- |
 | `src/SSCapture/TrayApplicationContext.cs` | 常駐・ショートカット・画面・出力の調停。UI更新はUIスレッドへ戻し、処理中の二重開始を防ぐ |
-| `src/SSCapture/Capture` | 画面取得と選択。座標は負座標を含む物理ピクセル。通常撮影は選択UI表示前の画像を保持する |
+| `src/SSCapture/Capture` | 画面取得と選択。座標は負座標を含む物理ピクセル。撮影開始時の画面固定ONのときは選択UI表示前、OFFのときはUIを閉じた後に取得する |
 | `src/SSCapture/Recording` | 録画区間・音声時刻・FFmpegプロセス。一時停止時間を完成動画へ含めず、音声トグルは今回のセッションだけへ適用する |
 | `src/SSCapture/Services` | 設定、OCR、命名、保存、独立出力、履歴、通知。成功済み出力と未完了・失敗の出力を区別する |
 | `src/SSCapture/UI` | 設定・OCR・範囲・履歴・録画のWinForms画面。データ処理の結果と所有権を明確にし、システムダイアログを追加しない |

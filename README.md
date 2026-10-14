@@ -1,4 +1,4 @@
-# SSCapture v0.1.0
+# SSCapture v0.1.1
 
 ## GitHub開発版インストーラー
 
@@ -30,9 +30,11 @@ pwsh -File scripts/start.ps1 -Settings
 ## 案内
 
 - [使い方](docs/usage.md): 撮影・録画・OCR命名・登録範囲・履歴・通知・設定
-- [開発・ビルド・更新手順](dev/development.md): 環境準備、検証後の発行、版管理
+- [ビルド手順](docs/DEVELOPERS_GUIDE.md): 環境準備、テスト、ローカル実行、公開用配布物の生成
+- [開発・更新手順](dev/development.md) / [Release規則](dev/RELEASE_RULE.md)
 - [検証状況と未確認の範囲](dev/validation.md): 今回の確認状況と過去版の実績
 - [v0.1.0の要求](dev/history/v0.1.0/v0.1.0-req.md) / [実装計画・報告](dev/history/v0.1.0/v0.1.0-imp.md) / [進捗](dev/history/v0.1.0/v0.1.0-task.md)
+- [v0.1.1の要求](dev/history/v0.1.1/v0.1.1-req.md) / [実装計画・報告](dev/history/v0.1.1/v0.1.1-imp.md) / [リリースノート](docs/releases/v0.1.1.md)
 - [対応しない事項](dev/reject.md) / [第三者ライセンス・配布元](THIRD_PARTY.md)
 
-Windows 11 x64と.NET 10 Desktop Runtimeが対象です。設定と作業データは実行ファイル横の `data` に保存します。実行フォルダは書き込み可能な場所を使い、利用済みの `artifacts/app` をそのまま配布しないでください。
+Windows 11 x64が対象です。公開インストーラーには.NET 10 Desktop Runtimeを同梱します。ローカルの`artifacts/app`はランタイムを別途必要とします。設定と作業データは実行ファイル横の `data` に保存します。実行フォルダは書き込み可能な場所を使い、利用済みの `artifacts/app` をそのまま配布しないでください。
