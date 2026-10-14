@@ -5,6 +5,7 @@ namespace SSCapture.Capture;
 
 internal static class CaptureNative
 {
+    internal const int WsExToolWindow = 0x00000080;
     internal const int WmDisplayChange = 0x007e;
     internal const int WmDpiChanged = 0x02e0;
     internal const int WmSessionChange = 0x02b1;
