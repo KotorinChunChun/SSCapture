@@ -6,6 +6,7 @@ internal sealed class SelectionGesture
     private readonly CaptureMode mode;
     private readonly IReadOnlyList<Rectangle> monitors;
     private readonly IReadOnlyList<Rectangle> windows;
+    private readonly Rectangle? desktopBounds;
     private readonly SelectionSnap snapEdges;
     private readonly Size fixedDimensions;
     private readonly Size anchorOffset;
@@ -30,6 +31,7 @@ internal sealed class SelectionGesture
         if (!Enum.IsDefined(fixedAnchor)) throw new ArgumentOutOfRangeException(nameof(fixedAnchor));
         this.mode = mode;
         this.monitors = monitors.ToArray();
+        desktopBounds = this.monitors.Count == 0 ? null : this.monitors.Aggregate(Rectangle.Union);
         this.windows = windows.ToArray();
         snapEdges = new SelectionSnap(this.monitors, this.windows);
         fixedDimensions = mode == CaptureMode.FixedRegion ? CaptureGeometry.ValidateFixedSize(fixedSize) : Size.Empty;
@@ -76,10 +78,10 @@ internal sealed class SelectionGesture
         {
             int x = horizontal.Prepare(point.X, lockWidth, previous.X, previous.X != start.X, HasDragged);
             int y = vertical.Prepare(point.Y, lockHeight, previous.Y, previous.Y != start.Y, HasDragged);
-            if (monitors.Count == 1)
+            if (desktopBounds is Rectangle desktop)
             {
-                x = Math.Clamp(x, monitors[0].Left, monitors[0].Right);
-                y = Math.Clamp(y, monitors[0].Top, monitors[0].Bottom);
+                x = Math.Clamp(x, desktop.Left, desktop.Right);
+                y = Math.Clamp(y, desktop.Top, desktop.Bottom);
             }
             Point adjusted = new(x, y);
             Point quantized = Grid20 || snap ? new(Quantize(x, start.X, true), Quantize(y, start.Y, false)) : adjusted;
@@ -154,9 +156,8 @@ internal sealed class SelectionGesture
         long delta = (long)coordinate - origin;
         long units = (Math.Abs(delta) + 10) / 20;
         long result = origin + Math.Sign(delta) * units * 20;
-        if (monitors.Count == 1)
+        if (desktopBounds is Rectangle monitor)
         {
-            Rectangle monitor = monitors[0];
             int first = horizontalAxis ? monitor.Left : monitor.Top;
             int last = horizontalAxis ? monitor.Right : monitor.Bottom;
             if (result < first) result = origin - ((long)origin - first) / 20 * 20;

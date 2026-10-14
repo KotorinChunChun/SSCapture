@@ -116,6 +116,8 @@ internal static class CaptureNative
         return processId == Environment.ProcessId;
     }
 
+    internal static bool ForegroundTransition => GetForegroundWindow() == 0;
+
     internal static IReadOnlyList<Rectangle> MonitorBounds()
     {
         List<Rectangle> monitors = [];

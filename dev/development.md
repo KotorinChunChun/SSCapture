@@ -4,11 +4,11 @@
 
 コマンドはリポジトリのルートで、PowerShell 7の `pwsh` を使って実行します。このフォルダだけがGit管理の対象です。
 
-## 現在の開発記録
+## 完了版の開発記録
 
-- [v0.1.0の要求](v0.1.0-req.md)
-- [v0.1.0の実装計画・点検報告](v0.1.0-imp.md)
-- [v0.1.0の進捗](v0.1.0-task.md)
+- [v0.1.0の要求](history/v0.1.0/v0.1.0-req.md)
+- [v0.1.0の実装計画・点検報告](history/v0.1.0/v0.1.0-imp.md)
+- [v0.1.0の進捗](history/v0.1.0/v0.1.0-task.md)
 - [共通ルール](../AGENTS.md) / [対応しない事項](reject.md)
 
 現在の版は `v0.1.0` です。以後は `vX.Y.Z` の通常の連番を使い、過去の `v0.YYYYMMDD.Z` の文書は履歴として維持します。新しい版の要求・計画を `dev/vX.Y.Z-req.md`・`dev/vX.Y.Z-imp.md` に記録し、必要な場合にだけ `task.md` を作成します。フェーズごとに検証結果を記録し、問題がなければコミットします。却下事項にはユーザーが明示したものだけを記録し、未検証項目は [validation.md](validation.md) に分けます。
@@ -112,6 +112,15 @@ dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --s
 ```
 
 各実モニタで設定ON/OFF、4辺からのポインタ逸脱防止、確定・Esc・非アクティブ化・設定へ移動・画像取得例外の終了経路を確認します。終了後は元のポインタ位置と制限へ戻します。
+
+## 選択操作の実入力検証
+
+専用の合成画面で修飾キー・中断・メニュー・単押し・撮影タイミングを確認します。実行中はPC操作を控えてください。通常テストをビルドした後に実行します。実デスクトップ画像・音声・クリップボードは取得しません。前面ウィンドウを確認できないときは入力を中止します。
+
+```powershell
+dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --selection-input-smoke
+dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --window-hit-smoke
+```
 
 ## ファイルと配布の扱い
 

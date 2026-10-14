@@ -255,7 +255,7 @@ internal sealed class SessionController
 
     private void UpdateModifiers(bool queuedKeyState)
     {
-        if (completed || menuOpen || menuTransition || Mode is not (CaptureMode.Rectangle or CaptureMode.FixedRegion)) return;
+        if (completed || menuOpen || menuTransition) return;
         try
         {
             if (Control.MouseButtons == MouseButtons.None) suppressedButtons = MouseButtons.None;
@@ -365,7 +365,9 @@ internal sealed class SessionController
         menuOpen = false;
         if (completed) return;
         menuTransition = true;
-        if (e.CloseReason is ToolStripDropDownCloseReason.AppFocusChange or ToolStripDropDownCloseReason.Keyboard)
+        // Popup activation can transiently clear GetForegroundWindow. Check focus
+        // after the closing input message instead of treating that transition as exit.
+        if (e.CloseReason == ToolStripDropDownCloseReason.Keyboard)
         {
             Cancel();
             return;

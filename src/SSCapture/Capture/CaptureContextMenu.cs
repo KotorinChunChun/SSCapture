@@ -7,12 +7,15 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     private readonly Dictionary<OutputDestination, ToolStripMenuItem> destinations = [];
     private readonly Dictionary<CaptureMode, ToolStripMenuItem> modes = [];
     private readonly ToolStripMenuItem? gridItem;
+    private readonly Func<bool> ownsPopupFocus;
 
     internal CaptureContextMenu(OutputDestination selected, Action<OutputDestination> changeDestination,
         Action openSettings, Action cancel, CaptureMode mode = CaptureMode.Rectangle, bool grid20 = false,
-        Action<CaptureMode>? changeMode = null, Action<bool>? changeGrid = null, Action? captureDesktop = null)
+        Action<CaptureMode>? changeMode = null, Action<bool>? changeGrid = null, Action? captureDesktop = null,
+        Func<bool>? ownsPopupFocus = null)
     {
         this.cancel = cancel;
+        this.ownsPopupFocus = ownsPopupFocus ?? (() => CaptureNative.OwnsForegroundWindow() || CaptureNative.ForegroundTransition);
         Font = menuFont;
         foreach (OutputDestination destination in new[] { OutputDestination.Clipboard, OutputDestination.File, OutputDestination.ExternalApp })
         {
@@ -31,7 +34,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         Items.Add(new ToolStripSeparator());
         if (changeMode is not null)
         {
-            var modeMenu = new ToolStripMenuItem("撮影モード") { Name = "CaptureModeMenu", ToolTipText = "現在の撮影中だけモードを変更します。次回は設定画面の撮影モードから開始します。" };
+            var modeMenu = new ToolStripMenuItem("撮影モード") { Name = "CaptureModeMenu", ToolTipText = "現在の撮影中だけモードを変更します。次回は設定画面の撮影モードから開始します。", DropDown = new SelectionModeDropDown(this.ownsPopupFocus) };
             foreach (CaptureMode value in Enum.GetValues<CaptureMode>())
             {
                 var item = new ToolStripMenuItem(UI.SettingsForm.ModeName(value)) { Tag = value };
@@ -65,6 +68,25 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     }
 
     internal void SetGrid(bool enabled) { if (gridItem is not null) gridItem.Checked = enabled; }
+
+    protected override void OnClosing(ToolStripDropDownClosingEventArgs e)
+    {
+        if (e.CloseReason == ToolStripDropDownCloseReason.AppFocusChange
+            && modes.Values.Any(item => item.Owner is ToolStripDropDown { Visible: true })
+            && ownsPopupFocus()) e.Cancel = true;
+        base.OnClosing(e);
+    }
+
+    private sealed class SelectionModeDropDown(Func<bool> ownsPopupFocus) : ToolStripDropDownMenu
+    {
+        protected override void OnClosing(ToolStripDropDownClosingEventArgs e)
+        {
+            // 子メニューへの前面切替中は、親子のメニューをまとめて閉じない。
+            if (e.CloseReason == ToolStripDropDownCloseReason.AppFocusChange
+                && ownsPopupFocus()) e.Cancel = true;
+            base.OnClosing(e);
+        }
+    }
 
     private void SetDestination(OutputDestination selected)
     {

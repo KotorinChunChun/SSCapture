@@ -116,6 +116,23 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
+        Run("モード子メニューは内部フォーカス遷移で閉じず項目確定と外部切替で閉じる", () =>
+        {
+            bool internalFocus = true;
+            using var menu = new CaptureContextMenu(OutputDestination.Clipboard, _ => { }, () => { }, () => { },
+                changeMode: _ => { }, ownsPopupFocus: () => internalFocus);
+            var child = ((ToolStripMenuItem)menu.Items["CaptureModeMenu"]!).DropDown;
+            bool Closing(ToolStripDropDownCloseReason reason)
+            {
+                var args = new ToolStripDropDownClosingEventArgs(reason);
+                child.GetType().GetMethod("OnClosing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(child, [args]);
+                return args.Cancel;
+            }
+            Check(Closing(ToolStripDropDownCloseReason.AppFocusChange), "内部切替で閉じた");
+            Check(!Closing(ToolStripDropDownCloseReason.ItemClicked), "モード選択で閉じない");
+            internalFocus = false;
+            Check(!Closing(ToolStripDropDownCloseReason.AppFocusChange), "他アプリ切替で閉じない");
+        });
         Run("固定サイズから対象モニタ全体を明示確定・限定OFFの位置", () =>
         {
             foreach (bool limited in new[] { false, true })

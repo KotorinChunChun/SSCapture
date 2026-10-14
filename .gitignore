@@ -7,3 +7,5 @@ data/
 *.user
 *.suo
 .vs/
+dev/temp/
+dev/private/
