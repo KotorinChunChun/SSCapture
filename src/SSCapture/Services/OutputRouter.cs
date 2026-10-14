@@ -111,12 +111,12 @@ internal sealed class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImag
         {
             try
             {
-                ValidateEditor(executable);
+                string resolvedExecutable = EditorExecutable.Resolve(executable);
                 EditorArguments.Validate(arguments);
                 if (destination.HasFlag(OutputDestination.File) && saved is null)
                     throw new IOException("保存に失敗したため、編集アプリへ保存ファイルを渡せません。");
                 string path = saved ?? await prepareExternal();
-                LaunchEditor(executable, path, arguments);
+                LaunchEditor(resolvedExecutable, path, arguments);
                 succeeded |= OutputDestination.ExternalApp;
                 messages.Add("外部アプリに送りました。");
             }
@@ -221,13 +221,12 @@ internal sealed class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImag
 
     internal static void ValidateEditor(string executable)
     {
-        if (string.IsNullOrWhiteSpace(executable) || !Path.IsPathFullyQualified(executable) || !File.Exists(executable) || !executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("設定画面で外部アプリのexeファイルを指定してください。");
+        _ = EditorExecutable.Resolve(executable);
     }
 
     internal static ProcessStartInfo EditorStartInfo(string executable, string path, string arguments = EditorArguments.Default)
     {
-        ValidateEditor(executable);
+        executable = EditorExecutable.Resolve(executable);
         var info = new ProcessStartInfo(executable) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(executable)! };
         foreach (string argument in EditorArguments.Expand(arguments, path)) info.ArgumentList.Add(argument);
         return info;

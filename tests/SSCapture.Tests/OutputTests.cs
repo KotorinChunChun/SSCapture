@@ -410,6 +410,7 @@ internal static partial class Program
                 bool rejected = false;
                 try { OutputRouter.ValidateEditor(invalid); }
                 catch (ArgumentException) { rejected = true; }
+                catch (FileNotFoundException ex) { rejected = ex.FileName == invalid; }
                 Check(rejected, "不正な起動先を拒否する");
             }
         }));
