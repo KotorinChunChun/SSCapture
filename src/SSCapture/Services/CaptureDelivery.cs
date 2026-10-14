@@ -13,13 +13,14 @@ internal sealed record CaptureDelivery(CaptureIntent Intent, OutputDestination C
         {
             List<string> lines = [];
             string? subject = CaptureDescription is { Length: > 0 } description
-                ? description + (Intent == CaptureIntent.Recording ? "の動画" : "") : null;
-            Add(OutputDestination.Clipboard, subject is null ? "コピーが完了しました" : subject + "をコピーしました。",
-                subject is null ? "コピーできませんでした" : subject + "をコピーできませんでした。");
-            Add(OutputDestination.File, subject is null ? Intent == CaptureIntent.Recording ? "動画を保存しました" : "スクリーンショットを保存しました" : subject + "を保存しました。",
-                subject is null ? "保存できませんでした" : subject + "を保存できませんでした。");
-            Add(OutputDestination.ExternalApp, subject is null ? "外部アプリへ送りました" : subject + "を外部アプリへ送りました。",
-                subject is null ? "外部アプリへ送れませんでした" : subject + "を外部アプリへ送れませんでした。");
+                ? description + (Intent == CaptureIntent.Recording ? (description.EndsWith('】') ? " の動画" : "の動画") : "") : null;
+            string? prefix = subject is null ? null : subject + (subject.EndsWith('】') ? " を" : "を");
+            Add(OutputDestination.Clipboard, prefix is null ? "コピーが完了しました" : prefix + "コピーしました",
+                prefix is null ? "コピーできませんでした" : prefix + "コピーできませんでした");
+            Add(OutputDestination.File, prefix is null ? Intent == CaptureIntent.Recording ? "動画を保存しました" : "スクリーンショットを保存しました" : prefix + "保存しました",
+                prefix is null ? "保存できませんでした" : prefix + "保存できませんでした");
+            Add(OutputDestination.ExternalApp, prefix is null ? "外部アプリへ送りました" : prefix + "外部アプリへ送りました",
+                prefix is null ? "外部アプリへ送れませんでした" : prefix + "外部アプリへ送れませんでした");
             if (FolderOpenFailed) lines.Add("保存フォルダを開けませんでした");
             return string.Join(Environment.NewLine, lines);
 

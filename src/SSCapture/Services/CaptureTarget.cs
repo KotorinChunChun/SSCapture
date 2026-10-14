@@ -12,17 +12,17 @@ internal static class CaptureTarget
         {
             Rectangle monitor = ordered[i].Bounds;
             if (!monitor.Contains(capture)) continue;
-            if (monitor == capture) return $"デスクトップ{i + 1}全体";
+            if (monitor == capture) return $"デスクトップ【{i + 1}】全体";
             long x = (long)capture.X - monitor.X, y = (long)capture.Y - monitor.Y;
-            return $"デスクトップ{i + 1}の{x},{y}～{x + capture.Width},{y + capture.Height}";
+            return $"デスクトップ【{i + 1}】の 【{x},{y}】 ～ 【{x + capture.Width},{y + capture.Height}】";
         }
         var touched = ordered.Select((display, index) => (display.Bounds, Number: index + 1))
             .Where(display => display.Bounds.IntersectsWith(capture)).ToArray();
         if (touched.Length == 0) return null;
         string numbers = string.Join("・", touched.Select(d => d.Number));
         if (ordered.Count > 1 && capture == ordered.Select(d => d.Bounds).Aggregate(Rectangle.Union))
-            return $"デスクトップ{numbers}全体";
+            return $"デスクトップ【{numbers}】全体";
         string relation = touched.Length > 1 ? "にまたがる" : "を含む";
-        return $"デスクトップ{numbers}{relation}範囲（全体座標{capture.X},{capture.Y}～{(long)capture.X + capture.Width},{(long)capture.Y + capture.Height}）";
+        return $"デスクトップ【{numbers}】{relation}範囲（全体座標 【{capture.X},{capture.Y}】 ～ 【{(long)capture.X + capture.Width},{(long)capture.Y + capture.Height}】）";
     }
 }
