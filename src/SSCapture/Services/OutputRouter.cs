@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using SSCapture.Capture;
 
 namespace SSCapture.Services;
 
@@ -7,12 +8,14 @@ internal sealed record ScreenshotFileName(string? FileName, FileNamePlan? NamePl
 
 internal sealed class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImage = null,
     Func<string, Task>? copyFile = null, Action<ProcessStartInfo>? launch = null, Action<Bitmap, string?, DateTimeOffset>? captured = null,
-    Action<CaptureDelivery>? delivered = null, Action<Bitmap, string?, DateTimeOffset, Rectangle?>? capturedWithBounds = null)
+    Action<CaptureDelivery>? delivered = null, Action<Bitmap, string?, DateTimeOffset, Rectangle?>? capturedWithBounds = null,
+    Func<IReadOnlyList<DisplayTarget>>? readDisplays = null)
 {
     private readonly Func<Bitmap, Task> copyImage = copyImage ?? ClipboardWriter.CopyAsync;
     private readonly Func<string, Task> copyFile = copyFile ?? ClipboardWriter.CopyFileAsync;
     private readonly Action<ProcessStartInfo> launchEditor = launch ?? LaunchProcess;
     private readonly Action<string> selectSavedFile = CreateFileSelector(launch);
+    private readonly Func<IReadOnlyList<DisplayTarget>> readDisplays = readDisplays ?? InstantCapture.ReadDisplays;
 
     public async Task<string> ScreenshotAsync(Bitmap image, OutputDestination destination, AppSettings settings, string? fileName = null, FileNamePlan? namePlan = null,
         DateTimeOffset? capturedAt = null, Action? onDelivered = null, Rectangle? captureBounds = null,
@@ -44,7 +47,7 @@ internal sealed class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImag
                     capturedWithBounds?.Invoke(owned, saved, captureTime, captureBounds);
                 }
                 if (succeeded) onDelivered?.Invoke();
-            }, captureBounds, prepareFile);
+            }, captureBounds, prepareFile, DescribeCapture(captureBounds));
     }
 
     public async Task<string> RecordingAsync(string source, OutputDestination destination, AppSettings settings, string? fileName = null, FileNamePlan? namePlan = null,
@@ -58,12 +61,14 @@ internal sealed class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImag
         if (fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, DateTimeOffset.Now, CaptureIntent.Recording);
         return await DeliverAsync(CaptureIntent.Recording, destination, () => copyFile(source),
             () => Task.Run(() => CopyVideo(source, settings.SaveDirectory, fileName: fileName, namePlan: namePlan)),
-            () => Task.FromResult(source), settings.VideoEditorPath, settings.VideoEditorArguments, settings.OpenFolderAfterSave, captureBounds: captureBounds);
+            () => Task.FromResult(source), settings.VideoEditorPath, settings.VideoEditorArguments, settings.OpenFolderAfterSave,
+            captureBounds: captureBounds, captureDescription: DescribeCapture(captureBounds));
     }
 
     private async Task<string> DeliverAsync(CaptureIntent intent, OutputDestination destination, Func<Task> copy,
         Func<Task<string>> save, Func<Task<string>> prepareExternal, string executable, string arguments, bool openFolderAfterSave,
-        Action<string?, bool, bool>? completed = null, Rectangle? captureBounds = null, Func<Task<bool?>>? prepareFile = null)
+        Action<string?, bool, bool>? completed = null, Rectangle? captureBounds = null, Func<Task<bool?>>? prepareFile = null,
+        string? captureDescription = null)
     {
         var messages = new List<string>();
         var errors = new List<Exception>();
@@ -134,10 +139,17 @@ internal sealed class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImag
         {
             if (attempted)
                 NotifyDelivered(new CaptureDelivery(intent, succeeded, failed, folderOpenFailed,
-                    succeeded.HasFlag(OutputDestination.File) ? saved : null, captureBounds));
+                    succeeded.HasFlag(OutputDestination.File) ? saved : null, captureBounds, captureDescription));
         }
         if (errors.Count > 0) throw new IOException(result, new AggregateException(errors));
         return result;
+    }
+
+    private string? DescribeCapture(Rectangle? bounds)
+    {
+        if (bounds is not Rectangle capture) return null;
+        try { return CaptureTarget.Describe(capture, readDisplays()); }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException) { return null; }
     }
 
     private void NotifyDelivered(CaptureDelivery result)

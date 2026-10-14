@@ -57,6 +57,7 @@ internal static partial class Program
         FixedCaptureTests();
         DeliveryTests();
         FeedbackTests();
+        CaptureTargetTests();
         SnapTests();
         SelectionInteractionTests();
         StatusTests();
