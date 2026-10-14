@@ -10,6 +10,7 @@ internal static partial class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
+        if (args.Contains("--overlay-placement-smoke")) return RunOverlayPlacementSmoke();
         if (args.Contains("--ocr-smoke")) return RunOcrSmoke();
         if (args.Contains("--ocr-ui-preview")) return OcrPreview();
         if (args.Contains("--display-routing-smoke")) return DisplayRoutingSmoke();
@@ -30,6 +31,7 @@ internal static partial class Program
         }
         Run("5つの撮影モード", () => Equal(5, Enum.GetValues<CaptureMode>().Length));
         CaptureTests();
+        OverlayWindowTests();
         ServiceTests();
         UiTests();
         RecordingTests();

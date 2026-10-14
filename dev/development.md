@@ -95,6 +95,16 @@ pwsh -File scripts/build.ps1 -NoRestore
 pwsh -File scripts/start.ps1 -Settings
 ```
 
+## 範囲選択画面の実モニタ配置検証
+
+通常テストのビルド後、次のコマンドで実モニタごとの配置を確認できます。単色の検証画面が短時間表示されます。画面撮影・音声取得・クリップボード変更は行いません。
+
+```powershell
+dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --overlay-placement-smoke
+```
+
+FancyZonesの「新規ウィンドウを現在のアクティブモニタへ移動」が有効な環境では、表示後の物理座標・クライアントサイズ・自動移動印を確認します。FancyZonesが停止中の成功は、FancyZonesとの併用確認を意味しません。通常テストでは、非表示の実HWNDとハンドル再作成後のツールウィンドウ属性を確認します。
+
 ## ファイルと配布の扱い
 
 | 場所 | 内容 |

@@ -30,6 +30,18 @@ internal sealed class CaptureOverlay : Form
 
     protected override bool ShowWithoutActivation => true;
 
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            CreateParams parameters = base.CreateParams;
+            // 範囲選択画面をFancyZones等の通常ウィンドウ自動配置から除外する。
+            // ハンドル再作成時も維持し、キー入力に必要なアクティブ化は許可する。
+            parameters.ExStyle |= 0x00000080; // WS_EX_TOOLWINDOW
+            return parameters;
+        }
+    }
+
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
