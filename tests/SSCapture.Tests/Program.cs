@@ -12,6 +12,7 @@ internal static partial class Program
         Application.EnableVisualStyles();
         if (args.Contains("--overlay-placement-smoke")) return RunOverlayPlacementSmoke();
         if (args.Contains("--selection-monitor-smoke")) return RunSelectionMonitorSmoke();
+        if (args.Contains("--window-hit-smoke")) return RunWindowHitSmoke();
         if (args.Contains("--ocr-smoke")) return RunOcrSmoke();
         if (args.Contains("--ocr-ui-preview")) return OcrPreview();
         if (args.Contains("--display-routing-smoke")) return DisplayRoutingSmoke();

@@ -76,6 +76,11 @@ internal sealed class SelectionGesture
         {
             int x = horizontal.Prepare(point.X, lockWidth, previous.X, previous.X != start.X, HasDragged);
             int y = vertical.Prepare(point.Y, lockHeight, previous.Y, previous.Y != start.Y, HasDragged);
+            if (monitors.Count == 1)
+            {
+                x = Math.Clamp(x, monitors[0].Left, monitors[0].Right);
+                y = Math.Clamp(y, monitors[0].Top, monitors[0].Bottom);
+            }
             Point adjusted = new(x, y);
             Point quantized = Grid20 || snap ? new(Quantize(x, start.X, true), Quantize(y, start.Y, false)) : adjusted;
             Point snapped = snap ? snapEdges.Apply(adjusted) : adjusted;

@@ -61,6 +61,13 @@ internal static partial class Program
             g.Move(new(990, 990), true, lockHeight: true);
             Equal(new Rectangle(103, 107, 897, 60), g.Selection);
         });
+        Run("寸法固定解除の補正でも開始モニタを越えない", () =>
+        {
+            var g = RectangleGesture(); g.Begin(new(100, 100), new(8, 8)); g.Move(new(800, 800));
+            g.Move(new(200, 200), lockHeight: true, lockWidth: true);
+            g.Move(new(200, 200)); g.Move(new(999, 999));
+            Equal(new Rectangle(100, 100, 900, 900), g.Selection);
+        });
         Run("丸めと修飾キーだけでは単押しをドラッグにしない", () =>
         {
             var g = new SelectionGesture(CaptureMode.Rectangle, [new(0, 0, 1000, 1000)], [new(90, 90, 200, 150)]) { Grid20 = true };
@@ -122,6 +129,52 @@ internal static partial class Program
                 }
                 finally { session.Cancel(); }
             }
+        });
+        Run("画面固定は選択中断・一時モード後もON開始画像/OFF確定後画像", () =>
+        {
+            foreach (bool freeze in new[] { true, false })
+            {
+                Rectangle desktop = new(0, 0, 100, 100);
+                DesktopSnapshot Frame(Color color)
+                {
+                    Bitmap bitmap = new(100, 100);
+                    using (Graphics graphics = Graphics.FromImage(bitmap)) graphics.Clear(color);
+                    return new(bitmap, desktop, [desktop]);
+                }
+                int reads = 0;
+                var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard, FreezeFrame: freeze),
+                    Frame(Color.Red), [desktop], () => { reads++; return Frame(Color.Blue); }, new(20, 20));
+                try
+                {
+                    session.AbortSelection(); session.ChangeMode(CaptureMode.Window);
+                    session.CompleteSelection(new(new(10, 10, 30, 30), null, OutputDestination.Clipboard));
+                    using var result = session.Completion.GetAwaiter().GetResult();
+                    Equal(freeze ? 0 : 1, reads);
+                    Equal((freeze ? Color.Red : Color.Blue).ToArgb(), result.Image!.GetPixel(15, 15).ToArgb());
+                    Equal(OutputDestination.Clipboard, result.Selection!.Destination);
+                }
+                finally { session.Cancel(); }
+            }
+        });
+        Run("全設定の入力・ボタン・行ラベルにツールチップを付ける", () =>
+        {
+            using var form = new UI.SettingsForm(new Services.AppSettings(), _ => null, () => { }, () => []);
+            var tips = (ToolTip)typeof(UI.SettingsForm).GetField("settingTips", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(form)!;
+            foreach (Control control in Descendants(form).Where(c => c is TextBox or ComboBox or CheckBox or NumericUpDown or Button))
+            {
+                if (control.Name == "Status") continue;
+                string description = tips.GetToolTip(control) ?? "";
+                Check(!string.IsNullOrWhiteSpace(description), "説明欠落: " + control.Name);
+                Check(!description.Contains("ONでは") && !description.Contains("OFFでは"), "表記不一致: " + control.Name);
+            }
+            var freeze = form.Controls.Find("FreezeFrame", true).Single();
+            var table = (TableLayoutPanel)freeze.Parent!;
+            var label = (Label)table.GetControlFromPosition(0, 3)!;
+            Equal("撮影タイミング", label.Text);
+            Equal(tips.GetToolTip(freeze), tips.GetToolTip(label));
+            _ = form.Handle; foreach (Control child in Descendants(form)) _ = child.Handle; LayoutTree(form);
+            Check(label.Parent!.ClientRectangle.Contains(label.Bounds) && label.PreferredSize.Width <= label.Width,
+                $"撮影タイミングが見切れる: label={label.Bounds}, preferred={label.PreferredSize}, parent={label.Parent.ClientRectangle}");
         });
     }
 

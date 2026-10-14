@@ -175,7 +175,7 @@ internal sealed class SessionController
         CaptureOverlay owner = menuOwner ?? overlays.FirstOrDefault(o => o.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
         guide?.Dispose();
         guide = new UI.SelectionGuideForm(owner.MonitorBounds, options.Intent, Cancel,
-            Mode == CaptureMode.FixedRegion ? options.FixedSize ?? new Size(1280, 720) : null, HandleCommandKey, options.FixedAnchor, AltKeyChanged);
+            Mode == CaptureMode.FixedRegion ? options.FixedSize ?? new Size(1280, 720) : null, HandleCommandKey, options.FixedAnchor, AltKeyChanged, Mode);
         guide.Show(owner);
     }
 
@@ -202,7 +202,7 @@ internal sealed class SessionController
             active.Activate();
             active.Focus();
             guide = new UI.SelectionGuideForm(active.MonitorBounds, options.Intent, Cancel,
-                Mode == CaptureMode.FixedRegion ? options.FixedSize : null, HandleCommandKey, options.FixedAnchor, AltKeyChanged);
+                Mode == CaptureMode.FixedRegion ? options.FixedSize : null, HandleCommandKey, options.FixedAnchor, AltKeyChanged, Mode);
             guide.Show(active);
             active.Activate();
             active.Focus();

@@ -18,6 +18,7 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox clipboardOutput, fileOutput, externalOutput, freeze, systemAudio, micAudio, openFolderAfterSave;
     private readonly TextBox status;
     private readonly System.Windows.Forms.Timer statusTimer = new() { Interval = 1000 };
+    private readonly ToolTip settingTips = new() { AutoPopDelay = 25000, InitialDelay = 500, ReshowDelay = 100, ShowAlways = true };
     private readonly Func<DateTimeOffset> now;
     private StatusMessage? statusMessage;
     private readonly Func<AppSettings, string?> save;
@@ -60,7 +61,7 @@ internal sealed class SettingsForm : Form
         Add(basic, "出力先", destinations, 2);
         CheckBox OutputToggle(string text, string name, OutputDestination value) => new()
         { Text = text, Name = name, AutoSize = true, Checked = settings.DefaultDestination.HasFlag(value), Margin = new Padding(0, 3, 12, 0) };
-        freeze = Toggle(basic, "画像", "FreezeFrame", "キーを押した時点の画面を固定", settings.FreezeFrame, 3);
+        freeze = Toggle(basic, "撮影タイミング", "FreezeFrame", "撮影開始時の画面を固定", settings.FreezeFrame, 3);
         openFolderAfterSave = Toggle(basic, "保存後", "OpenFolderAfterSave", "保存フォルダを開く", settings.OpenFolderAfterSave, 4);
         limitToStartingMonitor = Toggle(basic, "範囲選択", "LimitToStartingMonitor", "開始画面内だけで選択", settings.LimitToStartingMonitor, 5);
         var naming = Page(tabs, "ファイル名");
@@ -183,6 +184,7 @@ internal sealed class SettingsForm : Form
         AcceptButton = saveButton;
         CancelButton = closeButton;
         if (deviceError is not null) SetStatus(deviceError, true);
+        SettingsHelp.Apply(this, settingTips);
     }
 
     public void SetStatus(string text, bool error = false) => SetStatus(new StatusMessage(text, error, now()));
@@ -212,7 +214,7 @@ internal sealed class SettingsForm : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) statusTimer.Dispose();
+        if (disposing) { statusTimer.Dispose(); settingTips.Dispose(); }
         base.Dispose(disposing);
     }
     private void SaveSettings()

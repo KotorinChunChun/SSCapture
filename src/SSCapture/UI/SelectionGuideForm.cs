@@ -6,7 +6,8 @@ internal sealed class SelectionGuideForm : Form
     private readonly Func<Keys, bool>? handleKey;
     private readonly Action? modifiersChanged;
     internal SelectionGuideForm(Rectangle monitor, CaptureIntent intent, Action cancel, Size? fixedSize = null,
-        Func<Keys, bool>? handleKey = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft, Action? modifiersChanged = null)
+        Func<Keys, bool>? handleKey = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft, Action? modifiersChanged = null,
+        CaptureMode mode = CaptureMode.Rectangle)
     {
         this.cancel = cancel;
         this.handleKey = handleKey;
@@ -20,15 +21,17 @@ internal sealed class SelectionGuideForm : Form
         TopMost = true;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = fixedSize is null ? new Size(560, 90) : new Size(660, 104);
+        ClientSize = new Size(720, 116);
         StartPosition = FormStartPosition.Manual;
         Location = new Point(Math.Max(monitor.Left, monitor.Right - Width - 16), Math.Max(monitor.Top, monitor.Bottom - Height - 16));
         Controls.Add(new Label
         {
             Name = "SelectionHelp", Dock = DockStyle.Fill, Padding = new Padding(8, 4, 8, 4),
             Text = fixedSize is Size dimensions
-                ? $"固定サイズ {dimensions.Width} × {dimensions.Height} px　基点: {AnchorText(fixedAnchor)}　左クリック / Enter: 確定\n矢印: 1px移動　Shift＋矢印: 10px移動　Alt: 枠へスナップ（20px）\n右クリック: 出力先　Esc: キャンセル　画面外の枠は確定できません"
-                : "左クリック: ウィンドウ　中央クリック: 画面全体\n左ドラッグ: 範囲選択　Alt: 矩形を枠へスナップ（20px）\n右クリック: 出力先　Esc: キャンセル"
+                ? $"固定サイズ {dimensions.Width} × {dimensions.Height} px　基点: {AnchorText(fixedAnchor)}　左クリック / Enter: 確定\n矢印: 1px移動　Shift＋矢印: 10px移動　Alt: 枠へスナップ\n中央クリック: 画面全体　右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断　画面外の枠は確定不可"
+                : mode == CaptureMode.Rectangle
+                    ? "左クリック: ウィンドウ　中央クリック: 画面全体　左ドラッグ: 範囲選択\nShift: 高さ固定　Ctrl: 幅固定　Alt: 20px単位＋枠吸着\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
+                    : $"左クリック: ウィンドウ　中央クリック: 画面全体\n{(mode == CaptureMode.Freeform ? "左ドラッグ: 輪郭を囲む" : "ウィンドウを選んで左クリックで確定")}\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
         });
         FormClosing += (_, _) => cancel();
     }

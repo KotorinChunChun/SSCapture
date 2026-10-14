@@ -40,6 +40,11 @@ internal static class CaptureNative
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsIconic(nint window);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern nint GetWindowLongPtr(nint window, int index);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetLayeredWindowAttributes(nint window, out uint color, out byte alpha, out uint flags);
     [DllImport("user32.dll")]
     private static extern nint GetShellWindow();
     [DllImport("user32.dll")]
@@ -132,6 +137,11 @@ internal static class CaptureNative
         EnumWindows((window, data) =>
         {
             if (window == shell || !IsWindowVisible(window) || IsIconic(window)) return true;
+            long style = GetWindowLongPtr(window, -20 /* GWL_EXSTYLE */).ToInt64();
+            // 入力透過の補助画面や完全透明な画面の矩形で、背後の撮影対象を遮らない。
+            if ((style & 0x20 /* WS_EX_TRANSPARENT */) != 0) return true;
+            if ((style & 0x80000 /* WS_EX_LAYERED */) != 0 && GetLayeredWindowAttributes(window, out _, out byte alpha, out uint flags)
+                && (flags & 2 /* LWA_ALPHA */) != 0 && alpha == 0) return true;
             if (DwmGetWindowAttributeInt(window, 14, out int cloaked, sizeof(int)) == 0 && cloaked != 0) return true;
             if (DwmGetWindowAttribute(window, 9, out NativeRect bounds, Marshal.SizeOf<NativeRect>()) != 0
                 && !GetWindowRect(window, out bounds)) return true;
