@@ -94,6 +94,14 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
             }
             Controls[0].Padding = new Padding((int)Math.Round(16 * scale), (int)Math.Round(10 * scale),
                 (int)Math.Round(16 * scale), (int)Math.Round(10 * scale));
+            // 範囲文言は改行だけでなく折返しも含めて必要な高さを測る。
+            int textWidth = Math.Max(1, bounds.Width - Controls[0].Padding.Horizontal);
+            Size measured = TextRenderer.MeasureText(text, message.Font, new Size(textWidth, int.MaxValue),
+                TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+            int margin = monitor.WorkArea.Bottom - bounds.Bottom;
+            int height = Math.Min(Math.Max(bounds.Height, measured.Height + Controls[0].Padding.Vertical),
+                monitor.WorkArea.Height - margin * 2);
+            bounds = new Rectangle(bounds.X, bounds.Bottom - height, bounds.Width, height);
             BackColor = hasFailure ? Color.FromArgb(99, 55, 25) : Color.FromArgb(28, 43, 50);
             message.Text = text;
             Bounds = bounds;

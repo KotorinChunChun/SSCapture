@@ -10,6 +10,12 @@ internal static partial class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
+        if (args.Contains("--overlay-placement-smoke")) return RunOverlayPlacementSmoke();
+        if (args.Contains("--selection-monitor-smoke")) return RunSelectionMonitorSmoke();
+        if (args.Contains("--window-hit-smoke")) return RunWindowHitSmoke();
+        if (args.Contains("--selection-input-smoke")) return RunSelectionInputSmoke();
+        if (args.Contains("--paint-launch-smoke")) return RunPaintLaunchSmoke(args[1]);
+        if (args.Contains("--capture-target-toast-smoke")) return RunCaptureTargetToastSmoke();
         if (args.Contains("--ocr-smoke")) return RunOcrSmoke();
         if (args.Contains("--ocr-ui-preview")) return OcrPreview();
         if (args.Contains("--display-routing-smoke")) return DisplayRoutingSmoke();
@@ -30,6 +36,8 @@ internal static partial class Program
         }
         Run("5つの撮影モード", () => Equal(5, Enum.GetValues<CaptureMode>().Length));
         CaptureTests();
+        OverlayWindowTests();
+        SelectionMonitorTests();
         ServiceTests();
         UiTests();
         RecordingTests();
@@ -51,7 +59,9 @@ internal static partial class Program
         FixedCaptureTests();
         DeliveryTests();
         FeedbackTests();
+        CaptureTargetTests();
         SnapTests();
+        SelectionInteractionTests();
         StatusTests();
         TrayOperationPolicyTests();
         Console.WriteLine($"RESULT: {passed} passed, {failed} failed");

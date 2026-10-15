@@ -11,13 +11,14 @@ internal sealed class SettingsForm : Form
     private readonly TextBox directory, imageEditor, videoEditor, imageArguments, videoArguments, fileNamePattern, ocrSeparator, oneOcrDirectory;
     private readonly HotkeyEditor screenshot1, screenshot2, recording1, recording2, lastRegionKey;
     private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration;
-    private readonly CheckBox includeCursor, keepHistory, playCaptureSound;
+    private readonly CheckBox includeCursor, keepHistory, playCaptureSound, limitToStartingMonitor;
     private readonly ComboBox notificationCorner, notificationDisplay, fixedCaptureAnchor;
     private readonly HotkeyEditor[] instantKeys = new HotkeyEditor[10];
     private readonly ComboBox mode, microphone;
     private readonly CheckBox clipboardOutput, fileOutput, externalOutput, freeze, systemAudio, micAudio, openFolderAfterSave;
     private readonly TextBox status;
     private readonly System.Windows.Forms.Timer statusTimer = new() { Interval = 1000 };
+    private readonly ToolTip settingTips = new() { AutoPopDelay = 25000, InitialDelay = 500, ReshowDelay = 100, ShowAlways = true };
     private readonly Func<DateTimeOffset> now;
     private StatusMessage? statusMessage;
     private readonly Func<AppSettings, string?> save;
@@ -60,8 +61,9 @@ internal sealed class SettingsForm : Form
         Add(basic, "出力先", destinations, 2);
         CheckBox OutputToggle(string text, string name, OutputDestination value) => new()
         { Text = text, Name = name, AutoSize = true, Checked = settings.DefaultDestination.HasFlag(value), Margin = new Padding(0, 3, 12, 0) };
-        freeze = Toggle(basic, "画像", "FreezeFrame", "キーを押した時点の画面を固定", settings.FreezeFrame, 3);
+        freeze = Toggle(basic, "撮影タイミング", "FreezeFrame", "撮影開始時の画面を固定", settings.FreezeFrame, 3);
         openFolderAfterSave = Toggle(basic, "保存後", "OpenFolderAfterSave", "保存フォルダを開く", settings.OpenFolderAfterSave, 4);
+        limitToStartingMonitor = Toggle(basic, "範囲選択", "LimitToStartingMonitor", "開始画面内だけで選択", settings.LimitToStartingMonitor, 5);
         var naming = Page(tabs, "ファイル名");
         fileNamePattern = Field(naming, "パターン", "FileNamePattern", settings.FileNamePattern, 0);
         ocrSeparator = Field(naming, "OCR区切り", "OcrSeparator", settings.OcrSeparator, 1);
@@ -182,6 +184,7 @@ internal sealed class SettingsForm : Form
         AcceptButton = saveButton;
         CancelButton = closeButton;
         if (deviceError is not null) SetStatus(deviceError, true);
+        SettingsHelp.Apply(this, settingTips);
     }
 
     public void SetStatus(string text, bool error = false) => SetStatus(new StatusMessage(text, error, now()));
@@ -211,7 +214,7 @@ internal sealed class SettingsForm : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) statusTimer.Dispose();
+        if (disposing) { statusTimer.Dispose(); settingTips.Dispose(); }
         base.Dispose(disposing);
     }
     private void SaveSettings()
@@ -224,7 +227,8 @@ internal sealed class SettingsForm : Form
                 OpenFolderAfterSave = openFolderAfterSave.Checked,
                 FileNamePattern = fileNamePattern.Text, OcrSeparator = ocrSeparator.Text, OneOcrDirectory = Expand(oneOcrDirectory.Text),
                 DefaultDestination = (clipboardOutput.Checked ? OutputDestination.Clipboard : 0) | (fileOutput.Checked ? OutputDestination.File : 0) | (externalOutput.Checked ? OutputDestination.ExternalApp : 0),
-                FreezeFrame = freeze.Checked, ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
+                FreezeFrame = freeze.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
+                ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
                 RecordingShortcut1 = recording1.Value, RecordingShortcut2 = recording2.Value,
                 LastRegionShortcut = lastRegionKey.Value, FixedWidth = (int)fixedWidth.Value, FixedHeight = (int)fixedHeight.Value,
                 FixedCaptureAnchor = ((CaptureAnchorItem)fixedCaptureAnchor.SelectedItem!).Value,

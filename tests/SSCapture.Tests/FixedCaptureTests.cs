@@ -65,7 +65,7 @@ internal static partial class Program
             Check(gesture.FixedSelection(OutputDestination.File) is null, "外側は確定しない");
             gesture.Move(new Point(-20, 20));
             Equal(new Rectangle(-20, 20, 20, 30), gesture.FixedSelection(OutputDestination.File)!.Bounds);
-            Check(gesture.MonitorSelection(new Point(-20, 20), OutputDestination.File) is null, "中央クリックでモニタサイズに変更しない");
+            Equal(left, gesture.MonitorSelection(new Point(-20, 20), OutputDestination.File)!.Bounds);
         });
         Run("固定サイズの1px撮影は元画像の1pxをそのまま返す", () =>
         {

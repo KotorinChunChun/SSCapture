@@ -5,11 +5,17 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     private readonly Action cancel;
     private readonly Font menuFont = new("Yu Gothic UI", 12F);
     private readonly Dictionary<OutputDestination, ToolStripMenuItem> destinations = [];
+    private readonly Dictionary<CaptureMode, ToolStripMenuItem> modes = [];
+    private readonly ToolStripMenuItem? gridItem;
+    private readonly Func<bool> ownsPopupFocus;
 
     internal CaptureContextMenu(OutputDestination selected, Action<OutputDestination> changeDestination,
-        Action openSettings, Action cancel)
+        Action openSettings, Action cancel, CaptureMode mode = CaptureMode.Rectangle, bool grid20 = false,
+        Action<CaptureMode>? changeMode = null, Action<bool>? changeGrid = null, Action? captureDesktop = null,
+        Func<bool>? ownsPopupFocus = null)
     {
         this.cancel = cancel;
+        this.ownsPopupFocus = ownsPopupFocus ?? (() => CaptureNative.OwnsForegroundWindow() || CaptureNative.ForegroundTransition);
         Font = menuFont;
         foreach (OutputDestination destination in new[] { OutputDestination.Clipboard, OutputDestination.File, OutputDestination.ExternalApp })
         {
@@ -26,9 +32,60 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             Items.Add(item);
         }
         Items.Add(new ToolStripSeparator());
+        if (changeMode is not null)
+        {
+            var modeMenu = new ToolStripMenuItem("撮影モード") { Name = "CaptureModeMenu", ToolTipText = "現在の撮影中だけモードを変更します。次回は設定画面の撮影モードから開始します。", DropDown = new SelectionModeDropDown(this.ownsPopupFocus) };
+            foreach (CaptureMode value in Enum.GetValues<CaptureMode>())
+            {
+                var item = new ToolStripMenuItem(UI.SettingsForm.ModeName(value)) { Tag = value };
+                item.Click += (_, _) => changeMode(value);
+                modes.Add(value, item);
+                modeMenu.DropDownItems.Add(item);
+            }
+            Items.Add(modeMenu);
+            SetMode(mode);
+        }
+        if (captureDesktop is not null)
+            Items.Add(new ToolStripMenuItem("デスクトップ全体 (中央クリック)", null, (_, _) => captureDesktop())
+            { Name = "CaptureDesktop", ToolTipText = "対象モニタ1枚の全体を撮影します。開始画面への制限がONのときは開始モニタ、OFFのときは右クリック位置のモニタが対象です。" });
+        if (changeGrid is not null)
+        {
+            Items.Add(new ToolStripSeparator());
+            gridItem = new ToolStripMenuItem("20px単位") { Name = "Grid20", Checked = grid20,
+                ToolTipText = "ONのときは矩形の幅・高さを20物理ピクセル単位で変更します。OFFのときもAltを押している間は有効です。Altの枠吸着を優先するため、吸着時は20の倍数以外になる場合があります。" };
+            gridItem.Click += (_, _) => changeGrid(!gridItem.Checked);
+            Items.Add(gridItem);
+        }
+        if (changeMode is not null || captureDesktop is not null || changeGrid is not null) Items.Add(new ToolStripSeparator());
         Items.Add("設定", null, (_, _) => openSettings());
         Items.Add("閉じる / キャンセル", null, (_, _) => cancel());
         SetDestination(selected);
+    }
+
+    internal void SetMode(CaptureMode mode)
+    {
+        foreach (var (value, item) in modes) item.Checked = value == mode;
+    }
+
+    internal void SetGrid(bool enabled) { if (gridItem is not null) gridItem.Checked = enabled; }
+
+    protected override void OnClosing(ToolStripDropDownClosingEventArgs e)
+    {
+        if (e.CloseReason == ToolStripDropDownCloseReason.AppFocusChange
+            && modes.Values.Any(item => item.Owner is ToolStripDropDown { Visible: true })
+            && ownsPopupFocus()) e.Cancel = true;
+        base.OnClosing(e);
+    }
+
+    private sealed class SelectionModeDropDown(Func<bool> ownsPopupFocus) : ToolStripDropDownMenu
+    {
+        protected override void OnClosing(ToolStripDropDownClosingEventArgs e)
+        {
+            // 子メニューへの前面切替中は、親子のメニューをまとめて閉じない。
+            if (e.CloseReason == ToolStripDropDownCloseReason.AppFocusChange
+                && ownsPopupFocus()) e.Cancel = true;
+            base.OnClosing(e);
+        }
     }
 
     private void SetDestination(OutputDestination selected)

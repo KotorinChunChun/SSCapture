@@ -5,6 +5,7 @@ namespace SSCapture.Capture;
 
 internal static class CaptureNative
 {
+    internal const int WsExToolWindow = 0x00000080;
     internal const int WmDisplayChange = 0x007e;
     internal const int WmDpiChanged = 0x02e0;
     internal const int WmSessionChange = 0x02b1;
@@ -39,6 +40,11 @@ internal static class CaptureNative
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsIconic(nint window);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern nint GetWindowLongPtr(nint window, int index);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetLayeredWindowAttributes(nint window, out uint color, out byte alpha, out uint flags);
     [DllImport("user32.dll")]
     private static extern nint GetShellWindow();
     [DllImport("user32.dll")]
@@ -79,6 +85,15 @@ internal static class CaptureNative
     internal static bool AltPressed(bool queuedKeyState = false) =>
         ((queuedKeyState ? GetKeyState(0x12 /* VK_MENU */) : GetAsyncKeyState(0x12)) & 0x8000) != 0;
 
+    internal static Keys Modifiers(bool queuedKeyState = false)
+    {
+        bool Down(int key) => ((queuedKeyState ? GetKeyState(key) : GetAsyncKeyState(key)) & 0x8000) != 0;
+        return (Down(0x10) ? Keys.Shift : Keys.None) | (Down(0x11) ? Keys.Control : Keys.None) | (Down(0x12) ? Keys.Alt : Keys.None);
+    }
+
+    internal static bool IsModifierTransition(int message, nint key) =>
+        (message is 0x0100 or 0x0101 or 0x0104 or 0x0105) && (key.ToInt32() is 0x10 or 0x11 or 0x12 or >= 0xa0 and <= 0xa5);
+
     internal static bool IsAltTransition(int message, nint key) =>
         (message is 0x0100 or 0x0101 or 0x0104 or 0x0105) && (key.ToInt32() is 0x12 or 0xa4 or 0xa5);
 
@@ -101,6 +116,8 @@ internal static class CaptureNative
         return processId == Environment.ProcessId;
     }
 
+    internal static bool ForegroundTransition => GetForegroundWindow() == 0;
+
     internal static IReadOnlyList<Rectangle> MonitorBounds()
     {
         List<Rectangle> monitors = [];
@@ -122,6 +139,11 @@ internal static class CaptureNative
         EnumWindows((window, data) =>
         {
             if (window == shell || !IsWindowVisible(window) || IsIconic(window)) return true;
+            long style = GetWindowLongPtr(window, -20 /* GWL_EXSTYLE */).ToInt64();
+            // 入力透過の補助画面や完全透明な画面の矩形で、背後の撮影対象を遮らない。
+            if ((style & 0x20 /* WS_EX_TRANSPARENT */) != 0) return true;
+            if ((style & 0x80000 /* WS_EX_LAYERED */) != 0 && GetLayeredWindowAttributes(window, out _, out byte alpha, out uint flags)
+                && (flags & 2 /* LWA_ALPHA */) != 0 && alpha == 0) return true;
             if (DwmGetWindowAttributeInt(window, 14, out int cloaked, sizeof(int)) == 0 && cloaked != 0) return true;
             if (DwmGetWindowAttribute(window, 9, out NativeRect bounds, Marshal.SizeOf<NativeRect>()) != 0
                 && !GetWindowRect(window, out bounds)) return true;

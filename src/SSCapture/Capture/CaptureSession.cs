@@ -3,20 +3,21 @@ namespace SSCapture.Capture;
 internal static class CaptureSession
 {
     /// <summary>Call on the application's STA UI thread. The caller owns the outcome.</summary>
-    public static Task<CaptureOutcome> SelectAsync(CaptureOptions options)
+    public static Task<CaptureOutcome> SelectAsync(CaptureOptions options, Action<bool>? gridChanged = null)
     {
         ValidateCall(options);
+        Point initialPointer = CaptureNative.CursorPosition();
         // Freeze before showing any overlay or menu, with no intentional capture delay.
         DesktopSnapshot snapshot = DesktopSnapshot.Take(options.IncludeCursor);
         IReadOnlyList<Rectangle> windows;
         try { windows = CaptureNative.WindowBounds(snapshot.Bounds); }
         catch { snapshot.Dispose(); throw; }
-        return SelectAsync(options, snapshot, windows, () => CaptureNative.TakeAfterOverlaysClosed(options.IncludeCursor));
+        return SelectAsync(options, snapshot, windows, () => CaptureNative.TakeAfterOverlaysClosed(options.IncludeCursor), initialPointer, gridChanged);
     }
 
     /// <summary>Consumes snapshot. Never reads desktop pixels or enumerates real windows.</summary>
     internal static Task<CaptureOutcome> SelectAsync(CaptureOptions options, DesktopSnapshot snapshot,
-        IReadOnlyList<Rectangle>? windows = null, Func<DesktopSnapshot>? currentFrameFactory = null)
+        IReadOnlyList<Rectangle>? windows = null, Func<DesktopSnapshot>? currentFrameFactory = null, Point? initialPointer = null, Action<bool>? gridChanged = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         try
@@ -24,7 +25,8 @@ internal static class CaptureSession
             ValidateCall(options);
             if (!options.FreezeFrame && options.Intent == CaptureIntent.Screenshot && currentFrameFactory is null)
                 throw new ArgumentException("画面固定OFFの合成画像検証には画像取得関数を指定してください。", nameof(currentFrameFactory));
-            SessionController session = new(options, snapshot, windows ?? [], currentFrameFactory);
+            SessionController session = new(options, snapshot, windows ?? [], currentFrameFactory,
+                initialPointer ?? CaptureNative.CursorPosition(), gridChanged: gridChanged);
             session.Start();
             return session.Completion;
         }
@@ -62,7 +64,14 @@ internal sealed class SessionController
     private readonly List<CaptureOverlay> overlays = [];
     private readonly CaptureOptions options;
     private readonly Func<DesktopSnapshot>? currentFrameFactory;
-    private readonly SelectionGesture gesture;
+    private SelectionGesture gesture;
+    private readonly IReadOnlyList<Rectangle> windows;
+    private readonly Action<bool>? gridChanged;
+    private Point menuPointer;
+    private readonly Point initialPointer;
+    private readonly Rectangle? selectionBounds;
+    private readonly Func<Rectangle, IDisposable> confineCursor;
+    private IDisposable? cursorConfinement;
     private CaptureOverlay? dragOwner;
     private CaptureOverlay? menuOwner;
     private UI.SelectionGuideForm? guide;
@@ -73,9 +82,13 @@ internal sealed class SessionController
     private bool menuOpen;
     private Point? lastPointerPosition;
     private bool lastSnap;
+    private bool lastHeightLock, lastWidthLock;
+    private Keys ignoredModifiers;
+    private MouseButtons suppressedButtons;
     private System.Windows.Forms.Timer? snapTimer;
 
-    internal CaptureMode Mode => options.Mode;
+    internal CaptureMode Mode { get; private set; }
+    internal bool Grid20 => gesture.Grid20;
     internal DesktopSnapshot Snapshot { get; }
     internal Task<CaptureOutcome> Completion => completion.Task;
     internal bool Dragging => gesture.IsPressed;
@@ -83,44 +96,126 @@ internal sealed class SessionController
     internal Rectangle Selection => gesture.Selection;
     internal List<Point> Points => gesture.Points;
     internal OutputDestination Destination { get; private set; }
+    internal IReadOnlyList<Rectangle> SelectionMonitors { get; }
     internal CaptureContextMenu SelectionMenu { get; }
     internal bool FixedSelectionValid => Mode != CaptureMode.FixedRegion || gesture.FixedSelection(Destination) is not null;
 
     internal SessionController(CaptureOptions options, DesktopSnapshot snapshot,
-        IReadOnlyList<Rectangle> windows, Func<DesktopSnapshot>? currentFrameFactory = null)
+        IReadOnlyList<Rectangle> windows, Func<DesktopSnapshot>? currentFrameFactory = null,
+        Point? initialPointer = null, Func<Rectangle, IDisposable>? confineCursor = null, Action<bool>? gridChanged = null)
     {
         this.options = options;
+        Mode = options.Mode;
+        this.gridChanged = gridChanged;
         this.currentFrameFactory = currentFrameFactory;
+        this.initialPointer = initialPointer ?? snapshot.Monitors[0].Location;
+        this.confineCursor = confineCursor ?? CursorConfinement.Acquire;
         Snapshot = snapshot;
         Destination = options.Destination;
-        gesture = new SelectionGesture(options.Mode, snapshot.Monitors, windows.ToArray(), options.FixedSize, options.FixedAnchor);
+        if (options.LimitToStartingMonitor && options.Mode != CaptureMode.FullScreen)
+        {
+            selectionBounds = snapshot.Monitors.FirstOrDefault(monitor => monitor.Contains(this.initialPointer));
+            if (selectionBounds.Value.IsEmpty) throw new InvalidOperationException("開始位置のモニタが見つかりません。もう一度選択してください。");
+            SelectionMonitors = [selectionBounds.Value];
+            windows = windows.Select(window => Rectangle.Intersect(window, selectionBounds.Value))
+                .Where(CaptureGeometry.IsUsable).ToArray();
+        }
+        else SelectionMonitors = snapshot.Monitors;
+        this.windows = windows.ToArray();
+        gesture = CreateGesture(Mode, options.Grid20);
         SelectionMenu = new CaptureContextMenu(Destination, destination => Destination = destination,
-            () => FinishCommand(true), Cancel);
+            () => FinishCommand(true), Cancel, Mode, options.Grid20, ChangeMode, ChangeGrid20, () => CaptureDesktop(menuPointer));
         SelectionMenu.Closed += MenuClosed;
+    }
+
+    private SelectionGesture CreateGesture(CaptureMode mode, bool grid20) =>
+        new(mode, SelectionMonitors, windows, options.FixedSize ?? new Size(1280, 720), options.FixedAnchor) { Grid20 = grid20 };
+
+    internal void ChangeGrid20(bool enabled)
+    {
+        try
+        {
+            gridChanged?.Invoke(enabled);
+            gesture.Grid20 = enabled;
+            SelectionMenu.SetGrid(enabled);
+            if (lastPointerPosition is Point point) gesture.Move(point, lastSnap, lastHeightLock, lastWidthLock);
+            RefreshOverlays();
+        }
+        catch (Exception ex) { Fail(ex); }
+    }
+
+    internal void ChangeMode(CaptureMode mode)
+    {
+        if (completed || mode == Mode) return;
+        try
+        {
+            if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+            bool grid20 = Grid20;
+            gesture.Reset();
+            ReleasePointer();
+            Mode = mode;
+            gesture = CreateGesture(mode, grid20);
+            SelectionMenu.SetMode(mode);
+            if (SelectionMenu.Visible) SelectionMenu.Close(ToolStripDropDownCloseReason.ItemClicked);
+            if (mode == CaptureMode.FullScreen)
+            {
+                CompleteSelection(new CaptureSelection(selectionBounds ?? Snapshot.Bounds, null, Destination));
+                return;
+            }
+            lastPointerPosition = null;
+            gesture.Move(menuOpen ? menuPointer : initialPointer);
+            ReplaceGuide();
+            RefreshOverlays();
+        }
+        catch (Exception ex) { Fail(ex); }
+    }
+
+    private void ReplaceGuide()
+    {
+        if (overlays.Count == 0) return;
+        CaptureOverlay owner = menuOwner ?? overlays.FirstOrDefault(o => o.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
+        guide?.Dispose();
+        guide = new UI.SelectionGuideForm(owner.MonitorBounds, options.Intent, Cancel,
+            Mode == CaptureMode.FixedRegion ? options.FixedSize ?? new Size(1280, 720) : null, HandleCommandKey, options.FixedAnchor, AltKeyChanged, Mode);
+        guide.Show(owner);
+        owner.BeginInvoke((Action)(() =>
+        {
+            if (completed || owner.IsDisposed || menuOpen || !CaptureNative.OwnsForegroundWindow()) return;
+            owner.Activate();
+            owner.Focus();
+        }));
+    }
+
+    internal void CaptureDesktop(Point point)
+    {
+        CaptureSelection? selection = gesture.MonitorSelection(point, Destination);
+        if (selection is not null) CompleteSelection(selection, entireMonitor: true);
     }
 
     internal void Start()
     {
         try
         {
+            ignoredModifiers = CaptureNative.Modifiers() & (Keys.Shift | Keys.Control);
             if (Mode == CaptureMode.FullScreen)
             {
                 CompleteSelection(new CaptureSelection(Snapshot.Bounds, null, Destination));
                 return;
             }
-            foreach (Rectangle bounds in Snapshot.Monitors) overlays.Add(new CaptureOverlay(this, bounds));
+            foreach (Rectangle bounds in SelectionMonitors) overlays.Add(new CaptureOverlay(this, bounds));
             foreach (CaptureOverlay overlay in overlays) overlay.Show();
-            MoveTo(CaptureNative.CursorPosition(), CaptureNative.AltPressed());
+            MoveTo(initialPointer, CaptureNative.AltPressed());
             CaptureOverlay active = overlays.FirstOrDefault(overlay => overlay.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
             active.Activate();
             active.Focus();
             guide = new UI.SelectionGuideForm(active.MonitorBounds, options.Intent, Cancel,
-                Mode == CaptureMode.FixedRegion ? options.FixedSize : null, HandleCommandKey, options.FixedAnchor, AltKeyChanged);
+                Mode == CaptureMode.FixedRegion ? options.FixedSize : null, HandleCommandKey, options.FixedAnchor, AltKeyChanged, Mode);
             guide.Show(active);
             active.Activate();
             active.Focus();
             starting = false;
-            if (Mode is CaptureMode.Rectangle or CaptureMode.FixedRegion)
+            if (selectionBounds is Rectangle monitorBounds) cursorConfinement = confineCursor(monitorBounds);
+            if (Mode != CaptureMode.FullScreen)
             {
                 // Key messages can be routed to the movable guide or a captured
                 // overlay. Only while selecting, poll Alt to cover either route.
@@ -138,20 +233,27 @@ internal sealed class SessionController
         if (completed || menuOpen || menuTransition) return;
         try
         {
-            MoveTo(CaptureNative.CursorPosition(), CaptureNative.AltPressed(queuedKeyState));
+            Keys modifiers = ReadModifiers(queuedKeyState);
+            MoveTo(CaptureNative.CursorPosition(), (modifiers & Keys.Alt) != 0,
+                (modifiers & Keys.Shift) != 0, (modifiers & Keys.Control) != 0);
         }
         catch (Exception ex) { Fail(ex); }
     }
 
-    internal void MoveTo(Point physicalPosition, bool snap = false)
+    internal void MoveTo(Point physicalPosition, bool snap = false, bool lockHeight = false, bool lockWidth = false)
     {
         if (completed || menuOpen || menuTransition) return;
+        if (selectionBounds is Rectangle bounds)
+            physicalPosition = new Point(Math.Clamp(physicalPosition.X, bounds.Left, bounds.Right - 1),
+                Math.Clamp(physicalPosition.Y, bounds.Top, bounds.Bottom - 1));
         // Keyboard nudges must survive synthetic mouse messages at the unchanged cursor
         // location, including the click used to confirm an adjusted fixed rectangle.
         if (Mode == CaptureMode.FixedRegion && lastPointerPosition == physicalPosition && lastSnap == snap) return;
         lastPointerPosition = physicalPosition;
         lastSnap = snap;
-        gesture.Move(physicalPosition, snap);
+        lastHeightLock = lockHeight;
+        lastWidthLock = lockWidth;
+        gesture.Move(physicalPosition, snap, lockHeight, lockWidth);
         RefreshOverlays();
     }
 
@@ -160,18 +262,25 @@ internal sealed class SessionController
 
     private void UpdateModifiers(bool queuedKeyState)
     {
-        if (completed || menuOpen || menuTransition || Mode is not (CaptureMode.Rectangle or CaptureMode.FixedRegion)) return;
+        if (completed || menuOpen || menuTransition) return;
         try
         {
-            bool snap = CaptureNative.AltPressed(queuedKeyState);
-            if (snap != lastSnap && lastPointerPosition is Point point) MoveTo(point, snap);
+            if (Control.MouseButtons == MouseButtons.None) suppressedButtons = MouseButtons.None;
+            Keys modifiers = ReadModifiers(queuedKeyState);
+            bool snap = (modifiers & Keys.Alt) != 0, height = (modifiers & Keys.Shift) != 0, width = (modifiers & Keys.Control) != 0;
+            if ((snap != lastSnap || height != lastHeightLock || width != lastWidthLock) && lastPointerPosition is Point point)
+                MoveTo(point, snap, height, width);
         }
         catch (Exception ex) { Fail(ex); }
     }
 
     internal bool HandleCommandKey(Keys keyData)
     {
-        if ((keyData & Keys.KeyCode) == Keys.Escape) { Cancel(); return true; }
+        if ((keyData & Keys.KeyCode) == Keys.Escape)
+        {
+            if (gesture.IsPressed) AbortSelection(); else Cancel();
+            return true;
+        }
         if (completed || menuOpen || menuTransition || Mode != CaptureMode.FixedRegion) return false;
         if (keyData == Keys.Enter)
         {
@@ -192,36 +301,58 @@ internal sealed class SessionController
     internal void MouseDown(CaptureOverlay overlay, MouseButtons button)
     {
         if (completed || menuOpen || menuTransition) return;
-        if (button == MouseButtons.Right) { ShowMenu(overlay); return; }
-        if (Mode == CaptureMode.FixedRegion && button == MouseButtons.Middle) return;
+        if (suppressedButtons != MouseButtons.None) return;
+        if (button == MouseButtons.Right)
+        {
+            if (gesture.IsPressed) { AbortSelection(); suppressedButtons |= MouseButtons.Right; overlay.Capture = false; }
+            else ShowMenu(overlay);
+            return;
+        }
         if (button is not (MouseButtons.Left or MouseButtons.Middle) || pressedButton != MouseButtons.None) return;
         Move(true);
         if (completed) return;
         dragOwner = overlay;
         pressedButton = button;
-        if (button == MouseButtons.Left) gesture.Begin(gesture.RawCurrent, CaptureNative.DragThreshold(overlay.DeviceDpi), lastSnap);
+        if (button == MouseButtons.Left) gesture.Begin(gesture.RawCurrent, CaptureNative.DragThreshold(overlay.DeviceDpi), lastSnap, lastHeightLock, lastWidthLock);
         overlay.Capture = true;
         if (!overlay.Capture) Cancel();
     }
 
     internal void MouseUp(MouseButtons button)
     {
+        if ((suppressedButtons & button) != 0) { suppressedButtons &= ~button; return; }
         if (completed || menuOpen || menuTransition || button != pressedButton || pressedButton == MouseButtons.None) return;
         Move(true);
         if (completed) return;
         CaptureSelection? selection = button == MouseButtons.Middle
             ? gesture.MonitorSelection(gesture.RawCurrent, Destination)
-            : gesture.End(gesture.RawCurrent, Destination, lastSnap);
+            : gesture.End(gesture.RawCurrent, Destination, lastSnap, lastHeightLock, lastWidthLock);
         ReleasePointer();
-        if (selection is null && Mode != CaptureMode.FixedRegion) Cancel();
-        else if (selection is null) RefreshOverlays();
-        else CompleteSelection(selection);
+        if (selection is null) { gesture.Reset(); RefreshOverlays(); }
+        else CompleteSelection(selection, entireMonitor: button == MouseButtons.Middle);
+    }
+
+    private Keys ReadModifiers(bool queuedKeyState)
+    {
+        Keys modifiers = CaptureNative.Modifiers(queuedKeyState);
+        ignoredModifiers &= modifiers;
+        return modifiers & ~ignoredModifiers;
+    }
+
+    internal void AbortSelection()
+    {
+        suppressedButtons |= pressedButton;
+        gesture.Reset();
+        ReleasePointer();
+        RefreshOverlays();
     }
 
     private void ShowMenu(CaptureOverlay overlay)
     {
         try
         {
+            Move(true);
+            menuPointer = gesture.RawCurrent;
             menuTransition = true;
             gesture.Reset();
             ReleasePointer();
@@ -241,7 +372,9 @@ internal sealed class SessionController
         menuOpen = false;
         if (completed) return;
         menuTransition = true;
-        if (e.CloseReason is ToolStripDropDownCloseReason.AppFocusChange or ToolStripDropDownCloseReason.Keyboard)
+        // Popup activation can transiently clear GetForegroundWindow. Check focus
+        // after the closing input message instead of treating that transition as exit.
+        if (e.CloseReason == ToolStripDropDownCloseReason.Keyboard)
         {
             Cancel();
             return;
@@ -290,21 +423,33 @@ internal sealed class SessionController
 
     private void CloseOverlays()
     {
-        snapTimer?.Stop();
-        snapTimer?.Dispose();
-        snapTimer = null;
-        ReleasePointer();
-        gesture.Reset();
-        SelectionMenu.Dispose();
-        guide?.Dispose();
-        foreach (CaptureOverlay overlay in overlays) overlay.Dispose();
+        try
+        {
+            snapTimer?.Stop();
+            snapTimer?.Dispose();
+            snapTimer = null;
+            ReleasePointer();
+            gesture.Reset();
+            SelectionMenu.Dispose();
+            guide?.Dispose();
+            foreach (CaptureOverlay overlay in overlays) overlay.Dispose();
+        }
+        finally
+        {
+            IDisposable? confinement = cursorConfinement;
+            cursorConfinement = null;
+            confinement?.Dispose();
+        }
     }
 
-    internal void CompleteSelection(CaptureSelection selection)
+    internal void CompleteSelection(CaptureSelection selection, bool entireMonitor = false)
     {
         if (completed) return;
-        if (Mode == CaptureMode.FixedRegion && (selection.Polygon is not null
-            || selection.Bounds.Size != options.FixedSize || !CaptureGeometry.IsFullyCovered(selection.Bounds, Snapshot.Monitors))) return;
+        if (selectionBounds is Rectangle bounds && (!bounds.Contains(selection.Bounds)
+            || selection.Polygon?.Any(point => !bounds.Contains(point)) == true)) return;
+        Size fixedSize = options.FixedSize ?? new Size(1280, 720);
+        if (Mode == CaptureMode.FixedRegion && !entireMonitor && (selection.Polygon is not null
+            || selection.Bounds.Size != fixedSize || !CaptureGeometry.IsFullyCovered(selection.Bounds, SelectionMonitors))) return;
         completed = true;
         Bitmap? result = null;
         try

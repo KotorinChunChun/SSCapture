@@ -164,7 +164,7 @@ internal static partial class Program
                     Equal(new Rectangle(point.X + 1, point.Y + 10, 200, 120), result.Selection!.Bounds);
                     Equal(new Size(200, 120), result.Image!.Size);
                 })) return;
-                if (!await Test("固定サイズ 中央クリック無効・右メニュー出力追加後も寸法維持", async ct =>
+                if (!await Test("固定サイズ 右メニュー出力追加後も寸法維持", async ct =>
                 {
                     Point point = new(bounds.Left + 50, bounds.Top + 60);
                     using CaptureOutcome result = await CaptureSyntheticOutcome(CaptureMode.FixedRegion, bounds, input,
@@ -173,11 +173,6 @@ internal static partial class Program
                             input.Move(point);
                             await Task.Delay(80, token);
                             NativeSmokeInput.RequireTarget(overlay.Handle, point);
-                            input.MiddleDown();
-                            await Task.Delay(60, token);
-                            input.MiddleUp();
-                            await Task.Delay(80, token);
-                            Check(!overlay.IsDisposed && overlay.Visible, "中央クリックで固定撮影が終了した");
                             await OpenSelectionMenu(overlay, bounds, input, token);
                             CaptureContextMenu menu = overlay.SelectionMenu;
                             ToolStripMenuItem file = menu.Items.OfType<ToolStripMenuItem>()
@@ -590,7 +585,8 @@ internal static partial class Program
 
     private static async Task<CaptureOutcome> CaptureSyntheticOutcome(CaptureMode mode, Rectangle bounds, NativeSmokeInput input,
         Func<CaptureOverlay, CancellationToken, Task> action, CancellationToken token, bool splitMonitors = false,
-        IReadOnlyList<Rectangle>? windows = null, Size? fixedSize = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft)
+        IReadOnlyList<Rectangle>? windows = null, Size? fixedSize = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft,
+        bool freeze = true, Func<DesktopSnapshot>? currentFrameFactory = null)
     {
         var pixels = new Bitmap(bounds.Width, bounds.Height);
         using (Graphics graphics = Graphics.FromImage(pixels))
@@ -604,7 +600,8 @@ internal static partial class Program
             : [bounds];
         var snapshot = new DesktopSnapshot(pixels, bounds, monitors);
         Task<CaptureOutcome> capture = CaptureSession.SelectAsync(
-            new CaptureOptions(mode, CaptureIntent.Screenshot, OutputDestination.Clipboard, FixedSize: fixedSize, FixedAnchor: fixedAnchor), snapshot, windows ?? [bounds]);
+            new CaptureOptions(mode, CaptureIntent.Screenshot, OutputDestination.Clipboard, FreezeFrame: freeze, FixedSize: fixedSize, FixedAnchor: fixedAnchor,
+                LimitToStartingMonitor: false), snapshot, windows ?? [bounds], currentFrameFactory);
         bool returned = false;
         try
         {
@@ -613,6 +610,8 @@ internal static partial class Program
             Equal(monitors.Length, overlays.Length);
             CaptureOverlay overlay = overlays.Single(candidate => candidate.MonitorBounds == monitors[0]);
             Equal(monitors[0], overlay.Bounds);
+            NativeSmokeInput.FocusFixture(overlay.Handle);
+            await Task.Delay(60, token);
             NativeSmokeInput.RequireForeground(overlay.Handle);
             await action(overlay, token);
             CaptureOutcome result = await capture.WaitAsync(token);
@@ -742,7 +741,8 @@ internal static partial class Program
 
         internal static void RequireForeground(nint window)
         {
-            if (GetForegroundWindow() != window) throw new InvalidOperationException("テスト対象が最前面ではないため入力を中止します。");
+            nint actual = GetForegroundWindow();
+            if (actual != window) throw new InvalidOperationException($"テスト対象が最前面ではないため入力を中止します。expected={window:X}, actual={actual:X}");
         }
 
         internal static void FocusFixture(nint window)

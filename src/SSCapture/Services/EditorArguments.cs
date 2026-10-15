@@ -63,7 +63,7 @@ internal static class EditorPresets
     public static IReadOnlyList<EditorPreset> Images =>
     [
         new("カスタム", "", EditorArguments.Default),
-        new("MS ペイント", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "mspaint.exe"), EditorArguments.Default),
+        new("MS ペイント", EditorExecutable.PaintPreset, EditorArguments.Default),
         new("Paint.NET", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "paint.net", "paintdotnet.exe"), EditorArguments.Default)
     ];
     public static IReadOnlyList<EditorPreset> Videos =>

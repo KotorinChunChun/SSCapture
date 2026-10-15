@@ -30,6 +30,18 @@ internal sealed class CaptureOverlay : Form
 
     protected override bool ShowWithoutActivation => true;
 
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            CreateParams parameters = base.CreateParams;
+            // 範囲選択画面をFancyZones等の通常ウィンドウ自動配置から除外する。
+            // ハンドル再作成時も維持し、キー入力に必要なアクティブ化は許可する。
+            parameters.ExStyle |= CaptureNative.WsExToolWindow;
+            return parameters;
+        }
+    }
+
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
@@ -61,7 +73,7 @@ internal sealed class CaptureOverlay : Form
 
     protected override void WndProc(ref Message m)
     {
-        if (CaptureNative.IsAltTransition(m.Msg, m.WParam))
+        if (CaptureNative.IsModifierTransition(m.Msg, m.WParam))
         {
             session.AltKeyChanged();
             return;
@@ -105,22 +117,15 @@ internal sealed class CaptureOverlay : Form
         using (SolidBrush dim = new(Color.FromArgb(115, Color.Black))) graphics.FillRectangle(dim, ClientRectangle);
         Rectangle selection = session.Selection;
         selection.Offset(-MonitorBounds.X, -MonitorBounds.Y);
+        DrawSelection(graphics, selection);
+        DrawDimensions(graphics, selection);
+    }
+
+    private void DrawSelection(Graphics graphics, Rectangle selection)
+    {
         using Pen border = new(session.FixedSelectionValid ? Color.FromArgb(55, 195, 255) : Color.OrangeRed, 2);
         if (session.Mode == CaptureMode.Freeform && session.Points.Count >= 2)
-        {
-            Point[] points = session.Points.Select(p => new Point(p.X - MonitorBounds.X, p.Y - MonitorBounds.Y)).ToArray();
-            if (points.Length >= 3)
-            {
-                using GraphicsPath path = new(FillMode.Alternate);
-                path.AddPolygon(points);
-                GraphicsState state = graphics.Save();
-                graphics.SetClip(path, CombineMode.Intersect);
-                DrawSnapshot(graphics);
-                graphics.Restore(state);
-                graphics.DrawPath(border, path);
-            }
-            else graphics.DrawLines(border, points);
-        }
+            DrawFreeformSelection(graphics, border);
         else if (selection.Width > 0 && selection.Height > 0)
         {
             GraphicsState state = graphics.Save();
@@ -129,17 +134,35 @@ internal sealed class CaptureOverlay : Form
             graphics.Restore(state);
             graphics.DrawRectangle(border, selection);
         }
-        if (selection.Width > 0 && selection.Height > 0 && MonitorBounds.Contains(session.Current))
+    }
+
+    private void DrawFreeformSelection(Graphics graphics, Pen border)
+    {
+        Point[] points = session.Points.Select(p => new Point(p.X - MonitorBounds.X, p.Y - MonitorBounds.Y)).ToArray();
+        if (points.Length >= 3)
         {
-            string text = $"{selection.Width} × {selection.Height}" + (session.FixedSelectionValid ? "" : " 画面外");
-            Size textSize = TextRenderer.MeasureText(text, dimensionsFont);
-            int x = Math.Clamp(session.Current.X - MonitorBounds.X + 18, 0, Math.Max(0, ClientSize.Width - textSize.Width - 8));
-            int y = Math.Clamp(session.Current.Y - MonitorBounds.Y + 24, 0, Math.Max(0, ClientSize.Height - textSize.Height - 4));
-            Rectangle label = new(x, y, textSize.Width + 8, textSize.Height + 4);
-            graphics.FillRectangle(Brushes.Black, label);
-            TextRenderer.DrawText(graphics, text, dimensionsFont, label, Color.White,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            using GraphicsPath path = new(FillMode.Alternate);
+            path.AddPolygon(points);
+            GraphicsState state = graphics.Save();
+            graphics.SetClip(path, CombineMode.Intersect);
+            DrawSnapshot(graphics);
+            graphics.Restore(state);
+            graphics.DrawPath(border, path);
         }
+        else graphics.DrawLines(border, points);
+    }
+
+    private void DrawDimensions(Graphics graphics, Rectangle selection)
+    {
+        if (selection.Width <= 0 || selection.Height <= 0 || !MonitorBounds.Contains(session.Current)) return;
+        string text = $"{selection.Width} × {selection.Height}" + (session.FixedSelectionValid ? "" : " 画面外");
+        Size textSize = TextRenderer.MeasureText(text, dimensionsFont);
+        int x = Math.Clamp(session.Current.X - MonitorBounds.X + 18, 0, Math.Max(0, ClientSize.Width - textSize.Width - 8));
+        int y = Math.Clamp(session.Current.Y - MonitorBounds.Y + 24, 0, Math.Max(0, ClientSize.Height - textSize.Height - 4));
+        Rectangle label = new(x, y, textSize.Width + 8, textSize.Height + 4);
+        graphics.FillRectangle(Brushes.Black, label);
+        TextRenderer.DrawText(graphics, text, dimensionsFont, label, Color.White,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
 
     private void DrawSnapshot(Graphics graphics)
