@@ -1,10 +1,11 @@
 [CmdletBinding()]
-param()
+param([string]$OutputRoot)
 . (Join-Path $PSScriptRoot 'common.ps1')
 
 # Generated files and injected process/dotnet results only. No real build,
 # process stop, clipboard access, or write to artifacts/app is performed.
-$fixtureBase = Join-Path $projectRoot ('artifacts\build-script-tests\' + [Guid]::NewGuid().ToString('N'))
+$fixtureParent = if ($OutputRoot) { [IO.Path]::GetFullPath($OutputRoot, $projectRoot) } else { Join-Path $projectRoot 'artifacts\build-script-tests' }
+$fixtureBase = Join-Path $fixtureParent ([Guid]::NewGuid().ToString('N'))
 $sourceBuild = Join-Path $PSScriptRoot 'build.ps1'
 $sourceCommon = Join-Path $PSScriptRoot 'common.ps1'
 $passed = 0

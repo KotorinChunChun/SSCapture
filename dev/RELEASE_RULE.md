@@ -7,13 +7,13 @@
 | 項目 | 値 |
 | --- | --- |
 | リポジトリ | `KotorinChunChun/SSCapture`、main |
-| 現在の版・タグ | `0.1.1` / `v0.1.1` |
+| 現在の版・タグ | `0.1.2` / `v0.1.2` |
 | AppId | `KotorinToys.SSCapture` |
 | 導入先の既定 | `{localappdata}\Programs\SSCapture` |
 | 対象 | Windows 11 x64、ユーザー単位 |
 | 形式 | Inno Setupインストーラー、.NET 10 Desktop Runtime同梱 |
 | 公開状態 | 未署名のprereleaseを継続 |
-| 公開用出力先 | `release/v0.1.1/`、Git除外 |
+| 公開用出力先 | `release/v0.1.2/`、Git除外 |
 
 v0.1.0の公開EXEを実行せず、SHA256照合とヘッダー展開でAppId・導入先を確認した。AppId・導入先・設定JSON形式は変更しない。既存導入先は`UsePreviousAppDir`で継承する。稼働中はAppMutexで更新を止め、強制終了しない。アプリの終了後に更新する。
 
@@ -34,7 +34,7 @@ pwsh -File scripts/package.ps1
 
 ## 公開前の確認
 
-- 要求・実装報告を完了記録へ移し、現行文書のリンク・版を整合させる。
+- 要求・実装報告は最初から対象版の`dev/history/vX.Y.Z/`へ記録し、現行文書のリンク・版を整合させる。公開後に文書を移動しない。
 - Releaseビルド・通常回帰・ビルドスクリプトのfixture検証を成功させ、実機測定との境界をvalidation.mdに残す。
 - 配布物の版、同梱ランタイム、除外物、JSON・SHA256SUMSとの一致を確認する。インストールを実行していない場合は報告にその範囲を残す。
 - `git diff --check`、クリーンな作業ツリー、`git fetch origin`後の分岐なしを確認する。
@@ -48,10 +48,10 @@ pwsh -File scripts/package.ps1
 git fetch origin --prune
 git status --short
 git rev-list --left-right --count origin/main...HEAD
-Get-FileHash release/v0.1.1/SSCapture-0.1.1-setup.exe -Algorithm SHA256
+Get-FileHash release/v0.1.2/SSCapture-0.1.2-setup.exe -Algorithm SHA256
 git push origin main
 $releaseCommit = git rev-parse HEAD
-gh release create v0.1.1 release/v0.1.1/SSCapture-0.1.1-setup.exe release/v0.1.1/SSCapture-packages.json release/v0.1.1/SSCapture-SHA256SUMS.txt --repo KotorinChunChun/SSCapture --target $releaseCommit --title 'SSCapture v0.1.1' --notes-file docs/releases/v0.1.1.md --prerelease
+gh release create v0.1.2 release/v0.1.2/SSCapture-0.1.2-setup.exe release/v0.1.2/SSCapture-packages.json release/v0.1.2/SSCapture-SHA256SUMS.txt --repo KotorinChunChun/SSCapture --target $releaseCommit --title 'SSCapture v0.1.2' --notes-file docs/releases/v0.1.2.md --prerelease
 ```
 
 mainだけをプッシュする。不要な過去タグの一括送信・force pushを行わない。Release作成後はタグの対象コミット、3資産のサイズ・SHA256、ノートを確認し、実公開URLを報告する。

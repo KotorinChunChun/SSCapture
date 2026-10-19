@@ -1,4 +1,4 @@
-# SSCapture v0.1.1
+# SSCapture v0.1.2
 
 Windows 11用の軽快な常駐スクリーンショット・領域録画ツールです。Windows標準の **Win＋Shift＋S（Snipping Tool）** を置き換え、範囲の決めやすさ、繰り返し撮影、撮影後の出力を重視しています。
 
@@ -74,6 +74,7 @@ pwsh -File scripts/start.ps1 -Settings
 - [ビルド手順](docs/DEVELOPERS_GUIDE.md): 環境準備、テスト、ローカル実行、公開用配布物の生成
 - [開発・更新手順](dev/development.md) / [Release規則](dev/RELEASE_RULE.md)
 - [検証状況と未確認の範囲](dev/validation.md): 今回の確認状況と過去版の実績
+- [v0.1.2の要求](dev/history/v0.1.2/v0.1.2-req.md) / [リリース計画・報告](dev/history/v0.1.2/v0.1.2-imp.md) / [リリースノート](docs/releases/v0.1.2.md)
 - [v0.1.0の要求](dev/history/v0.1.0/v0.1.0-req.md) / [実装計画・報告](dev/history/v0.1.0/v0.1.0-imp.md) / [進捗](dev/history/v0.1.0/v0.1.0-task.md)
 - [v0.1.1の要求](dev/history/v0.1.1/v0.1.1-req.md) / [実装計画・報告](dev/history/v0.1.1/v0.1.1-imp.md) / [リリースノート](docs/releases/v0.1.1.md)
 - [対応しない事項](dev/reject.md) / [第三者ライセンス・配布元](THIRD_PARTY.md)

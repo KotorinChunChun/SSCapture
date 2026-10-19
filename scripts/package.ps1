@@ -17,8 +17,9 @@ if ((Get-FileHash -LiteralPath $compiler).Hash -ne '29856cf82d9a993afd7da8f99fb8
     throw '配布物生成用コンパイラーのSHA256が一致しません。'
 }
 # 利用中のartifacts/appからコピーせず、通常検証後に毎回新しい発行先を使う。
-& (Join-Path $PSScriptRoot 'test.ps1')
-$stage = Join-Path $projectRoot ('release\work\' + [Guid]::NewGuid().ToString('N') + '\app')
+$work = Join-Path $projectRoot ('release\work\' + [Guid]::NewGuid().ToString('N'))
+& (Join-Path $PSScriptRoot 'test.ps1') -OutputPath (Join-Path $work 'tests')
+$stage = Join-Path $work 'app'
 $output = Join-Path $projectRoot ('release\v' + $version)
 New-Item -ItemType Directory -Path $stage, $output -Force | Out-Null
 $appProject = Join-Path $projectRoot 'src\SSCapture\SSCapture.csproj'

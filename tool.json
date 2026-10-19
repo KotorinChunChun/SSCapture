@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ss-capture",
   "name": "SSCapture",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "summary": "画面撮影・録画と保存先や命名を管理する",
   "category": "画面キャプチャ",
   "executable": "src/SSCapture/bin/Release/net10.0-windows/SSCapture.exe",
