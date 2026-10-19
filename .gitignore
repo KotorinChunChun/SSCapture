@@ -10,3 +10,24 @@ data/
 .vs/
 dev/temp/
 dev/private/
+
+# セキュリティ点検: 秘密保管と生成物の公開混入を防ぐ
+/artifacts/
+/dev/private/
+/dev/temp/
+/dev/history/*/logs/
+.env
+.env.*
+!.env.example
+secrets.json
+credentials.json
+.npmrc
+*.pfx
+*.p12
+*.pem
+*.key
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
