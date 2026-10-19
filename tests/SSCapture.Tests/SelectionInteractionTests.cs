@@ -6,7 +6,7 @@ internal static partial class Program
 {
     private static void SelectionInteractionTests()
     {
-        Run("Shift高さ固定と解除後の連続移動", () =>
+        Run("Shift高さ固定を離すと静止中でもポインタの角へ復元", () =>
         {
             var g = RectangleGesture();
             g.Begin(new(100, 100), new(8, 8));
@@ -15,9 +15,10 @@ internal static partial class Program
             g.Move(new(220, 260), lockHeight: true);
             Equal(new Rectangle(100, 100, 120, 60), g.Selection);
             g.Move(new(220, 260));
-            Equal(new Rectangle(100, 100, 120, 60), g.Selection);
+            Equal(new Point(220, 260), g.Current);
+            Equal(new Rectangle(100, 100, 120, 160), g.Selection);
             g.Move(new(230, 270));
-            Equal(new Rectangle(100, 100, 130, 70), g.Selection);
+            Equal(new Rectangle(100, 100, 130, 170), g.Selection);
         });
         Run("Ctrl幅固定・両キー・逆方向・繰り返し固定", () =>
         {
@@ -28,11 +29,31 @@ internal static partial class Program
             g.Move(new(100, 100), lockHeight: true, lockWidth: true);
             Equal(new Rectangle(300, 280, 100, 120), g.Selection);
             g.Move(new(100, 100));
-            Equal(new Rectangle(300, 280, 100, 120), g.Selection);
+            Equal(new Point(100, 100), g.Current);
+            Equal(new Rectangle(100, 100, 300, 300), g.Selection);
             g.Move(new(80, 70));
-            Equal(new Rectangle(280, 250, 120, 150), g.Selection);
+            Equal(new Rectangle(80, 70, 320, 330), g.Selection);
             g.Move(new(60, 20), lockWidth: true);
-            Equal(new Rectangle(280, 200, 120, 200), g.Selection);
+            Equal(new Rectangle(80, 20, 320, 380), g.Selection);
+            Equal(new Rectangle(60, 20, 340, 380), g.End(new(60, 20), OutputDestination.Clipboard)!.Bounds);
+        });
+        Run("方向ロックは片軸だけの解除と再固定を独立して処理", () =>
+        {
+            var g = RectangleGesture();
+            g.Begin(new(300, 300), new(8, 8)); g.Move(new(500, 450));
+            g.Move(new(650, 700), lockHeight: true, lockWidth: true);
+            Equal(new Point(500, 450), g.Current);
+            g.Move(new(650, 700), lockWidth: true);
+            Equal(new Point(500, 700), g.Current);
+            g.Move(new(600, 600), lockHeight: true);
+            Equal(new Point(600, 700), g.Current);
+            g.Move(new(600, 600));
+            Equal(new Point(600, 600), g.Current);
+            g.Move(new(50, 60), lockWidth: true);
+            Equal(new Point(600, 60), g.Current);
+            g.Move(new(50, 60));
+            Equal(new Point(50, 60), g.Current);
+            Equal(new Rectangle(50, 60, 250, 240), g.End(new(50, 60), OutputDestination.File)!.Bounds);
         });
         Run("ドラッグ前の寸法固定でゼロ寸法に閉じ込めない", () =>
         {
@@ -61,12 +82,13 @@ internal static partial class Program
             g.Move(new(990, 990), true, lockHeight: true);
             Equal(new Rectangle(103, 107, 897, 60), g.Selection);
         });
-        Run("寸法固定解除の補正でも開始モニタを越えない", () =>
+        Run("寸法固定解除は画面内の実ポインタ位置へ戻り境界を越えない", () =>
         {
             var g = RectangleGesture(); g.Begin(new(100, 100), new(8, 8)); g.Move(new(800, 800));
             g.Move(new(200, 200), lockHeight: true, lockWidth: true);
             g.Move(new(200, 200)); g.Move(new(999, 999));
-            Equal(new Rectangle(100, 100, 900, 900), g.Selection);
+            Equal(new Point(999, 999), g.Current);
+            Equal(new Rectangle(100, 100, 899, 899), g.Selection);
         });
         Run("丸めと修飾キーだけでは単押しをドラッグにしない", () =>
         {

@@ -170,21 +170,19 @@ internal sealed class SelectionGesture
     {
         internal bool IsLocked { get; private set; }
         internal int Value { get; private set; }
-        private long offset;
 
         internal int Prepare(int raw, bool pressed, int previous, bool hasDimension, bool dragged)
         {
-            if (IsLocked && !pressed) { offset = (long)Value - raw; IsLocked = false; }
-            int adjusted = (int)Math.Clamp(raw + offset, int.MinValue, int.MaxValue);
+            if (IsLocked && !pressed) IsLocked = false;
             if (!IsLocked && pressed && dragged)
             {
-                Value = hasDimension ? previous : adjusted;
+                Value = hasDimension ? previous : raw;
                 IsLocked = true;
             }
-            return adjusted;
+            return raw;
         }
 
-        internal void Reset() { IsLocked = false; offset = 0; }
+        internal void Reset() => IsLocked = false;
     }
 
     private void PositionFixed(Point point) => PositionFixed(point.X, point.Y);
