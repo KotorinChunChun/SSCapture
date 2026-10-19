@@ -44,6 +44,7 @@ internal static partial class Program
             }
             catch (Exception error) { return error.Message; }
         }, () => { }, () => []);
+        form.Text = WindowTitle.Create("プリセット操作確認");
         var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
         var page = new TabPage("出力プレビュー");
         page.Controls.Add(picture); page.Controls.Add(info);
