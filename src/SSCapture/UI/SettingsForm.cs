@@ -22,6 +22,7 @@ internal sealed class SettingsForm : Form
     private readonly Func<DateTimeOffset> now;
     private StatusMessage? statusMessage;
     private readonly Func<AppSettings, string?> save;
+    private readonly CapturePresetEditor presetEditor;
 
     public SettingsForm(AppSettings settings, Func<AppSettings, string?> onSave, Action openFolder,
         Func<IReadOnlyList<MicrophoneInfo>>? listMicrophones = null, Action? openRegions = null, Action? openHistory = null,
@@ -172,6 +173,9 @@ internal sealed class SettingsForm : Form
         var notificationInfo = new Label { Name = "NotificationInfo", Dock = DockStyle.Fill,
             Text = "画面共有への映り込みを抑えますが、共有アプリによっては除外できません。\n効果音はPC音声の録音・共有に含まれる場合があります。" };
         notifications.Controls.Add(notificationInfo, 0, 4); notifications.SetColumnSpan(notificationInfo, 2);
+        var presetPage = new TabPage("プリセット") { BackColor = BackColor, Padding = new Padding(8) };
+        presetEditor = new CapturePresetEditor(settings, ReadSettings);
+        presetPage.Controls.Add(presetEditor); tabs.TabPages.Add(presetPage);
         status = new TextBox { Name = "Status", Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
             WordWrap = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None,
             BackColor = BackColor, TabStop = false, Margin = new Padding(8, 6, 8, 6) };
@@ -227,7 +231,14 @@ internal sealed class SettingsForm : Form
     {
         try
         {
-            var next = initial with
+            var next = ReadSettings();
+            string? error = save(next);
+            SetStatus(error ?? "設定を保存しました。", error is not null);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        { SetStatus("保存できませんでした: " + ex.Message, true); }
+    }
+    private AppSettings ReadSettings() => initial with
             {
                 SaveDirectory = Expand(directory.Text), DefaultMode = ((ModeItem)mode.SelectedItem!).Value,
                 OpenFolderAfterSave = openFolderAfterSave.Checked,
@@ -235,6 +246,7 @@ internal sealed class SettingsForm : Form
                 DefaultDestination = (clipboardOutput.Checked ? OutputDestination.Clipboard : 0) | (fileOutput.Checked ? OutputDestination.File : 0) | (externalOutput.Checked ? OutputDestination.ExternalApp : 0),
                 FreezeFrame = freeze.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
                 ScreenshotPaddingPixels = (int)screenshotPadding.Value,
+                CapturePresets = presetEditor.Presets,
                 ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
                 RecordingShortcut1 = recording1.Value, RecordingShortcut2 = recording2.Value,
                 LastRegionShortcut = lastRegionKey.Value, FixedWidth = (int)fixedWidth.Value, FixedHeight = (int)fixedHeight.Value,
@@ -249,12 +261,6 @@ internal sealed class SettingsForm : Form
                 ImageEditorPath = Expand(imageEditor.Text), VideoEditorPath = Expand(videoEditor.Text),
                 ImageEditorArguments = imageArguments.Text, VideoEditorArguments = videoArguments.Text
             };
-            string? error = save(next);
-            SetStatus(error ?? "設定を保存しました。", error is not null);
-        }
-        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
-        { SetStatus("保存できませんでした: " + ex.Message, true); }
-    }
     private static string Expand(string text) => Environment.ExpandEnvironmentVariables(text.Trim().Trim('"'));
     private static NumericUpDown PixelField(TableLayoutPanel table, string label, string name, int value, int row)
     { var control = new NumericUpDown { Name = name, Minimum = 1, Maximum = 32768, Value = value }; Add(table, label, control, row); return control; }

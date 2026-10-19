@@ -66,6 +66,7 @@ internal static partial class Program
         SnapTests();
         SelectionInteractionTests();
         SelectionUpgradeTests();
+        CapturePresetTests();
         SelectionGuideTests();
         StatusTests();
         TrayOperationPolicyTests();

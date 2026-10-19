@@ -19,6 +19,7 @@ internal sealed record AppSettings
     internal const string LastRegionKeyId = "$last";
     public string LastRegionShortcut { get; init; } = "Win+Ctrl+Shift+S";
     public SavedRegion[] SavedRegions { get; init; } = [];
+    public CapturePreset[] CapturePresets { get; init; } = [];
     public int FixedWidth { get; init; } = 1280;
     public int FixedHeight { get; init; } = 720;
     public CaptureAnchor FixedCaptureAnchor { get; init; } = CaptureAnchor.TopLeft;
@@ -46,6 +47,12 @@ internal sealed record AppSettings
 
     internal void Validate()
     {
+        if (CapturePresets is null || CapturePresets.Length > 50 || CapturePresets.Any(p => p is null))
+            throw new ArgumentException("プリセットは50件以内で指定してください。");
+        foreach (var preset in CapturePresets) preset.Validate();
+        if (CapturePresets.Select(p => p.Id).Distinct(StringComparer.Ordinal).Count() != CapturePresets.Length
+            || CapturePresets.Select(p => p.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != CapturePresets.Length)
+            throw new ArgumentException("プリセットのIDまたは名前が重複しています。");
         if (SavedRegions is null || SavedRegions.Any(r => r is null)) throw new ArgumentException("登録範囲の設定が不正です。");
         foreach (var region in SavedRegions) region.Validate();
         if (SavedRegions.Any(r => r.Id == LastRegionKeyId)) throw new ArgumentException("登録範囲のIDが予約値です。");

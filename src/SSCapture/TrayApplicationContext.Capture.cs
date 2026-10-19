@@ -73,7 +73,7 @@ internal sealed partial class TrayApplicationContext
 
         try
         {
-            using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, settings.DefaultDestination, settings.FreezeFrame, IncludeRecordingImage: intent == CaptureIntent.Recording && FileNamePattern.UsesOcr(settings.FileNamePattern), IncludeCursor: settings.IncludeCursor, FixedSize: new Size(settings.FixedWidth, settings.FixedHeight), FixedAnchor: settings.FixedCaptureAnchor, LimitToStartingMonitor: settings.LimitToStartingMonitor, Grid20: settings.Grid20, ShowSelectionGuide: settings.ShowSelectionGuide), SaveGrid20, SaveGuideVisibility);
+            using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, settings.DefaultDestination, settings.FreezeFrame, IncludeRecordingImage: intent == CaptureIntent.Recording && (FileNamePattern.UsesOcr(settings.FileNamePattern) || settings.CapturePresets.Any(p => FileNamePattern.UsesOcr(p.FileNamePattern))), IncludeCursor: settings.IncludeCursor, FixedSize: new Size(settings.FixedWidth, settings.FixedHeight), FixedAnchor: settings.FixedCaptureAnchor, LimitToStartingMonitor: settings.LimitToStartingMonitor, Grid20: settings.Grid20, ShowSelectionGuide: settings.ShowSelectionGuide, OutputSettings: settings), SaveGrid20, SaveGuideVisibility);
             openSettings = outcome.OpenSettings;
             if (outcome.Selection is null)
             {
@@ -89,12 +89,12 @@ internal sealed partial class TrayApplicationContext
 
             string? fileName = null;
             FileNamePlan? namePlan = null;
-            AppSettings captureSettings = settings;
+            AppSettings captureSettings = outcome.OutputSettings ?? settings;
             if (outcome.Selection.Destination.HasFlag(OutputDestination.File))
             {
-                if (FileNamePattern.UsesOcr(settings.FileNamePattern) && intent == CaptureIntent.Recording)
+                if (FileNamePattern.UsesOcr(captureSettings.FileNamePattern) && intent == CaptureIntent.Recording)
                 {
-                    using var naming = new OcrNameForm(outcome.Image ?? throw new InvalidOperationException("OCR用画像がありません。"), settings, intent, capturedAt);
+                    using var naming = new OcrNameForm(outcome.Image ?? throw new InvalidOperationException("OCR用画像がありません。"), captureSettings, intent, capturedAt);
                     namingForm = naming;
                     DialogResult result;
                     try
@@ -116,8 +116,8 @@ internal sealed partial class TrayApplicationContext
                     namePlan = naming.NamePlan;
                     captureSettings = naming.OutputSettings;
                 }
-                else if (!FileNamePattern.UsesOcr(settings.FileNamePattern))
-                    namePlan = new FileNamePlan(settings.FileNamePattern, capturedAt, intent);
+                else if (!FileNamePattern.UsesOcr(captureSettings.FileNamePattern))
+                    namePlan = new FileNamePlan(captureSettings.FileNamePattern, capturedAt, intent);
             }
 
             if (intent == CaptureIntent.Recording)

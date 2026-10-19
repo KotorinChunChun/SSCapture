@@ -1,3 +1,5 @@
+using SSCapture.Services;
+
 namespace SSCapture.Capture;
 
 internal sealed class CaptureContextMenu : ContextMenuStrip
@@ -7,6 +9,8 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     private readonly Dictionary<OutputDestination, ToolStripMenuItem> destinations = [];
     private readonly Dictionary<CaptureMode, ToolStripMenuItem> modes = [];
     private readonly Dictionary<CaptureAspectRatio, ToolStripMenuItem> ratios = [];
+    private readonly Dictionary<int, ToolStripMenuItem> paddings = [];
+    private OutputDestination currentDestination;
     private readonly ToolStripMenuItem? gridItem;
     private readonly ToolStripMenuItem? guideItem;
     private readonly Func<bool> ownsPopupFocus;
@@ -14,7 +18,8 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     internal CaptureContextMenu(OutputDestination selected, Action<OutputDestination> changeDestination,
         Action openSettings, Action cancel, CaptureMode mode = CaptureMode.Rectangle, bool grid20 = false,
         Action<CaptureMode>? changeMode = null, Action<bool>? changeGrid = null, Action? captureDesktop = null,
-        Func<bool>? ownsPopupFocus = null, bool showGuide = true, Action<bool>? changeGuide = null, Action<CaptureAspectRatio>? changeRatio = null)
+        Func<bool>? ownsPopupFocus = null, bool showGuide = true, Action<bool>? changeGuide = null, Action<CaptureAspectRatio>? changeRatio = null,
+        int defaultPadding = 0, Action<int>? changePadding = null, IReadOnlyList<CapturePreset>? presets = null, Action<CapturePreset>? applyPreset = null)
     {
         this.cancel = cancel;
         this.ownsPopupFocus = ownsPopupFocus ?? (() => CaptureNative.OwnsForegroundWindow() || CaptureNative.ForegroundTransition);
@@ -29,7 +34,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
                 _ => throw new ArgumentOutOfRangeException(nameof(selected))
             };
             ToolStripMenuItem item = new(text) { Tag = destination };
-            item.Click += (_, _) => { selected ^= destination; changeDestination(selected); SetDestination(selected); };
+            item.Click += (_, _) => { var next = currentDestination ^ destination; changeDestination(next); SetDestination(next); };
             destinations.Add(destination, item);
             Items.Add(item);
         }
@@ -80,6 +85,32 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             }
             Items.Insert(Math.Max(0, Items.Count - 2), ratioMenu);
         }
+        if (changePadding is not null)
+        {
+            var paddingMenu = new ToolStripMenuItem("今回の余白") { Name = "ScreenshotPaddingMenu" };
+            var reset = new ToolStripMenuItem($"既定 ({defaultPadding}px)", null, (_, _) => changePadding(defaultPadding)) { Name = "DefaultPadding" };
+            paddingMenu.DropDownItems.Add(reset);
+            foreach (int pixels in new[] { 0, 10, 20, 40 })
+            {
+                int value = pixels;
+                var item = new ToolStripMenuItem(value == 0 ? "余白なし" : $"{value}px", null, (_, _) => changePadding(value));
+                paddings.Add(value, item); paddingMenu.DropDownItems.Add(item);
+            }
+            Items.Insert(Math.Max(0, Items.Count - 2), paddingMenu);
+            SetPadding(defaultPadding);
+        }
+        if (applyPreset is not null)
+        {
+            var presetMenu = new ToolStripMenuItem("撮影プリセット") { Name = "CapturePresetMenu" };
+            foreach (var preset in presets ?? [])
+            {
+                var capturedPreset = preset;
+                presetMenu.DropDownItems.Add(new ToolStripMenuItem(preset.Name, null, (_, _) => applyPreset(capturedPreset)) { Name = preset.Id });
+            }
+            if (presetMenu.DropDownItems.Count == 0)
+                presetMenu.DropDownItems.Add(new ToolStripMenuItem("設定画面で登録してください") { Enabled = false });
+            Items.Insert(Math.Max(0, Items.Count - 2), presetMenu);
+        }
     }
 
     internal void SetMode(CaptureMode mode)
@@ -93,6 +124,11 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     {
         foreach (var pair in ratios) pair.Value.Checked = pair.Key == ratio;
         if (Items["AspectRatioMenu"] is ToolStripMenuItem item) item.Enabled = modes.Count == 0 || modes[CaptureMode.Rectangle].Checked;
+    }
+    internal void SetPadding(int pixels)
+    {
+        foreach (var pair in paddings) pair.Value.Checked = pair.Key == pixels;
+        if (Items["ScreenshotPaddingMenu"] is ToolStripMenuItem parent) parent.Text = $"今回の余白 ({pixels}px)";
     }
 
     protected override void OnClosing(ToolStripDropDownClosingEventArgs e)
@@ -114,8 +150,9 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         }
     }
 
-    private void SetDestination(OutputDestination selected)
+    internal void SetDestination(OutputDestination selected)
     {
+        currentDestination = selected;
         foreach ((OutputDestination destination, ToolStripMenuItem item) in destinations)
             item.Checked = selected.HasFlag(destination);
     }

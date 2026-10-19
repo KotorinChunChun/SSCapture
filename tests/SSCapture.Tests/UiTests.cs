@@ -158,7 +158,7 @@ internal static partial class Program
             Check(!WindowVisibility.RestorePending(ocr, _ => shown++), "終了済み窓を再表示");
             Check(!WindowVisibility.RestorePending(null), "未処理なしで拒否");
         });
-        Run("設定9タブの入力欄とボタンが表示領域に収まる", () =>
+        Run("設定10タブの入力欄とボタンが表示領域に収まる", () =>
         {
             using var form = NewSettings();
             Equal("設定 - SSCapture - ver 0.1.1", form.Text);
@@ -167,7 +167,7 @@ internal static partial class Program
             foreach (Control child in Descendants(form)) _ = child.Handle;
             LayoutTree(form);
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
-            Equal(9, tabs.TabCount);
+            Equal(10, tabs.TabCount);
             for (int index = 0; index < tabs.TabCount; index++)
             {
                 Rectangle header = tabs.GetTabRect(index);

@@ -10,7 +10,8 @@ internal static partial class Program
     {
         Check(expected.InstantShortcuts.SequenceEqual(actual.InstantShortcuts), "即時キー設定の往復不一致" );
         Equal(System.Text.Json.JsonSerializer.Serialize(expected.SavedRegions), System.Text.Json.JsonSerializer.Serialize(actual.SavedRegions));
-        Equal(expected, actual with { InstantShortcuts = expected.InstantShortcuts, SavedRegions = expected.SavedRegions });
+        Equal(System.Text.Json.JsonSerializer.Serialize(expected.CapturePresets), System.Text.Json.JsonSerializer.Serialize(actual.CapturePresets));
+        Equal(expected, actual with { InstantShortcuts = expected.InstantShortcuts, SavedRegions = expected.SavedRegions, CapturePresets = expected.CapturePresets });
     }
     static partial void ServiceTests()
     {

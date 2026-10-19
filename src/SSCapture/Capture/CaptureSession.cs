@@ -63,6 +63,7 @@ internal sealed class SessionController
     private readonly TaskCompletionSource<CaptureOutcome> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly List<CaptureOverlay> overlays = [];
     private readonly CaptureOptions options;
+    internal SSCapture.Services.AppSettings OutputSettings { get; private set; }
     private readonly Func<DesktopSnapshot>? currentFrameFactory;
     private SelectionGesture gesture;
     private readonly IReadOnlyList<Rectangle> windows;
@@ -118,6 +119,7 @@ internal sealed class SessionController
         this.confineCursor = confineCursor ?? CursorConfinement.Acquire;
         Snapshot = snapshot;
         Destination = options.Destination;
+        OutputSettings = options.OutputSettings ?? new SSCapture.Services.AppSettings();
         if (options.LimitToStartingMonitor && options.Mode != CaptureMode.FullScreen)
         {
             selectionBounds = snapshot.Monitors.FirstOrDefault(monitor => monitor.Contains(this.initialPointer));
@@ -131,7 +133,9 @@ internal sealed class SessionController
         gesture = CreateGesture(Mode, options.Grid20);
         SelectionMenu = new CaptureContextMenu(Destination, destination => Destination = destination,
             () => FinishCommand(true), Cancel, Mode, options.Grid20, ChangeMode, ChangeGrid20, () => CaptureDesktop(menuPointer),
-            showGuide: ShowSelectionGuide, changeGuide: ChangeGuideVisibility, changeRatio: ChangeAspectRatio);
+            showGuide: ShowSelectionGuide, changeGuide: ChangeGuideVisibility, changeRatio: ChangeAspectRatio,
+            defaultPadding: OutputSettings.ScreenshotPaddingPixels, changePadding: options.Intent == CaptureIntent.Screenshot ? ChangePadding : null,
+            presets: OutputSettings.CapturePresets, applyPreset: ApplyPreset);
         SelectionMenu.SetRatio(AspectRatio);
         SelectionMenu.Closed += MenuClosed;
     }
@@ -145,6 +149,21 @@ internal sealed class SessionController
         AspectRatio = ratio; gesture.AspectRatio = ratio;
         SelectionMenu.SetRatio(ratio);
         RefreshOverlays();
+    }
+
+    internal void ChangePadding(int pixels)
+    {
+        if (pixels is < 0 or > SSCapture.Services.ScreenshotPadding.MaximumPixels) throw new ArgumentOutOfRangeException(nameof(pixels));
+        OutputSettings = OutputSettings with { ScreenshotPaddingPixels = pixels };
+        SelectionMenu.SetPadding(pixels);
+    }
+
+    internal void ApplyPreset(SSCapture.Services.CapturePreset preset)
+    {
+        OutputSettings = preset.Apply(OutputSettings);
+        Destination = OutputSettings.DefaultDestination;
+        SelectionMenu.SetDestination(Destination);
+        SelectionMenu.SetPadding(OutputSettings.ScreenshotPaddingPixels);
     }
 
     internal void ChangeGrid20(bool enabled)
@@ -517,7 +536,7 @@ internal sealed class SessionController
                     : CaptureGeometry.Crop(frame.Image, frame.Bounds, selection.Bounds, Mode == CaptureMode.FixedRegion ? 1 : CaptureGeometry.MinimumSize);
                 if (result is null) { completion.TrySetResult(new CaptureOutcome(null, null)); return; }
             }
-            completion.TrySetResult(new CaptureOutcome(result, selection));
+            completion.TrySetResult(new CaptureOutcome(result, selection, outputSettings: OutputSettings with { DefaultDestination = Destination }));
             result = null;
         }
         catch (Exception ex) { completion.TrySetException(ex); }
