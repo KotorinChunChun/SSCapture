@@ -73,7 +73,7 @@ internal sealed partial class TrayApplicationContext
 
         try
         {
-            using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, settings.DefaultDestination, settings.FreezeFrame, IncludeRecordingImage: intent == CaptureIntent.Recording && FileNamePattern.UsesOcr(settings.FileNamePattern), IncludeCursor: settings.IncludeCursor, FixedSize: new Size(settings.FixedWidth, settings.FixedHeight), FixedAnchor: settings.FixedCaptureAnchor, LimitToStartingMonitor: settings.LimitToStartingMonitor, Grid20: settings.Grid20), SaveGrid20);
+            using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, settings.DefaultDestination, settings.FreezeFrame, IncludeRecordingImage: intent == CaptureIntent.Recording && FileNamePattern.UsesOcr(settings.FileNamePattern), IncludeCursor: settings.IncludeCursor, FixedSize: new Size(settings.FixedWidth, settings.FixedHeight), FixedAnchor: settings.FixedCaptureAnchor, LimitToStartingMonitor: settings.LimitToStartingMonitor, Grid20: settings.Grid20, ShowSelectionGuide: settings.ShowSelectionGuide), SaveGrid20, SaveGuideVisibility);
             openSettings = outcome.OpenSettings;
             if (outcome.Selection is null)
             {

@@ -17,7 +17,7 @@ internal sealed partial class TrayApplicationContext
             lastStatus = null;
         if (form is null || form.IsDisposed)
         {
-            form = new SettingsForm(settings, next => SaveSettings(next with { SavedRegions = settings.SavedRegions, Grid20 = settings.Grid20 }), OpenFolder, openRegions: ShowRegions, openHistory: ShowHistory);
+            form = new SettingsForm(settings, next => SaveSettings(next with { SavedRegions = settings.SavedRegions, Grid20 = settings.Grid20, ShowSelectionGuide = settings.ShowSelectionGuide }), OpenFolder, openRegions: ShowRegions, openHistory: ShowHistory);
             form.FormClosed += (_, _) => form = null;
             form.SetStatus(lastStatus);
         }
@@ -64,6 +64,13 @@ internal sealed partial class TrayApplicationContext
     private void SaveGrid20(bool enabled)
     {
         AppSettings next = settings with { Grid20 = enabled };
+        store.Save(next);
+        settings = next;
+    }
+
+    private void SaveGuideVisibility(bool enabled)
+    {
+        AppSettings next = settings with { ShowSelectionGuide = enabled };
         store.Save(next);
         settings = next;
     }

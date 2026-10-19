@@ -3,7 +3,7 @@ namespace SSCapture.Capture;
 internal static class CaptureSession
 {
     /// <summary>Call on the application's STA UI thread. The caller owns the outcome.</summary>
-    public static Task<CaptureOutcome> SelectAsync(CaptureOptions options, Action<bool>? gridChanged = null)
+    public static Task<CaptureOutcome> SelectAsync(CaptureOptions options, Action<bool>? gridChanged = null, Action<bool>? guideChanged = null)
     {
         ValidateCall(options);
         Point initialPointer = CaptureNative.CursorPosition();
@@ -12,12 +12,12 @@ internal static class CaptureSession
         IReadOnlyList<Rectangle> windows;
         try { windows = CaptureNative.WindowBounds(snapshot.Bounds); }
         catch { snapshot.Dispose(); throw; }
-        return SelectAsync(options, snapshot, windows, () => CaptureNative.TakeAfterOverlaysClosed(options.IncludeCursor), initialPointer, gridChanged);
+        return SelectAsync(options, snapshot, windows, () => CaptureNative.TakeAfterOverlaysClosed(options.IncludeCursor), initialPointer, gridChanged, guideChanged);
     }
 
     /// <summary>Consumes snapshot. Never reads desktop pixels or enumerates real windows.</summary>
     internal static Task<CaptureOutcome> SelectAsync(CaptureOptions options, DesktopSnapshot snapshot,
-        IReadOnlyList<Rectangle>? windows = null, Func<DesktopSnapshot>? currentFrameFactory = null, Point? initialPointer = null, Action<bool>? gridChanged = null)
+        IReadOnlyList<Rectangle>? windows = null, Func<DesktopSnapshot>? currentFrameFactory = null, Point? initialPointer = null, Action<bool>? gridChanged = null, Action<bool>? guideChanged = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         try
@@ -26,7 +26,7 @@ internal static class CaptureSession
             if (!options.FreezeFrame && options.Intent == CaptureIntent.Screenshot && currentFrameFactory is null)
                 throw new ArgumentException("画面固定OFFの合成画像検証には画像取得関数を指定してください。", nameof(currentFrameFactory));
             SessionController session = new(options, snapshot, windows ?? [], currentFrameFactory,
-                initialPointer ?? CaptureNative.CursorPosition(), gridChanged: gridChanged);
+                initialPointer ?? CaptureNative.CursorPosition(), gridChanged: gridChanged, guideChanged: guideChanged);
             session.Start();
             return session.Completion;
         }
@@ -67,6 +67,8 @@ internal sealed class SessionController
     private SelectionGesture gesture;
     private readonly IReadOnlyList<Rectangle> windows;
     private readonly Action<bool>? gridChanged;
+    private readonly Action<bool>? guideChanged;
+    internal bool ShowSelectionGuide { get; private set; }
     private Point menuPointer;
     private readonly Point initialPointer;
     private readonly Rectangle? selectionBounds;
@@ -102,11 +104,13 @@ internal sealed class SessionController
 
     internal SessionController(CaptureOptions options, DesktopSnapshot snapshot,
         IReadOnlyList<Rectangle> windows, Func<DesktopSnapshot>? currentFrameFactory = null,
-        Point? initialPointer = null, Func<Rectangle, IDisposable>? confineCursor = null, Action<bool>? gridChanged = null)
+        Point? initialPointer = null, Func<Rectangle, IDisposable>? confineCursor = null, Action<bool>? gridChanged = null, Action<bool>? guideChanged = null)
     {
         this.options = options;
         Mode = options.Mode;
         this.gridChanged = gridChanged;
+        this.guideChanged = guideChanged;
+        ShowSelectionGuide = options.ShowSelectionGuide;
         this.currentFrameFactory = currentFrameFactory;
         this.initialPointer = initialPointer ?? snapshot.Monitors[0].Location;
         this.confineCursor = confineCursor ?? CursorConfinement.Acquire;
@@ -124,7 +128,8 @@ internal sealed class SessionController
         this.windows = windows.ToArray();
         gesture = CreateGesture(Mode, options.Grid20);
         SelectionMenu = new CaptureContextMenu(Destination, destination => Destination = destination,
-            () => FinishCommand(true), Cancel, Mode, options.Grid20, ChangeMode, ChangeGrid20, () => CaptureDesktop(menuPointer));
+            () => FinishCommand(true), Cancel, Mode, options.Grid20, ChangeMode, ChangeGrid20, () => CaptureDesktop(menuPointer),
+            showGuide: ShowSelectionGuide, changeGuide: ChangeGuideVisibility);
         SelectionMenu.Closed += MenuClosed;
     }
 
@@ -172,18 +177,40 @@ internal sealed class SessionController
 
     private void ReplaceGuide()
     {
-        if (overlays.Count == 0) return;
-        CaptureOverlay owner = menuOwner ?? overlays.FirstOrDefault(o => o.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
         guide?.Dispose();
+        guide = null;
+        if (overlays.Count == 0 || !ShowSelectionGuide) return;
+        CaptureOverlay owner = menuOwner ?? overlays.FirstOrDefault(o => o.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
         guide = new UI.SelectionGuideForm(owner.MonitorBounds, options.Intent, Cancel,
-            Mode == CaptureMode.FixedRegion ? options.FixedSize ?? new Size(1280, 720) : null, HandleCommandKey, options.FixedAnchor, AltKeyChanged, Mode);
+            Mode == CaptureMode.FixedRegion ? options.FixedSize ?? new Size(1280, 720) : null, HandleCommandKey, options.FixedAnchor, AltKeyChanged, Mode,
+            dismiss: () => ChangeGuideVisibility(false));
         guide.Show(owner);
+        UpdateGuidePointer();
         owner.BeginInvoke((Action)(() =>
         {
             if (completed || owner.IsDisposed || menuOpen || !CaptureNative.OwnsForegroundWindow()) return;
             owner.Activate();
             owner.Focus();
         }));
+    }
+
+    internal void ChangeGuideVisibility(bool enabled)
+    {
+        if (completed || enabled == ShowSelectionGuide) return;
+        try { guideChanged?.Invoke(enabled); }
+        catch (Exception ex)
+        {
+            guide?.ShowSaveError(ex.Message);
+            return;
+        }
+        ShowSelectionGuide = enabled;
+        SelectionMenu.SetGuide(enabled);
+        if (enabled) ReplaceGuide(); else guide?.Hide();
+    }
+
+    private void UpdateGuidePointer()
+    {
+        if (ShowSelectionGuide) guide?.UpdatePointer(gesture.RawCurrent, gesture.IsPressed && gesture.HasDragged);
     }
 
     internal void CaptureDesktop(Point point)
@@ -208,9 +235,7 @@ internal sealed class SessionController
             CaptureOverlay active = overlays.FirstOrDefault(overlay => overlay.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
             active.Activate();
             active.Focus();
-            guide = new UI.SelectionGuideForm(active.MonitorBounds, options.Intent, Cancel,
-                Mode == CaptureMode.FixedRegion ? options.FixedSize : null, HandleCommandKey, options.FixedAnchor, AltKeyChanged, Mode);
-            guide.Show(active);
+            ReplaceGuide();
             active.Activate();
             active.Focus();
             starting = false;
@@ -295,6 +320,7 @@ internal sealed class SessionController
 
     private void RefreshOverlays()
     {
+        UpdateGuidePointer();
         foreach (CaptureOverlay overlay in overlays) overlay.Invalidate();
     }
 

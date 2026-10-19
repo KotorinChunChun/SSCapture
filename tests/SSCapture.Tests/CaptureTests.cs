@@ -138,7 +138,7 @@ internal static partial class Program
                 file.PerformClick();
                 Check(!session.Completion.IsCompleted, "送信先変更だけでは選択を終えない");
                 Equal(OutputDestination.Clipboard | OutputDestination.File, session.Destination);
-                Equal(2, session.SelectionMenu.Items.OfType<ToolStripMenuItem>().Count(item => item.Checked));
+                Equal(2, session.SelectionMenu.Items.OfType<ToolStripMenuItem>().Count(item => item.Tag is OutputDestination && item.Checked));
                 session.CompleteSelection(new CaptureSelection(bounds, null, session.Destination));
                 using CaptureOutcome result = session.Completion.GetAwaiter().GetResult();
                 Equal(OutputDestination.Clipboard | OutputDestination.File, result.Selection!.Destination);

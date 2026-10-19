@@ -7,12 +7,13 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     private readonly Dictionary<OutputDestination, ToolStripMenuItem> destinations = [];
     private readonly Dictionary<CaptureMode, ToolStripMenuItem> modes = [];
     private readonly ToolStripMenuItem? gridItem;
+    private readonly ToolStripMenuItem? guideItem;
     private readonly Func<bool> ownsPopupFocus;
 
     internal CaptureContextMenu(OutputDestination selected, Action<OutputDestination> changeDestination,
         Action openSettings, Action cancel, CaptureMode mode = CaptureMode.Rectangle, bool grid20 = false,
         Action<CaptureMode>? changeMode = null, Action<bool>? changeGrid = null, Action? captureDesktop = null,
-        Func<bool>? ownsPopupFocus = null)
+        Func<bool>? ownsPopupFocus = null, bool showGuide = true, Action<bool>? changeGuide = null)
     {
         this.cancel = cancel;
         this.ownsPopupFocus = ownsPopupFocus ?? (() => CaptureNative.OwnsForegroundWindow() || CaptureNative.ForegroundTransition);
@@ -56,7 +57,14 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             gridItem.Click += (_, _) => changeGrid(!gridItem.Checked);
             Items.Add(gridItem);
         }
-        if (changeMode is not null || captureDesktop is not null || changeGrid is not null) Items.Add(new ToolStripSeparator());
+        if (changeGuide is not null)
+        {
+            guideItem = new ToolStripMenuItem("操作ガイドを表示") { Name = "ShowSelectionGuide", Checked = showGuide,
+                ToolTipText = "範囲選択の案内を表示します。表示設定は次回にも保持し、ドラッグ中にポインタが近づくと一時的に隠れます。" };
+            guideItem.Click += (_, _) => changeGuide(!guideItem.Checked);
+            Items.Add(guideItem);
+        }
+        if (changeMode is not null || captureDesktop is not null || changeGrid is not null || changeGuide is not null) Items.Add(new ToolStripSeparator());
         Items.Add("設定", null, (_, _) => openSettings());
         Items.Add("閉じる / キャンセル", null, (_, _) => cancel());
         SetDestination(selected);
@@ -68,6 +76,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     }
 
     internal void SetGrid(bool enabled) { if (gridItem is not null) gridItem.Checked = enabled; }
+    internal void SetGuide(bool enabled) { if (guideItem is not null) guideItem.Checked = enabled; }
 
     protected override void OnClosing(ToolStripDropDownClosingEventArgs e)
     {

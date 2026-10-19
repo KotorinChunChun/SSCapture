@@ -10,7 +10,8 @@ internal sealed record CaptureOptions(
     Size? FixedSize = null,
     CaptureAnchor FixedAnchor = CaptureAnchor.TopLeft,
     bool LimitToStartingMonitor = true,
-    bool Grid20 = false);
+    bool Grid20 = false,
+    bool ShowSelectionGuide = true);
 
 internal sealed record CaptureSelection(
     Rectangle Bounds,

@@ -10,6 +10,7 @@ internal static partial class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
+        if (args.Contains("--selection-guide-preview")) return SelectionGuidePreview(args[1]);
         if (args.Contains("--overlay-placement-smoke")) return RunOverlayPlacementSmoke();
         if (args.Contains("--selection-monitor-smoke")) return RunSelectionMonitorSmoke();
         if (args.Contains("--window-hit-smoke")) return RunWindowHitSmoke();
@@ -62,6 +63,7 @@ internal static partial class Program
         CaptureTargetTests();
         SnapTests();
         SelectionInteractionTests();
+        SelectionGuideTests();
         StatusTests();
         TrayOperationPolicyTests();
         Console.WriteLine($"RESULT: {passed} passed, {failed} failed");

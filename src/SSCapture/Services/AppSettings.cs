@@ -33,6 +33,7 @@ internal sealed record AppSettings
     public bool FreezeFrame { get; init; } = true;
     public bool LimitToStartingMonitor { get; init; } = true;
     public bool Grid20 { get; init; }
+    public bool ShowSelectionGuide { get; init; } = true;
     public OutputDestination DefaultDestination { get; init; } = OutputDestination.Clipboard;
     public bool RecordSystemAudio { get; init; }
     public bool RecordMicrophone { get; init; }

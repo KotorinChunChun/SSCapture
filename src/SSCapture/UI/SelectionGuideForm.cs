@@ -5,13 +5,16 @@ internal sealed class SelectionGuideForm : Form
     private readonly Action cancel;
     private readonly Func<Keys, bool>? handleKey;
     private readonly Action? modifiersChanged;
+    private readonly Action? dismiss;
+    private bool hiddenForPointer;
     internal SelectionGuideForm(Rectangle monitor, CaptureIntent intent, Action cancel, Size? fixedSize = null,
         Func<Keys, bool>? handleKey = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft, Action? modifiersChanged = null,
-        CaptureMode mode = CaptureMode.Rectangle)
+        CaptureMode mode = CaptureMode.Rectangle, Action? dismiss = null)
     {
         this.cancel = cancel;
         this.handleKey = handleKey;
         this.modifiersChanged = modifiersChanged;
+        this.dismiss = dismiss;
         Name = "SelectionGuide";
         Text = WindowTitle.Create(intent == CaptureIntent.Recording ? "録画範囲の選択" : "撮影範囲の選択");
         Font = new Font("Yu Gothic UI", 11F);
@@ -33,8 +36,37 @@ internal sealed class SelectionGuideForm : Form
                     ? "左クリック: ウィンドウ　中央クリック: 画面全体　左ドラッグ: 範囲選択\nShift: 高さ固定　Ctrl: 幅固定　Alt: 20px単位＋枠吸着\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
                     : $"左クリック: ウィンドウ　中央クリック: 画面全体\n{(mode == CaptureMode.Freeform ? "左ドラッグ: 輪郭を囲む" : "ウィンドウを選んで左クリックで確定")}\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
         });
-        FormClosing += (_, _) => cancel();
     }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (e.CloseReason == CloseReason.UserClosing)
+        {
+            e.Cancel = true;
+            if (dismiss is not null) dismiss(); else Hide();
+        }
+        base.OnFormClosing(e);
+    }
+
+    internal static bool ShouldHideForPointer(Rectangle bounds, Point pointer, bool dragging, int dpi, bool hidden)
+    {
+        if (!dragging) return false;
+        int margin = (int)Math.Ceiling((hidden ? 40 : 24) * Math.Max(96, dpi) / 96.0);
+        bounds.Inflate(margin, margin);
+        return bounds.Contains(pointer);
+    }
+
+    internal void UpdatePointer(Point pointer, bool dragging)
+    {
+        if (IsDisposed || Disposing) return;
+        bool hide = ShouldHideForPointer(Bounds, pointer, dragging, DeviceDpi, hiddenForPointer);
+        if (hide == hiddenForPointer) return;
+        hiddenForPointer = hide;
+        if (hide) Hide(); else Show();
+    }
+
+    internal void ShowSaveError(string message) => Controls["SelectionHelp"]!.Text =
+        "案内の表示設定を保存できませんでした。撮影は継続できます。\n" + message;
     protected override bool ShowWithoutActivation => true;
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
@@ -51,7 +83,7 @@ internal sealed class SelectionGuideForm : Form
         }
         if (m.Msg == SSCapture.Capture.CaptureNative.WmSysCommand && (m.WParam.ToInt64() & 0xfff0) == SSCapture.Capture.CaptureNative.ScKeyMenu) return;
         base.WndProc(ref m);
-        if (m.Msg == 0x001C && m.WParam == 0) cancel();
+        if (m.Msg == 0x001C && m.WParam == 0 && Visible && !Disposing) cancel();
     }
 
     private static string AnchorText(CaptureAnchor anchor) => anchor switch
