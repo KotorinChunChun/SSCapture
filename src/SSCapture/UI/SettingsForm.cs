@@ -10,7 +10,7 @@ internal sealed class SettingsForm : Form
     private readonly AppSettings initial;
     private readonly TextBox directory, imageEditor, videoEditor, imageArguments, videoArguments, fileNamePattern, ocrSeparator, oneOcrDirectory;
     private readonly HotkeyEditor screenshot1, screenshot2, recording1, recording2, lastRegionKey;
-    private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration;
+    private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration, screenshotPadding;
     private readonly CheckBox includeCursor, keepHistory, playCaptureSound, limitToStartingMonitor;
     private readonly ComboBox notificationCorner, notificationDisplay, fixedCaptureAnchor;
     private readonly HotkeyEditor[] instantKeys = new HotkeyEditor[10];
@@ -38,7 +38,7 @@ internal sealed class SettingsForm : Form
         Font = new Font("Yu Gothic UI", 12F);
         BackColor = Color.FromArgb(247, 249, 251);
         ForeColor = Color.FromArgb(28, 37, 47);
-        ClientSize = new Size(1080, 462);
+        ClientSize = new Size(1080, 502);
         MinimumSize = SizeFromClientSize(ClientSize);
         StartPosition = FormStartPosition.CenterScreen;
         Icon = AppIcon.Create();
@@ -64,6 +64,12 @@ internal sealed class SettingsForm : Form
         freeze = Toggle(basic, "撮影タイミング", "FreezeFrame", "撮影開始時の画面を固定", settings.FreezeFrame, 3);
         openFolderAfterSave = Toggle(basic, "保存後", "OpenFolderAfterSave", "保存フォルダを開く", settings.OpenFolderAfterSave, 4);
         limitToStartingMonitor = Toggle(basic, "範囲選択", "LimitToStartingMonitor", "開始画面内だけで選択", settings.LimitToStartingMonitor, 5);
+        basic.RowCount = 8;
+        basic.RowStyles.Insert(5, new RowStyle(SizeType.Absolute, 40));
+        basic.RowStyles.Insert(6, new RowStyle(SizeType.Absolute, 40));
+        screenshotPadding = new NumericUpDown { Name = "ScreenshotPaddingPixels", Minimum = 0,
+            Maximum = ScreenshotPadding.MaximumPixels, DecimalPlaces = 0, Increment = 1, Value = settings.ScreenshotPaddingPixels };
+        Add(basic, "画像の余白 (px)", screenshotPadding, 6);
         var naming = Page(tabs, "ファイル名");
         fileNamePattern = Field(naming, "パターン", "FileNamePattern", settings.FileNamePattern, 0);
         ocrSeparator = Field(naming, "OCR区切り", "OcrSeparator", settings.OcrSeparator, 1);
@@ -228,6 +234,7 @@ internal sealed class SettingsForm : Form
                 FileNamePattern = fileNamePattern.Text, OcrSeparator = ocrSeparator.Text, OneOcrDirectory = Expand(oneOcrDirectory.Text),
                 DefaultDestination = (clipboardOutput.Checked ? OutputDestination.Clipboard : 0) | (fileOutput.Checked ? OutputDestination.File : 0) | (externalOutput.Checked ? OutputDestination.ExternalApp : 0),
                 FreezeFrame = freeze.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
+                ScreenshotPaddingPixels = (int)screenshotPadding.Value,
                 ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
                 RecordingShortcut1 = recording1.Value, RecordingShortcut2 = recording2.Value,
                 LastRegionShortcut = lastRegionKey.Value, FixedWidth = (int)fixedWidth.Value, FixedHeight = (int)fixedHeight.Value,

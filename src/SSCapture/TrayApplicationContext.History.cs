@@ -61,6 +61,7 @@ internal sealed partial class TrayApplicationContext
         }
 
         using var image = history.CloneImage(id) ?? throw new InvalidOperationException("この画像は履歴から削除されています。");
-        return await new OutputRouter(workRoot, delivered: DispatchDelivery).ScreenshotAsync(image, OutputDestination.ExternalApp, settings with { KeepHistory = false, OpenFolderAfterSave = false }, captureBounds: entry.CaptureBounds);
+        // 履歴画像には撮影時の余白が含まれているため、再送では追加しない。
+        return await new OutputRouter(workRoot, delivered: DispatchDelivery).ScreenshotAsync(image, OutputDestination.ExternalApp, settings with { KeepHistory = false, OpenFolderAfterSave = false, ScreenshotPaddingPixels = 0 }, captureBounds: entry.CaptureBounds);
     }
 }

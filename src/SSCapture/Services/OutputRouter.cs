@@ -24,7 +24,7 @@ internal sealed class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImag
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(settings);
         ValidateDestination(destination);
-        using var owned = (Bitmap)image.Clone();
+        using var owned = ScreenshotPadding.Apply(image, settings.ScreenshotPaddingPixels);
         DateTimeOffset captureTime = capturedAt ?? namePlan?.CapturedAt ?? DateTimeOffset.Now;
         if (fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, captureTime, CaptureIntent.Screenshot);
         Func<Task<bool?>>? prepareFile = requestFileName is null ? null : async () =>

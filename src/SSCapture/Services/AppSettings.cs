@@ -32,6 +32,7 @@ internal sealed record AppSettings
     public NotificationCorner NotificationCorner { get; init; } = Services.NotificationCorner.BottomRight;
     public bool FreezeFrame { get; init; } = true;
     public bool LimitToStartingMonitor { get; init; } = true;
+    public int ScreenshotPaddingPixels { get; init; }
     public bool Grid20 { get; init; }
     public bool ShowSelectionGuide { get; init; } = true;
     public OutputDestination DefaultDestination { get; init; } = OutputDestination.Clipboard;
@@ -58,6 +59,8 @@ internal sealed record AppSettings
         if (!string.IsNullOrWhiteSpace(OneOcrDirectory) && (!Path.IsPathFullyQualified(OneOcrDirectory) || OneOcrDirectory.IndexOfAny(Path.GetInvalidPathChars()) >= 0))
             throw new ArgumentException("OneOCRフォルダは絶対パスか空欄（自動検出）を指定してください。");
         if (!Enum.IsDefined(DefaultMode)) throw new ArgumentException("撮影モードが正しくありません。");
+        if (ScreenshotPaddingPixels is < 0 or > ScreenshotPadding.MaximumPixels)
+            throw new ArgumentException($"画像の余白は0～{ScreenshotPadding.MaximumPixels}pxで指定してください。");
         if (!Enum.IsDefined(NotificationCorner)) throw new ArgumentException("通知の表示位置が正しくありません。");
         if (!Enum.IsDefined(NotificationDisplay)) throw new ArgumentException("通知の表示先が正しくありません。");
         if (NotificationDurationSeconds is < 0 or > 3600) throw new ArgumentException("通知の表示時間は0～3600秒の整数で指定してください。");

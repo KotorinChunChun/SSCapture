@@ -10,6 +10,7 @@ internal static partial class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
+        if (args.Contains("--padding-ui-preview")) return PaddingUiPreview(args[1]);
         if (args.Contains("--selection-guide-preview")) return SelectionGuidePreview(args[1]);
         if (args.Contains("--overlay-placement-smoke")) return RunOverlayPlacementSmoke();
         if (args.Contains("--selection-monitor-smoke")) return RunSelectionMonitorSmoke();
@@ -45,6 +46,7 @@ internal static partial class Program
         RecordingSessionTests();
         AudioToggleTests();
         OutputTests();
+        ScreenshotPaddingTests();
         SaveCancellationTests();
         DeliveryWaitTests();
         StorageRefactorTests();
@@ -76,6 +78,7 @@ internal static partial class Program
     static partial void RecordingSessionTests();
     static partial void AudioToggleTests();
     static partial void OutputTests();
+    static partial void ScreenshotPaddingTests();
     static partial void SaveCancellationTests();
     static partial void DeliveryWaitTests();
     static partial void StorageRefactorTests();
