@@ -7,6 +7,7 @@ internal sealed class SelectionGuideForm : Form
     private readonly Action? modifiersChanged;
     private readonly Action? dismiss;
     private bool hiddenForPointer;
+    private CaptureAnchor currentAnchor;
     internal SelectionGuideForm(Rectangle monitor, CaptureIntent intent, Action cancel, Size? fixedSize = null,
         Func<Keys, bool>? handleKey = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft, Action? modifiersChanged = null,
         CaptureMode mode = CaptureMode.Rectangle, Action? dismiss = null)
@@ -15,6 +16,7 @@ internal sealed class SelectionGuideForm : Form
         this.handleKey = handleKey;
         this.modifiersChanged = modifiersChanged;
         this.dismiss = dismiss;
+        currentAnchor = fixedAnchor;
         Name = "SelectionGuide";
         Text = WindowTitle.Create(intent == CaptureIntent.Recording ? "録画範囲の選択" : "撮影範囲の選択");
         Font = new Font("Yu Gothic UI", 11F);
@@ -31,9 +33,9 @@ internal sealed class SelectionGuideForm : Form
         {
             Name = "SelectionHelp", Dock = DockStyle.Fill, Padding = new Padding(8, 4, 8, 4),
             Text = fixedSize is Size dimensions
-                ? $"固定サイズ {dimensions.Width} × {dimensions.Height} px　基点: {AnchorText(fixedAnchor)}　左クリック / Enter: 確定\n矢印: 1px移動　Shift＋矢印: 10px移動　Alt: 枠へスナップ\n中央クリック: 画面全体　右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断　画面外の枠は確定不可"
+                ? $"固定サイズ {dimensions.Width} × {dimensions.Height} px　基点: {AnchorText(fixedAnchor)}　左クリック / Enter: 確定\nSpace: 基点を時計回り　矢印: 1px　Shift＋矢印: 10px　Alt: 枠吸着\n中央クリック: 画面全体　右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断　画面外の枠は確定不可"
                 : mode == CaptureMode.Rectangle
-                    ? "左クリック: ウィンドウ　中央クリック: 画面全体　左ドラッグ: 範囲選択\nShift: 高さ固定　Ctrl: 幅固定　Alt: 20px単位＋枠吸着\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
+                    ? "左クリック: ウィンドウ　中央クリック: 画面全体　左ドラッグ: 範囲選択\nShift: 高さ固定　Ctrl: 幅固定　Alt: 20px単位＋枠吸着\nSpace: 現在位置を新しい始点に　右クリック: メニュー・縦横比\nEsc: 撮影終了　ドラッグ中の右クリック / Esc: 選択だけ中断"
                     : $"左クリック: ウィンドウ　中央クリック: 画面全体\n{(mode == CaptureMode.Freeform ? "左ドラッグ: 輪郭を囲む" : "ウィンドウを選んで左クリックで確定")}\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
         });
     }
@@ -67,9 +69,15 @@ internal sealed class SelectionGuideForm : Form
 
     internal void ShowSaveError(string message) => Controls["SelectionHelp"]!.Text =
         "案内の表示設定を保存できませんでした。撮影は継続できます。\n" + message;
+    internal void UpdateAnchor(CaptureAnchor anchor)
+    {
+        Controls["SelectionHelp"]!.Text = Controls["SelectionHelp"]!.Text.Replace("基点: " + AnchorText(currentAnchor), "基点: " + AnchorText(anchor));
+        currentAnchor = anchor;
+    }
     protected override bool ShowWithoutActivation => true;
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
+        if ((keyData & Keys.KeyCode) == Keys.Space && (keyData & Keys.Alt) == 0 && (msg.LParam.ToInt64() & (1L << 30)) != 0) return true;
         if (handleKey?.Invoke(keyData) == true) return true;
         if (keyData == Keys.Escape) { cancel(); return true; }
         return base.ProcessCmdKey(ref msg, keyData);

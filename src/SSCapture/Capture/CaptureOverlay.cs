@@ -99,7 +99,7 @@ internal sealed class CaptureOverlay : Form
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if (session.HandleCommandKey(keyData)) return true;
+        if (session.HandleCommandKey(keyData, (msg.LParam.ToInt64() & (1L << 30)) != 0)) return true;
         return base.ProcessCmdKey(ref msg, keyData);
     }
 

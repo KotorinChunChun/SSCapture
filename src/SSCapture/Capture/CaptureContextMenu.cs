@@ -6,6 +6,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     private readonly Font menuFont = new("Yu Gothic UI", 12F);
     private readonly Dictionary<OutputDestination, ToolStripMenuItem> destinations = [];
     private readonly Dictionary<CaptureMode, ToolStripMenuItem> modes = [];
+    private readonly Dictionary<CaptureAspectRatio, ToolStripMenuItem> ratios = [];
     private readonly ToolStripMenuItem? gridItem;
     private readonly ToolStripMenuItem? guideItem;
     private readonly Func<bool> ownsPopupFocus;
@@ -13,7 +14,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     internal CaptureContextMenu(OutputDestination selected, Action<OutputDestination> changeDestination,
         Action openSettings, Action cancel, CaptureMode mode = CaptureMode.Rectangle, bool grid20 = false,
         Action<CaptureMode>? changeMode = null, Action<bool>? changeGrid = null, Action? captureDesktop = null,
-        Func<bool>? ownsPopupFocus = null, bool showGuide = true, Action<bool>? changeGuide = null)
+        Func<bool>? ownsPopupFocus = null, bool showGuide = true, Action<bool>? changeGuide = null, Action<CaptureAspectRatio>? changeRatio = null)
     {
         this.cancel = cancel;
         this.ownsPopupFocus = ownsPopupFocus ?? (() => CaptureNative.OwnsForegroundWindow() || CaptureNative.ForegroundTransition);
@@ -68,6 +69,17 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         Items.Add("設定", null, (_, _) => openSettings());
         Items.Add("閉じる / キャンセル", null, (_, _) => cancel());
         SetDestination(selected);
+        if (changeRatio is not null)
+        {
+            var ratioMenu = new ToolStripMenuItem("縦横比") { Name = "AspectRatioMenu" };
+            foreach (var ratio in Enum.GetValues<CaptureAspectRatio>())
+            {
+                var item = new ToolStripMenuItem(AspectRatios.Label(ratio)) { Checked = ratio == CaptureAspectRatio.Free };
+                item.Click += (_, _) => changeRatio(ratio);
+                ratios.Add(ratio, item); ratioMenu.DropDownItems.Add(item);
+            }
+            Items.Insert(Math.Max(0, Items.Count - 2), ratioMenu);
+        }
     }
 
     internal void SetMode(CaptureMode mode)
@@ -77,6 +89,11 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
 
     internal void SetGrid(bool enabled) { if (gridItem is not null) gridItem.Checked = enabled; }
     internal void SetGuide(bool enabled) { if (guideItem is not null) guideItem.Checked = enabled; }
+    internal void SetRatio(CaptureAspectRatio ratio)
+    {
+        foreach (var pair in ratios) pair.Value.Checked = pair.Key == ratio;
+        if (Items["AspectRatioMenu"] is ToolStripMenuItem item) item.Enabled = modes.Count == 0 || modes[CaptureMode.Rectangle].Checked;
+    }
 
     protected override void OnClosing(ToolStripDropDownClosingEventArgs e)
     {

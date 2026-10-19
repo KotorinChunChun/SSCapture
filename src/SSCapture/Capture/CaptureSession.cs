@@ -26,7 +26,7 @@ internal static class CaptureSession
             if (!options.FreezeFrame && options.Intent == CaptureIntent.Screenshot && currentFrameFactory is null)
                 throw new ArgumentException("画面固定OFFの合成画像検証には画像取得関数を指定してください。", nameof(currentFrameFactory));
             SessionController session = new(options, snapshot, windows ?? [], currentFrameFactory,
-                initialPointer ?? CaptureNative.CursorPosition(), gridChanged: gridChanged, guideChanged: guideChanged);
+                initialPointer ?? snapshot.Monitors.FirstOrDefault().Location, gridChanged: gridChanged, guideChanged: guideChanged);
             session.Start();
             return session.Completion;
         }
@@ -91,6 +91,8 @@ internal sealed class SessionController
 
     internal CaptureMode Mode { get; private set; }
     internal bool Grid20 => gesture.Grid20;
+    internal CaptureAnchor FixedAnchor => gesture.FixedAnchor;
+    internal CaptureAspectRatio AspectRatio { get; private set; }
     internal DesktopSnapshot Snapshot { get; }
     internal Task<CaptureOutcome> Completion => completion.Task;
     internal bool Dragging => gesture.IsPressed;
@@ -129,12 +131,21 @@ internal sealed class SessionController
         gesture = CreateGesture(Mode, options.Grid20);
         SelectionMenu = new CaptureContextMenu(Destination, destination => Destination = destination,
             () => FinishCommand(true), Cancel, Mode, options.Grid20, ChangeMode, ChangeGrid20, () => CaptureDesktop(menuPointer),
-            showGuide: ShowSelectionGuide, changeGuide: ChangeGuideVisibility);
+            showGuide: ShowSelectionGuide, changeGuide: ChangeGuideVisibility, changeRatio: ChangeAspectRatio);
+        SelectionMenu.SetRatio(AspectRatio);
         SelectionMenu.Closed += MenuClosed;
     }
 
     private SelectionGesture CreateGesture(CaptureMode mode, bool grid20) =>
-        new(mode, SelectionMonitors, windows, options.FixedSize ?? new Size(1280, 720), options.FixedAnchor) { Grid20 = grid20 };
+        new(mode, SelectionMonitors, windows, options.FixedSize ?? new Size(1280, 720), options.FixedAnchor) { Grid20 = grid20, AspectRatio = AspectRatio };
+
+    internal void ChangeAspectRatio(CaptureAspectRatio ratio)
+    {
+        if (!Enum.IsDefined(ratio)) throw new ArgumentOutOfRangeException(nameof(ratio));
+        AspectRatio = ratio; gesture.AspectRatio = ratio;
+        SelectionMenu.SetRatio(ratio);
+        RefreshOverlays();
+    }
 
     internal void ChangeGrid20(bool enabled)
     {
@@ -161,6 +172,7 @@ internal sealed class SessionController
             Mode = mode;
             gesture = CreateGesture(mode, grid20);
             SelectionMenu.SetMode(mode);
+            SelectionMenu.SetRatio(AspectRatio);
             if (SelectionMenu.Visible) SelectionMenu.Close(ToolStripDropDownCloseReason.ItemClicked);
             if (mode == CaptureMode.FullScreen)
             {
@@ -299,14 +311,24 @@ internal sealed class SessionController
         catch (Exception ex) { Fail(ex); }
     }
 
-    internal bool HandleCommandKey(Keys keyData)
+    internal bool HandleCommandKey(Keys keyData) => HandleCommandKey(keyData, false);
+
+    internal bool HandleCommandKey(Keys keyData, bool repeated)
     {
         if ((keyData & Keys.KeyCode) == Keys.Escape)
         {
             if (gesture.IsPressed) AbortSelection(); else Cancel();
             return true;
         }
-        if (completed || menuOpen || menuTransition || Mode != CaptureMode.FixedRegion) return false;
+        if (completed || menuOpen || menuTransition) return false;
+        if ((keyData & Keys.KeyCode) == Keys.Space && (keyData & Keys.Alt) == 0)
+        {
+            if (repeated) return true;
+            bool handled = gesture.Space();
+            if (handled) { guide?.UpdateAnchor(gesture.FixedAnchor); RefreshOverlays(); }
+            return handled;
+        }
+        if (Mode != CaptureMode.FixedRegion) return false;
         if (keyData == Keys.Enter)
         {
             CaptureSelection? selection = gesture.FixedSelection(Destination);

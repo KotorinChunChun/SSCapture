@@ -9,7 +9,10 @@ internal sealed class SelectionGesture
     private readonly Rectangle? desktopBounds;
     private readonly SelectionSnap snapEdges;
     private readonly Size fixedDimensions;
-    private readonly Size anchorOffset;
+    private Size anchorOffset;
+    internal CaptureAnchor FixedAnchor { get; private set; }
+    internal CaptureAspectRatio AspectRatio { get; set; }
+    private bool restarted;
     private Point start;
     private Point rawStart;
     private Size threshold;
@@ -35,6 +38,7 @@ internal sealed class SelectionGesture
         this.windows = windows.ToArray();
         snapEdges = new SelectionSnap(this.monitors, this.windows);
         fixedDimensions = mode == CaptureMode.FixedRegion ? CaptureGeometry.ValidateFixedSize(fixedSize) : Size.Empty;
+        FixedAnchor = fixedAnchor;
         anchorOffset = new Size(fixedAnchor is CaptureAnchor.TopRight or CaptureAnchor.BottomRight ? fixedDimensions.Width : 0,
             fixedAnchor is CaptureAnchor.BottomLeft or CaptureAnchor.BottomRight ? fixedDimensions.Height : 0);
     }
@@ -46,6 +50,7 @@ internal sealed class SelectionGesture
         threshold = dragThreshold;
         IsPressed = true;
         HasDragged = false;
+        restarted = false;
         horizontal.Reset();
         vertical.Reset();
         Points.Clear();
@@ -88,6 +93,7 @@ internal sealed class SelectionGesture
             Point snapped = snap ? snapEdges.Apply(adjusted) : adjusted;
             Current = new Point(horizontal.IsLocked ? horizontal.Value : snapped.X != adjusted.X ? snapped.X : quantized.X,
                 vertical.IsLocked ? vertical.Value : snapped.Y != adjusted.Y ? snapped.Y : quantized.Y);
+            Current = AspectRatios.Constrain(start, Current, AspectRatio, desktopBounds, horizontal.IsLocked, vertical.IsLocked);
         }
         if (Points.Count == 0 || Points[^1] != point) Points.Add(point);
         Selection = HasDragged
@@ -102,7 +108,7 @@ internal sealed class SelectionGesture
         IsPressed = false;
         if (mode == CaptureMode.FixedRegion) return FixedSelection(destination);
         if (mode == CaptureMode.Window) return FromBounds(WindowAt(point), destination);
-        if (!HasDragged) return FromBounds(WindowAt(rawStart), destination);
+        if (!HasDragged) return restarted ? null : FromBounds(WindowAt(rawStart), destination);
         if (!CaptureGeometry.IsUsable(Selection)) return null;
         if (mode != CaptureMode.Freeform) return new CaptureSelection(Selection, null, destination);
         return CaptureGeometry.HasPolygonArea(Points)
@@ -111,6 +117,22 @@ internal sealed class SelectionGesture
     }
 
     internal Rectangle WindowAt(Point point) => windows.FirstOrDefault(window => window.Contains(point));
+
+    internal bool Space()
+    {
+        if (mode == CaptureMode.FixedRegion)
+        {
+            FixedAnchor = (CaptureAnchor)(((int)FixedAnchor + 1) % 4);
+            anchorOffset = new Size(FixedAnchor is CaptureAnchor.TopRight or CaptureAnchor.BottomRight ? fixedDimensions.Width : 0,
+                FixedAnchor is CaptureAnchor.BottomLeft or CaptureAnchor.BottomRight ? fixedDimensions.Height : 0);
+            PositionFixed(RawCurrent);
+            return true;
+        }
+        if (mode != CaptureMode.Rectangle || !IsPressed) return false;
+        Begin(RawCurrent, threshold);
+        restarted = true;
+        return true;
+    }
 
     internal CaptureSelection? WindowSelection(Point point, OutputDestination destination) => FromBounds(WindowAt(point), destination);
     internal CaptureSelection? MonitorSelection(Point point, OutputDestination destination) =>
