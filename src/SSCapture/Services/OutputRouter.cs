@@ -6,10 +6,11 @@ namespace SSCapture.Services;
 
 internal sealed record ScreenshotFileName(string? FileName, FileNamePlan? NamePlan, bool OpenFolderAfterSave);
 
-internal sealed class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImage = null,
+internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImage = null,
     Func<string, Task>? copyFile = null, Action<ProcessStartInfo>? launch = null, Action<Bitmap, string?, DateTimeOffset>? captured = null,
     Action<CaptureDelivery>? delivered = null, Action<Bitmap, string?, DateTimeOffset, Rectangle?>? capturedWithBounds = null,
-    Func<IReadOnlyList<DisplayTarget>>? readDisplays = null)
+    Func<IReadOnlyList<DisplayTarget>>? readDisplays = null, Action? retryChanged = null,
+    long retryByteLimit = 256L * 1024 * 1024) : IDisposable
 {
     private readonly Func<Bitmap, Task> copyImage = copyImage ?? ClipboardWriter.CopyAsync;
     private readonly Func<string, Task> copyFile = copyFile ?? ClipboardWriter.CopyFileAsync;
@@ -19,35 +20,40 @@ internal sealed class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImag
 
     public async Task<string> ScreenshotAsync(Bitmap image, OutputDestination destination, AppSettings settings, string? fileName = null, FileNamePlan? namePlan = null,
         DateTimeOffset? capturedAt = null, Action? onDelivered = null, Rectangle? captureBounds = null,
-        Func<Task<ScreenshotFileName?>>? requestFileName = null)
+        Func<Task<ScreenshotFileName?>>? requestFileName = null,
+        Func<Bitmap, Task<ScreenshotFileName?>>? requestFileNameForImage = null)
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(settings);
         ValidateDestination(destination);
-        using var owned = ScreenshotPadding.Apply(image, settings.ScreenshotPaddingPixels);
+        var owned = ScreenshotPadding.Apply(image, settings.ScreenshotPaddingPixels);
+        var retry = NewRetry(owned);
         DateTimeOffset captureTime = capturedAt ?? namePlan?.CapturedAt ?? DateTimeOffset.Now;
         if (fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, captureTime, CaptureIntent.Screenshot);
-        Func<Task<bool?>>? prepareFile = requestFileName is null ? null : async () =>
+        Func<Task<bool?>>? prepareFile = requestFileName is null && requestFileNameForImage is null ? null : async () =>
         {
-            var requested = await requestFileName();
+            var requested = requestFileNameForImage is not null ? await requestFileNameForImage(owned) : await requestFileName!();
             if (requested is null) return null;
             fileName = requested.FileName;
             namePlan = requested.NamePlan;
             if (fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, captureTime, CaptureIntent.Screenshot);
             return requested.OpenFolderAfterSave;
         };
-        return await DeliverAsync(CaptureIntent.Screenshot, destination, () => copyImage(owned),
+        retry.Pending = destination;
+        retry.PrepareFile = prepareFile;
+        retry.Execute = () => DeliverAsync(CaptureIntent.Screenshot, retry.Pending, () => copyImage(owned),
             () => SaveAsync(owned, settings.SaveDirectory, fileName, namePlan),
             () => SaveAsync(owned, NewWorkDirectory()), settings.ImageEditorPath, settings.ImageEditorArguments, settings.OpenFolderAfterSave,
             (saved, succeeded, attempted) =>
             {
-                if (settings.KeepHistory && attempted)
+                if (!retry.IsRetry && settings.KeepHistory && attempted)
                 {
                     captured?.Invoke(owned, saved, captureTime);
                     capturedWithBounds?.Invoke(owned, saved, captureTime, captureBounds);
                 }
-                if (succeeded) onDelivered?.Invoke();
-            }, captureBounds, prepareFile, DescribeCapture(captureBounds));
+                if (succeeded && !retry.SuccessNotified) { retry.SuccessNotified = true; onDelivered?.Invoke(); }
+            }, captureBounds, retry.PrepareFile, DescribeCapture(captureBounds), retry);
+        return await ExecuteRetryJobAsync(retry);
     }
 
     public async Task<string> RecordingAsync(string source, OutputDestination destination, AppSettings settings, string? fileName = null, FileNamePlan? namePlan = null,
@@ -68,11 +74,13 @@ internal sealed class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImag
     private async Task<string> DeliverAsync(CaptureIntent intent, OutputDestination destination, Func<Task> copy,
         Func<Task<string>> save, Func<Task<string>> prepareExternal, string executable, string arguments, bool openFolderAfterSave,
         Action<string?, bool, bool>? completed = null, Rectangle? captureBounds = null, Func<Task<bool?>>? prepareFile = null,
-        string? captureDescription = null)
+        string? captureDescription = null, RetryJob? retry = null)
     {
         var messages = new List<string>();
         var errors = new List<Exception>();
-        string? saved = null;
+        string? saved = retry?.SavedPath;
+        if (retry?.IsRetry == true)
+            openFolderAfterSave = retry.FolderPending || destination.HasFlag(OutputDestination.File) && openFolderAfterSave;
         OutputDestination succeeded = OutputDestination.None, failed = OutputDestination.None;
         bool folderOpenFailed = false, skipExternal = false;
         if (destination.HasFlag(OutputDestination.Clipboard))
@@ -89,6 +97,7 @@ internal sealed class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImag
                 {
                     // Copy is already complete. Never re-copy after the user confirms or cancels naming.
                     bool? requestedFolderOpen = await prepareFile();
+                    if (retry is not null) retry.PrepareFile = null;
                     if (requestedFolderOpen is null)
                     {
                         shouldSave = false;
@@ -120,7 +129,9 @@ internal sealed class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImag
                 EditorArguments.Validate(arguments);
                 if (destination.HasFlag(OutputDestination.File) && saved is null)
                     throw new IOException("保存に失敗したため、編集アプリへ保存ファイルを渡せません。");
-                string path = saved ?? await prepareExternal();
+                string path = saved ?? retry?.ExternalPath ?? await prepareExternal();
+                if (retry is not null) retry.ExternalPath = path;
+                if (!File.Exists(path)) throw new FileNotFoundException("送信する保存済みファイルがありません。", path);
                 LaunchEditor(resolvedExecutable, path, arguments);
                 succeeded |= OutputDestination.ExternalApp;
                 messages.Add("外部アプリに送りました。");
@@ -129,15 +140,16 @@ internal sealed class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImag
         }
         if (openFolderAfterSave && saved is not null)
         {
-            try { selectSavedFile(saved); }
+            try { selectSavedFile(saved); if (messages.Count == 0) messages.Add("保存フォルダを開きました。"); }
             catch (Exception ex) { folderOpenFailed = true; errors.Add(ex); messages.Add("保存済みですがフォルダを開けません: " + ex.Message); }
         }
         string result = messages.Count == 0 ? "出力先がすべてOFFです。" : string.Join(Environment.NewLine, messages);
         bool attempted = succeeded != OutputDestination.None || failed != OutputDestination.None;
+        if (retry is not null) { retry.Pending = failed; retry.FolderPending = folderOpenFailed; retry.SavedPath = saved; }
         try { completed?.Invoke(saved, succeeded != OutputDestination.None, attempted); }
         finally
         {
-            if (attempted)
+            if (attempted || folderOpenFailed || openFolderAfterSave && saved is not null)
                 NotifyDelivered(new CaptureDelivery(intent, succeeded, failed, folderOpenFailed,
                     succeeded.HasFlag(OutputDestination.File) ? saved : null, captureBounds, captureDescription));
         }

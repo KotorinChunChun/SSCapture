@@ -14,7 +14,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
     private readonly NotifyIcon tray;
     private readonly Icon icon;
     private readonly ContextMenuStrip menu;
-    private readonly ToolStripMenuItem pause, recordItem;
+    private readonly ToolStripMenuItem pause, recordItem, retryOutputItem;
     private readonly SettingsStore store;
     private readonly OutputRouter output;
     private readonly CaptureFeedback feedback;
@@ -54,7 +54,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         {
             if (settings?.KeepHistory == true)
                 history.Add(image, path, time, bounds);
-        }, delivered: DispatchDelivery);
+        }, delivered: DispatchDelivery, retryChanged: () => Post(RefreshMenu));
         settings = store.Load(out var warning);
         regionStore = new RegionStore(Path.Combine(AppContext.BaseDirectory, "data", "last-region.json"));
         lastRegion = regionStore.Load(out var regionWarning);
@@ -78,6 +78,8 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         menu.Items.Add(savedRegionMenu);
         menu.Items.Add("登録範囲", null, (_, _) => ShowRegions());
         menu.Items.Add("撮影履歴", null, (_, _) => ShowHistory());
+        retryOutputItem = new ToolStripMenuItem("失敗した出力を再実行", null, (_, _) => _ = RetryOutputAsync());
+        menu.Items.Add(retryOutputItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("設定", null, (_, _) => ShowSettings());
         menu.Items.Add("保存先を開く", null, (_, _) => OpenFolder());

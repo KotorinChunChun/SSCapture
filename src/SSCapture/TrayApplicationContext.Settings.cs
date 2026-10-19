@@ -88,6 +88,7 @@ internal sealed partial class TrayApplicationContext
 
     private void RefreshMenu()
     {
+        retryOutputItem.Enabled = output.HasPendingRetry && !busy && pendingRecording is null && recorder is null;
         pause.Enabled = settings.HasShortcuts;
         pause.Checked = hook is null || !hook.Enabled;
         foreach (var (mode, item) in modeItems)

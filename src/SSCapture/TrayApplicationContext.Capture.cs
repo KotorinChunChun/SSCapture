@@ -143,11 +143,11 @@ internal sealed partial class TrayApplicationContext
                 }
 
                 var namingFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                Func<Task<ScreenshotFileName?>>? requestFileName = outcome.Selection.Destination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(captureSettings.FileNamePattern) ? async () =>
+                Func<Bitmap, Task<ScreenshotFileName?>>? requestFileName = outcome.Selection.Destination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(captureSettings.FileNamePattern) ? async namingImage =>
                 {
                     try
                     {
-                        return await RequestScreenshotFileNameAsync(outcome.Image, captureSettings, capturedAt);
+                        return await RequestScreenshotFileNameAsync(namingImage, captureSettings, capturedAt);
                     }
                     finally
                     {
@@ -190,7 +190,7 @@ internal sealed partial class TrayApplicationContext
         }
     }
 
-    private async Task<string> DeliverAndRememberAsync(Bitmap image, OutputDestination destination, AppSettings captureSettings, string? fileName, FileNamePlan? namePlan, SavedRegion? remembered, long sequence, DateTimeOffset capturedAt, Rectangle captureBounds, Func<Task<ScreenshotFileName?>>? requestFileName = null)
+    private async Task<string> DeliverAndRememberAsync(Bitmap image, OutputDestination destination, AppSettings captureSettings, string? fileName, FileNamePlan? namePlan, SavedRegion? remembered, long sequence, DateTimeOffset capturedAt, Rectangle captureBounds, Func<Bitmap, Task<ScreenshotFileName?>>? requestFileName = null)
     {
         string warning = "";
         string result = await output.ScreenshotAsync(image, destination, captureSettings, fileName, namePlan, capturedAt, () =>
@@ -209,7 +209,7 @@ internal sealed partial class TrayApplicationContext
             {
                 warning = Environment.NewLine + "前回範囲を保存できませんでした: " + ex.Message;
             }
-        }, captureBounds: captureBounds, requestFileName: requestFileName);
+        }, captureBounds: captureBounds, requestFileNameForImage: requestFileName);
         return result + warning;
     }
 }

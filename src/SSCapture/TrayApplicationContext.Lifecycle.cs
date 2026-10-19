@@ -51,6 +51,7 @@ internal sealed partial class TrayApplicationContext
             regionForm?.Dispose();
             historyForm?.Dispose();
             history.Dispose();
+            output.Dispose();
             feedback.Dispose();
         }
 
