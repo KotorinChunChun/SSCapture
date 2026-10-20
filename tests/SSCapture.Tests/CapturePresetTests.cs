@@ -31,7 +31,7 @@ internal static partial class Program
         {
             var good = CapturePreset.FromSettings("資料", new AppSettings());
             foreach (var invalid in new[] { good with { Name = " " }, good with { Id = "" }, good with { PaddingPixels = -1 },
-                good with { PaddingPixels = 4097 }, good with { SaveDirectory = "relative" }, good with { FileNamePattern = "../escape.png" },
+                good with { PaddingPixels = 4097 }, good with { SaveDirectory = "relative", Destination = OutputDestination.File }, good with { FileNamePattern = "../escape.png", Destination = OutputDestination.File },
                 good with { Destination = (OutputDestination)128 } })
                 PaddingRejected(invalid.Validate);
             PaddingRejected(() => new AppSettings { CapturePresets = null! }.Validate());

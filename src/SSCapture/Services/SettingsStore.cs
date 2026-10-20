@@ -53,6 +53,8 @@ internal sealed class SettingsStore(string path)
                 if (HotkeyBinding.Parse(settings.LastRegionShortcut) is { } repeat && assigned.Any(a => a.Binding == repeat))
                     settings = settings with { LastRegionShortcut = "" };
             }
+            if (!document.RootElement.TryGetProperty("SchemaVersion", out var editorVersion) || editorVersion.GetInt32() < 3)
+                settings = settings.MigrateEditors();
             settings.Validate();
             return settings;
         }
@@ -69,6 +71,15 @@ internal sealed class SettingsStore(string path)
     {
         ArgumentNullException.ThrowIfNull(settings);
         settings.Validate();
+        if (File.Exists(filePath))
+        {
+            using var old = JsonDocument.Parse(File.ReadAllText(filePath, Encoding.UTF8));
+            if (!old.RootElement.TryGetProperty("SchemaVersion", out var version) || version.GetInt32() < 3)
+            {
+                string backup = filePath + ".schema2.bak";
+                if (!File.Exists(backup)) File.Copy(filePath, backup, false);
+            }
+        }
         AtomicFile.Write(filePath, stream => JsonSerializer.Serialize(stream, settings, Options));
     }
 }

@@ -8,7 +8,7 @@ internal sealed record AppSettings
     public string OcrSeparator { get; init; } = "_";
     public string OneOcrDirectory { get; init; } = "";
     public CaptureMode DefaultMode { get; init; } = CaptureMode.Rectangle;
-    public int SchemaVersion { get; init; } = 2;
+    public int SchemaVersion { get; init; } = 3;
     [System.Text.Json.Serialization.JsonIgnore]
     public bool HasShortcuts => HotkeyBinding.ReadAssignments(this).Length > 0;
     public string ScreenshotShortcut1 { get; init; } = "Win+Shift+S";
@@ -46,12 +46,40 @@ internal sealed record AppSettings
     public string VideoEditorPath { get; init; } = "";
     public string ImageEditorArguments { get; init; } = EditorArguments.Default;
     public string VideoEditorArguments { get; init; } = EditorArguments.Default;
+    public ExternalApplication[] ImageEditors { get; init; } = [];
+    public ExternalApplication[] VideoEditors { get; init; } = [];
+    public string SelectedImageEditorId { get; init; } = "";
+    public string SelectedVideoEditorId { get; init; } = "";
+
+    internal AppSettings ResolveEditors()
+    {
+        var image = ImageEditors.FirstOrDefault(a => a.Id == SelectedImageEditorId);
+        var video = VideoEditors.FirstOrDefault(a => a.Id == SelectedVideoEditorId);
+        return this with { ImageEditorPath = image?.Executable ?? (ImageEditors.Length == 0 ? ImageEditorPath : ""),
+            ImageEditorArguments = image?.Arguments ?? ImageEditorArguments,
+            VideoEditorPath = video?.Executable ?? (VideoEditors.Length == 0 ? VideoEditorPath : ""), VideoEditorArguments = video?.Arguments ?? VideoEditorArguments };
+    }
+
+    internal AppSettings MigrateEditors() => this with { SchemaVersion = 3,
+        ImageEditors = Legacy(ImageEditorPath, ImageEditorArguments, "legacy-image"),
+        VideoEditors = Legacy(VideoEditorPath, VideoEditorArguments, "legacy-video"),
+        SelectedImageEditorId = string.IsNullOrWhiteSpace(ImageEditorPath) ? "" : "legacy-image",
+        SelectedVideoEditorId = string.IsNullOrWhiteSpace(VideoEditorPath) ? "" : "legacy-video" };
+    private static ExternalApplication[] Legacy(string path, string args, string id) => string.IsNullOrWhiteSpace(path) ? [] :
+        [new ExternalApplication { Id = id, Name = Path.GetFileNameWithoutExtension(path), Executable = path, Arguments = args }];
 
     internal void Validate()
     {
+        ExternalApplication.ValidateList(ImageEditors, SelectedImageEditorId);
+        ExternalApplication.ValidateList(VideoEditors, SelectedVideoEditorId);
         if (CapturePresets is null || CapturePresets.Length > 50 || CapturePresets.Any(p => p is null))
             throw new ArgumentException("プリセットは50件以内で指定してください。");
-        foreach (var preset in CapturePresets) preset.Validate();
+        foreach (var preset in CapturePresets)
+        {
+            preset.Validate();
+            ExternalApplication.ValidateReference(ImageEditors, preset.ImageEditorId);
+            ExternalApplication.ValidateReference(VideoEditors, preset.VideoEditorId);
+        }
         if (CapturePresets.Select(p => p.Id).Distinct(StringComparer.Ordinal).Count() != CapturePresets.Length
             || CapturePresets.Select(p => p.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != CapturePresets.Length)
             throw new ArgumentException("プリセットのIDまたは名前が重複しています。");
@@ -64,8 +92,8 @@ internal sealed record AppSettings
             throw new ArgumentException("固定サイズは1～32768px、合計1億画素以内で指定してください。");
         if (!Enum.IsDefined(FixedCaptureAnchor)) throw new ArgumentException("固定サイズの基点が正しくありません。");
         HotkeyBinding.ValidateSettings(this);
-        Services.FileNamePattern.Validate(FileNamePattern, OcrSeparator);
-        if (!string.IsNullOrWhiteSpace(OneOcrDirectory) && (!Path.IsPathFullyQualified(OneOcrDirectory) || OneOcrDirectory.IndexOfAny(Path.GetInvalidPathChars()) >= 0))
+        if (DefaultDestination.HasFlag(OutputDestination.File)) Services.FileNamePattern.Validate(FileNamePattern, OcrSeparator);
+        if (DefaultDestination.HasFlag(OutputDestination.File) && !string.IsNullOrWhiteSpace(OneOcrDirectory) && (!Path.IsPathFullyQualified(OneOcrDirectory) || OneOcrDirectory.IndexOfAny(Path.GetInvalidPathChars()) >= 0))
             throw new ArgumentException("OneOCRフォルダは絶対パスか空欄（自動検出）を指定してください。");
         if (!Enum.IsDefined(DefaultMode)) throw new ArgumentException("撮影モードが正しくありません。");
         if (!Enum.IsDefined(ScreenshotColorDepth)) throw new ArgumentException("静止画の減色指定が正しくありません。");
@@ -77,13 +105,16 @@ internal sealed record AppSettings
         if ((DefaultDestination & ~(OutputDestination.Clipboard | OutputDestination.File | OutputDestination.ExternalApp)) != 0) throw new ArgumentException("送信先が正しくありません。");
         EditorArguments.Validate(ImageEditorArguments);
         EditorArguments.Validate(VideoEditorArguments);
-        if (string.IsNullOrWhiteSpace(SaveDirectory) || !Path.IsPathFullyQualified(SaveDirectory))
-            throw new ArgumentException("保存先にはフォルダの絶対パスを入力してください。");
-        if (SaveDirectory.IndexOfAny(Path.GetInvalidPathChars()) >= 0 || SaveDirectory.IndexOfAny(['*', '?', '"', '<', '>', '|']) >= 0)
-            throw new ArgumentException("保存先に使用できない文字が含まれています。");
-        string fullPath = Path.GetFullPath(SaveDirectory);
-        string root = Path.GetPathRoot(fullPath)!;
-        if (fullPath[root.Length..].Contains(':')) throw new ArgumentException("保存先のパスが正しくありません。");
+        if (DefaultDestination.HasFlag(OutputDestination.File))
+        {
+            if (string.IsNullOrWhiteSpace(SaveDirectory) || !Path.IsPathFullyQualified(SaveDirectory))
+                throw new ArgumentException("保存先にはフォルダの絶対パスを入力してください。");
+            if (SaveDirectory.IndexOfAny(Path.GetInvalidPathChars()) >= 0 || SaveDirectory.IndexOfAny(['*', '?', '"', '<', '>', '|']) >= 0)
+                throw new ArgumentException("保存先に使用できない文字が含まれています。");
+            string fullPath = Path.GetFullPath(SaveDirectory);
+            string root = Path.GetPathRoot(fullPath)!;
+            if (fullPath[root.Length..].Contains(':')) throw new ArgumentException("保存先のパスが正しくありません。");
+        }
         foreach (string editor in new[] { ImageEditorPath, VideoEditorPath })
         {
             if (!string.IsNullOrWhiteSpace(editor) && (!Path.IsPathFullyQualified(editor) || !editor.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)))

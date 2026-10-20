@@ -76,7 +76,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         menu.Items.Add(recordItem);
         savedRegionMenu = new ToolStripMenuItem("範囲を再撮影");
         menu.Items.Add(savedRegionMenu);
-        menu.Items.Add("登録範囲", null, (_, _) => ShowRegions());
+        menu.Items.Add("入力プリセット", null, (_, _) => ShowRegions());
         menu.Items.Add("撮影履歴", null, (_, _) => ShowHistory());
         retryOutputItem = new ToolStripMenuItem("失敗した出力を再実行", null, (_, _) => _ = RetryOutputAsync());
         menu.Items.Add(retryOutputItem);

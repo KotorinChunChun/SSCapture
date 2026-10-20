@@ -68,7 +68,7 @@ internal static class InstantCapture
                 warning = "OCRを取得できなかったためファイル名に「OCRなし」を使用しました。" + result.Error + Environment.NewLine;
             }
         }
-        var plan = new FileNamePlan(settings.FileNamePattern, capturedAt, CaptureIntent.Screenshot, ocr, Region: regionName);
+        var plan = destination.HasFlag(OutputDestination.File) ? new FileNamePlan(settings.FileNamePattern, capturedAt, CaptureIntent.Screenshot, ocr, Region: regionName) : null;
         return warning + await output.ScreenshotAsync(image, destination, settings with { OpenFolderAfterSave = false }, namePlan: plan, captureBounds: captureBounds);
     }
 }

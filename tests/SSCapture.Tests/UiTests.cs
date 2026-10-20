@@ -133,15 +133,18 @@ internal static partial class Program
             Equal(CaptureAnchor.BottomRight, saved.FixedCaptureAnchor);
             Equal("Win+Ctrl+Shift+S", saved.LastRegionShortcut);
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
-            tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "範囲・履歴");
+            tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "入力");
             form.Size = form.MinimumSize;
             _ = form.Handle; foreach (var child in Descendants(form)) _ = child.Handle; LayoutTree(form);
-            foreach (string name in new[] { "FixedWidth", "FixedHeight", "FixedCaptureAnchor", "IncludeCursor", "KeepHistory", "OpenRegions", "OpenHistory" })
+            foreach (string name in new[] { "FixedWidth", "FixedHeight", "FixedCaptureAnchor", "IncludeCursor", "OpenRegions" })
             {
                 var control = form.Controls.Find(name, true).Single();
                 Check(control.Parent!.ClientRectangle.Contains(control.Bounds), name + " が親領域外");
             }
-            Equal(7, ((TableLayoutPanel)anchor.Parent!).RowCount);
+            Equal(6, ((TableLayoutPanel)anchor.Parent!).RowCount);
+            tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "履歴"); LayoutTree(form);
+            foreach (string name in new[] { "KeepHistory", "OpenHistory" })
+            { var field = form.Controls.Find(name, true).Single(); Check(field.Parent!.ClientRectangle.Contains(field.Bounds), name + "が履歴区分に収まらない"); }
         });
         Run("設定・OCRは閉じるだけで未完了ウィンドウを再利用", () =>
         {
@@ -167,13 +170,9 @@ internal static partial class Program
             foreach (Control child in Descendants(form)) _ = child.Handle;
             LayoutTree(form);
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
-            Equal(10, tabs.TabCount);
-            for (int index = 0; index < tabs.TabCount; index++)
-            {
-                Rectangle header = tabs.GetTabRect(index);
-                Check(tabs.ClientRectangle.Contains(header), $"タブ {tabs.TabPages[index].Text} が見切れる: {header}");
-                Equal(tabs.GetTabRect(0).Top, header.Top);
-            }
+            var categories = (ListBox)form.Controls.Find("SettingsCategories", true).Single();
+            Equal(tabs.TabCount, categories.Items.Count);
+            Check(categories.Parent!.ClientRectangle.Contains(categories.Bounds), "分類一覧が領域外");
             Check(!Descendants(form).OfType<Label>().Any(label => label.Text.Contains("SSCapture", StringComparison.Ordinal)), "アプリ名見出しが残っている");
             Equal(0, ((TableLayoutPanel)tabs.Parent!).GetRow(tabs));
             foreach (TabPage page in tabs.TabPages)
@@ -182,7 +181,7 @@ internal static partial class Program
                 LayoutTree(form);
                 foreach (var input in Descendants(page).Where(c => c is TextBox or ComboBox && c.Parent is not UpDownBase))
                 {
-                    Check(input.Width >= (input.Name.EndsWith("Key", StringComparison.Ordinal) ? 200 : 420), $"{input.Name} 幅 {input.Width}");
+                    Check(input.Width >= (input.Name.EndsWith("EditorPreset", StringComparison.Ordinal) ? 160 : input.Name.EndsWith("Key", StringComparison.Ordinal) ? 200 : 420), $"{input.Name} 幅 {input.Width}");
                     Check(input.Height >= 24, $"{input.Name} 高さ {input.Height}");
                     Check(input.Parent!.ClientRectangle.Contains(input.Bounds), $"{input.Name} が親領域外: {input.Bounds} parent={input.Parent.ClientRectangle}");
                 }

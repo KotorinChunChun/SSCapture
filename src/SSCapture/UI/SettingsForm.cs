@@ -25,6 +25,7 @@ internal sealed class SettingsForm : Form
     private StatusMessage? statusMessage;
     private readonly Func<AppSettings, string?> save;
     private readonly CapturePresetEditor presetEditor;
+    private readonly ExternalApplicationsEditor imageApps, videoApps;
 
     public SettingsForm(AppSettings settings, Func<AppSettings, string?> onSave, Action openFolder,
         Func<IReadOnlyList<MicrophoneInfo>>? listMicrophones = null, Action? openRegions = null, Action? openHistory = null,
@@ -50,10 +51,19 @@ internal sealed class SettingsForm : Form
         foreach (float height in new[] { 0f, 96f, 38f }) layout.RowStyles.Add(new RowStyle(height == 0 ? SizeType.Percent : SizeType.Absolute, height == 0 ? 100 : height));
         Controls.Add(layout);
         var tabs = new TabControl { Name = "SettingsTabs", Dock = DockStyle.Fill, Margin = Padding.Empty };
-        layout.Controls.Add(tabs, 0, 0);
+        var categoryBody = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
+        categoryBody.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 158)); categoryBody.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        categoryBody.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var categories = new ListBox { Name = "SettingsCategories", Dock = DockStyle.Fill, IntegralHeight = false, ItemHeight = 34 };
+        tabs.Appearance = TabAppearance.FlatButtons; tabs.SizeMode = TabSizeMode.Fixed; tabs.ItemSize = new Size(1, 1); tabs.TabStop = false;
+        categoryBody.Controls.Add(categories, 0, 0); categoryBody.Controls.Add(tabs, 1, 0); layout.Controls.Add(categoryBody, 0, 0);
         var basic = Page(tabs, "基本");
+        basic.RowStyles.Clear(); basic.RowCount = 9;
+        for (int row = 0; row < 8; row++) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        basic.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var inputs = Page(tabs, "入力");
         directory = Field(basic, "保存先", "SaveDirectory", settings.SaveDirectory, 0);
-        mode = Combo(basic, "撮影モード", "CaptureMode", 1);
+        mode = Combo(inputs, "撮影モード", "CaptureMode", 0);
         foreach (var value in Enum.GetValues<CaptureMode>()) mode.Items.Add(new ModeItem(value));
         mode.SelectedIndex = (int)settings.DefaultMode;
         var destinations = new FlowLayoutPanel { WrapContents = false, Margin = Padding.Empty };
@@ -61,26 +71,19 @@ internal sealed class SettingsForm : Form
         fileOutput = OutputToggle("ファイル保存", "FileOutput", OutputDestination.File);
         externalOutput = OutputToggle("外部アプリ", "ExternalOutput", OutputDestination.ExternalApp);
         destinations.Controls.AddRange([clipboardOutput, fileOutput, externalOutput]);
-        Add(basic, "出力先", destinations, 2);
+        Add(basic, "出力先", destinations, 1);
         CheckBox OutputToggle(string text, string name, OutputDestination value) => new()
         { Text = text, Name = name, AutoSize = true, Checked = settings.DefaultDestination.HasFlag(value), Margin = new Padding(0, 3, 12, 0) };
-        freeze = Toggle(basic, "撮影タイミング", "FreezeFrame", "撮影開始時の画面を固定", settings.FreezeFrame, 3);
-        openFolderAfterSave = Toggle(basic, "保存後", "OpenFolderAfterSave", "保存フォルダを開く", settings.OpenFolderAfterSave, 4);
-        limitToStartingMonitor = Toggle(basic, "範囲選択", "LimitToStartingMonitor", "開始画面内だけで選択", settings.LimitToStartingMonitor, 5);
-        basic.RowCount = 8;
-        basic.RowStyles.Insert(5, new RowStyle(SizeType.Absolute, 40));
-        basic.RowStyles.Insert(6, new RowStyle(SizeType.Absolute, 40));
+        freeze = Toggle(basic, "撮影タイミング", "FreezeFrame", "撮影開始時の画面を固定", settings.FreezeFrame, 2);
+        openFolderAfterSave = Toggle(basic, "保存後", "OpenFolderAfterSave", "保存フォルダを開く", settings.OpenFolderAfterSave, 3);
+        limitToStartingMonitor = Toggle(basic, "範囲選択", "LimitToStartingMonitor", "開始画面内だけで選択", settings.LimitToStartingMonitor, 4);
         screenshotPadding = new NumericUpDown { Name = "ScreenshotPaddingPixels", Minimum = 0,
             Maximum = ScreenshotPadding.MaximumPixels, DecimalPlaces = 0, Increment = 1, Value = settings.ScreenshotPaddingPixels };
-        Add(basic, "画像の余白 (px)", screenshotPadding, 6);
-        basic.RowCount = 9;
-        basic.RowStyles.Insert(7, new RowStyle(SizeType.Absolute, 40));
-        screenshotColorDepth = Combo(basic, "静止画の減色", "ScreenshotColorDepth", 7);
+        Add(basic, "画像の余白 (px)", screenshotPadding, 5);
+        screenshotColorDepth = Combo(basic, "静止画の減色", "ScreenshotColorDepth", 6);
         screenshotColorDepth.Items.AddRange(["減色なし", "256色（8ビット）", "16色（4ビット）"]);
         screenshotColorDepth.SelectedIndex = (int)settings.ScreenshotColorDepth;
-        basic.RowCount = 10;
-        basic.RowStyles.Insert(8, new RowStyle(SizeType.Absolute, 40));
-        dimCaptureBackground = Toggle(basic, "背景表示", "DimCaptureBackground", "撮影中に背景を暗くする", settings.DimCaptureBackground, 8);
+        dimCaptureBackground = Toggle(basic, "背景表示", "DimCaptureBackground", "撮影中に背景を暗くする", settings.DimCaptureBackground, 7);
         var naming = Page(tabs, "ファイル名");
         fileNamePattern = Field(naming, "パターン", "FileNamePattern", settings.FileNamePattern, 0);
         ocrSeparator = Field(naming, "OCR区切り", "OcrSeparator", settings.OcrSeparator, 1);
@@ -94,24 +97,24 @@ internal sealed class SettingsForm : Form
         recording1 = KeyField(keys, "録画 1", "RecordingShortcut1", settings.RecordingShortcut1, 2);
         recording2 = KeyField(keys, "録画 2", "RecordingShortcut2", settings.RecordingShortcut2, 3);
         lastRegionKey = KeyField(keys, "前回の範囲", "LastRegionShortcut", settings.LastRegionShortcut, 4);
-        var regions = Page(tabs, "範囲・履歴");
-        regions.RowCount = 7;
-        regions.RowStyles.Insert(5, new RowStyle(SizeType.Absolute, 40));
-        fixedWidth = PixelField(regions, "固定幅 (px)", "FixedWidth", settings.FixedWidth, 0);
-        fixedHeight = PixelField(regions, "固定高さ (px)", "FixedHeight", settings.FixedHeight, 1);
-        fixedCaptureAnchor = Combo(regions, "固定サイズの基点", "FixedCaptureAnchor", 2);
+        var regions = inputs;
+        fixedWidth = PixelField(regions, "固定幅 (px)", "FixedWidth", settings.FixedWidth, 1);
+        fixedHeight = PixelField(regions, "固定高さ (px)", "FixedHeight", settings.FixedHeight, 2);
+        fixedCaptureAnchor = Combo(regions, "固定サイズの基点", "FixedCaptureAnchor", 3);
         foreach (var anchor in Enum.GetValues<CaptureAnchor>()) fixedCaptureAnchor.Items.Add(new CaptureAnchorItem(anchor));
         fixedCaptureAnchor.SelectedIndex = (int)settings.FixedCaptureAnchor;
-        includeCursor = Toggle(regions, "カーソル", "IncludeCursor", "画像・動画に含める", settings.IncludeCursor, 3);
-        keepHistory = Toggle(regions, "撮影履歴", "KeepHistory", "メモリーに保持する", settings.KeepHistory, 4);
+        includeCursor = Toggle(regions, "カーソル", "IncludeCursor", "画像・動画に含める", settings.IncludeCursor, 4);
+        var historyPage = Page(tabs, "履歴");
+        keepHistory = Toggle(historyPage, "撮影履歴", "KeepHistory", "メモリーに保持する", settings.KeepHistory, 0);
         var regionButtons = new FlowLayoutPanel { WrapContents = false, Margin = Padding.Empty };
-        var manageRegions = MakeButton("登録範囲", "OpenRegions", ButtonRole.Secondary);
+        var manageRegions = MakeButton("入力プリセット", "OpenRegions", ButtonRole.Secondary);
         manageRegions.Width = 144; manageRegions.Enabled = openRegions is not null;
         manageRegions.Click += (_, _) => openRegions?.Invoke();
         var historyButton = MakeButton("撮影履歴", "OpenHistory", ButtonRole.Secondary);
         historyButton.Width = 144; historyButton.Enabled = openHistory is not null;
         historyButton.Click += (_, _) => openHistory?.Invoke();
-        regionButtons.Controls.AddRange([manageRegions, historyButton]);
+        regionButtons.Controls.Add(manageRegions);
+        Add(historyPage, "管理", historyButton, 1);
         Add(regions, "管理", regionButtons, 5);
         regionButtons.Margin = Padding.Empty;
         var instant = Page(tabs, "即時撮影");
@@ -159,8 +162,17 @@ internal sealed class SettingsForm : Form
         microphone.SelectedIndex = selectedMic;
         microphone.Enabled = micAudio.Checked;
         micAudio.CheckedChanged += (_, _) => microphone.Enabled = micAudio.Checked;
-        (imageEditor, imageArguments) = EditorPage(tabs, "画像編集アプリ", "Image", settings.ImageEditorPath, settings.ImageEditorArguments, EditorPresets.Images);
-        (videoEditor, videoArguments) = EditorPage(tabs, "動画編集アプリ", "Video", settings.VideoEditorPath, settings.VideoEditorArguments, EditorPresets.Videos);
+        var externalPage = new TabPage("外部アプリ") { BackColor = BackColor };
+        var appTabs = new TabControl { Name = "ExternalApplicationTabs", Dock = DockStyle.Fill };
+        externalPage.Controls.Add(appTabs); tabs.TabPages.Add(externalPage);
+        imageApps = new ExternalApplicationsEditor("Image", settings.ImageEditors, settings.SelectedImageEditorId,
+            settings.ImageEditorPath, settings.ImageEditorArguments, EditorPresets.Images, () => presetEditor?.Presets.Select(p => p.ImageEditorId) ?? []);
+        videoApps = new ExternalApplicationsEditor("Video", settings.VideoEditors, settings.SelectedVideoEditorId,
+            settings.VideoEditorPath, settings.VideoEditorArguments, EditorPresets.Videos, () => presetEditor?.Presets.Select(p => p.VideoEditorId) ?? []);
+        var imagePage = new TabPage("画像"); imagePage.Controls.Add(imageApps); appTabs.TabPages.Add(imagePage);
+        var videoPage = new TabPage("動画"); videoPage.Controls.Add(videoApps); appTabs.TabPages.Add(videoPage);
+        imageEditor = imageApps.Executable; imageArguments = imageApps.Arguments;
+        videoEditor = videoApps.Executable; videoArguments = videoApps.Arguments;
         var notifications = Page(tabs, "通知");
         notifications.RowCount = 5;
         notifications.RowStyles.Clear();
@@ -183,7 +195,7 @@ internal sealed class SettingsForm : Form
         var notificationInfo = new Label { Name = "NotificationInfo", Dock = DockStyle.Fill,
             Text = "画面共有への映り込みを抑えますが、共有アプリによっては除外できません。\n効果音はPC音声の録音・共有に含まれる場合があります。" };
         notifications.Controls.Add(notificationInfo, 0, 4); notifications.SetColumnSpan(notificationInfo, 2);
-        var presetPage = new TabPage("プリセット") { BackColor = BackColor, Padding = new Padding(8) };
+        var presetPage = new TabPage("出力プリセット") { BackColor = BackColor, Padding = new Padding(8) };
         presetEditor = new CapturePresetEditor(settings, ReadSettings);
         presetPage.Controls.Add(presetEditor); tabs.TabPages.Add(presetPage);
         status = new TextBox { Name = "Status", Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
@@ -204,6 +216,11 @@ internal sealed class SettingsForm : Form
         AcceptButton = saveButton;
         CancelButton = closeButton;
         if (deviceError is not null) SetStatus(deviceError, true);
+        categories.DisplayMember = nameof(TabPage.Text); categories.Items.AddRange(tabs.TabPages.Cast<TabPage>().Cast<object>().ToArray()); categories.SelectedIndex = 0;
+        categories.SelectedIndexChanged += (_, _) => { if (categories.SelectedIndex >= 0) tabs.SelectedIndex = categories.SelectedIndex; };
+        tabs.SelectedIndexChanged += (_, _) => { if (categories.SelectedIndex != tabs.SelectedIndex) categories.SelectedIndex = tabs.SelectedIndex; };
+        void UpdateFileFields() { folderButton.Enabled = directory.Enabled = fileNamePattern.Enabled = ocrSeparator.Enabled = oneOcrDirectory.Enabled = openFolderAfterSave.Enabled = fileOutput.Checked; }
+        fileOutput.CheckedChanged += (_, _) => UpdateFileFields(); UpdateFileFields();
         SettingsHelp.Apply(this, settingTips);
     }
 
@@ -271,6 +288,8 @@ internal sealed class SettingsForm : Form
                 MicrophoneDeviceId = ((MicrophoneInfo)microphone.SelectedItem!).Id,
                 ImageEditorPath = Expand(imageEditor.Text), VideoEditorPath = Expand(videoEditor.Text),
                 ImageEditorArguments = imageArguments.Text, VideoEditorArguments = videoArguments.Text
+                , ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications,
+                SelectedImageEditorId = imageApps.SelectedId, SelectedVideoEditorId = videoApps.SelectedId
             };
     private static string Expand(string text) => Environment.ExpandEnvironmentVariables(text.Trim().Trim('"'));
     private static NumericUpDown PixelField(TableLayoutPanel table, string label, string name, int value, int row)

@@ -121,7 +121,7 @@ internal static partial class Program
             Equal(region, loaded with { Layout = region.Layout });
             Check(region.Layout.SequenceEqual(loaded.Layout), "登録範囲の画面情報が変化した");
             using var json = JsonDocument.Parse(File.ReadAllText(settingsPath));
-            Equal(2, json.RootElement.GetProperty("SchemaVersion").GetInt32());
+            Equal(3, json.RootElement.GetProperty("SchemaVersion").GetInt32());
             Equal("Freeform", json.RootElement.GetProperty("DefaultMode").GetString());
             Equal(JsonValueKind.String, json.RootElement.GetProperty("DefaultDestination").ValueKind);
             Equal(2, Directory.GetFiles(directory).Length);

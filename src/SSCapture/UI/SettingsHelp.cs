@@ -24,7 +24,7 @@ internal static class SettingsHelp
         ["FixedCaptureAnchor"] = "固定サイズの四隅のうち、ポインタに合わせる位置です。右下ならポインタから左上へ指定サイズの枠が広がります。画面外にはみ出した枠は確定できません。",
         ["IncludeCursor"] = "ONのときは撮影画像と録画映像にマウスポインタを含めます。静止画では撮影タイミングの設定に応じた取得時点のポインタが対象です。",
         ["KeepHistory"] = "ONのときは撮影した画像をアプリのメモリーに保持し、撮影履歴から再利用できます。OFFのときは保持せず、既存のメモリー内履歴も消去します。アプリ終了時に履歴は失われます。保存ファイルは削除しません。",
-        ["OpenRegions"] = "登録した撮影範囲を追加・変更・削除する画面を開きます。登録範囲は設定に保存され、再起動後も使用できます。",
+        ["OpenRegions"] = "登録した撮影範囲を追加・変更・削除する画面を開きます。入力プリセットは設定に保存され、再起動後も使用できます。",
         ["OpenHistory"] = "メモリーに保持した撮影履歴を開きます。画像のコピーや外部アプリでの編集ができます。履歴はアプリ終了時に失われます。",
         ["SystemAudio"] = "ONのときは録画と一緒にPCで再生している音を録音します。マイク音声と併用できます。録画中の操作画面でも切り替えられます。",
         ["MicrophoneAudio"] = "ONのときは選択したマイクの音を録画と一緒に録音します。PCの再生音と併用できます。録画中の操作画面でも切り替えられます。",
@@ -67,6 +67,8 @@ internal static class SettingsHelp
     private static string? Description(string name)
     {
         if (Descriptions.TryGetValue(name, out string? description)) return description;
+        if (name.Contains("Editor", StringComparison.Ordinal) || name.Contains("SelectedEditor", StringComparison.Ordinal))
+            return "画像用・動画用の外部アプリを複数登録し、既定を1つ選びます。新規・複製・登録更新・削除の変更は設定の保存で確定します。参照中のアプリは削除できません。";
         if (name.StartsWith("InstantShortcut", StringComparison.Ordinal))
             return "指定モニタの全体を選択画面なしで即時撮影するキーです。画面1は主画面で、未接続の画面は撮影できません。" + ShortcutHelp;
         if (name.StartsWith("ScreenshotShortcut", StringComparison.Ordinal)) return "静止画の範囲選択を開始するキーです。撮影1と撮影2は同じ操作を開始します。" + ShortcutHelp;

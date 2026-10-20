@@ -11,7 +11,10 @@ internal static partial class Program
         Check(expected.InstantShortcuts.SequenceEqual(actual.InstantShortcuts), "即時キー設定の往復不一致" );
         Equal(System.Text.Json.JsonSerializer.Serialize(expected.SavedRegions), System.Text.Json.JsonSerializer.Serialize(actual.SavedRegions));
         Equal(System.Text.Json.JsonSerializer.Serialize(expected.CapturePresets), System.Text.Json.JsonSerializer.Serialize(actual.CapturePresets));
-        Equal(expected, actual with { InstantShortcuts = expected.InstantShortcuts, SavedRegions = expected.SavedRegions, CapturePresets = expected.CapturePresets });
+        Equal(System.Text.Json.JsonSerializer.Serialize(expected.ImageEditors), System.Text.Json.JsonSerializer.Serialize(actual.ImageEditors));
+        Equal(System.Text.Json.JsonSerializer.Serialize(expected.VideoEditors), System.Text.Json.JsonSerializer.Serialize(actual.VideoEditors));
+        Equal(expected, actual with { InstantShortcuts = expected.InstantShortcuts, SavedRegions = expected.SavedRegions, CapturePresets = expected.CapturePresets,
+            ImageEditors = expected.ImageEditors, VideoEditors = expected.VideoEditors });
     }
     static partial void ServiceTests()
     {
@@ -394,7 +397,7 @@ internal static partial class Program
         {
             string path = Path.Combine(directory, "settings.json");
             var store = new SettingsStore(path);
-            foreach (string content in new[] { "{破損", "null", "{\"DefaultMode\":567}", "{\"SaveDirectory\":\"relative\"}", "{\"SaveDirectory\":null}", "{\"SaveDirectory\":\"C:\\\\bad*path\"}",
+            foreach (string content in new[] { "{破損", "null", "{\"DefaultMode\":567}", "{\"DefaultDestination\":\"File\",\"SaveDirectory\":\"relative\"}", "{\"DefaultDestination\":\"File\",\"SaveDirectory\":null}", "{\"DefaultDestination\":\"File\",\"SaveDirectory\":\"C:\\\\bad*path\"}",
                 "{\"ScreenshotShortcut1\":\"Escape\"}", "{\"RecordingShortcut2\":\"shift+win+s\"}", "{\"RecordingShortcut1\":\"Ctrl+Ctrl+R\"}" })
             {
                 byte[] bytes = Encoding.UTF8.GetBytes(content);

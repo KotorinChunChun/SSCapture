@@ -136,7 +136,10 @@ internal sealed class SessionController
             () => FinishCommand(true), Cancel, Mode, options.Grid20, ChangeMode, ChangeGrid20, () => CaptureDesktop(menuPointer),
             showGuide: ShowSelectionGuide, changeGuide: ChangeGuideVisibility, changeRatio: ChangeAspectRatio,
             defaultPadding: OutputSettings.ScreenshotPaddingPixels, changePadding: options.Intent == CaptureIntent.Screenshot ? ChangePadding : null,
-            presets: OutputSettings.CapturePresets, applyPreset: ApplyPreset);
+            presets: OutputSettings.CapturePresets, applyPreset: ApplyPreset,
+            applications: options.Intent == CaptureIntent.Screenshot ? OutputSettings.ImageEditors : OutputSettings.VideoEditors,
+            selectedApplication: options.Intent == CaptureIntent.Screenshot ? OutputSettings.SelectedImageEditorId : OutputSettings.SelectedVideoEditorId,
+            changeApplication: ChangeApplication);
         SelectionMenu.SetRatio(AspectRatio);
         SelectionMenu.Closed += MenuClosed;
     }
@@ -165,6 +168,15 @@ internal sealed class SessionController
         Destination = OutputSettings.DefaultDestination;
         SelectionMenu.SetDestination(Destination);
         SelectionMenu.SetPadding(OutputSettings.ScreenshotPaddingPixels);
+        SelectionMenu.SetApplication(options.Intent == CaptureIntent.Screenshot ? OutputSettings.SelectedImageEditorId : OutputSettings.SelectedVideoEditorId);
+    }
+
+    internal void ChangeApplication(string id)
+    {
+        var apps = options.Intent == CaptureIntent.Screenshot ? OutputSettings.ImageEditors : OutputSettings.VideoEditors;
+        SSCapture.Services.ExternalApplication.ValidateReference(apps, id);
+        OutputSettings = options.Intent == CaptureIntent.Screenshot ? OutputSettings with { SelectedImageEditorId = id } : OutputSettings with { SelectedVideoEditorId = id };
+        SelectionMenu.SetApplication(id);
     }
 
     internal void ChangeGrid20(bool enabled)

@@ -34,7 +34,7 @@ internal sealed class RegionManagerForm : Form
         this.selectAnchoredRegion = selectAnchoredRegion;
         this.saveRegions = saveRegions;
         this.displays = displays ?? RegionCoordinates.ReadDisplays;
-        Text = WindowTitle.Create("登録範囲");
+        Text = WindowTitle.Create("入力プリセット");
         Name = "RegionManagerForm";
         MinimizeBox = MaximizeBox = false;
         AutoScaleMode = AutoScaleMode.Dpi;
@@ -69,7 +69,12 @@ internal sealed class RegionManagerForm : Form
         body.Controls.Add(left, 0, 0);
         body.SetRowSpan(left, 2);
         list = new ListBox { Name = "SavedRegions", Dock = DockStyle.Fill, IntegralHeight = false,
-            DisplayMember = nameof(SavedRegion.Name), Margin = Padding.Empty };
+            DisplayMember = nameof(SavedRegion.Name), Margin = Padding.Empty, FormattingEnabled = true, HorizontalScrollbar = true };
+        list.Format += (_, e) =>
+        {
+            if (e.ListItem is SavedRegion region)
+                e.Value = $"{region.Name} / {(string.IsNullOrWhiteSpace(region.Shortcut) ? "なし" : region.Shortcut)} / ({region.Bounds.X}, {region.Bounds.Y}) {region.Bounds.Width}×{region.Bounds.Height}";
+        };
         left.Controls.Add(list, 0, 0);
         var addNumeric = Button("新規（数値入力）", "NewNumericRegion", ButtonRole.Secondary);
         addNumeric.Click += (_, _) => NewRegion();
@@ -81,7 +86,7 @@ internal sealed class RegionManagerForm : Form
 
         var editor = new TableLayoutPanel { Name = "RegionEditor", Dock = DockStyle.Fill,
             ColumnCount = 2, RowCount = 7, Margin = Padding.Empty };
-        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 184));
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         foreach (float row in new[] { 44f, 44f, 88f, 40f, 48f, 48f, 0f })
             editor.RowStyles.Add(new RowStyle(row == 0 ? SizeType.Percent : SizeType.Absolute, row == 0 ? 100 : row));
@@ -89,7 +94,7 @@ internal sealed class RegionManagerForm : Form
         name = new TextBox { Name = "RegionName", Dock = DockStyle.Fill, MaxLength = 120 };
         AddField(editor, "名前", name, 0);
         shortcut = new HotkeyEditor("RegionShortcut", "") { Dock = DockStyle.Fill };
-        AddField(editor, "キー", shortcut, 1);
+        AddField(editor, "再撮影ショートカット", shortcut, 1);
         var dimensions = new TableLayoutPanel { Name = "RegionDimensions", Dock = DockStyle.Fill,
             ColumnCount = 4, RowCount = 2, Margin = Padding.Empty };
         dimensions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));
@@ -276,7 +281,7 @@ internal sealed class RegionManagerForm : Form
             string? error = saveRegions(candidate.Select(Clone).ToArray());
             if (error is not null) { SetStatus(error, true); return; }
             regions.Clear(); regions.AddRange(candidate); ReloadList(next.Id);
-            SetStatus("登録範囲を保存しました。");
+            SetStatus("入力プリセットを保存しました。");
         }
         catch (Exception ex) { SetStatus("保存できませんでした: " + ex.Message, true); }
     }
@@ -291,7 +296,7 @@ internal sealed class RegionManagerForm : Form
             if (error is not null) { SetStatus(error, true); return; }
             regions.Clear(); regions.AddRange(candidate); ReloadList(null);
             if (candidate.Length == 0) NewRegion();
-            SetStatus("選択した登録範囲を削除しました。");
+            SetStatus("選択した入力プリセットを削除しました。");
         }
         catch (Exception ex) { SetStatus("削除できませんでした: " + ex.Message, true); }
     }

@@ -8,6 +8,7 @@ internal sealed class CapturePresetEditor : UserControl
     private readonly TextBox presetName, directory, pattern;
     private readonly NumericUpDown padding;
     private readonly CheckBox clipboard, file, external;
+    private readonly ComboBox imageApp, videoApp;
     private readonly Label status;
     private readonly Func<AppSettings> readSettings;
     internal CapturePreset[] Presets => list.Items.Cast<CapturePreset>().ToArray();
@@ -22,9 +23,9 @@ internal sealed class CapturePresetEditor : UserControl
         Controls.Add(root);
         list = new ListBox { Name = "CapturePresetList", Dock = DockStyle.Fill, IntegralHeight = false };
         root.Controls.Add(list, 0, 0);
-        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 6 };
+        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 8 };
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 156)); fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (int i = 0; i < 5; i++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        for (int i = 0; i < 7; i++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         fields.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.Controls.Add(fields, 1, 0);
         presetName = new TextBox { Name = "CapturePresetName", MaxLength = 80 }; Add("名前", presetName, 0);
@@ -35,6 +36,10 @@ internal sealed class CapturePresetEditor : UserControl
         Add("白余白 (px)", padding, 2);
         directory = new TextBox { Name = "PresetSaveDirectory" }; Add("保存フォルダー", directory, 3);
         pattern = new TextBox { Name = "PresetFileNamePattern" }; Add("命名パターン", pattern, 4);
+        imageApp = new ComboBox { Name = "PresetImageEditor", DropDownStyle = ComboBoxStyle.DropDownList }; Add("画像の外部アプリ", imageApp, 5);
+        videoApp = new ComboBox { Name = "PresetVideoEditor", DropDownStyle = ComboBoxStyle.DropDownList }; Add("動画の外部アプリ", videoApp, 6);
+        imageApp.Enter += (_, _) => RefreshApps(imageApp, readSettings().ImageEditors, (imageApp.SelectedItem as ExternalApplication)?.Id);
+        videoApp.Enter += (_, _) => RefreshApps(videoApp, readSettings().VideoEditors, (videoApp.SelectedItem as ExternalApplication)?.Id);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
         Button Button(string text, string name, int width, Action action)
         {
@@ -51,6 +56,10 @@ internal sealed class CapturePresetEditor : UserControl
         list.SelectedIndexChanged += (_, _) => { if (list.SelectedItem is CapturePreset preset) Fill(preset); };
         foreach (var preset in initial.CapturePresets) list.Items.Add(preset);
         Fill(CapturePreset.FromSettings("", initial));
+        file.CheckedChanged += (_, _) => UpdateFileFields();
+        UpdateFileFields();
+
+        void UpdateFileFields() { directory.Enabled = pattern.Enabled = file.Checked; }
 
         void Add(string text, Control input, int row)
         {
@@ -62,6 +71,9 @@ internal sealed class CapturePresetEditor : UserControl
 
     private void Fill(CapturePreset preset)
     {
+        var current = IsHandleCreated ? readSettings() : null;
+        RefreshApps(imageApp, current?.ImageEditors ?? [], preset.ImageEditorId);
+        RefreshApps(videoApp, current?.VideoEditors ?? [], preset.VideoEditorId);
         presetName.Text = preset.Name; directory.Text = preset.SaveDirectory; pattern.Text = preset.FileNamePattern;
         padding.Value = preset.PaddingPixels;
         clipboard.Checked = preset.Destination.HasFlag(OutputDestination.Clipboard);
@@ -76,15 +88,24 @@ internal sealed class CapturePresetEditor : UserControl
             var preset = new CapturePreset { Id = (list.SelectedItem as CapturePreset)?.Id ?? Guid.NewGuid().ToString("N"),
                 Name = presetName.Text.Trim(), SaveDirectory = Environment.ExpandEnvironmentVariables(directory.Text.Trim().Trim('"')),
                 FileNamePattern = pattern.Text, PaddingPixels = (int)padding.Value,
+                ImageEditorId = (imageApp.SelectedItem as ExternalApplication)?.Id,
+                VideoEditorId = (videoApp.SelectedItem as ExternalApplication)?.Id,
                 Destination = (clipboard.Checked ? OutputDestination.Clipboard : 0) | (file.Checked ? OutputDestination.File : 0) | (external.Checked ? OutputDestination.ExternalApp : 0) };
             preset.Validate();
             var next = Presets.Where(p => p.Id != preset.Id).Append(preset).ToArray();
-            new AppSettings { CapturePresets = next }.Validate();
+            (readSettings() with { CapturePresets = next }).Validate();
             if (list.SelectedIndex >= 0) { int selected = list.SelectedIndex; list.Items[selected] = preset; list.SelectedIndex = selected; }
             else { list.Items.Add(preset); list.SelectedIndex = list.Items.Count - 1; }
             status.Text = "登録・更新しました。設定画面の「保存」で確定します。";
             status.ForeColor = Color.FromArgb(28, 37, 47);
         }
         catch (ArgumentException error) { status.Text = error.Message; status.ForeColor = Color.DarkRed; }
+    }
+
+    private static void RefreshApps(ComboBox combo, ExternalApplication[] apps, string? id)
+    {
+        combo.Items.Clear(); combo.Items.Add("基本設定に従う"); combo.Items.AddRange(apps.Cast<object>().ToArray());
+        if (!string.IsNullOrEmpty(id) && !apps.Any(a => a.Id == id)) combo.Items.Add(new ExternalApplication { Id = id, Name = "未登録: " + id });
+        combo.SelectedIndex = Enumerable.Range(1, combo.Items.Count - 1).FirstOrDefault(i => ((ExternalApplication)combo.Items[i]!).Id == id, 0);
     }
 }

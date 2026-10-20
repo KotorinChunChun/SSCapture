@@ -15,7 +15,8 @@ internal sealed partial class TrayApplicationContext
             return;
         if (historyForm is null || historyForm.IsDisposed)
         {
-            historyForm = new HistoryForm(history, CopyHistoryAsync, EditHistoryAsync);
+            historyForm = new HistoryForm(history, CopyHistoryAsync, id => EditHistoryAsync(id), () => settings.ImageEditors,
+                (id, appId) => EditHistoryAsync(id, appId));
             historyForm.FormClosed += (_, _) => historyForm = null;
         }
 
@@ -41,14 +42,15 @@ internal sealed partial class TrayApplicationContext
         return "コピーしました。";
     }
 
-    private async Task<string> EditHistoryAsync(Guid id)
+    private async Task<string> EditHistoryAsync(Guid id, string? applicationId = null)
     {
+        var editorSettings = (applicationId is null ? settings : settings with { SelectedImageEditorId = applicationId }).ResolveEditors();
         var entry = history.Entries.FirstOrDefault(e => e.Id == id) ?? throw new InvalidOperationException("この画像は履歴から削除されています。");
         if (entry.SavedPath is string saved && File.Exists(saved))
         {
             try
             {
-                using var process = Process.Start(OutputRouter.EditorStartInfo(settings.ImageEditorPath, saved, settings.ImageEditorArguments)) ?? throw new IOException("画像編集アプリを開始できません。");
+                using var process = Process.Start(OutputRouter.EditorStartInfo(editorSettings.ImageEditorPath, saved, editorSettings.ImageEditorArguments)) ?? throw new IOException("画像編集アプリを開始できません。");
             }
             catch
             {
@@ -64,7 +66,7 @@ internal sealed partial class TrayApplicationContext
         // 履歴画像は撮影時に加工済み。現在の設定で余白・減色を重ねない。
         using var router = new OutputRouter(workRoot, delivered: DispatchDelivery);
         return await router.ScreenshotAsync(image, OutputDestination.ExternalApp,
-            settings with { KeepHistory = false, OpenFolderAfterSave = false, ScreenshotPaddingPixels = 0, ScreenshotColorDepth = ScreenshotColorDepth.Original },
+            editorSettings with { KeepHistory = false, OpenFolderAfterSave = false, ScreenshotPaddingPixels = 0, ScreenshotColorDepth = ScreenshotColorDepth.Original },
             captureBounds: entry.CaptureBounds);
     }
 }

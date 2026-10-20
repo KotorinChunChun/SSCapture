@@ -52,6 +52,8 @@ internal static partial class Program
         ScreenshotColorTests();
         PreparationTests();
         NotificationUpgradeTests();
+        OutputConditionTests();
+        ExternalApplicationTests();
         SaveCancellationTests();
         DeliveryWaitTests();
         StorageRefactorTests();

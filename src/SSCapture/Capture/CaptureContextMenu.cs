@@ -19,7 +19,8 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         Action openSettings, Action cancel, CaptureMode mode = CaptureMode.Rectangle, bool grid20 = false,
         Action<CaptureMode>? changeMode = null, Action<bool>? changeGrid = null, Action? captureDesktop = null,
         Func<bool>? ownsPopupFocus = null, bool showGuide = true, Action<bool>? changeGuide = null, Action<CaptureAspectRatio>? changeRatio = null,
-        int defaultPadding = 0, Action<int>? changePadding = null, IReadOnlyList<CapturePreset>? presets = null, Action<CapturePreset>? applyPreset = null)
+        int defaultPadding = 0, Action<int>? changePadding = null, IReadOnlyList<CapturePreset>? presets = null, Action<CapturePreset>? applyPreset = null,
+        IReadOnlyList<ExternalApplication>? applications = null, string selectedApplication = "", Action<string>? changeApplication = null)
     {
         this.cancel = cancel;
         this.ownsPopupFocus = ownsPopupFocus ?? (() => CaptureNative.OwnsForegroundWindow() || CaptureNative.ForegroundTransition);
@@ -74,6 +75,17 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         Items.Add("設定", null, (_, _) => openSettings());
         Items.Add("閉じる / キャンセル", null, (_, _) => cancel());
         SetDestination(selected);
+        if (changeApplication is not null)
+        {
+            var appMenu = new ToolStripMenuItem("今回の外部アプリ") { Name = "ExternalApplicationMenu" };
+            foreach (var app in applications ?? [])
+            {
+                string id = app.Id;
+                appMenu.DropDownItems.Add(new ToolStripMenuItem(app.Name, null, (_, _) => { changeApplication(id); SetApplication(id); }) { Name = id });
+            }
+            if (appMenu.DropDownItems.Count == 0) appMenu.DropDownItems.Add(new ToolStripMenuItem("設定画面で登録してください") { Enabled = false });
+            Items.Insert(3, appMenu); SetApplication(selectedApplication);
+        }
         if (changeRatio is not null)
         {
             var ratioMenu = new ToolStripMenuItem("縦横比") { Name = "AspectRatioMenu" };
@@ -101,7 +113,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         }
         if (applyPreset is not null)
         {
-            var presetMenu = new ToolStripMenuItem("撮影プリセット") { Name = "CapturePresetMenu" };
+            var presetMenu = new ToolStripMenuItem("出力プリセット") { Name = "CapturePresetMenu" };
             foreach (var preset in presets ?? [])
             {
                 var capturedPreset = preset;
@@ -116,6 +128,12 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     internal void SetMode(CaptureMode mode)
     {
         foreach (var (value, item) in modes) item.Checked = value == mode;
+    }
+
+    internal void SetApplication(string id)
+    {
+        if (Items["ExternalApplicationMenu"] is ToolStripMenuItem menu)
+            foreach (var item in menu.DropDownItems.OfType<ToolStripMenuItem>()) item.Checked = item.Name == id;
     }
 
     internal void SetGrid(bool enabled) { if (gridItem is not null) gridItem.Checked = enabled; }

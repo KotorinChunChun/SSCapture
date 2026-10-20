@@ -25,6 +25,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(settings);
+        settings = settings.ResolveEditors();
         ValidateDestination(destination);
         var owned = ScreenshotPadding.Apply(image, settings.ScreenshotPaddingPixels);
         if (settings.ScreenshotColorDepth != ScreenshotColorDepth.Original)
@@ -35,7 +36,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         }
         var retry = NewRetry(owned);
         DateTimeOffset captureTime = capturedAt ?? namePlan?.CapturedAt ?? DateTimeOffset.Now;
-        if (fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, captureTime, CaptureIntent.Screenshot);
+        if (destination.HasFlag(OutputDestination.File) && fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, captureTime, CaptureIntent.Screenshot);
         Func<Task<bool?>>? prepareFile = requestFileName is null && requestFileNameForImage is null ? null : async () =>
         {
             var requested = requestFileNameForImage is not null ? await requestFileNameForImage(owned) : await requestFileName!();
@@ -68,9 +69,10 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
         ArgumentNullException.ThrowIfNull(settings);
         source = Path.GetFullPath(source);
+        settings = settings.ResolveEditors();
         if (!File.Exists(source)) throw new FileNotFoundException("動画ファイルがありません。", source);
         ValidateDestination(destination);
-        if (fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, DateTimeOffset.Now, CaptureIntent.Recording);
+        if (destination.HasFlag(OutputDestination.File) && fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, DateTimeOffset.Now, CaptureIntent.Recording);
         return await DeliverAsync(CaptureIntent.Recording, destination, () => copyFile(source),
             () => Task.Run(() => CopyVideo(source, settings.SaveDirectory, fileName: fileName, namePlan: namePlan)),
             () => Task.FromResult(source), settings.VideoEditorPath, settings.VideoEditorArguments, settings.OpenFolderAfterSave,
