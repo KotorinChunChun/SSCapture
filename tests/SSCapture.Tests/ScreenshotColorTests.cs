@@ -17,6 +17,41 @@ internal static partial class Program
         });
         foreach (var depth in new[] { ScreenshotColorDepth.Indexed8, ScreenshotColorDepth.Indexed4 })
         {
+            Run($"コピー用{depth}はパレット形式と不透明画素を保持", () =>
+            {
+                using var source = ColorSource();
+                using var indexed = ScreenshotColors.Apply(source, depth);
+                using var copy = ClipboardWriter.PrepareImage(indexed);
+                Equal(indexed.PixelFormat, copy.PixelFormat);
+                Equal(Color.White.ToArgb(), copy.GetPixel(2, 0).ToArgb());
+                Equal((byte)0, indexed.GetPixel(2, 0).A);
+                for (int y = 0; y < indexed.Height; y++)
+                    for (int x = 0; x < indexed.Width; x++)
+                        if (indexed.GetPixel(x, y).A == 255) Equal(indexed.GetPixel(x, y).ToArgb(), copy.GetPixel(x, y).ToArgb());
+                AssertColors(copy, depth);
+            });
+            Run($"コピー用DIB{depth}はヘッダー・パレット・奇数幅を復号可能", () =>
+            {
+                using var source = new Bitmap(5, 3);
+                for (int y = 0; y < 3; y++)
+                    for (int x = 0; x < 5; x++) source.SetPixel(x, y, x % 2 == 0 ? Color.Red : Color.Blue);
+                using var indexed = ScreenshotColors.Apply(source, depth);
+                var dib = ClipboardWriter.EncodeDib(indexed);
+                int bits = depth == ScreenshotColorDepth.Indexed8 ? 8 : 4;
+                Equal((short)bits, BitConverter.ToInt16(dib, 14));
+                Equal(5, BitConverter.ToInt32(dib, 4)); Equal(3, BitConverter.ToInt32(dib, 8));
+                using var encoded = new MemoryStream();
+                using (var writer = new BinaryWriter(encoded, System.Text.Encoding.UTF8, true))
+                {
+                    writer.Write((ushort)0x4d42); writer.Write(14 + dib.Length); writer.Write(0);
+                    writer.Write(14 + BitConverter.ToInt32(dib, 0) + (1 << bits) * 4); writer.Write(dib);
+                }
+                encoded.Position = 0;
+                using var decoded = new Bitmap(encoded);
+                Equal(indexed.PixelFormat, decoded.PixelFormat);
+                for (int y = 0; y < 3; y++)
+                    for (int x = 0; x < 5; x++) Equal(source.GetPixel(x, y).ToArgb(), decoded.GetPixel(x, y).ToArgb());
+            });
             Run($"減色{depth}の少色・透明・奇数幅とPNGビット深度", () =>
             {
                 using var source = new Bitmap(5, 3);
@@ -99,6 +134,16 @@ internal static partial class Program
             PaddingRejected(() => new AppSettings { ScreenshotColorDepth = (ScreenshotColorDepth)99 }.Validate());
             string storePath() => Path.Combine(directory, "settings.json");
         }));
+        Run("減色なしのコピーは白背景合成と24ビット互換形式を維持", () =>
+        {
+            using var source = new Bitmap(2, 1);
+            source.SetPixel(0, 0, Color.Transparent); source.SetPixel(1, 0, Color.Red);
+            using var copy = ClipboardWriter.PrepareImage(source);
+            Equal(PixelFormat.Format24bppRgb, copy.PixelFormat);
+            Equal(Color.White.ToArgb(), copy.GetPixel(0, 0).ToArgb());
+            Equal(Color.Red.ToArgb(), copy.GetPixel(1, 0).ToArgb());
+            Equal((byte)0, source.GetPixel(0, 0).A);
+        });
         Run("基本タブの減色選択と保存・最小画面で見切れなし", () =>
         {
             AppSettings? saved = null;

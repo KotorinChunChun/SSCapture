@@ -30,8 +30,18 @@ internal static partial class Program
                 await router.ScreenshotAsync(source, OutputDestination.Clipboard | OutputDestination.File, settings, depthText + ".png");
                 using var copied = Clipboard.GetImage() ?? throw new IOException("画像をコピーできませんでした。");
                 copied.Save(Path.Combine(directory, depthText + "-clipboard-readback.png"), ImageFormat.Png);
+                var clipboard = Clipboard.GetDataObject() ?? throw new IOException("クリップボードに画像がありません。");
+                using var nativePng = clipboard.GetData("PNG", false) as MemoryStream ?? throw new IOException("PNG形式がありません。");
+                using var nativeDib = clipboard.GetData(DataFormats.Dib, false) as MemoryStream ?? throw new IOException("DIB形式がありません。");
+                var pngBytes = nativePng.ToArray(); var dibBytes = nativeDib.ToArray();
+                File.WriteAllBytes(Path.Combine(directory, depthText + "-clipboard-native.png"), pngBytes);
+                File.WriteAllBytes(Path.Combine(directory, depthText + "-clipboard-native.dib"), dibBytes);
+                int expectedBits = depth == ScreenshotColorDepth.Indexed8 ? 8 : 4;
+                if (pngBytes[24] != expectedBits || pngBytes[25] != 3 || BitConverter.ToInt16(dibBytes, 14) != expectedBits)
+                    throw new IOException("クリップボードのPNGまたはDIBが指定パレット形式ではありません。");
                 var data = new { depth = depthText, width = copied.Width, height = copied.Height,
                     clipboardPixelFormat = copied.PixelFormat.ToString(), formats = Clipboard.GetDataObject()?.GetFormats(false),
+                    pngBitDepth = pngBytes[24], pngColorType = pngBytes[25], dibBitDepth = BitConverter.ToInt16(dibBytes, 14),
                     source = "合成画像。実OutputRouter → 実ClipboardWriter。個人設定・画面撮影なし。" };
                 File.WriteAllText(Path.Combine(directory, depthText + "-clipboard.json"), JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true }));
                 Console.WriteLine(JsonSerializer.Serialize(data));
