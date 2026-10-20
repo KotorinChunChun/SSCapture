@@ -10,6 +10,7 @@ internal static partial class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
+        if (args.Contains("--clipboard-color-smoke")) return ClipboardColorSmoke(args[1], args[2]);
         if (args.Contains("--padding-ui-preview")) return PaddingUiPreview(args[1]);
         if (args.Contains("--selection-guide-preview")) return SelectionGuidePreview(args[1]);
         if (args.Contains("--overlay-placement-smoke")) return RunOverlayPlacementSmoke();
