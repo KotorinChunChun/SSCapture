@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <AssemblyName>KotorinToys.Maintenance</AssemblyName>
+    <Product>KotorinToys.Maintenance</Product>
+    <Version>0.1.3</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Update="Microsoft.NETCore.App" RuntimeFrameworkVersion="10.0.13" Condition="'$(SelfContained)' == 'true'" />
+    <EmbeddedResource Include="legacy-0.1.2.json" />
+    <InternalsVisibleTo Include="SSCapture.Maintenance.Tests" />
+  </ItemGroup>
+</Project>

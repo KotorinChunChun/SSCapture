@@ -1,0 +1,154 @@
+{
+  "repository": "https://github.com/KotorinChunChun/KotorinToys",
+  "commit": "29cd3c17b931bb910bcacbfef6289135f0593a39",
+  "files": [
+    {
+      "path": "src/KotorinToys/CatalogModels.cs",
+      "gitBlob": "0cc7e8100d48003e4f331e2507a456b903f11c41"
+    },
+    {
+      "path": "src/KotorinToys/ExternalStartupDetector.cs",
+      "gitBlob": "4e468db84d53579874aab9eefb17bbeb9adc43b3"
+    },
+    {
+      "path": "src/KotorinToys/HostProduct.cs",
+      "gitBlob": "7c53bf618b0dbb6082eaa0cbf6fb2280540b279d"
+    },
+    {
+      "path": "src/KotorinToys/HostSettingsModels.cs",
+      "gitBlob": "65c14ad2a7d6bca69859c6d39d05c853dd8db453"
+    },
+    {
+      "path": "src/KotorinToys/HostSettingsStore.cs",
+      "gitBlob": "a4df5f8ab4baf14deb71212d0cba9a6259f4184c"
+    },
+    {
+      "path": "src/KotorinToys/InstallationDetector.cs",
+      "gitBlob": "7c7b1e9c836ac967df4b8c901a66c4579a684bd7"
+    },
+    {
+      "path": "src/KotorinToys/InstallationRegistration.cs",
+      "gitBlob": "ac2ab98d7b48640207222694ae81cc223ef94581"
+    },
+    {
+      "path": "src/KotorinToys/InstallerAdapter.cs",
+      "gitBlob": "b140aff10a53d2b8373bedeab322d04258379ba8"
+    },
+    {
+      "path": "src/KotorinToys/ManagedProductDeclaration.cs",
+      "gitBlob": "c123f2c6822da5d4480c530930a451ec6a070bb8"
+    },
+    {
+      "path": "src/KotorinToys/MsixDataStore.cs",
+      "gitBlob": "c021d8e7699a5c3ed91db4aa472076e2fea30d96"
+    },
+    {
+      "path": "src/KotorinToys/MsixDeployment.cs",
+      "gitBlob": "8364c628a58545728390c5fc82fcc38f2ec7cf86"
+    },
+    {
+      "path": "src/KotorinToys/MsixInstallation.cs",
+      "gitBlob": "151e4a49dedd3cc4aa06d4449975d16c977ddd66"
+    },
+    {
+      "path": "src/KotorinToys/MsixInstaller.cs",
+      "gitBlob": "d752e8afc1fbcd6bd9726f7e6b8e15e025765274"
+    },
+    {
+      "path": "src/KotorinToys/MsixPackageVerifier.cs",
+      "gitBlob": "dab183db0d75aaf0d08666f26ebb4cc0cd55d1e1"
+    },
+    {
+      "path": "src/KotorinToys/MsixPolicy.cs",
+      "gitBlob": "74b563076ab0c1f7aa48f9dd232322fe166941f2"
+    },
+    {
+      "path": "src/KotorinToys/MsixSignature.cs",
+      "gitBlob": "4583c846af54aabbefab0f7999fd212f04a6ddda"
+    },
+    {
+      "path": "src/KotorinToys/OnlineToolCatalog.cs",
+      "gitBlob": "f2289b3df6775b5f54c81adf046a42e0a1c118d9"
+    },
+    {
+      "path": "src/KotorinToys/PackageCatalogReader.cs",
+      "gitBlob": "dd8fd75b46dd4156af865f587f8d706eb5a3a6ff"
+    },
+    {
+      "path": "src/KotorinToys/PackageModels.cs",
+      "gitBlob": "6536bd356b4882e8c72a9d6a19a4d0d26315791d"
+    },
+    {
+      "path": "src/KotorinToys/PathSafety.cs",
+      "gitBlob": "ae5bb5863f1a33ed52af669fcb9d15f89b20bb78"
+    },
+    {
+      "path": "src/KotorinToys/ProductIdentity.cs",
+      "gitBlob": "0b5eb9528c47dae2d8ac8bf351a818ba40cd7ca5"
+    },
+    {
+      "path": "src/KotorinToys/ReleaseModels.cs",
+      "gitBlob": "18e0b828ed69caf4be44b02c724b0fe4564444f9"
+    },
+    {
+      "path": "src/KotorinToys/RemovalReservations.cs",
+      "gitBlob": "3b3640ce32a9907afcd1980fe5bc9ce5769683db"
+    },
+    {
+      "path": "src/KotorinToys/RuntimeDetector.cs",
+      "gitBlob": "b5fc2cf69fe932029ed10558361c227a2b770543"
+    },
+    {
+      "path": "src/KotorinToys/SelfUpdateModels.cs",
+      "gitBlob": "43e772ce848ae2203fe75f727520e5bb6584ecf1"
+    },
+    {
+      "path": "src/KotorinToys/SelfUpdateWorker.cs",
+      "gitBlob": "3c457fe31121f655ab8dd94a972db78cad785624"
+    },
+    {
+      "path": "src/KotorinToys/SelfUpdateWorkflow.cs",
+      "gitBlob": "860a431882dd8c9ab6fc8f29e401f1083c9ef304"
+    },
+    {
+      "path": "src/KotorinToys/TaskModels.cs",
+      "gitBlob": "25c9af07f280ca1f196e876064428636e33f2df6"
+    },
+    {
+      "path": "src/KotorinToys/TaskSchedulerGateway.cs",
+      "gitBlob": "493da530a6d3db9d89ee20c8358eea2e5cafd7a5"
+    },
+    {
+      "path": "src/KotorinToys/ToolCatalog.cs",
+      "gitBlob": "9925a51ea663eb47d3e92f9e2e32e7ba29fd110c"
+    },
+    {
+      "path": "src/KotorinToys/ToolCatalogClient.cs",
+      "gitBlob": "f535902b9a60d860e48083618be6900d10e67d85"
+    },
+    {
+      "path": "src/KotorinToys/ToolCatalogSource.cs",
+      "gitBlob": "417c13ada6ae809932d9774cafb552b9851a6b0b"
+    },
+    {
+      "path": "src/KotorinToys/ToolExecutionModels.cs",
+      "gitBlob": "3f94589ed7a656a064a870accf09d84eb6473d3c"
+    },
+    {
+      "path": "src/KotorinToys/ToolManager.cs",
+      "gitBlob": "611bf1835fd97bb2f494cd5bc99bb6e80ffe804b"
+    },
+    {
+      "path": "src/KotorinToys/ToolManager.Lifecycle.cs",
+      "gitBlob": "6958fa875939f0222e96c41d75e566db308adfdb"
+    },
+    {
+      "path": "src/KotorinToys/ToolManager.Status.cs",
+      "gitBlob": "da8ef32c9779d63ad14ea244c83af443c1285796"
+    },
+    {
+      "path": "src/KotorinToys/ToolManager.Transport.cs",
+      "gitBlob": "513f2f6ec36634d8f2ba9408f8bcf610c89b51d1"
+    }
+  ]
+}
