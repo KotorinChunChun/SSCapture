@@ -3,16 +3,25 @@ namespace SSCapture.Capture;
 internal static class CaptureSession
 {
     /// <summary>Call on the application's STA UI thread. The caller owns the outcome.</summary>
-    public static Task<CaptureOutcome> SelectAsync(CaptureOptions options, Action<bool>? gridChanged = null, Action<bool>? guideChanged = null)
+    public static async Task<CaptureOutcome> SelectAsync(CaptureOptions options, Action<bool>? gridChanged = null, Action<bool>? guideChanged = null)
     {
         ValidateCall(options);
         Point initialPointer = CaptureNative.CursorPosition();
         // Freeze before showing any overlay or menu, with no intentional capture delay.
-        DesktopSnapshot snapshot = DesktopSnapshot.Take(options.IncludeCursor);
+        bool metadata = options.Intent == CaptureIntent.Screenshot && options.OutputSettings is { } settings &&
+            (settings.DefaultDestination.HasFlag(OutputDestination.File) && settings.MetadataMode != Services.CaptureMetadataMode.None ||
+             settings.CapturePresets.Any(p => p.Destination.HasFlag(OutputDestination.File) && p.MetadataMode != Services.CaptureMetadataMode.None));
+        DesktopSnapshot snapshot = DesktopSnapshot.Take(options.IncludeCursor, metadata);
+        if (metadata)
+            snapshot.Context = await Services.CaptureContextClient.Shared.ObserveAsync(new Point(snapshot.Pointer!.Screen.X, snapshot.Pointer.Screen.Y));
         IReadOnlyList<Rectangle> windows;
         try { windows = CaptureNative.WindowBounds(snapshot.Bounds); }
         catch { snapshot.Dispose(); throw; }
-        return SelectAsync(options, snapshot, windows, () => CaptureNative.TakeAfterOverlaysClosed(options.IncludeCursor), initialPointer, gridChanged, guideChanged);
+        return await SelectAsync(options, snapshot, windows, () =>
+        {
+            CaptureNative.SynchronizeDesktop();
+            return DesktopSnapshot.Take(options.IncludeCursor, metadata);
+        }, initialPointer, gridChanged, guideChanged);
     }
 
     /// <summary>Consumes snapshot. Never reads desktop pixels or enumerates real windows.</summary>
@@ -522,7 +531,7 @@ internal sealed class SessionController
         }
     }
 
-    internal void CompleteSelection(CaptureSelection selection, bool entireMonitor = false)
+    internal async void CompleteSelection(CaptureSelection selection, bool entireMonitor = false)
     {
         if (completed) return;
         if (selectionBounds is Rectangle bounds && (!bounds.Contains(selection.Bounds)
@@ -532,6 +541,7 @@ internal sealed class SessionController
             || selection.Bounds.Size != fixedSize || !CaptureGeometry.IsFullyCovered(selection.Bounds, SelectionMonitors))) return;
         completed = true;
         Bitmap? result = null;
+        Services.CaptureMetadata? metadata = null;
         try
         {
             CloseOverlays();
@@ -539,6 +549,13 @@ internal sealed class SessionController
             {
                 using DesktopSnapshot? current = options.FreezeFrame || options.Intent == CaptureIntent.Recording ? null : currentFrameFactory!();
                 DesktopSnapshot frame = current ?? Snapshot;
+                if (frame.Pointer is { } pointer && OutputSettings.MetadataMode != Services.CaptureMetadataMode.None && Destination.HasFlag(OutputDestination.File))
+                {
+                    var context = frame.Context ?? await Services.CaptureContextClient.Shared.ObserveAsync(new Point(pointer.Screen.X, pointer.Screen.Y));
+                    if (current is not null) context = context with { FocusAtSelectionStart = Snapshot.Context?.FocusedElement };
+                    metadata = Services.CaptureMetadata.Create(selection.Bounds, OutputSettings.ScreenshotPaddingPixels, frame.CapturedAt, pointer, context,
+                        Mode == CaptureMode.Window && !entireMonitor && context.PointerApplication.Bounds == Services.PixelBounds.From(selection.Bounds) ? context.PointerApplication : null);
+                }
                 // A display-layout change must not silently shift the chosen physical region.
                 if (!frame.Bounds.Contains(selection.Bounds))
                     throw new InvalidOperationException("選択中にディスプレイ領域が変わりました。もう一度撮影してください。");
@@ -549,7 +566,7 @@ internal sealed class SessionController
                     : CaptureGeometry.Crop(frame.Image, frame.Bounds, selection.Bounds, Mode == CaptureMode.FixedRegion ? 1 : CaptureGeometry.MinimumSize);
                 if (result is null) { completion.TrySetResult(new CaptureOutcome(null, null)); return; }
             }
-            completion.TrySetResult(new CaptureOutcome(result, selection, outputSettings: OutputSettings with { DefaultDestination = Destination }));
+            completion.TrySetResult(new CaptureOutcome(result, selection, outputSettings: OutputSettings with { DefaultDestination = Destination }, metadata: metadata));
             result = null;
         }
         catch (Exception ex) { completion.TrySetException(ex); }

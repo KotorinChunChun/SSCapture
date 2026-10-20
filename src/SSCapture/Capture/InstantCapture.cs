@@ -34,11 +34,16 @@ internal static class InstantCapture
 
     internal static Bitmap Take(Rectangle bounds, bool includeCursor = false)
     {
+        using var cursor = includeCursor ? CursorSnapshot.Capture() : null;
+        return Take(bounds, cursor);
+    }
+
+    private static Bitmap Take(Rectangle bounds, CursorSnapshot? cursor)
+    {
         if (bounds.Width <= 0 || bounds.Height <= 0 || bounds.Width > RegionCoordinates.MaximumDimension
             || bounds.Height > RegionCoordinates.MaximumDimension || (long)bounds.Width * bounds.Height > RegionCoordinates.MaximumPixels
             || (long)bounds.X + bounds.Width > int.MaxValue || (long)bounds.Y + bounds.Height > int.MaxValue)
             throw new ArgumentException("即時撮影の座標または寸法が正しくありません。範囲を確認してください。", nameof(bounds));
-        using var cursor = includeCursor ? CursorSnapshot.Capture() : null;
         var image = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppRgb);
         try
         {
@@ -50,8 +55,26 @@ internal static class InstantCapture
         catch { image.Dispose(); throw; }
     }
 
+    internal static async Task<(Bitmap Image, CaptureMetadata? Metadata)> TakeWithContextAsync(Rectangle bounds, AppSettings settings)
+    {
+        bool enabled = settings.DefaultDestination.HasFlag(OutputDestination.File) && settings.MetadataMode != CaptureMetadataMode.None;
+        if (!enabled) return (Take(bounds, settings.IncludeCursor), null);
+        DateTimeOffset at = DateTimeOffset.Now;
+        using var cursor = CursorSnapshot.Capture();
+        Point point = cursor?.ScreenPosition ?? CaptureNative.CursorPosition();
+        var pointer = new PointerObservation(at, PixelPoint.From(point), cursor is not null, cursor is not null && settings.IncludeCursor);
+        Bitmap image = Take(bounds, settings.IncludeCursor ? cursor : null);
+        try
+        {
+            var context = await CaptureContextClient.Shared.ObserveAsync(point);
+            return (image, CaptureMetadata.Create(bounds, settings.ScreenshotPaddingPixels, at, pointer, context));
+        }
+        catch { image.Dispose(); throw; }
+    }
+
     internal static async Task<string> DeliverAsync(Bitmap image, AppSettings settings, DateTimeOffset capturedAt, OutputRouter output,
-        Func<Bitmap, string, CancellationToken, Task<OcrResult>>? recognize = null, string regionName = "撮影", Rectangle? captureBounds = null)
+        Func<Bitmap, string, CancellationToken, Task<OcrResult>>? recognize = null, string regionName = "撮影", Rectangle? captureBounds = null,
+        CaptureMetadata? metadata = null)
     {
         OutputDestination destination = settings.DefaultDestination & (OutputDestination.Clipboard | OutputDestination.File);
         if (destination == OutputDestination.None) return "即時撮影の出力先がOFFです。クリップボードまたはファイル保存を有効にしてください。";
@@ -69,6 +92,6 @@ internal static class InstantCapture
             }
         }
         var plan = destination.HasFlag(OutputDestination.File) ? new FileNamePlan(settings.FileNamePattern, capturedAt, CaptureIntent.Screenshot, ocr, Region: regionName) : null;
-        return warning + await output.ScreenshotAsync(image, destination, settings with { OpenFolderAfterSave = false }, namePlan: plan, captureBounds: captureBounds);
+        return warning + await output.ScreenshotAsync(image, destination, settings with { OpenFolderAfterSave = false }, namePlan: plan, captureBounds: captureBounds, metadata: metadata);
     }
 }

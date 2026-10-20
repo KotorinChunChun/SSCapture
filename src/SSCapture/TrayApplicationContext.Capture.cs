@@ -32,10 +32,11 @@ internal sealed partial class TrayApplicationContext
             PrepareCaptureUi();
             DateTimeOffset capturedAt = DateTimeOffset.Now;
             Rectangle bounds = InstantCapture.ResolveDisplay(number, InstantCapture.ReadDisplays());
-            using Bitmap image = InstantCapture.Take(bounds, settings.IncludeCursor);
+            var capture = await InstantCapture.TakeWithContextAsync(bounds, settings);
+            using Bitmap image = capture.Image;
             // Keep capture exclusive until output completes. The optional protected
             // completion toast is shown only after pixels have been acquired.
-            StoreStatus(await InstantCapture.DeliverAsync(image, settings, capturedAt, output, regionName: $"画面{number}", captureBounds: bounds));
+            StoreStatus(await InstantCapture.DeliverAsync(image, settings, capturedAt, output, regionName: $"画面{number}", captureBounds: bounds, metadata: capture.Metadata));
         }
         catch (Exception ex)
         {
@@ -155,7 +156,7 @@ internal sealed partial class TrayApplicationContext
                     }
                 }
                 : null;
-                var delivery = DeliverAndRememberAsync(outcome.Image, outcome.Selection.Destination, captureSettings, fileName, namePlan, remembered, sequence, capturedAt, outcome.Selection.Bounds, requestFileName);
+                var delivery = DeliverAndRememberAsync(outcome.Image, outcome.Selection.Destination, captureSettings, fileName, namePlan, remembered, sequence, capturedAt, outcome.Selection.Bounds, requestFileName, outcome.Metadata);
                 Report(await AwaitDeliveryAsync(delivery, requestFileName is null ? null : namingFinished.Task), false);
             }
         }
@@ -190,7 +191,7 @@ internal sealed partial class TrayApplicationContext
         }
     }
 
-    private async Task<string> DeliverAndRememberAsync(Bitmap image, OutputDestination destination, AppSettings captureSettings, string? fileName, FileNamePlan? namePlan, SavedRegion? remembered, long sequence, DateTimeOffset capturedAt, Rectangle captureBounds, Func<Bitmap, Task<ScreenshotFileName?>>? requestFileName = null)
+    private async Task<string> DeliverAndRememberAsync(Bitmap image, OutputDestination destination, AppSettings captureSettings, string? fileName, FileNamePlan? namePlan, SavedRegion? remembered, long sequence, DateTimeOffset capturedAt, Rectangle captureBounds, Func<Bitmap, Task<ScreenshotFileName?>>? requestFileName = null, CaptureMetadata? metadata = null)
     {
         string warning = "";
         string result = await output.ScreenshotAsync(image, destination, captureSettings, fileName, namePlan, capturedAt, () =>
@@ -209,7 +210,7 @@ internal sealed partial class TrayApplicationContext
             {
                 warning = Environment.NewLine + "前回範囲を保存できませんでした: " + ex.Message;
             }
-        }, captureBounds: captureBounds, requestFileNameForImage: requestFileName);
+        }, captureBounds: captureBounds, requestFileNameForImage: requestFileName, metadata: metadata);
         return result + warning;
     }
 }

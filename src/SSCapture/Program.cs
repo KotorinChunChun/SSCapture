@@ -5,6 +5,8 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.FirstOrDefault() == "--capture-context-worker")
+        { Environment.ExitCode = Services.CaptureContextWorker.Run(); return; }
         if (args.FirstOrDefault() == "--ocr-worker")
         { Environment.ExitCode = Services.OneOcr.RunWorker(args); return; }
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);

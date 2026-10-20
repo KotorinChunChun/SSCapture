@@ -10,13 +10,14 @@ internal sealed record CapturePreset
     public string FileNamePattern { get; init; } = Services.FileNamePattern.Default;
     public string? ImageEditorId { get; init; }
     public string? VideoEditorId { get; init; }
+    public CaptureMetadataMode MetadataMode { get; init; }
 
     internal void Validate()
     {
         if (string.IsNullOrWhiteSpace(Id) || string.IsNullOrWhiteSpace(Name) || Name.Length > 80)
             throw new ArgumentException("出力プリセット名は1～80文字で指定してください。");
         new AppSettings { DefaultDestination = Destination, ScreenshotPaddingPixels = PaddingPixels,
-            SaveDirectory = SaveDirectory, FileNamePattern = FileNamePattern }.Validate();
+            SaveDirectory = SaveDirectory, FileNamePattern = FileNamePattern, MetadataMode = MetadataMode }.Validate();
     }
 
     internal AppSettings Apply(AppSettings settings)
@@ -25,14 +26,14 @@ internal sealed record CapturePreset
         return settings with { DefaultDestination = Destination, ScreenshotPaddingPixels = PaddingPixels,
             SaveDirectory = SaveDirectory, FileNamePattern = FileNamePattern,
             SelectedImageEditorId = ImageEditorId ?? settings.SelectedImageEditorId,
-            SelectedVideoEditorId = VideoEditorId ?? settings.SelectedVideoEditorId };
+            SelectedVideoEditorId = VideoEditorId ?? settings.SelectedVideoEditorId, MetadataMode = MetadataMode };
     }
 
     internal static CapturePreset FromSettings(string name, AppSettings settings) => new()
     {
         Name = name.Trim(), Destination = settings.DefaultDestination, PaddingPixels = settings.ScreenshotPaddingPixels,
         SaveDirectory = settings.SaveDirectory, FileNamePattern = settings.FileNamePattern,
-        ImageEditorId = settings.SelectedImageEditorId, VideoEditorId = settings.SelectedVideoEditorId
+        ImageEditorId = settings.SelectedImageEditorId, VideoEditorId = settings.SelectedVideoEditorId, MetadataMode = settings.MetadataMode
     };
 
     public override string ToString() => Name;

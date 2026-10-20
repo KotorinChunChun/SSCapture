@@ -31,8 +31,9 @@ internal sealed partial class TrayApplicationContext
                 throw new InvalidOperationException("撮影範囲がありません。先に矩形で撮影するか、範囲を登録してください。");
             Rectangle bounds = RegionCoordinates.Resolve(region, RegionCoordinates.ReadDisplays());
             DateTimeOffset capturedAt = DateTimeOffset.Now;
-            using var image = InstantCapture.Take(bounds, settings.IncludeCursor);
-            StoreStatus(await InstantCapture.DeliverAsync(image, settings, capturedAt, output, regionName: region.Name, captureBounds: bounds));
+            var capture = await InstantCapture.TakeWithContextAsync(bounds, settings);
+            using var image = capture.Image;
+            StoreStatus(await InstantCapture.DeliverAsync(image, settings, capturedAt, output, regionName: region.Name, captureBounds: bounds, metadata: capture.Metadata));
         }
         catch (Exception ex)
         {

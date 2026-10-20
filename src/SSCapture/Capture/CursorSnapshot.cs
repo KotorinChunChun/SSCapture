@@ -14,6 +14,7 @@ internal sealed class CursorSnapshot : IDisposable
     private readonly Point hotspot;
     private readonly Size size;
     private bool disposed;
+    internal Point ScreenPosition => screenPosition;
 
     private CursorSnapshot(SafeIconHandle icon, Point screenPosition, Point hotspot, Size size)
     {

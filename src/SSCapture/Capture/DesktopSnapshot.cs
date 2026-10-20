@@ -11,6 +11,9 @@ internal sealed class DesktopSnapshot : IDisposable
     internal Bitmap Image { get; }
     internal Rectangle Bounds { get; }
     internal IReadOnlyList<Rectangle> Monitors { get; }
+    internal DateTimeOffset CapturedAt { get; private init; } = DateTimeOffset.Now;
+    internal Services.PointerObservation? Pointer { get; private init; }
+    internal Services.CaptureContext? Context { get; set; }
 
     /// <summary>Takes ownership of image. Also used with synthetic pixels for isolated overlay checks.</summary>
     internal DesktopSnapshot(Bitmap image, Rectangle bounds, IReadOnlyList<Rectangle> monitors)
@@ -25,9 +28,12 @@ internal sealed class DesktopSnapshot : IDisposable
         Monitors = monitors.ToArray();
     }
 
-    internal static DesktopSnapshot Take(bool includeCursor = false)
+    internal static DesktopSnapshot Take(bool includeCursor = false, bool observePointer = false)
     {
-        using CursorSnapshot? cursor = includeCursor ? CursorSnapshot.Capture() : null;
+        DateTimeOffset pointerAt = DateTimeOffset.Now;
+        using CursorSnapshot? cursor = includeCursor || observePointer ? CursorSnapshot.Capture() : null;
+        Services.PointerObservation? pointer = observePointer ? new(pointerAt,
+            Services.PixelPoint.From(cursor?.ScreenPosition ?? CaptureNative.CursorPosition()), cursor is not null, includeCursor && cursor is not null) : null;
         IReadOnlyList<Rectangle> monitors = CaptureNative.MonitorBounds();
         Rectangle desktop = monitors.Aggregate(Rectangle.Union);
         Bitmap image = new(desktop.Width, desktop.Height, PixelFormat.Format32bppArgb);
@@ -48,7 +54,7 @@ internal sealed class DesktopSnapshot : IDisposable
                     target.DrawImageUnscaled(monitorImage, monitor.X - desktop.X, monitor.Y - desktop.Y);
                 }
             }
-            if (cursor is not null)
+            if (includeCursor && cursor is not null)
             {
                 using Region monitorClip = new();
                 monitorClip.MakeEmpty();
@@ -56,7 +62,7 @@ internal sealed class DesktopSnapshot : IDisposable
                     monitorClip.Union(new Rectangle(monitor.X - desktop.X, monitor.Y - desktop.Y, monitor.Width, monitor.Height));
                 cursor.Draw(image, desktop.Location, monitorClip);
             }
-            return new DesktopSnapshot(image, desktop, monitors);
+            return new DesktopSnapshot(image, desktop, monitors) { CapturedAt = pointerAt, Pointer = pointer };
         }
         catch
         {

@@ -21,7 +21,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
     public async Task<string> ScreenshotAsync(Bitmap image, OutputDestination destination, AppSettings settings, string? fileName = null, FileNamePlan? namePlan = null,
         DateTimeOffset? capturedAt = null, Action? onDelivered = null, Rectangle? captureBounds = null,
         Func<Task<ScreenshotFileName?>>? requestFileName = null,
-        Func<Bitmap, Task<ScreenshotFileName?>>? requestFileNameForImage = null)
+        Func<Bitmap, Task<ScreenshotFileName?>>? requestFileNameForImage = null, CaptureMetadata? metadata = null)
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(settings);

@@ -33,6 +33,7 @@ internal sealed record AppSettings
     public NotificationCorner NotificationCorner { get; init; } = Services.NotificationCorner.BottomRight;
     public bool FreezeFrame { get; init; } = true;
     public bool DimCaptureBackground { get; init; }
+    public CaptureMetadataMode MetadataMode { get; init; }
     public bool LimitToStartingMonitor { get; init; } = true;
     public int ScreenshotPaddingPixels { get; init; }
     public ScreenshotColorDepth ScreenshotColorDepth { get; init; }
@@ -72,6 +73,7 @@ internal sealed record AppSettings
     {
         ExternalApplication.ValidateList(ImageEditors, SelectedImageEditorId);
         ExternalApplication.ValidateList(VideoEditors, SelectedVideoEditorId);
+        if (!Enum.IsDefined(MetadataMode)) throw new ArgumentException("撮影情報の保存形式が正しくありません。");
         if (CapturePresets is null || CapturePresets.Length > 50 || CapturePresets.Any(p => p is null))
             throw new ArgumentException("プリセットは50件以内で指定してください。");
         foreach (var preset in CapturePresets)

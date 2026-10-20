@@ -52,6 +52,7 @@ internal sealed partial class TrayApplicationContext
             historyForm?.Dispose();
             history.Dispose();
             output.Dispose();
+            CaptureContextClient.Shared.Dispose();
             feedback.Dispose();
         }
 
