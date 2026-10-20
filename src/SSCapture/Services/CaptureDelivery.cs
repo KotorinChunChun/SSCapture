@@ -1,10 +1,10 @@
 namespace SSCapture.Services;
 
 internal sealed record CaptureDelivery(CaptureIntent Intent, OutputDestination Completed, OutputDestination Failed,
-    bool FolderOpenFailed = false, string? SavedPath = null, Rectangle? CaptureBounds = null, string? CaptureDescription = null)
+    bool FolderOpenFailed = false, string? SavedPath = null, Rectangle? CaptureBounds = null, string? CaptureDescription = null, bool MetadataFailed = false)
 {
     public bool HasSuccess => Completed != OutputDestination.None;
-    public bool HasFailure => Failed != OutputDestination.None || FolderOpenFailed;
+    public bool HasFailure => Failed != OutputDestination.None || FolderOpenFailed || MetadataFailed;
 
     // 通知には対象画面と座標だけを加え、パス・OCR・例外詳細は表示しない。
     public string Message
@@ -21,6 +21,7 @@ internal sealed record CaptureDelivery(CaptureIntent Intent, OutputDestination C
             Add(OutputDestination.ExternalApp, (prefix ?? "") + "外部アプリへ送りました",
                 (prefix ?? "") + "外部アプリへ送れませんでした");
             if (FolderOpenFailed) lines.Add("保存フォルダを開けませんでした");
+            if (MetadataFailed) lines.Add("画像は保存済みですが撮影情報JSONを保存できませんでした");
             return string.Join(Environment.NewLine, lines);
 
             void Add(OutputDestination output, string success, string failure)

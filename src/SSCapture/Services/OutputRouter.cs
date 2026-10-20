@@ -10,7 +10,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
     Func<string, Task>? copyFile = null, Action<ProcessStartInfo>? launch = null, Action<Bitmap, string?, DateTimeOffset>? captured = null,
     Action<CaptureDelivery>? delivered = null, Action<Bitmap, string?, DateTimeOffset, Rectangle?>? capturedWithBounds = null,
     Func<IReadOnlyList<DisplayTarget>>? readDisplays = null, Action? retryChanged = null,
-    long retryByteLimit = 256L * 1024 * 1024) : IDisposable
+    long retryByteLimit = 256L * 1024 * 1024, Func<string, Task>? beforeMetadataSave = null) : IDisposable
 {
     private readonly Func<Bitmap, Task> copyImage = copyImage ?? ClipboardWriter.CopyAsync;
     private readonly Func<string, Task> copyFile = copyFile ?? ClipboardWriter.CopyFileAsync;
@@ -27,6 +27,8 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         ArgumentNullException.ThrowIfNull(settings);
         settings = settings.ResolveEditors();
         ValidateDestination(destination);
+        if (destination.HasFlag(OutputDestination.File) && settings.MetadataMode != CaptureMetadataMode.None && metadata is null)
+            throw new ArgumentException("撮影情報がありません。情報を取得した撮影結果を指定してください。", nameof(metadata));
         var owned = ScreenshotPadding.Apply(image, settings.ScreenshotPaddingPixels);
         if (settings.ScreenshotColorDepth != ScreenshotColorDepth.Original)
         {
@@ -35,6 +37,9 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
             finally { padded.Dispose(); }
         }
         var retry = NewRetry(owned);
+        metadata = metadata?.WithPadding(settings.ScreenshotPaddingPixels);
+        CaptureMetadataMode metadataMode = destination.HasFlag(OutputDestination.File) ? settings.MetadataMode : CaptureMetadataMode.None;
+        MetadataSidecar? sidecar = metadata is not null && metadataMode.HasFlag(CaptureMetadataMode.Json) ? new(metadata) : null;
         DateTimeOffset captureTime = capturedAt ?? namePlan?.CapturedAt ?? DateTimeOffset.Now;
         if (destination.HasFlag(OutputDestination.File) && fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, captureTime, CaptureIntent.Screenshot);
         Func<Task<bool?>>? prepareFile = requestFileName is null && requestFileNameForImage is null ? null : async () =>
@@ -49,7 +54,11 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         retry.Pending = destination;
         retry.PrepareFile = prepareFile;
         retry.Execute = () => DeliverAsync(CaptureIntent.Screenshot, retry.Pending, () => copyImage(owned),
-            () => SaveAsync(owned, settings.SaveDirectory, fileName, namePlan),
+            async () =>
+            {
+                return await SaveAsync(owned, settings.SaveDirectory, fileName, namePlan, metadata, metadataMode,
+                    sidecar is null ? null : sidecar.RememberImage);
+            },
             () => SaveAsync(owned, NewWorkDirectory()), settings.ImageEditorPath, settings.ImageEditorArguments, settings.OpenFolderAfterSave,
             (saved, succeeded, attempted) =>
             {
@@ -59,7 +68,8 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                     capturedWithBounds?.Invoke(owned, saved, captureTime, captureBounds);
                 }
                 if (succeeded && !retry.SuccessNotified) { retry.SuccessNotified = true; onDelivered?.Invoke(); }
-            }, captureBounds, retry.PrepareFile, DescribeCapture(captureBounds), retry);
+            }, captureBounds, retry.PrepareFile, DescribeCapture(captureBounds), retry,
+            sidecar is null ? null : async path => { if (beforeMetadataSave is not null) await beforeMetadataSave(path); await Task.Run(() => sidecar.Write(path)); });
         return await ExecuteRetryJobAsync(retry);
     }
 
@@ -82,7 +92,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
     private async Task<string> DeliverAsync(CaptureIntent intent, OutputDestination destination, Func<Task> copy,
         Func<Task<string>> save, Func<Task<string>> prepareExternal, string executable, string arguments, bool openFolderAfterSave,
         Action<string?, bool, bool>? completed = null, Rectangle? captureBounds = null, Func<Task<bool?>>? prepareFile = null,
-        string? captureDescription = null, RetryJob? retry = null)
+        string? captureDescription = null, RetryJob? retry = null, Func<string, Task>? saveMetadata = null)
     {
         var messages = new List<string>();
         var errors = new List<Exception>();
@@ -91,6 +101,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
             openFolderAfterSave = retry.FolderPending || destination.HasFlag(OutputDestination.File) && openFolderAfterSave;
         OutputDestination succeeded = OutputDestination.None, failed = OutputDestination.None;
         bool folderOpenFailed = false, skipExternal = false;
+        bool metadataFailed = false;
         if (destination.HasFlag(OutputDestination.Clipboard))
         {
             try { await copy(); succeeded |= OutputDestination.Clipboard; messages.Add("コピーしました。"); }
@@ -129,6 +140,11 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                 catch (Exception ex) { failed |= OutputDestination.File; errors.Add(ex); messages.Add("保存失敗: " + ex.Message); }
             }
         }
+        if (saveMetadata is not null && saved is not null && (succeeded.HasFlag(OutputDestination.File) || retry?.MetadataPending == true))
+        {
+            try { await saveMetadata(saved); if (retry is not null) retry.MetadataPending = false; messages.Add("撮影情報JSONを保存しました。"); }
+            catch (Exception ex) { metadataFailed = true; if (retry is not null) retry.MetadataPending = true; errors.Add(ex); messages.Add("画像は保存済みですが撮影情報JSONを保存できません: " + ex.Message); }
+        }
         if (destination.HasFlag(OutputDestination.ExternalApp) && !skipExternal)
         {
             try
@@ -157,9 +173,9 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         try { completed?.Invoke(saved, succeeded != OutputDestination.None, attempted); }
         finally
         {
-            if (attempted || folderOpenFailed || openFolderAfterSave && saved is not null)
+            if (attempted || metadataFailed || folderOpenFailed || openFolderAfterSave && saved is not null)
                 NotifyDelivered(new CaptureDelivery(intent, succeeded, failed, folderOpenFailed,
-                    succeeded.HasFlag(OutputDestination.File) ? saved : null, captureBounds, captureDescription));
+                    succeeded.HasFlag(OutputDestination.File) ? saved : null, captureBounds, captureDescription, metadataFailed));
         }
         if (errors.Count > 0) throw new IOException(result, new AggregateException(errors));
         return result;
@@ -195,10 +211,11 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
 
     private string NewWorkDirectory() => Path.Combine(workRoot, Guid.NewGuid().ToString("N"));
 
-    private static async Task<string> SaveAsync(Bitmap image, string folder, string? fileName = null, FileNamePlan? namePlan = null)
+    private static async Task<string> SaveAsync(Bitmap image, string folder, string? fileName = null, FileNamePlan? namePlan = null,
+        CaptureMetadata? metadata = null, CaptureMetadataMode metadataMode = CaptureMetadataMode.None, Action<string>? prepared = null)
     {
         var copy = (Bitmap)image.Clone();
-        return await Task.Run(() => { using (copy) return CaptureStorage.SavePng(copy, folder, DateTimeOffset.Now, fileName, namePlan); });
+        return await Task.Run(() => { using (copy) return CaptureStorage.SavePng(copy, folder, DateTimeOffset.Now, fileName, namePlan, metadata, metadataMode, prepared); });
     }
 
     internal static string CopyVideo(string source, string folder, DateTimeOffset? capturedAt = null, string? fileName = null, FileNamePlan? namePlan = null)

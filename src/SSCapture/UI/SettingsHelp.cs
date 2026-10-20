@@ -67,6 +67,7 @@ internal static class SettingsHelp
     private static string? Description(string name)
     {
         if (Descriptions.TryGetValue(name, out string? description)) return description;
+        if (name is "MetadataMode" or "PresetMetadataMode") return "静止画をファイルに保存する場合の撮影情報です。記録しない・PNG内XMP・別JSON・両方から選択します。UI名・アプリのパス・タイトル等を含むため共有時には注意してください。";
         if (name.Contains("Editor", StringComparison.Ordinal) || name.Contains("SelectedEditor", StringComparison.Ordinal))
             return "画像用・動画用の外部アプリを複数登録し、既定を1つ選びます。新規・複製・登録更新・削除の変更は設定の保存で確定します。参照中のアプリは削除できません。";
         if (name.StartsWith("InstantShortcut", StringComparison.Ordinal))

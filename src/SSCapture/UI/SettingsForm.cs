@@ -12,6 +12,7 @@ internal sealed class SettingsForm : Form
     private readonly HotkeyEditor screenshot1, screenshot2, recording1, recording2, lastRegionKey;
     private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration, screenshotPadding;
     private readonly ComboBox screenshotColorDepth;
+    private readonly ComboBox metadataMode;
     private readonly CheckBox dimCaptureBackground;
     private readonly CheckBox includeCursor, keepHistory, playCaptureSound, limitToStartingMonitor;
     private readonly ComboBox notificationCorner, notificationDisplay, fixedCaptureAnchor;
@@ -42,7 +43,7 @@ internal sealed class SettingsForm : Form
         Font = new Font("Yu Gothic UI", 12F);
         BackColor = Color.FromArgb(247, 249, 251);
         ForeColor = Color.FromArgb(28, 37, 47);
-        ClientSize = new Size(1080, 582);
+        ClientSize = new Size(1080, 622);
         MinimumSize = SizeFromClientSize(ClientSize);
         StartPosition = FormStartPosition.CenterScreen;
         Icon = AppIcon.Create();
@@ -89,6 +90,12 @@ internal sealed class SettingsForm : Form
         ocrSeparator = Field(naming, "OCR区切り", "OcrSeparator", settings.OcrSeparator, 1);
         oneOcrDirectory = Field(naming, "OneOCRフォルダ", "OneOcrDirectory", settings.OneOcrDirectory, 2);
         oneOcrDirectory.PlaceholderText = "空欄でSnipping Toolから自動検出";
+        var metadataPage = Page(tabs, "撮影情報");
+        metadataMode = Combo(metadataPage, "保存形式", "MetadataMode", 0);
+        metadataMode.Items.AddRange(["記録しない", "PNG内XMP", "別JSON", "PNG内XMPと別JSON"]);
+        metadataMode.SelectedIndex = (int)settings.MetadataMode;
+        var metadataHelp = new Label { Dock = DockStyle.Fill, Text = "静止画のファイル保存時だけ、位置・UIA・exe/class/titleを記録します。\nウィンドウ名やアプリのパスを含むため、画像を共有する前にご確認ください。\n値の本文・パスワードの名前・UI全体のツリーは採取しません。\n画像とUIAは同時刻ではありません。未取得時は理由を記録します。" };
+        metadataPage.Controls.Add(metadataHelp, 0, 1); metadataPage.SetColumnSpan(metadataHelp, 2); metadataPage.SetRowSpan(metadataHelp, 4);
         var namingHelp = new Label { Dock = DockStyle.Fill, Text = "{yyyymmdd} 年月日　{hhmmss} 時分秒　{ocr} 文字列\n{region} 範囲名　{#} 1,2…　{##} 01,02…　動画は.mp4" };
         naming.Controls.Add(namingHelp, 0, 3); naming.SetColumnSpan(namingHelp, 2); naming.SetRowSpan(namingHelp, 2);
         var keys = Page(tabs, "ショートカット");
@@ -219,7 +226,7 @@ internal sealed class SettingsForm : Form
         categories.DisplayMember = nameof(TabPage.Text); categories.Items.AddRange(tabs.TabPages.Cast<TabPage>().Cast<object>().ToArray()); categories.SelectedIndex = 0;
         categories.SelectedIndexChanged += (_, _) => { if (categories.SelectedIndex >= 0) tabs.SelectedIndex = categories.SelectedIndex; };
         tabs.SelectedIndexChanged += (_, _) => { if (categories.SelectedIndex != tabs.SelectedIndex) categories.SelectedIndex = tabs.SelectedIndex; };
-        void UpdateFileFields() { folderButton.Enabled = directory.Enabled = fileNamePattern.Enabled = ocrSeparator.Enabled = oneOcrDirectory.Enabled = openFolderAfterSave.Enabled = fileOutput.Checked; }
+        void UpdateFileFields() { metadataMode.Enabled = folderButton.Enabled = directory.Enabled = fileNamePattern.Enabled = ocrSeparator.Enabled = oneOcrDirectory.Enabled = openFolderAfterSave.Enabled = fileOutput.Checked; }
         fileOutput.CheckedChanged += (_, _) => UpdateFileFields(); UpdateFileFields();
         SettingsHelp.Apply(this, settingTips);
     }
@@ -274,6 +281,7 @@ internal sealed class SettingsForm : Form
                 FreezeFrame = freeze.Checked, DimCaptureBackground = dimCaptureBackground.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
                 ScreenshotPaddingPixels = (int)screenshotPadding.Value,
                 ScreenshotColorDepth = (ScreenshotColorDepth)screenshotColorDepth.SelectedIndex,
+                MetadataMode = (CaptureMetadataMode)metadataMode.SelectedIndex,
                 CapturePresets = presetEditor.Presets,
                 ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
                 RecordingShortcut1 = recording1.Value, RecordingShortcut2 = recording2.Value,
@@ -286,8 +294,9 @@ internal sealed class SettingsForm : Form
                 InstantShortcuts = instantKeys.Select(key => key.Value).ToArray(),
                 RecordSystemAudio = systemAudio.Checked, RecordMicrophone = micAudio.Checked,
                 MicrophoneDeviceId = ((MicrophoneInfo)microphone.SelectedItem!).Id,
-                ImageEditorPath = Expand(imageEditor.Text), VideoEditorPath = Expand(videoEditor.Text),
-                ImageEditorArguments = imageArguments.Text, VideoEditorArguments = videoArguments.Text
+                ImageEditorPath = imageApps.SelectedApplication?.Executable ?? "", VideoEditorPath = videoApps.SelectedApplication?.Executable ?? "",
+                ImageEditorArguments = imageApps.SelectedApplication?.Arguments ?? EditorArguments.Default,
+                VideoEditorArguments = videoApps.SelectedApplication?.Arguments ?? EditorArguments.Default
                 , ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications,
                 SelectedImageEditorId = imageApps.SelectedId, SelectedVideoEditorId = videoApps.SelectedId
             };

@@ -54,5 +54,12 @@ internal static partial class Program
             name.Text = "B"; ui.Executable.Text = @"C:\b.exe";
             ((Button)ui.Controls.Find("ImageEditorStore", true).Single()).PerformClick(); Equal(2, ui.Applications.Length);
         });
+        Run("壊れた旧設定からの明示保存は原本を退避して回復できる", () => WithServiceDirectory(directory =>
+        {
+            string path = Path.Combine(directory, "settings.json"); File.WriteAllText(path, "{broken");
+            var store = new SettingsStore(path); var settings = store.Load(out var warning); Check(warning is not null, "破損警告なし");
+            store.Save(settings); Equal("{broken", File.ReadAllText(path + ".invalid.bak")); SettingsEqual(settings, store.Load(out warning));
+            Equal<string?>(null, warning);
+        }));
     }
 }

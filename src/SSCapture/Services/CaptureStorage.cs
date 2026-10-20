@@ -5,7 +5,8 @@ namespace SSCapture.Services;
 
 internal static class CaptureStorage
 {
-    public static string SavePng(Bitmap image, string folder, DateTimeOffset capturedAt, string? fileName = null, FileNamePlan? namePlan = null)
+    public static string SavePng(Bitmap image, string folder, DateTimeOffset capturedAt, string? fileName = null, FileNamePlan? namePlan = null,
+        CaptureMetadata? metadata = null, CaptureMetadataMode metadataMode = CaptureMetadataMode.None, Action<string>? prepared = null)
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentException.ThrowIfNullOrWhiteSpace(folder);
@@ -22,9 +23,15 @@ internal static class CaptureStorage
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 ownsTemporary = true;
-                image.Save(stream, ImageFormat.Png);
+                if (metadata is not null && metadataMode.HasFlag(CaptureMetadataMode.PngXmp))
+                {
+                    using var png = new MemoryStream(); image.Save(png, ImageFormat.Png);
+                    stream.Write(PngMetadata.Embed(png.ToArray(), metadata));
+                }
+                else image.Save(stream, ImageFormat.Png);
                 stream.Flush(true);
             }
+            prepared?.Invoke(temporary);
             for (int sequence = 0; ; sequence++)
             {
                 string suffix = sequence == 0 ? "" : $"_{sequence:D4}";
@@ -33,6 +40,7 @@ internal static class CaptureStorage
                 string destination = Path.Combine(directory, candidate);
                 try
                 {
+                    if (File.Exists(destination) || Directory.Exists(destination) || metadataMode.HasFlag(CaptureMetadataMode.Json) && Path.Exists(Path.ChangeExtension(destination, ".json"))) continue;
                     // Move with overwrite=false publishes only a complete PNG. A racing
                     // saver may win the filename, but can never overwrite another image.
                     File.Move(temporary, destination, false);

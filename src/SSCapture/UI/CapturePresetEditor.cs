@@ -9,6 +9,7 @@ internal sealed class CapturePresetEditor : UserControl
     private readonly NumericUpDown padding;
     private readonly CheckBox clipboard, file, external;
     private readonly ComboBox imageApp, videoApp;
+    private readonly ComboBox metadataMode;
     private readonly Label status;
     private readonly Func<AppSettings> readSettings;
     internal CapturePreset[] Presets => list.Items.Cast<CapturePreset>().ToArray();
@@ -23,9 +24,9 @@ internal sealed class CapturePresetEditor : UserControl
         Controls.Add(root);
         list = new ListBox { Name = "CapturePresetList", Dock = DockStyle.Fill, IntegralHeight = false };
         root.Controls.Add(list, 0, 0);
-        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 8 };
+        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 9 };
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 156)); fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (int i = 0; i < 7; i++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        for (int i = 0; i < 8; i++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         fields.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.Controls.Add(fields, 1, 0);
         presetName = new TextBox { Name = "CapturePresetName", MaxLength = 80 }; Add("名前", presetName, 0);
@@ -38,6 +39,8 @@ internal sealed class CapturePresetEditor : UserControl
         pattern = new TextBox { Name = "PresetFileNamePattern" }; Add("命名パターン", pattern, 4);
         imageApp = new ComboBox { Name = "PresetImageEditor", DropDownStyle = ComboBoxStyle.DropDownList }; Add("画像の外部アプリ", imageApp, 5);
         videoApp = new ComboBox { Name = "PresetVideoEditor", DropDownStyle = ComboBoxStyle.DropDownList }; Add("動画の外部アプリ", videoApp, 6);
+        metadataMode = new ComboBox { Name = "PresetMetadataMode", DropDownStyle = ComboBoxStyle.DropDownList }; Add("撮影情報", metadataMode, 7);
+        metadataMode.Items.AddRange(["記録しない", "PNG内XMP", "別JSON", "PNG内XMPと別JSON"]);
         imageApp.Enter += (_, _) => RefreshApps(imageApp, readSettings().ImageEditors, (imageApp.SelectedItem as ExternalApplication)?.Id);
         videoApp.Enter += (_, _) => RefreshApps(videoApp, readSettings().VideoEditors, (videoApp.SelectedItem as ExternalApplication)?.Id);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
@@ -59,7 +62,7 @@ internal sealed class CapturePresetEditor : UserControl
         file.CheckedChanged += (_, _) => UpdateFileFields();
         UpdateFileFields();
 
-        void UpdateFileFields() { directory.Enabled = pattern.Enabled = file.Checked; }
+        void UpdateFileFields() { metadataMode.Enabled = directory.Enabled = pattern.Enabled = file.Checked; }
 
         void Add(string text, Control input, int row)
         {
@@ -76,6 +79,7 @@ internal sealed class CapturePresetEditor : UserControl
         RefreshApps(videoApp, current?.VideoEditors ?? [], preset.VideoEditorId);
         presetName.Text = preset.Name; directory.Text = preset.SaveDirectory; pattern.Text = preset.FileNamePattern;
         padding.Value = preset.PaddingPixels;
+        metadataMode.SelectedIndex = (int)preset.MetadataMode;
         clipboard.Checked = preset.Destination.HasFlag(OutputDestination.Clipboard);
         file.Checked = preset.Destination.HasFlag(OutputDestination.File);
         external.Checked = preset.Destination.HasFlag(OutputDestination.ExternalApp);
@@ -90,6 +94,7 @@ internal sealed class CapturePresetEditor : UserControl
                 FileNamePattern = pattern.Text, PaddingPixels = (int)padding.Value,
                 ImageEditorId = (imageApp.SelectedItem as ExternalApplication)?.Id,
                 VideoEditorId = (videoApp.SelectedItem as ExternalApplication)?.Id,
+                MetadataMode = (CaptureMetadataMode)metadataMode.SelectedIndex,
                 Destination = (clipboard.Checked ? OutputDestination.Clipboard : 0) | (file.Checked ? OutputDestination.File : 0) | (external.Checked ? OutputDestination.ExternalApp : 0) };
             preset.Validate();
             var next = Presets.Where(p => p.Id != preset.Id).Append(preset).ToArray();

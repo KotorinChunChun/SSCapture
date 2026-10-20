@@ -14,6 +14,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
     private readonly Func<IEnumerable<string?>> references;
     internal ExternalApplication[] Applications => applications.ToArray();
     internal string SelectedId => (selected.SelectedItem as ExternalApplication)?.Id ?? "";
+    internal ExternalApplication? SelectedApplication => selected.SelectedItem as ExternalApplication;
 
     internal ExternalApplicationsEditor(string prefix, ExternalApplication[] apps, string selectedId, string legacyPath,
         string legacyArgs, IReadOnlyList<EditorPreset> examples, Func<IEnumerable<string?>> references)

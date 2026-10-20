@@ -73,12 +73,14 @@ internal sealed class SettingsStore(string path)
         settings.Validate();
         if (File.Exists(filePath))
         {
-            using var old = JsonDocument.Parse(File.ReadAllText(filePath, Encoding.UTF8));
-            if (!old.RootElement.TryGetProperty("SchemaVersion", out var version) || version.GetInt32() < 3)
+            string? suffix = null;
+            try
             {
-                string backup = filePath + ".schema2.bak";
-                if (!File.Exists(backup)) File.Copy(filePath, backup, false);
+                using var old = JsonDocument.Parse(File.ReadAllText(filePath, Encoding.UTF8));
+                if (!old.RootElement.TryGetProperty("SchemaVersion", out var version) || version.GetInt32() < 3) suffix = ".schema2.bak";
             }
+            catch (JsonException) { suffix = ".invalid.bak"; }
+            if (suffix is not null && !File.Exists(filePath + suffix)) File.Copy(filePath, filePath + suffix, false);
         }
         AtomicFile.Write(filePath, stream => JsonSerializer.Serialize(stream, settings, Options));
     }

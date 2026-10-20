@@ -57,6 +57,7 @@ internal static partial class Program
         OutputConditionTests();
         ExternalApplicationTests();
         MetadataContextTests();
+        MetadataStorageTests();
         SaveCancellationTests();
         DeliveryWaitTests();
         StorageRefactorTests();
