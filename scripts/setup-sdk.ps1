@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Version = '10.0.401')
+param([string]$Version = '10.0.402')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $toolDirectory = Join-Path $projectRoot '.tools'

@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param([switch]$Interactive, [string]$OutputPath)
+$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'common.ps1')
 Invoke-Dotnet restore (Join-Path $projectRoot 'tests\SSCapture.Tests\SSCapture.Tests.csproj') --configfile (Join-Path $projectRoot 'NuGet.Config') --nologo
 if ($OutputPath) {
