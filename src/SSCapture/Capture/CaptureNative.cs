@@ -65,6 +65,8 @@ internal static class CaptureNative
     private static extern short GetKeyState(int virtualKey);
     [DllImport("dwmapi.dll")]
     private static extern int DwmFlush();
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int size);
     [DllImport("user32.dll")]
     private static extern nint GetForegroundWindow();
     [DllImport("user32.dll")]
@@ -104,8 +106,21 @@ internal static class CaptureNative
     internal static DesktopSnapshot TakeAfterOverlaysClosed(bool includeCursor = false)
     {
         // Drain compositor work after hiding/disposing our HWNDs before reading current pixels.
-        DwmFlush();
+        SynchronizeDesktop();
         return DesktopSnapshot.Take(includeCursor);
+    }
+
+    internal static void DisableTransitions(Form form)
+    {
+        int disabled = 1;
+        int result = DwmSetWindowAttribute(form.Handle, 3 /* DWMWA_TRANSITIONS_FORCEDISABLED */, ref disabled, sizeof(int));
+        if (result < 0) throw new IOException("撮影前の画面アニメーションを抑止できません。", Marshal.GetExceptionForHR(result));
+    }
+
+    internal static void SynchronizeDesktop()
+    {
+        int result = DwmFlush();
+        if (result < 0) throw new IOException("撮影前の画面描画を同期できません。", Marshal.GetExceptionForHR(result));
     }
 
     internal static bool OwnsForegroundWindow()

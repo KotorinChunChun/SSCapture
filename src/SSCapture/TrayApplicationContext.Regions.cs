@@ -22,10 +22,10 @@ internal sealed partial class TrayApplicationContext
         if (busy)
             return;
         busy = true;
-        feedback.HideForCapture();
         RefreshMenu();
         try
         {
+            PrepareCaptureUi();
             var region = id == AppSettings.LastRegionKeyId ? lastRegion : settings.SavedRegions.FirstOrDefault(r => r.Id == id);
             if (region is null)
                 throw new InvalidOperationException("撮影範囲がありません。先に矩形で撮影するか、範囲を登録してください。");
@@ -68,13 +68,10 @@ internal sealed partial class TrayApplicationContext
         if (busy || pendingRecording is not null)
             throw new InvalidOperationException("撮影・録画を終了してから範囲を選択してください。");
         busy = true;
-        feedback.HideForCapture();
         RefreshMenu();
-        form?.Hide();
-        historyForm?.Hide();
-        menu.Close();
         try
         {
+            PrepareCaptureUi();
             using var outcome = await CaptureSession.SelectAsync(new CaptureOptions(size is null ? CaptureMode.Rectangle : CaptureMode.FixedRegion, CaptureIntent.Recording, OutputDestination.None, FixedSize: size, FixedAnchor: anchor, LimitToStartingMonitor: settings.LimitToStartingMonitor, Grid20: settings.Grid20, ShowSelectionGuide: settings.ShowSelectionGuide), SaveGrid20, SaveGuideVisibility);
             return outcome.Selection?.Bounds;
         }

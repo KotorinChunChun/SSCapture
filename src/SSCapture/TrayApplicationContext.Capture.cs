@@ -9,6 +9,10 @@ namespace SSCapture;
 
 internal sealed partial class TrayApplicationContext
 {
+    private void PrepareCaptureUi() => CaptureUiPreparation.Prepare(
+        Application.OpenForms.Cast<Form>().Where(f => f != namingForm && f != recordingForm).ToArray(),
+        () => { feedback.HideForCapture(); menu.Close(); }, menu.Visible);
+
     private async Task TakeInstantAsync(int number)
     {
         if (exiting || WindowVisibility.RestorePending(namingForm))
@@ -22,10 +26,10 @@ internal sealed partial class TrayApplicationContext
         if (busy)
             return;
         busy = true;
-        feedback.HideForCapture();
         RefreshMenu();
         try
         {
+            PrepareCaptureUi();
             DateTimeOffset capturedAt = DateTimeOffset.Now;
             Rectangle bounds = InstantCapture.ResolveDisplay(number, InstantCapture.ReadDisplays());
             using Bitmap image = InstantCapture.Take(bounds, settings.IncludeCursor);
@@ -53,12 +57,7 @@ internal sealed partial class TrayApplicationContext
         if (busy || exiting || pendingRecording is not null)
             return;
         busy = true;
-        feedback.HideForCapture();
         RefreshMenu();
-        form?.Hide();
-        regionForm?.Hide();
-        historyForm?.Hide();
-        menu.Close();
         bool openSettings = false;
         DateTimeOffset capturedAt = DateTimeOffset.Now;
         long sequence = ++captureSerial;
@@ -73,6 +72,7 @@ internal sealed partial class TrayApplicationContext
 
         try
         {
+            PrepareCaptureUi();
             using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, settings.DefaultDestination, settings.FreezeFrame, IncludeRecordingImage: intent == CaptureIntent.Recording && (FileNamePattern.UsesOcr(settings.FileNamePattern) || settings.CapturePresets.Any(p => FileNamePattern.UsesOcr(p.FileNamePattern))), IncludeCursor: settings.IncludeCursor, FixedSize: new Size(settings.FixedWidth, settings.FixedHeight), FixedAnchor: settings.FixedCaptureAnchor, LimitToStartingMonitor: settings.LimitToStartingMonitor, Grid20: settings.Grid20, ShowSelectionGuide: settings.ShowSelectionGuide, OutputSettings: settings), SaveGrid20, SaveGuideVisibility);
             openSettings = outcome.OpenSettings;
             if (outcome.Selection is null)

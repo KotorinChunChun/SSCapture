@@ -312,9 +312,9 @@ internal sealed class RegionManagerForm : Form
         if (selecting) return;
         bool restore = Visible;
         selecting = true; Enabled = false;
-        if (restore) Hide();
         try
         {
+            if (restore) CaptureUiPreparation.Prepare([this], () => { });
             CaptureAnchor selectedAnchor = ((AnchorItem)anchor.SelectedItem!).Value;
             Rectangle? bounds = await (selectAnchoredRegion is null ? selectRegion(fixedSize) : selectAnchoredRegion(fixedSize, selectedAnchor));
             if (IsDisposed) return;
