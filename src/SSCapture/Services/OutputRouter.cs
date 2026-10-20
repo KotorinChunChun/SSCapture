@@ -27,6 +27,12 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         ArgumentNullException.ThrowIfNull(settings);
         ValidateDestination(destination);
         var owned = ScreenshotPadding.Apply(image, settings.ScreenshotPaddingPixels);
+        if (settings.ScreenshotColorDepth != ScreenshotColorDepth.Original)
+        {
+            var padded = owned;
+            try { owned = await Task.Run(() => ScreenshotColors.Apply(padded, settings.ScreenshotColorDepth)); }
+            finally { padded.Dispose(); }
+        }
         var retry = NewRetry(owned);
         DateTimeOffset captureTime = capturedAt ?? namePlan?.CapturedAt ?? DateTimeOffset.Now;
         if (fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, captureTime, CaptureIntent.Screenshot);

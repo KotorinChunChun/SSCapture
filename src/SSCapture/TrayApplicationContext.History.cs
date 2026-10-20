@@ -61,7 +61,10 @@ internal sealed partial class TrayApplicationContext
         }
 
         using var image = history.CloneImage(id) ?? throw new InvalidOperationException("この画像は履歴から削除されています。");
-        // 履歴画像には撮影時の余白が含まれているため、再送では追加しない。
-        return await new OutputRouter(workRoot, delivered: DispatchDelivery).ScreenshotAsync(image, OutputDestination.ExternalApp, settings with { KeepHistory = false, OpenFolderAfterSave = false, ScreenshotPaddingPixels = 0 }, captureBounds: entry.CaptureBounds);
+        // 履歴画像は撮影時に加工済み。現在の設定で余白・減色を重ねない。
+        using var router = new OutputRouter(workRoot, delivered: DispatchDelivery);
+        return await router.ScreenshotAsync(image, OutputDestination.ExternalApp,
+            settings with { KeepHistory = false, OpenFolderAfterSave = false, ScreenshotPaddingPixels = 0, ScreenshotColorDepth = ScreenshotColorDepth.Original },
+            captureBounds: entry.CaptureBounds);
     }
 }

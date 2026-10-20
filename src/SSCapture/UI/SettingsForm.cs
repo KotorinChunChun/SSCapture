@@ -11,6 +11,7 @@ internal sealed class SettingsForm : Form
     private readonly TextBox directory, imageEditor, videoEditor, imageArguments, videoArguments, fileNamePattern, ocrSeparator, oneOcrDirectory;
     private readonly HotkeyEditor screenshot1, screenshot2, recording1, recording2, lastRegionKey;
     private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration, screenshotPadding;
+    private readonly ComboBox screenshotColorDepth;
     private readonly CheckBox includeCursor, keepHistory, playCaptureSound, limitToStartingMonitor;
     private readonly ComboBox notificationCorner, notificationDisplay, fixedCaptureAnchor;
     private readonly HotkeyEditor[] instantKeys = new HotkeyEditor[10];
@@ -39,7 +40,7 @@ internal sealed class SettingsForm : Form
         Font = new Font("Yu Gothic UI", 12F);
         BackColor = Color.FromArgb(247, 249, 251);
         ForeColor = Color.FromArgb(28, 37, 47);
-        ClientSize = new Size(1080, 502);
+        ClientSize = new Size(1080, 542);
         MinimumSize = SizeFromClientSize(ClientSize);
         StartPosition = FormStartPosition.CenterScreen;
         Icon = AppIcon.Create();
@@ -71,6 +72,11 @@ internal sealed class SettingsForm : Form
         screenshotPadding = new NumericUpDown { Name = "ScreenshotPaddingPixels", Minimum = 0,
             Maximum = ScreenshotPadding.MaximumPixels, DecimalPlaces = 0, Increment = 1, Value = settings.ScreenshotPaddingPixels };
         Add(basic, "画像の余白 (px)", screenshotPadding, 6);
+        basic.RowCount = 9;
+        basic.RowStyles.Insert(7, new RowStyle(SizeType.Absolute, 40));
+        screenshotColorDepth = Combo(basic, "静止画の減色", "ScreenshotColorDepth", 7);
+        screenshotColorDepth.Items.AddRange(["減色なし", "256色（8ビット）", "16色（4ビット）"]);
+        screenshotColorDepth.SelectedIndex = (int)settings.ScreenshotColorDepth;
         var naming = Page(tabs, "ファイル名");
         fileNamePattern = Field(naming, "パターン", "FileNamePattern", settings.FileNamePattern, 0);
         ocrSeparator = Field(naming, "OCR区切り", "OcrSeparator", settings.OcrSeparator, 1);
@@ -246,6 +252,7 @@ internal sealed class SettingsForm : Form
                 DefaultDestination = (clipboardOutput.Checked ? OutputDestination.Clipboard : 0) | (fileOutput.Checked ? OutputDestination.File : 0) | (externalOutput.Checked ? OutputDestination.ExternalApp : 0),
                 FreezeFrame = freeze.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
                 ScreenshotPaddingPixels = (int)screenshotPadding.Value,
+                ScreenshotColorDepth = (ScreenshotColorDepth)screenshotColorDepth.SelectedIndex,
                 CapturePresets = presetEditor.Presets,
                 ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
                 RecordingShortcut1 = recording1.Value, RecordingShortcut2 = recording2.Value,

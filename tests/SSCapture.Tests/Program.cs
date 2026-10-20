@@ -47,6 +47,7 @@ internal static partial class Program
         AudioToggleTests();
         OutputTests();
         ScreenshotPaddingTests();
+        ScreenshotColorTests();
         SaveCancellationTests();
         DeliveryWaitTests();
         StorageRefactorTests();

@@ -31,20 +31,21 @@ internal static partial class Program
             {
                 next = next with { SaveDirectory = directory, DefaultDestination = OutputDestination.File };
                 store.Save(next);
-                string name = $"padding-{next.ScreenshotPaddingPixels}-{++outputs}.png";
+                string name = $"padding-{next.ScreenshotPaddingPixels}-colors-{next.ScreenshotColorDepth}-{++outputs}.png";
                 RunOutputTask(async () => await new OutputRouter(Path.Combine(directory, "work")).ScreenshotAsync(source, OutputDestination.File, next, name));
                 string file = Path.Combine(directory, name);
                 using var output = new Bitmap(file);
                 preview?.Dispose();
                 preview = (Bitmap)output.Clone();
                 picture.Image = preview;
-                info.Text = $"白余白: {next.ScreenshotPaddingPixels}px / 元画像: 240×120px / 出力: {output.Width}×{output.Height}px";
+                var png = File.ReadAllBytes(file);
+                info.Text = $"白余白: {next.ScreenshotPaddingPixels}px / 減色: {next.ScreenshotColorDepth} / 出力: {output.Width}×{output.Height}px\nPNGビット深度: {png[24]} / 色形式: {png[25]}（3 = パレット）";
                 Console.WriteLine($"PADDING SAVED: {next.ScreenshotPaddingPixels}; SIZE: {output.Width}x{output.Height}; FILE: {name}");
                 return null;
             }
             catch (Exception error) { return error.Message; }
         }, () => { }, () => []);
-        form.Text = WindowTitle.Create("プリセット操作確認");
+        form.Text = WindowTitle.Create("減色・余白の操作確認");
         var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
         var page = new TabPage("出力プレビュー");
         page.Controls.Add(picture); page.Controls.Add(info);
