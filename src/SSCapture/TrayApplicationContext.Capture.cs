@@ -73,7 +73,7 @@ internal sealed partial class TrayApplicationContext
         try
         {
             PrepareCaptureUi();
-            using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, settings.DefaultDestination, settings.FreezeFrame, IncludeRecordingImage: intent == CaptureIntent.Recording && (FileNamePattern.UsesOcr(settings.FileNamePattern) || settings.CapturePresets.Any(p => FileNamePattern.UsesOcr(p.FileNamePattern))), IncludeCursor: settings.IncludeCursor, FixedSize: new Size(settings.FixedWidth, settings.FixedHeight), FixedAnchor: settings.FixedCaptureAnchor, LimitToStartingMonitor: settings.LimitToStartingMonitor, Grid20: settings.Grid20, ShowSelectionGuide: settings.ShowSelectionGuide, OutputSettings: settings), SaveGrid20, SaveGuideVisibility);
+            using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, settings.DefaultDestination, settings.FreezeFrame, IncludeRecordingImage: intent == CaptureIntent.Recording && (FileNamePattern.UsesOcr(settings.FileNamePattern) || settings.CapturePresets.Any(p => FileNamePattern.UsesOcr(p.FileNamePattern))), IncludeCursor: settings.IncludeCursor, FixedSize: new Size(settings.FixedWidth, settings.FixedHeight), FixedAnchor: settings.FixedCaptureAnchor, LimitToStartingMonitor: settings.LimitToStartingMonitor, Grid20: settings.Grid20, ShowSelectionGuide: settings.ShowSelectionGuide, OutputSettings: settings, DimCaptureBackground: settings.DimCaptureBackground), SaveGrid20, SaveGuideVisibility);
             openSettings = outcome.OpenSettings;
             if (outcome.Selection is null)
             {

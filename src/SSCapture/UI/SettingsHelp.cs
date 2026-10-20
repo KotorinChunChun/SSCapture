@@ -5,6 +5,7 @@ internal static class SettingsHelp
     private static readonly IReadOnlyDictionary<string, string> Descriptions = new Dictionary<string, string>
     {
         ["SaveDirectory"] = "ファイル保存を有効にしたときの保存先です。フォルダの完全パスを指定してください。保存先が存在しない場合は保存時に作成します。",
+        ["DimCaptureBackground"] = "選択中の背景だけを暗くします。初期設定はOFFです。画面固定・撮影時点・選択枠とは独立した設定です。",
         ["CaptureMode"] = "撮影開始時の選択方法です。矩形はドラッグ、ウィンドウは対象をクリック、全画面は全モニタを撮影します。自由形状は輪郭を囲み、固定サイズは指定した幅・高さで選びます。撮影中の右クリックで一時変更できます。",
         ["ClipboardOutput"] = "ONのときは撮影結果をクリップボードへコピーします。他の出力先と併用できます。録画では動画ファイルをコピーします。",
         ["FileOutput"] = "ONのときは保存先と命名パターンに従って画像・動画を保存します。他の出力先と併用できます。",

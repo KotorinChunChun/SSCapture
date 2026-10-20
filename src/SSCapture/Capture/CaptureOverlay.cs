@@ -114,7 +114,8 @@ internal sealed class CaptureOverlay : Form
         base.OnPaint(e);
         Graphics graphics = e.Graphics;
         DrawSnapshot(graphics);
-        using (SolidBrush dim = new(Color.FromArgb(115, Color.Black))) graphics.FillRectangle(dim, ClientRectangle);
+        if (session.DimCaptureBackground)
+            using (SolidBrush dim = new(Color.FromArgb(115, Color.Black))) graphics.FillRectangle(dim, ClientRectangle);
         Rectangle selection = session.Selection;
         selection.Offset(-MonitorBounds.X, -MonitorBounds.Y);
         DrawSelection(graphics, selection);

@@ -12,6 +12,7 @@ internal sealed class SettingsForm : Form
     private readonly HotkeyEditor screenshot1, screenshot2, recording1, recording2, lastRegionKey;
     private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration, screenshotPadding;
     private readonly ComboBox screenshotColorDepth;
+    private readonly CheckBox dimCaptureBackground;
     private readonly CheckBox includeCursor, keepHistory, playCaptureSound, limitToStartingMonitor;
     private readonly ComboBox notificationCorner, notificationDisplay, fixedCaptureAnchor;
     private readonly HotkeyEditor[] instantKeys = new HotkeyEditor[10];
@@ -40,7 +41,7 @@ internal sealed class SettingsForm : Form
         Font = new Font("Yu Gothic UI", 12F);
         BackColor = Color.FromArgb(247, 249, 251);
         ForeColor = Color.FromArgb(28, 37, 47);
-        ClientSize = new Size(1080, 542);
+        ClientSize = new Size(1080, 582);
         MinimumSize = SizeFromClientSize(ClientSize);
         StartPosition = FormStartPosition.CenterScreen;
         Icon = AppIcon.Create();
@@ -77,6 +78,9 @@ internal sealed class SettingsForm : Form
         screenshotColorDepth = Combo(basic, "静止画の減色", "ScreenshotColorDepth", 7);
         screenshotColorDepth.Items.AddRange(["減色なし", "256色（8ビット）", "16色（4ビット）"]);
         screenshotColorDepth.SelectedIndex = (int)settings.ScreenshotColorDepth;
+        basic.RowCount = 10;
+        basic.RowStyles.Insert(8, new RowStyle(SizeType.Absolute, 40));
+        dimCaptureBackground = Toggle(basic, "背景表示", "DimCaptureBackground", "撮影中に背景を暗くする", settings.DimCaptureBackground, 8);
         var naming = Page(tabs, "ファイル名");
         fileNamePattern = Field(naming, "パターン", "FileNamePattern", settings.FileNamePattern, 0);
         ocrSeparator = Field(naming, "OCR区切り", "OcrSeparator", settings.OcrSeparator, 1);
@@ -250,7 +254,7 @@ internal sealed class SettingsForm : Form
                 OpenFolderAfterSave = openFolderAfterSave.Checked,
                 FileNamePattern = fileNamePattern.Text, OcrSeparator = ocrSeparator.Text, OneOcrDirectory = Expand(oneOcrDirectory.Text),
                 DefaultDestination = (clipboardOutput.Checked ? OutputDestination.Clipboard : 0) | (fileOutput.Checked ? OutputDestination.File : 0) | (externalOutput.Checked ? OutputDestination.ExternalApp : 0),
-                FreezeFrame = freeze.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
+                FreezeFrame = freeze.Checked, DimCaptureBackground = dimCaptureBackground.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
                 ScreenshotPaddingPixels = (int)screenshotPadding.Value,
                 ScreenshotColorDepth = (ScreenshotColorDepth)screenshotColorDepth.SelectedIndex,
                 CapturePresets = presetEditor.Presets,

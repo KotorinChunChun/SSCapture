@@ -258,6 +258,8 @@ internal static partial class Program
 
     private sealed class FakeCaptureToast : ICaptureToast
     {
+        public Rectangle DisplayBounds { get; set; }
+        public int DisplayDpi { get; set; } = 96;
         internal int Shows;
         internal bool Allow = true, Visible, Disposed;
         internal Action? Activate;

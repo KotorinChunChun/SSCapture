@@ -72,7 +72,7 @@ internal sealed partial class TrayApplicationContext
         try
         {
             PrepareCaptureUi();
-            using var outcome = await CaptureSession.SelectAsync(new CaptureOptions(size is null ? CaptureMode.Rectangle : CaptureMode.FixedRegion, CaptureIntent.Recording, OutputDestination.None, FixedSize: size, FixedAnchor: anchor, LimitToStartingMonitor: settings.LimitToStartingMonitor, Grid20: settings.Grid20, ShowSelectionGuide: settings.ShowSelectionGuide), SaveGrid20, SaveGuideVisibility);
+            using var outcome = await CaptureSession.SelectAsync(new CaptureOptions(size is null ? CaptureMode.Rectangle : CaptureMode.FixedRegion, CaptureIntent.Recording, OutputDestination.None, FixedSize: size, FixedAnchor: anchor, LimitToStartingMonitor: settings.LimitToStartingMonitor, Grid20: settings.Grid20, ShowSelectionGuide: settings.ShowSelectionGuide, DimCaptureBackground: settings.DimCaptureBackground), SaveGrid20, SaveGuideVisibility);
             return outcome.Selection?.Bounds;
         }
         finally

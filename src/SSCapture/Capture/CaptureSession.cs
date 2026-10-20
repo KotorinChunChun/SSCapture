@@ -104,6 +104,7 @@ internal sealed class SessionController
     internal IReadOnlyList<Rectangle> SelectionMonitors { get; }
     internal CaptureContextMenu SelectionMenu { get; }
     internal bool FixedSelectionValid => Mode != CaptureMode.FixedRegion || gesture.FixedSelection(Destination) is not null;
+    internal bool DimCaptureBackground => options.DimCaptureBackground;
 
     internal SessionController(CaptureOptions options, DesktopSnapshot snapshot,
         IReadOnlyList<Rectangle> windows, Func<DesktopSnapshot>? currentFrameFactory = null,

@@ -19,6 +19,9 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
     private nint protectedHandle;
     private string? protectionWarning;
     private Font? notificationFont;
+    private int displayDpi = 96;
+    public Rectangle DisplayBounds => Bounds;
+    public int DisplayDpi => displayDpi;
 
     internal CaptureToastForm(Func<nint, CaptureProtection>? protect = null,
         Action<CaptureToastForm>? show = null, Func<(Rectangle WorkArea, int Dpi)>? location = null)
@@ -79,6 +82,7 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
                 Hide(); warning = "完了表示のクリック状態を設定できないため、表示を中止しました。"; return false;
             }
             var monitor = location?.Invoke() ?? NotificationPlacement.Current(display, captureBounds);
+            displayDpi = monitor.Dpi;
             Rectangle bounds = CalculateBounds(monitor.WorkArea, monitor.Dpi, corner, Math.Clamp(text.Count(c => c == '\n') + 1, 1, 4));
             float scale = monitor.Dpi / 96f;
             float fontSize = (44f / 3) * scale;

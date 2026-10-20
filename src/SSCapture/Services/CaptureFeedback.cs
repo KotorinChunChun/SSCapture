@@ -6,6 +6,8 @@ internal enum NotificationCorner { BottomRight, BottomLeft }
 
 internal interface ICaptureToast : IDisposable
 {
+    Rectangle DisplayBounds => Rectangle.Empty;
+    int DisplayDpi => 96;
     bool TryShow(string message, bool hasFailure, NotificationCorner corner, out string? warning,
         Action? activate = null, NotificationDisplay display = NotificationDisplay.Captured, Rectangle? captureBounds = null);
     void Hide();
@@ -36,16 +38,22 @@ internal sealed class CaptureFeedback : IDisposable
     private ICaptureToast? toast;
     private volatile bool disposed;
     private string? lastWarning;
+    private readonly Func<long> now;
+    private readonly Func<Point> pointer;
+    private NotificationLifetime? lifetime;
 
     internal CaptureFeedback(Action<string>? warning = null, Func<ICaptureToast>? createToast = null,
-        ICompletionSound? sound = null, IFeedbackTimer? timer = null, Action<string>? openSavedFile = null)
+        ICompletionSound? sound = null, IFeedbackTimer? timer = null, Action<string>? openSavedFile = null,
+        Func<long>? now = null, Func<Point>? pointer = null)
     {
         this.warning = warning;
         this.createToast = createToast ?? (() => new CaptureToastForm());
         this.sound = sound ?? new CompletionSound(warning: Warn);
         this.timer = timer ?? new FeedbackTimer();
         this.openSavedFile = openSavedFile ?? (path => ExplorerSelection.Open(path));
-        this.timer.Elapsed += HideForCapture;
+        this.now = now ?? (() => Environment.TickCount64);
+        this.pointer = pointer ?? Capture.CaptureNative.CursorPosition;
+        this.timer.Elapsed += PollLifetime;
     }
 
     internal string? LastWarning => lastWarning ?? sound.LastWarning;
@@ -72,7 +80,9 @@ internal sealed class CaptureFeedback : IDisposable
                 Warn(error ?? "完了表示を画面取得から除外できないため、表示を中止しました。");
                 return;
             }
-            timer.Restart(checked(settings.NotificationDurationSeconds * 1000));
+            int duration = checked(settings.NotificationDurationSeconds * 1000);
+            lifetime = new NotificationLifetime(this.now(), duration);
+            timer.Restart(toast.DisplayBounds.IsEmpty ? duration : 50);
         }
         catch (Exception ex)
         {
@@ -85,8 +95,20 @@ internal sealed class CaptureFeedback : IDisposable
     {
         if (disposed) return;
         notificationSerial++;
+        lifetime = null;
         timer.Stop();
         toast?.Hide();
+    }
+
+    private void PollLifetime()
+    {
+        if (disposed || lifetime is null || toast is null) return;
+        try
+        {
+            if (toast.DisplayBounds.IsEmpty || lifetime.Expired(now(), pointer(), toast.DisplayBounds, toast.DisplayDpi)) HideForCapture();
+            else timer.Restart(50);
+        }
+        catch (Exception ex) { HideForCapture(); Warn("通知の近接状態を確認できません: " + ex.Message); }
     }
 
     private void OpenSavedFile(int serial, string path)
@@ -110,7 +132,7 @@ internal sealed class CaptureFeedback : IDisposable
     {
         if (disposed) return;
         HideForCapture(); disposed = true;
-        timer.Elapsed -= HideForCapture;
+        timer.Elapsed -= PollLifetime;
         timer.Dispose(); toast?.Dispose(); sound.Dispose();
     }
 

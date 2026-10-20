@@ -12,7 +12,8 @@ internal sealed record CaptureOptions(
     bool LimitToStartingMonitor = true,
     bool Grid20 = false,
     bool ShowSelectionGuide = true,
-    SSCapture.Services.AppSettings? OutputSettings = null);
+    SSCapture.Services.AppSettings? OutputSettings = null,
+    bool DimCaptureBackground = false);
 
 internal sealed record CaptureSelection(
     Rectangle Bounds,
