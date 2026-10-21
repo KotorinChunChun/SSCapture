@@ -67,8 +67,12 @@ internal static partial class Program
             using var menu = new CaptureContextMenu(OutputDestination.Clipboard, _ => { }, () => { }, () => { },
                 defaultPadding: 7, changePadding: p => padding = p, presets: [preset], applyPreset: p => selected = p);
             var margins = (ToolStripMenuItem)menu.Items["ScreenshotPaddingMenu"]!;
-            ((ToolStripMenuItem)margins.DropDownItems[3]).PerformClick(); Equal(20, padding);
-            ((ToolStripMenuItem)margins.DropDownItems[0]).PerformClick(); Equal(7, padding);
+            Equal("画像の余白（7px）", margins.Text); Equal(4, margins.DropDownItems.Count);
+            Equal("0px,10px,20px,50px", string.Join(",", margins.DropDownItems.Cast<ToolStripItem>().Select(i => i.Text)));
+            ((ToolStripMenuItem)margins.DropDownItems[2]).PerformClick(); Equal(20, padding);
+            ((ToolStripMenuItem)margins.DropDownItems[3]).PerformClick(); Equal(50, padding);
+            menu.SetPadding(50); Equal("画像の余白（50px）", margins.Text);
+            ((ToolStripMenuItem)margins.DropDownItems[0]).PerformClick(); Equal(0, padding);
             var presets = (ToolStripMenuItem)menu.Items["CapturePresetMenu"]!;
             ((ToolStripMenuItem)presets.DropDownItems[0]).PerformClick(); Equal(preset.Id, selected!.Id);
         });

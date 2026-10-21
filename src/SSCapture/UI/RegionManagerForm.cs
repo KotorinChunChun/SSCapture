@@ -22,11 +22,13 @@ internal sealed class RegionManagerForm : Form
     private bool selecting, pickedBounds;
     private bool automaticName, updatingFields;
     private RegionPreviewForm? preview;
+    internal SavedRegion[] Regions => regions.Select(Clone).ToArray();
+    private Form Host => TopLevel ? this : Parent?.FindForm() ?? this;
 
     public RegionManagerForm(SavedRegion[] regions, SavedRegion? lastRegion,
         Func<Size?, Task<Rectangle?>> selectRegion, Func<SavedRegion[], string?> saveRegions,
         Func<IReadOnlyList<DisplayLayout>>? displays = null,
-        Func<Size?, CaptureAnchor, Task<Rectangle?>>? selectAnchoredRegion = null)
+        Func<Size?, CaptureAnchor, Task<Rectangle?>>? selectAnchoredRegion = null, bool embedded = false)
     {
         this.regions = regions.Select(Clone).ToList();
         this.lastRegion = lastRegion is null ? null : Clone(lastRegion);
@@ -158,6 +160,15 @@ internal sealed class RegionManagerForm : Form
         FormClosing += (_, e) => { if (selecting) e.Cancel = true; };
         ReloadList(null);
         if (regions.Length == 0) NewRegion();
+        if (embedded)
+        {
+            TopLevel = false; FormBorderStyle = FormBorderStyle.None; MinimumSize = Size.Empty; Dock = DockStyle.Fill;
+            AutoScroll = true; root.Dock = DockStyle.Top; root.Height = 520; root.Padding = new Padding(4);
+            root.RowStyles[2].Height = 0; footer.Visible = false;
+            editor.ColumnStyles[0].Width = 184;
+            body.ColumnStyles[0].Width = 25; body.ColumnStyles[1].Width = 75;
+            CancelButton = null;
+        }
 
         void Dimension(string label, Control control, int column, int row)
         {
@@ -315,11 +326,12 @@ internal sealed class RegionManagerForm : Form
     private async Task SelectBoundsAsync(Size? fixedSize)
     {
         if (selecting) return;
-        bool restore = Visible;
+        Form host = Host;
+        bool restore = host.Visible;
         selecting = true; Enabled = false;
         try
         {
-            if (restore) CaptureUiPreparation.Prepare([this], () => { });
+            if (restore) CaptureUiPreparation.Prepare([host], () => { });
             CaptureAnchor selectedAnchor = ((AnchorItem)anchor.SelectedItem!).Value;
             Rectangle? bounds = await (selectAnchoredRegion is null ? selectRegion(fixedSize) : selectAnchoredRegion(fixedSize, selectedAnchor));
             if (IsDisposed) return;
@@ -335,7 +347,7 @@ internal sealed class RegionManagerForm : Form
         finally
         {
             selecting = false;
-            if (!IsDisposed) { Enabled = true; if (restore) WindowVisibility.Show(this); }
+            if (!IsDisposed) { Enabled = true; if (restore && !host.IsDisposed) WindowVisibility.Show(host); }
         }
     }
 
@@ -346,10 +358,11 @@ internal sealed class RegionManagerForm : Form
         {
             Rectangle bounds = RegionCoordinates.Resolve(ReadRegion(), displays());
             preview?.Close();
-            bool restore = Visible;
+            Form host = Host;
+            bool restore = host.Visible;
             preview = new RegionPreviewForm(bounds);
-            preview.FormClosed += (_, _) => { preview = null; if (restore && !IsDisposed) WindowVisibility.Show(this); };
-            if (restore) Hide();
+            preview.FormClosed += (_, _) => { preview = null; if (restore && !host.IsDisposed) WindowVisibility.Show(host); };
+            if (restore) host.Hide();
             WindowVisibility.Show(preview);
         }
         catch (Exception ex) { SetStatus("範囲を表示できませんでした: " + ex.Message, true); }

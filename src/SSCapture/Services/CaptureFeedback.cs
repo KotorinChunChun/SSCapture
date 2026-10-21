@@ -43,6 +43,7 @@ internal sealed class CaptureFeedback : IDisposable
     private readonly Func<long> now;
     private readonly Func<Point> pointer;
     private NotificationLifetime? lifetime;
+    private NotificationImage? pendingImage;
 
     internal CaptureFeedback(Action<string>? warning = null, Func<ICaptureToast>? createToast = null,
         ICompletionSound? sound = null, IFeedbackTimer? timer = null, Action<string>? openSavedFile = null,
@@ -63,7 +64,8 @@ internal sealed class CaptureFeedback : IDisposable
 
     internal void Notify(CaptureDelivery result, AppSettings settings)
     {
-        if (disposed || (!result.HasSuccess && !result.HasFailure)) return;
+        if (disposed || (!result.HasSuccess && !result.HasFailure)) { result.NotificationImage?.Dispose(); return; }
+        pendingImage?.Dispose(); pendingImage = result.NotificationImage;
         if (settings.PlayCaptureSound && result.HasSuccess)
         {
             try { sound.Request(); }
@@ -106,6 +108,7 @@ internal sealed class CaptureFeedback : IDisposable
         lifetime = null;
         timer.Stop();
         toast?.Hide();
+        pendingImage?.Dispose(); pendingImage = null;
     }
 
     private void PollLifetime()
@@ -127,19 +130,26 @@ internal sealed class CaptureFeedback : IDisposable
         catch (Exception ex) { Warn("保存ファイルをExplorerで表示できません: " + ex.Message); }
     }
 
-    private void OpenApplication(int serial, CaptureDelivery result, AppSettings settings)
+    private async void OpenApplication(int serial, CaptureDelivery result, AppSettings settings)
     {
         if (disposed || serial != notificationSerial) return;
+        var image = pendingImage; pendingImage = null;
         HideForCapture();
         try
         {
             var app = settings.ImageEditors.Concat(settings.VideoEditors).FirstOrDefault(a => a.Id == settings.NotificationApplicationId)
                 ?? throw new InvalidOperationException("通知で開く外部アプリが登録されていません。");
-            string path = result.SavedPath ?? result.NotificationPath ?? throw new IOException("通知から開く画像・動画を準備できませんでした。");
+            _ = EditorExecutable.Resolve(app.Executable);
+            EditorArguments.Validate(app.Arguments);
+            string path = result.SavedPath ?? result.NotificationPath ?? (image is not null
+                ? await image.PrepareAsync() : throw new IOException("通知から開く画像・動画を準備できませんでした。"));
             if (!File.Exists(path)) throw new FileNotFoundException("通知のファイルが見つかりません。", path);
+            if (disposed) return;
             launch(OutputRouter.EditorStartInfo(app.Executable, path, app.Arguments));
+            if (image is not null) NotificationImage.RetainAfterLaunch(path);
         }
         catch (Exception ex) { Warn("通知から外部アプリを開けません: " + ex.Message); }
+        finally { image?.Dispose(); }
     }
 
     private void Warn(string text)

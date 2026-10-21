@@ -12,10 +12,13 @@ internal sealed partial class TrayApplicationContext
     private void NotifyDelivery(CaptureDelivery result)
     {
         if (exiting)
+        {
+            result.NotificationImage?.Dispose();
             return;
+        }
         if (OperationPolicy.MustDeferFeedback)
         {
-            deferredFeedback = result;
+            deferredFeedback?.NotificationImage?.Dispose(); deferredFeedback = result;
             return;
         }
 
@@ -25,7 +28,10 @@ internal sealed partial class TrayApplicationContext
     private void DispatchDelivery(CaptureDelivery result)
     {
         if (exiting || dispatcher.IsDisposed)
+        {
+            result.NotificationImage?.Dispose();
             return;
+        }
         if (dispatcher.InvokeRequired)
             Post(() => NotifyDelivery(result));
         else

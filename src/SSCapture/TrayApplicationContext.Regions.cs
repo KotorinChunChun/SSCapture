@@ -54,14 +54,8 @@ internal sealed partial class TrayApplicationContext
     {
         if (exiting || busy)
             return;
-        if (regionForm is null || regionForm.IsDisposed)
-        {
-            regionForm = new RegionManagerForm(settings.SavedRegions, lastRegion, size => PickRegionAsync(size, settings.FixedCaptureAnchor), regions => SaveSettings(settings with { SavedRegions = regions }), selectAnchoredRegion: PickRegionAsync);
-            regionForm.FormClosed += (_, _) => regionForm = null;
-        }
-
-        regionForm.UpdateLastRegion(lastRegion);
-        WindowVisibility.Show(regionForm);
+        ShowSettings();
+        form?.SelectCategory("入力プリセット");
     }
 
     private async Task<Rectangle?> PickRegionAsync(Size? size, CaptureAnchor anchor)

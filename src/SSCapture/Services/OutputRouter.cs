@@ -71,7 +71,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
             }, captureBounds, retry.PrepareFile, DescribeCapture(captureBounds), retry,
             sidecar is null ? null : async path => { if (beforeMetadataSave is not null) await beforeMetadataSave(path); await Task.Run(() => sidecar.Write(path)); },
             settings.ShowCaptureNotification && settings.NotificationClickAction == NotificationClickAction.ExternalApplication
-                ? () => SaveAsync(owned, NewWorkDirectory()) : null);
+                ? () => new NotificationImage(owned, Path.Combine(workRoot, "notification-images")) : null);
         return await ExecuteRetryJobAsync(retry);
     }
 
@@ -88,13 +88,15 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         return await DeliverAsync(CaptureIntent.Recording, destination, () => copyFile(source),
             () => Task.Run(() => CopyVideo(source, settings.SaveDirectory, fileName: fileName, namePlan: namePlan)),
             () => Task.FromResult(source), settings.VideoEditorPath, settings.VideoEditorArguments, settings.OpenFolderAfterSave,
-            captureBounds: captureBounds, captureDescription: DescribeCapture(captureBounds), notificationFile: () => Task.FromResult(source));
+            captureBounds: captureBounds, captureDescription: DescribeCapture(captureBounds),
+            notificationPath: settings.ShowCaptureNotification && settings.NotificationClickAction == NotificationClickAction.ExternalApplication ? source : null);
     }
 
     private async Task<string> DeliverAsync(CaptureIntent intent, OutputDestination destination, Func<Task> copy,
         Func<Task<string>> save, Func<Task<string>> prepareExternal, string executable, string arguments, bool openFolderAfterSave,
         Action<string?, bool, bool>? completed = null, Rectangle? captureBounds = null, Func<Task<bool?>>? prepareFile = null,
-        string? captureDescription = null, RetryJob? retry = null, Func<string, Task>? saveMetadata = null, Func<Task<string>>? notificationFile = null)
+        string? captureDescription = null, RetryJob? retry = null, Func<string, Task>? saveMetadata = null,
+        Func<NotificationImage>? notificationImage = null, string? notificationPath = null)
     {
         var messages = new List<string>();
         var errors = new List<Exception>();
@@ -177,15 +179,10 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         {
             if (attempted || metadataFailed || folderOpenFailed || openFolderAfterSave && saved is not null)
             {
-                string? notificationPath = notificationFile is not null && saved is null ? retry?.ExternalPath : null;
-                if (saved is null && notificationPath is null && succeeded != OutputDestination.None && notificationFile is not null)
-                {
-                    // 任意の完了通知の失敗を、出力失敗へ格上げしない。
-                    try { notificationPath = await notificationFile(); }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.ExternalException) { }
-                }
+                if (saved is null && notificationImage is not null) notificationPath ??= retry?.ExternalPath;
                 NotifyDelivered(new CaptureDelivery(intent, succeeded, failed, folderOpenFailed,
-                    succeeded.HasFlag(OutputDestination.File) ? saved : null, captureBounds, captureDescription, metadataFailed, notificationPath));
+                    succeeded.HasFlag(OutputDestination.File) ? saved : null, captureBounds, captureDescription, metadataFailed,
+                    saved is null ? notificationPath : null, saved is null && notificationPath is null ? notificationImage?.Invoke() : null));
             }
         }
         if (errors.Count > 0) throw new IOException(result, new AggregateException(errors));
@@ -201,9 +198,10 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
 
     private void NotifyDelivered(CaptureDelivery result)
     {
-        try { delivered?.Invoke(result); }
+        try { if (delivered is null) result.NotificationImage?.Dispose(); else delivered(result); }
         catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException)
         {
+            result.NotificationImage?.Dispose();
             // This optional observer only displays completion UI/plays a sound. Its
             // non-fatal failures must not change completed output or replace its error.
             // Restrict isolation to this observer; capture/storage errors keep propagating.

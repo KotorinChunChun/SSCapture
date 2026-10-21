@@ -22,12 +22,11 @@ internal sealed partial class TrayApplicationContext
         CancelRecording();
         exiting = true;
         feedback.HideForCapture();
-        deferredFeedback = null;
+        deferredFeedback?.NotificationImage?.Dispose(); deferredFeedback = null;
         hook?.Dispose();
         hook = null;
         tray.Visible = false;
         form?.Close();
-        regionForm?.Close();
         historyForm?.Close();
         base.ExitThreadCore();
     }
@@ -48,7 +47,6 @@ internal sealed partial class TrayApplicationContext
             form?.Dispose();
             recordingForm?.Dispose();
             dispatcher.Dispose();
-            regionForm?.Dispose();
             historyForm?.Dispose();
             history.Dispose();
             output.Dispose();

@@ -131,6 +131,14 @@ internal sealed class SelectionGesture
         snapEdges = new SelectionSnap(monitors, windows);
     }
 
+    internal void PlaceFixed(Rectangle bounds, Point pointer)
+    {
+        if (mode != CaptureMode.FixedRegion || bounds.Size != fixedDimensions) throw new ArgumentException("固定枠の寸法が一致しません。");
+        Move(pointer);
+        anchorOffset = new Size(pointer.X - bounds.X, pointer.Y - bounds.Y);
+        PositionFixed(pointer);
+    }
+
     internal bool Space()
     {
         if (mode == CaptureMode.FixedRegion)

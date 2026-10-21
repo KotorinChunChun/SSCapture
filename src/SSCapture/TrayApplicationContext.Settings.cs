@@ -17,7 +17,8 @@ internal sealed partial class TrayApplicationContext
             lastStatus = null;
         if (form is null || form.IsDisposed)
         {
-            form = new SettingsForm(settings, next => SaveSettings(next with { SavedRegions = settings.SavedRegions, Grid20 = settings.Grid20, ShowSelectionGuide = settings.ShowSelectionGuide }), OpenFolder, openRegions: ShowRegions, openHistory: ShowHistory);
+            form = new SettingsForm(settings, next => SaveSettings(next with { Grid20 = settings.Grid20, ShowSelectionGuide = settings.ShowSelectionGuide }), OpenFolder,
+                openHistory: ShowHistory, lastRegion: lastRegion, selectInputRegion: PickRegionAsync);
             form.FormClosed += (_, _) => form = null;
             form.SetStatus(lastStatus);
         }

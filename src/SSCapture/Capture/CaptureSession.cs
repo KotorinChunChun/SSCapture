@@ -94,6 +94,8 @@ internal sealed class SessionController
     private bool lastSnap;
     private bool lastHeightLock, lastWidthLock;
     private Keys ignoredModifiers;
+    private Size activeFixedSize;
+    private readonly Func<IReadOnlyList<Services.DisplayLayout>> readPresetDisplays;
     private MouseButtons suppressedButtons;
     private System.Windows.Forms.Timer? snapTimer;
 
@@ -112,12 +114,16 @@ internal sealed class SessionController
     internal CaptureContextMenu SelectionMenu { get; }
     internal bool FixedSelectionValid => Mode != CaptureMode.FixedRegion || gesture.FixedSelection(Destination) is not null;
     internal bool DimCaptureBackground => options.DimCaptureBackground;
+    internal string? SelectionError { get; private set; }
 
     internal SessionController(CaptureOptions options, DesktopSnapshot snapshot,
         IReadOnlyList<Rectangle> windows, Func<DesktopSnapshot>? currentFrameFactory = null,
-        Point? initialPointer = null, Func<Rectangle, IDisposable>? confineCursor = null, Action<bool>? gridChanged = null, Action<bool>? guideChanged = null)
+        Point? initialPointer = null, Func<Rectangle, IDisposable>? confineCursor = null, Action<bool>? gridChanged = null, Action<bool>? guideChanged = null,
+        Func<IReadOnlyList<Services.DisplayLayout>>? readPresetDisplays = null)
     {
         this.options = options;
+        activeFixedSize = options.FixedSize ?? new Size(1280, 720);
+        this.readPresetDisplays = readPresetDisplays ?? Services.RegionCoordinates.ReadDisplays;
         Mode = options.Mode;
         this.gridChanged = gridChanged;
         this.guideChanged = guideChanged;
@@ -144,13 +150,55 @@ internal sealed class SessionController
             presets: OutputSettings.CapturePresets, applyPreset: ApplyPreset,
             applications: options.Intent == CaptureIntent.Screenshot ? OutputSettings.ImageEditors : OutputSettings.VideoEditors,
             selectedApplication: options.Intent == CaptureIntent.Screenshot ? OutputSettings.SelectedImageEditorId : OutputSettings.SelectedVideoEditorId,
-            changeApplication: ChangeApplication);
+            changeApplication: ChangeApplication, inputPresets: OutputSettings.SavedRegions, applyInputPreset: ApplyInputPreset);
         SelectionMenu.SetRatio(AspectRatio);
         SelectionMenu.Closed += MenuClosed;
     }
 
     private SelectionGesture CreateGesture(CaptureMode mode, bool grid20) =>
-        new(mode, SelectionMonitors, windows, options.FixedSize ?? new Size(1280, 720), options.FixedAnchor) { Grid20 = grid20, AspectRatio = AspectRatio, WindowLimit = selectionBounds };
+        new(mode, SelectionMonitors, windows, activeFixedSize, options.FixedAnchor) { Grid20 = grid20, AspectRatio = AspectRatio, WindowLimit = selectionBounds };
+
+    internal void ApplyInputPreset(Services.SavedRegion preset)
+    {
+        if (completed) return;
+        try
+        {
+            var displays = readPresetDisplays();
+            if (!displays.Select(d => d.Bounds).OrderBy(b => b.X).ThenBy(b => b.Y)
+                .SequenceEqual(Snapshot.Monitors.OrderBy(b => b.X).ThenBy(b => b.Y)))
+                throw new InvalidOperationException("選択開始後に画面構成が変わりました。撮影を開始し直してください。");
+            Rectangle bounds = Services.RegionCoordinates.Resolve(preset, displays);
+            SelectionError = null;
+            bool grid = Grid20;
+            ReleasePointer();
+            cursorConfinement?.Dispose(); cursorConfinement = null;
+            Rectangle containing = Snapshot.Monitors.FirstOrDefault(m => m.Contains(bounds));
+            selectionBounds = options.LimitToStartingMonitor && !containing.IsEmpty ? containing : null;
+            SelectionMonitors = selectionBounds is Rectangle limited ? [limited] : Snapshot.Monitors;
+            // 元のドラッグは右クリック時点で終了済み。プリセットは新しい固定枠として呼び出す。
+            Mode = CaptureMode.FixedRegion; activeFixedSize = bounds.Size;
+            gesture = CreateGesture(Mode, grid);
+            if (!starting && selectionBounds is Rectangle clip) cursorConfinement = confineCursor(clip);
+            Point pointer = starting ? lastPointerPosition ?? initialPointer : CaptureNative.CursorPosition();
+            if (selectionBounds is Rectangle pointerLimit)
+                pointer = new(Math.Clamp(pointer.X, pointerLimit.Left, pointerLimit.Right - 1), Math.Clamp(pointer.Y, pointerLimit.Top, pointerLimit.Bottom - 1));
+            gesture.PlaceFixed(bounds, pointer);
+            lastPointerPosition = pointer;
+            lastSnap = lastHeightLock = lastWidthLock = false;
+            if (!starting)
+            {
+                foreach (Rectangle monitor in SelectionMonitors.Where(m => overlays.All(o => o.MonitorBounds != m)))
+                { var overlay = new CaptureOverlay(this, monitor); overlays.Add(overlay); overlay.Show(); }
+                ReplaceGuide();
+            }
+            SelectionMenu.SetMode(Mode); RefreshOverlays();
+        }
+        catch (Exception ex)
+        {
+            SelectionError = "入力プリセットを呼び出せません: " + ex.Message;
+            RefreshOverlays();
+        }
+    }
 
     internal void ChangeAspectRatio(CaptureAspectRatio ratio)
     {
@@ -231,7 +279,7 @@ internal sealed class SessionController
         if (overlays.Count == 0 || !ShowSelectionGuide) return;
         CaptureOverlay owner = menuOwner ?? overlays.FirstOrDefault(o => o.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
         guide = new UI.SelectionGuideForm(owner.MonitorBounds, options.Intent, Cancel,
-            Mode == CaptureMode.FixedRegion ? options.FixedSize ?? new Size(1280, 720) : null, HandleCommandKey, options.FixedAnchor, AltKeyChanged, Mode,
+            Mode == CaptureMode.FixedRegion ? activeFixedSize : null, HandleCommandKey, options.FixedAnchor, AltKeyChanged, Mode,
             dismiss: () => ChangeGuideVisibility(false));
         guide.Show(owner);
         UpdateGuidePointer();
@@ -561,7 +609,7 @@ internal sealed class SessionController
         if (completed) return;
         if (selectionBounds is Rectangle bounds && (!bounds.Contains(selection.Bounds)
             || selection.Polygon?.Any(point => !bounds.Contains(point)) == true)) return;
-        Size fixedSize = options.FixedSize ?? new Size(1280, 720);
+        Size fixedSize = activeFixedSize;
         if (Mode == CaptureMode.FixedRegion && !entireMonitor && (selection.Polygon is not null
             || selection.Bounds.Size != fixedSize || !CaptureGeometry.IsFullyCovered(selection.Bounds, SelectionMonitors))) return;
         completed = true;

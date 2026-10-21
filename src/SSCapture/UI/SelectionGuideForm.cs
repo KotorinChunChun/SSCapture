@@ -6,14 +6,13 @@ internal sealed class SelectionGuideForm : Form
     private readonly Func<Keys, bool>? handleKey;
     private readonly Action? modifiersChanged;
     private readonly Action? dismiss;
-    private readonly Rectangle monitor;
+    private bool hiddenForPointer;
     private CaptureAnchor currentAnchor;
     internal SelectionGuideForm(Rectangle monitor, CaptureIntent intent, Action cancel, Size? fixedSize = null,
         Func<Keys, bool>? handleKey = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft, Action? modifiersChanged = null,
         CaptureMode mode = CaptureMode.Rectangle, Action? dismiss = null)
     {
         this.cancel = cancel;
-        this.monitor = monitor;
         this.handleKey = handleKey;
         this.modifiersChanged = modifiersChanged;
         this.dismiss = dismiss;
@@ -62,29 +61,10 @@ internal sealed class SelectionGuideForm : Form
     internal void UpdatePointer(Point pointer, bool dragging)
     {
         if (IsDisposed || Disposing) return;
-        Rectangle next = AvoidPointer(Bounds, monitor, pointer, DeviceDpi);
-        if (next == Bounds) return;
-        // Hide/Showを使わず、選択中の入力・アクティブ状態を維持する。
-        Location = next.Location;
-    }
-
-    internal static Rectangle AvoidPointer(Rectangle bounds, Rectangle monitor, Point pointer, int dpi)
-    {
-        int margin = (int)Math.Ceiling(40 * Math.Max(96, dpi) / 96d);
-        if (!Rectangle.Inflate(bounds, margin, margin).Contains(pointer)) return bounds;
-        int inset = (int)Math.Ceiling(16 * Math.Max(96, dpi) / 96d);
-        int left = monitor.Left + inset, top = monitor.Top + inset;
-        int right = Math.Max(monitor.Left, monitor.Right - bounds.Width - inset);
-        int bottom = Math.Max(monitor.Top, monitor.Bottom - bounds.Height - inset);
-        Rectangle[] candidates = [new(left, top, bounds.Width, bounds.Height), new(right, top, bounds.Width, bounds.Height),
-            new(left, bottom, bounds.Width, bounds.Height), new(right, bottom, bounds.Width, bounds.Height)];
-        double Distance(Rectangle r)
-        {
-            double x = Math.Max(Math.Max((double)r.Left - pointer.X, 0), (double)pointer.X - r.Right);
-            double y = Math.Max(Math.Max((double)r.Top - pointer.Y, 0), (double)pointer.Y - r.Bottom);
-            return x * x + y * y;
-        }
-        return candidates.Where(monitor.Contains).OrderByDescending(Distance).FirstOrDefault(bounds);
+        bool hide = ShouldHideForPointer(Bounds, pointer, dragging, DeviceDpi, hiddenForPointer);
+        if (hide == hiddenForPointer) return;
+        hiddenForPointer = hide;
+        if (hide) Hide(); else Show();
     }
 
     internal void ShowSaveError(string message) => Controls["SelectionHelp"]!.Text =

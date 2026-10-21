@@ -29,10 +29,14 @@ internal sealed class SettingsForm : Form
     private readonly Func<AppSettings, string?> save;
     private readonly CapturePresetEditor presetEditor;
     private readonly ExternalApplicationsEditor imageApps, videoApps;
+    private readonly RegionManagerForm inputPresetEditor;
+    private readonly ListBox categories;
 
     public SettingsForm(AppSettings settings, Func<AppSettings, string?> onSave, Action openFolder,
         Func<IReadOnlyList<MicrophoneInfo>>? listMicrophones = null, Action? openRegions = null, Action? openHistory = null,
-        Func<DateTimeOffset>? now = null, Func<IReadOnlyList<DisplayTarget>>? listDisplays = null)
+        Func<DateTimeOffset>? now = null, Func<IReadOnlyList<DisplayTarget>>? listDisplays = null,
+        SavedRegion? lastRegion = null, Func<Size?, CaptureAnchor, Task<Rectangle?>>? selectInputRegion = null,
+        Func<IReadOnlyList<DisplayLayout>>? regionDisplays = null)
     {
         initial = settings;
         save = onSave;
@@ -57,7 +61,7 @@ internal sealed class SettingsForm : Form
         var categoryBody = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
         categoryBody.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 158)); categoryBody.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         categoryBody.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var categories = new ListBox { Name = "SettingsCategories", Dock = DockStyle.Fill, IntegralHeight = false, ItemHeight = 34 };
+        categories = new ListBox { Name = "SettingsCategories", Dock = DockStyle.Fill, IntegralHeight = false, ItemHeight = 34 };
         tabs.Appearance = TabAppearance.FlatButtons; tabs.SizeMode = TabSizeMode.Fixed; tabs.ItemSize = new Size(1, 1); tabs.TabStop = false;
         categoryBody.Controls.Add(categories, 0, 0); categoryBody.Controls.Add(tabs, 1, 0); layout.Controls.Add(categoryBody, 0, 0);
         var basic = Page(tabs, "基本");
@@ -106,6 +110,9 @@ internal sealed class SettingsForm : Form
         recording1 = KeyField(keys, "録画 1", "RecordingShortcut1", settings.RecordingShortcut1, 2);
         recording2 = KeyField(keys, "録画 2", "RecordingShortcut2", settings.RecordingShortcut2, 3);
         lastRegionKey = KeyField(keys, "前回の範囲", "LastRegionShortcut", settings.LastRegionShortcut, 4);
+        var special = new Label { Name = "SpecialCaptureOperations", Dock = DockStyle.Fill,
+            Text = "撮影中の特殊操作（変更不可）\nCtrl: 幅固定（縦方向のみ）　Shift: 高さ固定（横方向のみ）\nAlt: 20px単位・枠吸着\nCtrl＋Shiftを押しながら別モニタへ移動:\n  今回の撮影だけモニタ制限を解除（方向ロックより優先）\nSpace: 矩形は現在位置を新しい始点／固定サイズは基点を時計回り\n操作ガイドはドラッグ中にポインタが近づくと一時的に隠れます。" };
+        keys.Controls.Add(special, 0, 5); keys.SetColumnSpan(special, 2);
         var regions = inputs;
         fixedWidth = PixelField(regions, "固定幅 (px)", "FixedWidth", settings.FixedWidth, 1);
         fixedHeight = PixelField(regions, "固定高さ (px)", "FixedHeight", settings.FixedHeight, 2);
@@ -115,17 +122,10 @@ internal sealed class SettingsForm : Form
         includeCursor = Toggle(regions, "カーソル", "IncludeCursor", "画像・動画に含める", settings.IncludeCursor, 4);
         var historyPage = Page(tabs, "履歴");
         keepHistory = Toggle(historyPage, "撮影履歴", "KeepHistory", "メモリーに保持する", settings.KeepHistory, 0);
-        var regionButtons = new FlowLayoutPanel { WrapContents = false, Margin = Padding.Empty };
-        var manageRegions = MakeButton("入力プリセット", "OpenRegions", ButtonRole.Secondary);
-        manageRegions.Width = 144; manageRegions.Enabled = openRegions is not null;
-        manageRegions.Click += (_, _) => openRegions?.Invoke();
         var historyButton = MakeButton("撮影履歴", "OpenHistory", ButtonRole.Secondary);
         historyButton.Width = 144; historyButton.Enabled = openHistory is not null;
         historyButton.Click += (_, _) => openHistory?.Invoke();
-        regionButtons.Controls.Add(manageRegions);
         Add(historyPage, "管理", historyButton, 1);
-        Add(regions, "管理", regionButtons, 5);
-        regionButtons.Margin = Padding.Empty;
         var instant = Page(tabs, "即時撮影");
         ((TabPage)instant.Parent!).AutoScroll = true;
         instant.Dock = DockStyle.Top;
@@ -227,6 +227,44 @@ internal sealed class SettingsForm : Form
         var presetPage = new TabPage("出力プリセット") { BackColor = BackColor, Padding = new Padding(8) };
         presetEditor = new CapturePresetEditor(settings, ReadSettings);
         presetPage.Controls.Add(presetEditor); tabs.TabPages.Add(presetPage);
+        var inputPresetPage = new TabPage("入力プリセット") { BackColor = BackColor, Padding = new Padding(4) };
+        inputPresetEditor = new RegionManagerForm(settings.SavedRegions, lastRegion,
+            size => PickInputRegion(size, settings.FixedCaptureAnchor), _ => null, regionDisplays,
+            selectAnchoredRegion: PickInputRegion, embedded: true);
+        inputPresetPage.Controls.Add(inputPresetEditor); tabs.TabPages.Add(inputPresetPage); inputPresetEditor.Show();
+        async Task<Rectangle?> PickInputRegion(Size? size, CaptureAnchor anchor)
+        {
+            if (selectInputRegion is not null) return await selectInputRegion(size, anchor);
+            using var outcome = await CaptureSession.SelectAsync(new(size is null ? CaptureMode.Rectangle : CaptureMode.FixedRegion,
+                CaptureIntent.Recording, OutputDestination.None, FixedSize: size, FixedAnchor: anchor,
+                LimitToStartingMonitor: limitToStartingMonitor.Checked, DimCaptureBackground: dimCaptureBackground.Checked));
+            return outcome.Selection?.Bounds;
+        }
+        string[] order = ["基本", "入力", "入力プリセット", "出力プリセット", "ファイル名", "撮影情報", "外部アプリ", "ショートカット", "即時撮影", "通知", "履歴", "録画・音声"];
+        var ordered = order.Select(title => tabs.TabPages.Cast<TabPage>().Single(p => p.Text == title)).ToArray();
+        tabs.TabPages.Clear(); tabs.TabPages.AddRange(ordered);
+        MoveSetting(limitToStartingMonitor, inputs, 5); MoveSetting(dimCaptureBackground, inputs, 6);
+        // 保存先・命名・保存後を同じページへ。先に全ラベルを採取して行の衝突を避ける。
+        Control[] fileFields = [directory, fileNamePattern, ocrSeparator, oneOcrDirectory, openFolderAfterSave];
+        var fileRows = fileFields.Select(control => (control, label: ((TableLayoutPanel)control.Parent!).GetControlFromPosition(0, ((TableLayoutPanel)control.Parent!).GetRow(control))!)).ToArray();
+        foreach (var pair in fileRows) { pair.label.Parent!.Controls.Remove(pair.label); pair.control.Parent!.Controls.Remove(pair.control); }
+        naming.SetRow(namingHelp, 5); naming.SetRowSpan(namingHelp, 1);
+        for (int row = 0; row < fileRows.Length; row++) { naming.Controls.Add(fileRows[row].label, 0, row); naming.Controls.Add(fileRows[row].control, 1, row); }
+        MoveSetting(clipboardOutput.Parent!, basic, 0); MoveSetting(freeze, basic, 1);
+        MoveSetting(screenshotPadding, basic, 2); MoveSetting(screenshotColorDepth, basic, 3);
+        basic.RowCount = 5; basic.RowStyles.Clear();
+        for (int row = 0; row < 4; row++) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        basic.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        inputs.RowCount = 8; inputs.RowStyles.Clear();
+        for (int row = 0; row < 7; row++) inputs.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        inputs.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        void MoveSetting(Control control, TableLayoutPanel destination, int row)
+        {
+            var source = (TableLayoutPanel)control.Parent!;
+            var label = source.GetControlFromPosition(0, source.GetRow(control))!;
+            source.Controls.Remove(label); source.Controls.Remove(control);
+            destination.Controls.Add(label, 0, row); destination.Controls.Add(control, 1, row);
+        }
         status = new TextBox { Name = "Status", Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
             WordWrap = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None,
             BackColor = BackColor, TabStop = false, Margin = new Padding(8, 6, 8, 6) };
@@ -254,6 +292,11 @@ internal sealed class SettingsForm : Form
     }
 
     public void SetStatus(string text, bool error = false) => SetStatus(new StatusMessage(text, error, now()));
+    internal void SelectCategory(string title)
+    {
+        for (int index = 0; index < categories.Items.Count; index++)
+            if (((TabPage)categories.Items[index]!).Text == title) { categories.SelectedIndex = index; return; }
+    }
 
     public void SetStatus(StatusMessage? message)
     {
@@ -305,6 +348,7 @@ internal sealed class SettingsForm : Form
                 ScreenshotColorDepth = (ScreenshotColorDepth)screenshotColorDepth.SelectedIndex,
                 MetadataMode = (CaptureMetadataMode)metadataMode.SelectedIndex,
                 CapturePresets = presetEditor.Presets,
+                SavedRegions = inputPresetEditor.Regions,
                 ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
                 RecordingShortcut1 = recording1.Value, RecordingShortcut2 = recording2.Value,
                 LastRegionShortcut = lastRegionKey.Value, FixedWidth = (int)fixedWidth.Value, FixedHeight = (int)fixedHeight.Value,

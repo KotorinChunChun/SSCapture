@@ -13,6 +13,20 @@ internal static partial class Program
         SavedRegion initial = RegionCoordinates.FromBounds("左画面", new Rectangle(-1600, -100, 640, 480), displays,
             shortcut: "Win+Ctrl+Q");
 
+        Run("入力プリセット設定は出力と隣接し一覧登録後に設定保存へ渡る", () =>
+        {
+            AppSettings? saved = null;
+            using var settings = new SettingsForm(new AppSettings { SavedRegions = [initial] }, next => { saved = next; return null; }, () => { }, () => [], regionDisplays: () => displays);
+            var categories = (ListBox)settings.Controls.Find("SettingsCategories", true).Single();
+            Equal("入力プリセット", ((TabPage)categories.Items[2]!).Text); Equal("出力プリセット", ((TabPage)categories.Items[3]!).Text);
+            settings.SelectCategory("入力プリセット");
+            var editor = (RegionManagerForm)settings.Controls.Find("RegionManagerForm", true).Single();
+            ((TextBox)editor.Controls.Find("RegionName", true).Single()).Text = "変更済み";
+            Call(editor, "SaveRegion"); Check(saved is null, "一覧登録だけで設定保存した");
+            typeof(SettingsForm).GetMethod("SaveSettings", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settings, null);
+            Equal("変更済み", saved!.SavedRegions.Single().Name);
+        });
+
         Run("登録範囲画面の一覧・数値欄・キーが最小サイズで収まる", () =>
         {
             using var form = Manager([initial]);

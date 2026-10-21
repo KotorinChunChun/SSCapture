@@ -12,6 +12,8 @@ internal sealed class ExternalApplicationsEditor : UserControl
     internal TextBox Arguments { get; }
     private readonly Label status = null!;
     private readonly Func<IEnumerable<string?>> references;
+    private readonly ContextMenuStrip newMenu = new();
+    private readonly ToolTip argumentTips = new() { AutoPopDelay = 25000, ShowAlways = true };
     internal ExternalApplication[] Applications => applications.ToArray();
     internal string SelectedId => (selected.SelectedItem as ExternalApplication)?.Id ?? "";
     internal ExternalApplication? SelectedApplication => selected.SelectedItem as ExternalApplication;
@@ -41,16 +43,27 @@ internal sealed class ExternalApplicationsEditor : UserControl
         Arguments = new TextBox { Name = prefix + "EditorArguments", Text = legacyArgs }; Add("引数", Arguments, 5);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
         root.Controls.Add(buttons, 0, 6); root.SetColumnSpan(buttons, 2);
-        Button("新規", "New", () => { list.ClearSelected(); appName.Clear(); Executable.Clear(); Arguments.Text = EditorArguments.Default; });
+        var newButton = SettingsForm.MakeButton("新規 ▾", prefix + "EditorNew"); newButton.Width = 92;
+        newButton.ContextMenuStrip = newMenu;
+        foreach (var preset in examples)
+        {
+            var item = new ToolStripMenuItem(preset.Name) { Name = preset.Name };
+            item.Click += (_, _) =>
+            {
+                list.ClearSelected();
+                Executable.Text = preset.Executable; Arguments.Text = preset.Arguments;
+                appName.Text = string.IsNullOrWhiteSpace(preset.Executable) ? "" : Path.GetFileNameWithoutExtension(preset.Executable);
+                status.Text = "新規入力です。「保存」で一覧に登録し、設定の「保存」で確定します。";
+            };
+            newMenu.Items.Add(item);
+        }
+        newButton.Click += (_, _) => newMenu.Show(newButton, 0, newButton.Height);
+        buttons.Controls.Add(newButton);
         Button("複製", "Duplicate", () => { list.ClearSelected(); appName.Text += " コピー"; });
-        Button("登録・更新", "Store", Store);
+        Button("保存", "Store", Store);
         Button("削除", "Delete", Delete);
-        var example = new ComboBox { Name = prefix + "EditorPreset", DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
-        foreach (var item in examples) example.Items.Add(item);
-        example.SelectedIndex = 0;
-        example.SelectedIndexChanged += (_, _) => { if (example.SelectedItem is EditorPreset { Executable.Length: > 0 } item) { Executable.Text = item.Executable; Arguments.Text = item.Arguments; } };
-        buttons.Controls.Add(example);
-        status = new Label { Name = prefix + "EditorStatus", Dock = DockStyle.Fill, Text = "登録・更新後、設定の保存で確定。{file} 完全パス / {directory} フォルダ / {filename} ファイル名" };
+        status = new Label { Name = prefix + "EditorStatus", Dock = DockStyle.Fill, Text = "「保存」で一覧登録、設定の「保存」で確定。引数欄のツールチップで置換語を確認できます。" };
+        argumentTips.SetToolTip(Arguments, EditorArguments.Help);
         root.Controls.Add(status, 0, 7); root.SetColumnSpan(status, 2);
         list.SelectedIndexChanged += (_, _) => { if (list.SelectedItem is ExternalApplication app) { appName.Text = app.Name; Executable.Text = app.Executable; Arguments.Text = app.Arguments; } };
         Refresh(selectedId);
@@ -67,6 +80,11 @@ internal sealed class ExternalApplicationsEditor : UserControl
             button.Click += (_, _) => { try { action(); status.Text = "変更しました。設定の保存で確定します。"; } catch (ArgumentException e) { status.Text = e.Message; } };
             buttons.Controls.Add(button);
         }
+    }
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) { newMenu.Dispose(); argumentTips.Dispose(); }
+        base.Dispose(disposing);
     }
     private void Refresh(string id)
     {

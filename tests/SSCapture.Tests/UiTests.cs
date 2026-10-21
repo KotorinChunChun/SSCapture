@@ -136,12 +136,12 @@ internal static partial class Program
             tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "入力");
             form.Size = form.MinimumSize;
             _ = form.Handle; foreach (var child in Descendants(form)) _ = child.Handle; LayoutTree(form);
-            foreach (string name in new[] { "FixedWidth", "FixedHeight", "FixedCaptureAnchor", "IncludeCursor", "OpenRegions" })
+            foreach (string name in new[] { "FixedWidth", "FixedHeight", "FixedCaptureAnchor", "IncludeCursor", "LimitToStartingMonitor", "DimCaptureBackground" })
             {
                 var control = form.Controls.Find(name, true).Single();
                 Check(control.Parent!.ClientRectangle.Contains(control.Bounds), name + " が親領域外");
             }
-            Equal(6, ((TableLayoutPanel)anchor.Parent!).RowCount);
+            Equal(8, ((TableLayoutPanel)anchor.Parent!).RowCount);
             tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "履歴"); LayoutTree(form);
             foreach (string name in new[] { "KeepHistory", "OpenHistory" })
             { var field = form.Controls.Find(name, true).Single(); Check(field.Parent!.ClientRectangle.Contains(field.Bounds), name + "が履歴区分に収まらない"); }
@@ -181,7 +181,7 @@ internal static partial class Program
                 LayoutTree(form);
                 foreach (var input in Descendants(page).Where(c => c is TextBox or ComboBox && c.Parent is not UpDownBase))
                 {
-                    Check(input.Width >= (input.Name.EndsWith("EditorPreset", StringComparison.Ordinal) ? 160 : input.Name.EndsWith("Key", StringComparison.Ordinal) ? 200 : 420), $"{input.Name} 幅 {input.Width}");
+                    Check(input.Width >= (input.Name.EndsWith("EditorPreset", StringComparison.Ordinal) ? 160 : input.Name.EndsWith("Key", StringComparison.Ordinal) ? 200 : page.Text == "入力プリセット" ? 300 : 420), $"{input.Name} 幅 {input.Width}");
                     Check(input.Height >= 24, $"{input.Name} 高さ {input.Height}");
                     Check(input.Parent!.ClientRectangle.Contains(input.Bounds), $"{input.Name} が親領域外: {input.Bounds} parent={input.Parent.ClientRectangle}");
                 }
@@ -206,7 +206,7 @@ internal static partial class Program
             layout.Dock = DockStyle.None;
             layout.Size = new Size(240, 180);
             LayoutTree(form);
-            Check(form.Controls.Find("SaveDirectory", true).Single().Width < 420, "Dock断線を寸法検査で検出できない");
+            Check(form.Controls.Find("ScreenshotPaddingPixels", true).Single().Width < 420, "Dock断線を寸法検査で検出できない");
         });
         Run("撮影モード5種と未接続マイクIDが設定に保持される", () =>
         {

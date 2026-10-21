@@ -20,7 +20,8 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         Action<CaptureMode>? changeMode = null, Action<bool>? changeGrid = null, Action? captureDesktop = null,
         Func<bool>? ownsPopupFocus = null, bool showGuide = true, Action<bool>? changeGuide = null, Action<CaptureAspectRatio>? changeRatio = null,
         int defaultPadding = 0, Action<int>? changePadding = null, IReadOnlyList<CapturePreset>? presets = null, Action<CapturePreset>? applyPreset = null,
-        IReadOnlyList<ExternalApplication>? applications = null, string selectedApplication = "", Action<string>? changeApplication = null)
+        IReadOnlyList<ExternalApplication>? applications = null, string selectedApplication = "", Action<string>? changeApplication = null,
+        IReadOnlyList<SavedRegion>? inputPresets = null, Action<SavedRegion>? applyInputPreset = null)
     {
         this.cancel = cancel;
         this.ownsPopupFocus = ownsPopupFocus ?? (() => CaptureNative.OwnsForegroundWindow() || CaptureNative.ForegroundTransition);
@@ -75,6 +76,14 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         Items.Add("設定", null, (_, _) => openSettings());
         Items.Add("閉じる / キャンセル", null, (_, _) => cancel());
         SetDestination(selected);
+        if (applyInputPreset is not null)
+        {
+            var inputMenu = new ToolStripMenuItem("入力プリセット") { Name = "InputPresetMenu", DropDown = new SelectionModeDropDown(this.ownsPopupFocus) };
+            foreach (var preset in inputPresets ?? [])
+                inputMenu.DropDownItems.Add(new ToolStripMenuItem(preset.Name, null, (_, _) => applyInputPreset(preset)) { Name = preset.Id });
+            if (inputMenu.DropDownItems.Count == 0) inputMenu.DropDownItems.Add(new ToolStripMenuItem("設定画面で登録してください") { Enabled = false });
+            Items.Insert(3, inputMenu);
+        }
         if (changeApplication is not null)
         {
             var appMenu = new ToolStripMenuItem("今回の外部アプリ") { Name = "ExternalApplicationMenu" };
@@ -99,13 +108,11 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         }
         if (changePadding is not null)
         {
-            var paddingMenu = new ToolStripMenuItem("今回の余白") { Name = "ScreenshotPaddingMenu" };
-            var reset = new ToolStripMenuItem($"既定 ({defaultPadding}px)", null, (_, _) => changePadding(defaultPadding)) { Name = "DefaultPadding" };
-            paddingMenu.DropDownItems.Add(reset);
-            foreach (int pixels in new[] { 0, 10, 20, 40 })
+            var paddingMenu = new ToolStripMenuItem("画像の余白") { Name = "ScreenshotPaddingMenu" };
+            foreach (int pixels in new[] { 0, 10, 20, 50 })
             {
                 int value = pixels;
-                var item = new ToolStripMenuItem(value == 0 ? "余白なし" : $"{value}px", null, (_, _) => changePadding(value));
+                var item = new ToolStripMenuItem($"{value}px", null, (_, _) => changePadding(value));
                 paddings.Add(value, item); paddingMenu.DropDownItems.Add(item);
             }
             Items.Insert(Math.Max(0, Items.Count - 2), paddingMenu);
@@ -146,7 +153,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     internal void SetPadding(int pixels)
     {
         foreach (var pair in paddings) pair.Value.Checked = pair.Key == pixels;
-        if (Items["ScreenshotPaddingMenu"] is ToolStripMenuItem parent) parent.Text = $"今回の余白 ({pixels}px)";
+        if (Items["ScreenshotPaddingMenu"] is ToolStripMenuItem parent) parent.Text = $"画像の余白（{pixels}px）";
     }
 
     protected override void OnClosing(ToolStripDropDownClosingEventArgs e)

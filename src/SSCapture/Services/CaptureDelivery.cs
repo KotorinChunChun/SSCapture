@@ -2,7 +2,7 @@ namespace SSCapture.Services;
 
 internal sealed record CaptureDelivery(CaptureIntent Intent, OutputDestination Completed, OutputDestination Failed,
     bool FolderOpenFailed = false, string? SavedPath = null, Rectangle? CaptureBounds = null, string? CaptureDescription = null, bool MetadataFailed = false,
-    string? NotificationPath = null)
+    string? NotificationPath = null, NotificationImage? NotificationImage = null)
 {
     public bool HasSuccess => Completed != OutputDestination.None;
     public bool HasFailure => Failed != OutputDestination.None || FolderOpenFailed || MetadataFailed;

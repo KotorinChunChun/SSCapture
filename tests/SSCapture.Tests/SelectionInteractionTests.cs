@@ -222,7 +222,7 @@ internal static partial class Program
             }
             var freeze = form.Controls.Find("FreezeFrame", true).Single();
             var table = (TableLayoutPanel)freeze.Parent!;
-            var label = (Label)table.GetControlFromPosition(0, 2)!;
+            var label = (Label)table.GetControlFromPosition(0, table.GetRow(freeze))!;
             Equal("撮影タイミング", label.Text);
             Equal(tips.GetToolTip(freeze), tips.GetToolTip(label));
             _ = form.Handle; foreach (Control child in Descendants(form)) _ = child.Handle; LayoutTree(form);

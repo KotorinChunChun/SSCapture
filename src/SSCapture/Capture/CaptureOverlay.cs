@@ -120,6 +120,12 @@ internal sealed class CaptureOverlay : Form
         selection.Offset(-MonitorBounds.X, -MonitorBounds.Y);
         DrawSelection(graphics, selection);
         DrawDimensions(graphics, selection);
+        if (session.SelectionError is string error)
+        {
+            var box = new Rectangle(16, 16, Math.Max(1, ClientSize.Width - 32), 100);
+            graphics.FillRectangle(Brushes.White, box);
+            TextRenderer.DrawText(graphics, error, dimensionsFont, box, Color.DarkRed, TextFormatFlags.WordBreak);
+        }
     }
 
     private void DrawSelection(Graphics graphics, Rectangle selection)

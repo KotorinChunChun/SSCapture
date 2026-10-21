@@ -18,6 +18,41 @@ internal static partial class Program
 
     private static void SelectionMonitorTests()
     {
+        Run("入力プリセットは登録位置の枠を呼び出し調整後のEnterだけで確定", () =>
+        {
+            Services.DisplayLayout[] displays = SelectionTestMonitors.Select((m, i) => new Services.DisplayLayout("monitor" + i, "画面" + i, m, 96, 96)).ToArray();
+            var region = RegionCoordinates.FromBounds("右の枠", new Rectangle(40, 60, 120, 80), displays);
+            Rectangle desktop = SelectionTestMonitors.Aggregate(Rectangle.Union);
+            var snapshot = new DesktopSnapshot(new Bitmap(desktop.Width, desktop.Height), desktop, SelectionTestMonitors);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Recording, OutputDestination.None,
+                OutputSettings: new AppSettings { SavedRegions = [region] }), snapshot, [], initialPointer: new(-100, 20), readPresetDisplays: () => displays);
+            try
+            {
+                var menu = (ToolStripMenuItem)session.SelectionMenu.Items["InputPresetMenu"]!;
+                ((ToolStripMenuItem)menu.DropDownItems[0]).PerformClick();
+                Equal(CaptureMode.FixedRegion, session.Mode); Equal(region.Bounds, session.Selection);
+                Check(!session.Completion.IsCompleted, "プリセット選択で即撮影した");
+                session.MoveTo(new(0, 20)); Equal(region.Bounds, session.Selection);
+                session.HandleCommandKey(Keys.Right); Equal(new Rectangle(41, 60, 120, 80), session.Selection);
+                session.HandleCommandKey(Keys.Enter);
+                using var result = session.Completion.GetAwaiter().GetResult();
+                Equal(new Rectangle(41, 60, 120, 80), result.Selection!.Bounds);
+            }
+            finally { session.Cancel(); }
+        });
+        Run("入力プリセットの切断エラーは枠と撮影を壊さず表示", () =>
+        {
+            var session = MonitorSession(true);
+            try
+            {
+                var displays = new[] { new DisplayLayout("missing", "切断画面", new(0, 0, 640, 480), 96, 96) };
+                var region = RegionCoordinates.FromBounds("旧画面", new(0, 0, 100, 100), displays);
+                session.ApplyInputPreset(region);
+                Check(session.SelectionError is not null && !session.Completion.IsCompleted, "切断エラーを失った");
+                Equal(CaptureMode.Rectangle, session.Mode);
+            }
+            finally { session.Cancel(); }
+        });
         Run("CtrlShiftの別モニタ移動だけが撮影単位の制限を解除する", () =>
         {
             var session = MonitorSession(true);

@@ -8,6 +8,15 @@ internal static partial class Program
 {
     private static void NotificationUpgradeTests()
     {
+        Run("再起動の整理は通知用の正規名だけ削除し保存画像や他の作業を保持", () => WithServiceDirectory(directory =>
+        {
+            string folder = Path.Combine(directory, "notification-images"); Directory.CreateDirectory(folder);
+            string owned = Path.Combine(folder, "notify-" + Guid.NewGuid().ToString("N") + ".png");
+            string unrelated = Path.Combine(folder, "saved.png"); string otherWork = Path.Combine(directory, "recording.mp4");
+            File.WriteAllText(owned, "fixture"); File.WriteAllText(unrelated, "fixture"); File.WriteAllText(otherWork, "fixture");
+            NotificationImage.CleanupPreviousSession(directory);
+            Check(!File.Exists(owned) && File.Exists(unrelated) && File.Exists(otherWork), "整理対象が通知用ファイルに限定されない");
+        }));
         Run("通知用画像は履歴OFF・Clipboardのみでも余白と減色済み", () => WithServiceDirectory(directory => RunOutputTask(async () =>
         {
             CaptureDelivery? delivery = null; int history = 0;
@@ -17,11 +26,32 @@ internal static partial class Program
             await router.ScreenshotAsync(image, OutputDestination.Clipboard, new AppSettings
             { KeepHistory = false, ScreenshotPaddingPixels = 2, ScreenshotColorDepth = ScreenshotColorDepth.Indexed8,
                 NotificationClickAction = NotificationClickAction.ExternalApplication });
-            Equal(0, history); Check(delivery?.NotificationPath is not null, "通知用ファイルがない");
-            using var output = new Bitmap(delivery!.NotificationPath!);
+            Equal(0, history); Check(delivery?.NotificationImage is not null, "通知用のメモリー画像がない");
+            Check(!Directory.EnumerateFiles(directory, "*.png", SearchOption.AllDirectories).Any(), "開く前に画像を生成した");
+            using var pending = delivery!.NotificationImage!;
+            string path = await pending.PrepareAsync();
+            using var output = new Bitmap(path);
             Equal(new Size(24, 14), output.Size);
-            byte[] png = File.ReadAllBytes(delivery.NotificationPath!); Equal((byte)8, png[24]); Equal((byte)3, png[25]);
+            byte[] png = File.ReadAllBytes(path); Equal((byte)8, png[24]); Equal((byte)3, png[25]);
         })));
+        Run("通知クリックで生成完了してから1回起動し未使用画像を解放", () => WithServiceDirectory(directory =>
+        {
+            using var bitmap = new Bitmap(10, 10);
+            var pending = new NotificationImage(bitmap, directory);
+            var app = new ExternalApplication { Id = "a", Name = "検証", Executable = Environment.ProcessPath! };
+            var settings = new AppSettings { ImageEditors = [app], NotificationClickAction = NotificationClickAction.ExternalApplication, NotificationApplicationId = app.Id };
+            var toast = new FakeCaptureToast(); var launched = new TaskCompletionSource(); int launches = 0;
+            using var feedback = new CaptureFeedback(createToast: () => toast, sound: new FakeCompletionSound(), timer: new FakeFeedbackTimer(),
+                launch: info => { using var completed = new Bitmap(info.ArgumentList[0]); Equal(10, completed.Width); launches++; launched.SetResult(); });
+            feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, NotificationImage: pending), settings);
+            Check(!Directory.EnumerateFiles(directory).Any(), "クリック前にディスクへ書いた");
+            var click = toast.Activate!; click(); click(); WaitHistory(launched.Task); Equal(1, launches);
+            var unused = new NotificationImage(bitmap, directory);
+            feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, NotificationImage: unused), settings);
+            feedback.HideForCapture();
+            bool disposed = false; try { _ = unused.PrepareAsync(); } catch (ObjectDisposedException) { disposed = true; }
+            Check(disposed, "通知消去後もメモリー画像を保持した");
+        }));
         Run("通知は期限と同時に近接しても保持し離脱後1秒待つ", () =>
         {
             var lifetime = new NotificationLifetime(0, 1000);

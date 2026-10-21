@@ -53,9 +53,20 @@ internal static partial class Program
             ((Button)ui.Controls.Find("ImageEditorStore", true).Single()).PerformClick();
             Equal(1, ui.Applications.Length); Equal(ui.Applications[0].Id, ui.SelectedId);
             ((Button)ui.Controls.Find("ImageEditorDelete", true).Single()).PerformClick(); Equal(1, ui.Applications.Length);
-            ((Button)ui.Controls.Find("ImageEditorNew", true).Single()).PerformClick();
+            ((ToolStripMenuItem)ui.Controls.Find("ImageEditorNew", true).Single().ContextMenuStrip!.Items[0]).PerformClick();
             name.Text = "B"; ui.Executable.Text = @"C:\b.exe";
             ((Button)ui.Controls.Find("ImageEditorStore", true).Single()).PerformClick(); Equal(2, ui.Applications.Length);
+        });
+        Run("新規メニューは入力例から別の登録名とexeを入力するだけ", () =>
+        {
+            using var ui = new ExternalApplicationsEditor("Image", [], "", "", EditorArguments.Default, EditorPresets.Images, () => []);
+            var newButton = ui.Controls.Find("ImageEditorNew", true).Single();
+            Check(!ui.Controls.Find("ImageEditorPreset", true).Any(), "旧コンボが残る");
+            ((ToolStripMenuItem)newButton.ContextMenuStrip!.Items["MS ペイント"]!).PerformClick();
+            var name = (TextBox)ui.Controls.Find("ImageEditorName", true).Single();
+            Equal(Path.GetFileNameWithoutExtension(ui.Executable.Text), name.Text); Equal(0, ui.Applications.Length);
+            ((Button)ui.Controls.Find("ImageEditorStore", true).Single()).PerformClick();
+            Equal(1, ui.Applications.Length); Equal("保存", ui.Controls.Find("ImageEditorStore", true).Single().Text);
         });
         Run("壊れた旧設定からの明示保存は原本を退避して回復できる", () => WithServiceDirectory(directory =>
         {

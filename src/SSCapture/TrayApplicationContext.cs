@@ -23,7 +23,6 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
     private readonly RegionStore regionStore;
     private readonly ToolStripMenuItem savedRegionMenu;
     private SavedRegion? lastRegion;
-    private RegionManagerForm? regionForm;
     private HistoryForm? historyForm;
     private readonly EventWaitHandle settingsSignal;
     private readonly RegisteredWaitHandle signalWait;
@@ -48,6 +47,8 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
     public TrayApplicationContext(bool showSettings)
     {
         _ = dispatcher.Handle;
+        try { NotificationImage.CleanupPreviousSession(workRoot); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { lastStatus = new StatusMessage("以前の通知用画像を整理できません: " + ex.Message, true, DateTimeOffset.Now); }
         feedback = new CaptureFeedback(message => Post(() => StoreStatus(message, true)));
         store = new SettingsStore(Path.Combine(AppContext.BaseDirectory, "data", "settings.json"));
         output = new OutputRouter(workRoot, capturedWithBounds: (image, path, time, bounds) =>

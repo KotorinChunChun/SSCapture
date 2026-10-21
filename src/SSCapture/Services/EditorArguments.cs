@@ -6,6 +6,7 @@ namespace SSCapture.Services;
 internal static partial class EditorArguments
 {
     public const string Default = "\"{file}\"";
+    internal const string Help = "{file}: 画像・動画の完全パス\n{directory}: そのファイルのフォルダ\n{filename}: 拡張子を含むファイル名\n例: \"{file}\"\n未保存画像は、開く操作時に作業用PNGを生成し、書き込み完了後に渡します。クリップボード内容を直接渡すものではありません。";
     [GeneratedRegex(@"\{([^{}]+)\}")]
     private static partial Regex Variable();
     internal static string[] Expand(string template, string file)
