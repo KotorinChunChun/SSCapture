@@ -45,7 +45,7 @@ internal static partial class Program
                 Equal(1, saves);
                 session.ChangeMode(CaptureMode.Freeform);
                 Check(!session.ShowSelectionGuide, "モード変更で再表示された");
-                var item = (ToolStripMenuItem)session.SelectionMenu.Items["ShowSelectionGuide"]!;
+                var item = (ToolStripMenuItem)session.SelectionMenu.Command("ShowSelectionGuide")!;
                 Check(!item.Checked, "右メニューがOFFにならない");
                 item.PerformClick();
                 Check(item.Checked && session.ShowSelectionGuide && store.Load(out _).ShowSelectionGuide, "右メニューから再表示できない");
@@ -63,7 +63,7 @@ internal static partial class Program
             try
             {
                 session.ChangeMode(CaptureMode.FixedRegion);
-                var item = (ToolStripMenuItem)session.SelectionMenu.Items["ShowSelectionGuide"]!;
+                var item = (ToolStripMenuItem)session.SelectionMenu.Command("ShowSelectionGuide")!;
                 Check(!item.Checked && !session.ShowSelectionGuide, "モード変更でONになった");
                 item.PerformClick();
                 Check(item.Checked && session.ShowSelectionGuide, "メニューでONにならない");
@@ -125,7 +125,7 @@ internal static partial class Program
                 session.ChangeGuideVisibility(false);
                 Check(session.ShowSelectionGuide, "保存失敗をOFFの成功と扱った");
                 Check(!session.Completion.IsCompleted, "保存失敗で撮影を終了した");
-                Check(((ToolStripMenuItem)session.SelectionMenu.Items["ShowSelectionGuide"]!).Checked, "メニュー表示が不一致");
+                Check(((ToolStripMenuItem)session.SelectionMenu.Command("ShowSelectionGuide")!).Checked, "メニュー表示が不一致");
             }
             finally { session.Cancel(); }
         });

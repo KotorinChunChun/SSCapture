@@ -117,7 +117,7 @@ internal static partial class Program
             Rectangle desktop = new(0, 0, 12, 12);
             var session = new SessionController(new(CaptureMode.FixedRegion, CaptureIntent.Screenshot, OutputDestination.Clipboard,
                 FixedSize: new Size(2, 2)), new DesktopSnapshot(PatternBitmap(), desktop, [desktop]), []);
-            session.SelectionMenu.Items.OfType<ToolStripMenuItem>().Single(item => Equals(item.Tag, OutputDestination.File)).PerformClick();
+            session.SelectionMenu.AllCommands.Single(item => Equals(item.Tag, OutputDestination.File)).PerformClick();
             session.MoveTo(new Point(3, 3));
             session.HandleCommandKey(Keys.Enter);
             using CaptureOutcome result = session.Completion.GetAwaiter().GetResult();

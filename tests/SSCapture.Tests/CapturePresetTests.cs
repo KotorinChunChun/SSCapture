@@ -57,7 +57,7 @@ internal static partial class Program
             OutputDestination destination = OutputDestination.None;
             using var menu = new CaptureContextMenu(OutputDestination.Clipboard, value => destination = value, () => { }, () => { });
             menu.SetDestination(OutputDestination.File | OutputDestination.ExternalApp);
-            ((ToolStripMenuItem)menu.Items[0]).PerformClick();
+            menu.Command("DestinationClipboard").PerformClick();
             Equal(OutputDestination.Clipboard | OutputDestination.File | OutputDestination.ExternalApp, destination);
         });
         Run("右メニューの一時余白とプリセット項目はそれぞれの値を渡す", () =>
@@ -66,14 +66,14 @@ internal static partial class Program
             var preset = CapturePreset.FromSettings("資料", new AppSettings());
             using var menu = new CaptureContextMenu(OutputDestination.Clipboard, _ => { }, () => { }, () => { },
                 defaultPadding: 7, changePadding: p => padding = p, presets: [preset], applyPreset: p => selected = p);
-            var margins = (ToolStripMenuItem)menu.Items["ScreenshotPaddingMenu"]!;
+            var margins = (ToolStripMenuItem)menu.Command("ScreenshotPaddingMenu")!;
             Equal("画像の余白（7px）", margins.Text); Equal(4, margins.DropDownItems.Count);
             Equal("0px,10px,20px,50px", string.Join(",", margins.DropDownItems.Cast<ToolStripItem>().Select(i => i.Text)));
             ((ToolStripMenuItem)margins.DropDownItems[2]).PerformClick(); Equal(20, padding);
             ((ToolStripMenuItem)margins.DropDownItems[3]).PerformClick(); Equal(50, padding);
             menu.SetPadding(50); Equal("画像の余白（50px）", margins.Text);
             ((ToolStripMenuItem)margins.DropDownItems[0]).PerformClick(); Equal(0, padding);
-            var presets = (ToolStripMenuItem)menu.Items["CapturePresetMenu"]!;
+            var presets = (ToolStripMenuItem)menu.Command("CapturePresetMenu")!;
             ((ToolStripMenuItem)presets.DropDownItems[0]).PerformClick(); Equal(preset.Id, selected!.Id);
         });
         Run("設定フォーム内でプリセットを登録し保存コールバックに渡す", () =>

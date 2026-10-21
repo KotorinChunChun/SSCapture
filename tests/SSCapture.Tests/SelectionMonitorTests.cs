@@ -28,7 +28,7 @@ internal static partial class Program
                 OutputSettings: new AppSettings { SavedRegions = [region] }), snapshot, [], initialPointer: new(-100, 20), readPresetDisplays: () => displays);
             try
             {
-                var menu = (ToolStripMenuItem)session.SelectionMenu.Items["InputPresetMenu"]!;
+                var menu = (ToolStripMenuItem)session.SelectionMenu.Command("InputPresetMenu")!;
                 ((ToolStripMenuItem)menu.DropDownItems[0]).PerformClick();
                 Equal(CaptureMode.FixedRegion, session.Mode); Equal(region.Bounds, session.Selection);
                 Check(!session.Completion.IsCompleted, "プリセット選択で即撮影した");
@@ -207,7 +207,7 @@ internal static partial class Program
                     {
                         case "cancel": session.HandleCommandKey(Keys.Escape); break;
                         case "deactivate": session.ApplicationDeactivated(); break;
-                        case "settings": session.SelectionMenu.Items.OfType<ToolStripMenuItem>().Single(item => item.Text == "設定").PerformClick(); break;
+                        case "settings": session.SelectionMenu.AllCommands.Single(item => item.Text == "設定").PerformClick(); break;
                         default: session.CompleteSelection(new CaptureSelection(new Rectangle(start, new Size(20, 20)), null, OutputDestination.None)); break;
                     }
                     if (finish == "error") Check(session.Completion.IsFaulted, "画像取得失敗が通知されない");

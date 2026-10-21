@@ -16,6 +16,7 @@ internal static partial class Program
         if (args.Contains("--preparation-smoke")) return PreparationSmoke(args[1]);
         if (args.Contains("--context-smoke")) return ContextSmoke(args[1]);
         if (args.Contains("--upgrade-ui-preview")) return UpgradeUiPreview(args[1]);
+        if (args.Contains("--capture-menu-preview")) return CaptureMenuPreview(args[1]);
         if (args.Contains("--padding-ui-preview")) return PaddingUiPreview(args[1]);
         if (args.Contains("--selection-guide-preview")) return SelectionGuidePreview(args[1]);
         if (args.Contains("--overlay-placement-smoke")) return RunOverlayPlacementSmoke();
@@ -44,6 +45,7 @@ internal static partial class Program
         }
         Run("5つの撮影モード", () => Equal(5, Enum.GetValues<CaptureMode>().Length));
         CaptureTests();
+        CaptureMenuEditingTests();
         OverlayWindowTests();
         SelectionMonitorTests();
         ServiceTests();

@@ -39,7 +39,7 @@ internal static partial class Program
             {
                 session.ChangeApplication("b"); Equal("b", session.OutputSettings.SelectedImageEditorId);
                 Equal("a", settings.SelectedImageEditorId);
-                var menu = (ToolStripMenuItem)session.SelectionMenu.Items["ExternalApplicationMenu"]!;
+                var menu = (ToolStripMenuItem)session.SelectionMenu.Command("ExternalApplicationMenu")!;
                 Equal(1, menu.DropDownItems.OfType<ToolStripMenuItem>().Count(i => i.Checked));
                 session.ApplyPreset(new CapturePreset { Name = "Aへ", ImageEditorId = "a" }); Equal("a", session.OutputSettings.SelectedImageEditorId);
             }

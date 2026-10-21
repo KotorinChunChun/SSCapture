@@ -133,12 +133,12 @@ internal static partial class Program
                 new DesktopSnapshot(PatternBitmap(), bounds, [bounds]), []);
             try
             {
-                ToolStripMenuItem file = session.SelectionMenu.Items.OfType<ToolStripMenuItem>()
+                ToolStripMenuItem file = session.SelectionMenu.AllCommands
                     .Single(item => Equals(item.Tag, OutputDestination.File));
                 file.PerformClick();
                 Check(!session.Completion.IsCompleted, "送信先変更だけでは選択を終えない");
                 Equal(OutputDestination.Clipboard | OutputDestination.File, session.Destination);
-                Equal(2, session.SelectionMenu.Items.OfType<ToolStripMenuItem>().Count(item => item.Tag is OutputDestination && item.Checked));
+                Equal(2, session.SelectionMenu.AllCommands.Count(item => item.Tag is OutputDestination && item.Checked));
                 session.CompleteSelection(new CaptureSelection(bounds, null, session.Destination));
                 using CaptureOutcome result = session.Completion.GetAwaiter().GetResult();
                 Equal(OutputDestination.Clipboard | OutputDestination.File, result.Selection!.Destination);
@@ -156,7 +156,7 @@ internal static partial class Program
             Check(canceledResult.Image is null && canceledResult.Selection is null && !canceledResult.OpenSettings, "キャンセル結果");
             SessionController settings = new(new CaptureOptions(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.File),
                 new DesktopSnapshot(PatternBitmap(), bounds, [bounds]), []);
-            settings.SelectionMenu.Items.OfType<ToolStripMenuItem>().Single(item => item.Text == "設定").PerformClick();
+            settings.SelectionMenu.AllCommands.Single(item => item.Text == "設定").PerformClick();
             using CaptureOutcome settingsResult = settings.Completion.GetAwaiter().GetResult();
             Check(settingsResult.OpenSettings && settingsResult.Image is null && settingsResult.Selection is null, "設定は撮影せずに返す");
         });

@@ -88,12 +88,12 @@ internal static partial class Program
         Run("比率メニューの選択は同セッション内だけで次回自由へ戻る", () =>
         {
             using var menu = new CaptureContextMenu(OutputDestination.File, _ => { }, () => { }, () => { }, changeRatio: _ => { });
-            var item = (ToolStripMenuItem)menu.Items["AspectRatioMenu"]!;
+            var item = (ToolStripMenuItem)menu.Command("AspectRatioMenu")!;
             Equal(4, item.DropDownItems.Count);
             menu.SetRatio(CaptureAspectRatio.Wide);
             Check(((ToolStripMenuItem)item.DropDownItems[1]).Checked && !((ToolStripMenuItem)item.DropDownItems[0]).Checked, "比率チェック不一致");
             using var next = new CaptureContextMenu(OutputDestination.File, _ => { }, () => { }, () => { }, changeRatio: _ => { });
-            Check(((ToolStripMenuItem)((ToolStripMenuItem)next.Items["AspectRatioMenu"]!).DropDownItems[0]).Checked, "次回へ漏れた");
+            Check(((ToolStripMenuItem)((ToolStripMenuItem)next.Command("AspectRatioMenu")!).DropDownItems[0]).Checked, "次回へ漏れた");
         });
     }
 }

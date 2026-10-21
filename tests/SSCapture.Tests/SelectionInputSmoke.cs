@@ -37,7 +37,7 @@ internal static partial class Program
                 }
                 async Task MenuClick(CaptureOverlay overlay, ToolStripMenuItem item)
                 {
-                    var menu = overlay.SelectionMenu;
+                    var menu = RevealMenuCommand(overlay.SelectionMenu, item);
                     Point point = menu.PointToScreen(new(item.Bounds.Left + item.Bounds.Width / 2, item.Bounds.Top + item.Bounds.Height / 2));
                     input.Move(point); await Task.Delay(70);
                     NativeSmokeInput.RequireMenuTarget(overlay.Handle, menu.Handle, point);
@@ -105,7 +105,7 @@ internal static partial class Program
                         await Key(overlay, 0xA4, false); Equal(new Size(73, 57), session.Selection.Size);
                         await Key(overlay, 0x1B, true); await Key(overlay, 0x1B, false); input.LeftUp(); await Task.Delay(100);
                         await OpenSelectionMenu(overlay, bounds, input, ct);
-                        await MenuClick(overlay, (ToolStripMenuItem)overlay.SelectionMenu.Items["Grid20"]!);
+                        await MenuClick(overlay, (ToolStripMenuItem)overlay.SelectionMenu.Command("Grid20")!);
                         Check(session.Grid20, "メニュー20pxが反映されない");
                         await Down(overlay); await Move(overlay, 153, 137); input.LeftUp();
                     }, token);
@@ -116,8 +116,9 @@ internal static partial class Program
                     using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, ct) =>
                     {
                         await OpenSelectionMenu(overlay, bounds, input, ct);
-                        var root = (ToolStripMenuItem)overlay.SelectionMenu.Items["CaptureModeMenu"]!;
-                        Point rootPoint = overlay.SelectionMenu.PointToScreen(new(root.Bounds.Left + 30, root.Bounds.Top + root.Bounds.Height / 2));
+                        var root = (ToolStripMenuItem)overlay.SelectionMenu.Command("CaptureModeMenu")!;
+                        var rootOwner = RevealMenuCommand(overlay.SelectionMenu, root);
+                        Point rootPoint = rootOwner.PointToScreen(new(root.Bounds.Left + 30, root.Bounds.Top + root.Bounds.Height / 2));
                         input.Move(rootPoint); await Task.Delay(450);
                         if (!root.DropDown.Visible) root.ShowDropDown();
                         await Task.Delay(80);
@@ -150,7 +151,7 @@ internal static partial class Program
                     using var result = await CaptureSyntheticOutcome(CaptureMode.FixedRegion, bounds, input, async (overlay, ct) =>
                     {
                         await OpenSelectionMenu(overlay, bounds, input, ct);
-                        await MenuClick(overlay, (ToolStripMenuItem)overlay.SelectionMenu.Items["CaptureDesktop"]!);
+                        await MenuClick(overlay, (ToolStripMenuItem)overlay.SelectionMenu.Command("CaptureDesktop")!);
                     }, token, fixedSize: new(200, 120));
                     Equal(bounds, result.Selection!.Bounds);
                 });

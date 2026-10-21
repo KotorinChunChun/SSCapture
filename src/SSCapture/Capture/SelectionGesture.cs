@@ -5,7 +5,7 @@ internal sealed class SelectionGesture
 {
     private readonly CaptureMode mode;
     private IReadOnlyList<Rectangle> monitors;
-    private readonly IReadOnlyList<Rectangle> windows;
+    private IReadOnlyList<Rectangle> windows;
     private Rectangle? desktopBounds;
     private SelectionSnap snapEdges;
     internal Rectangle? WindowLimit { get; set; }
@@ -137,6 +137,19 @@ internal sealed class SelectionGesture
         Move(pointer);
         anchorOffset = new Size(pointer.X - bounds.X, pointer.Y - bounds.Y);
         PositionFixed(pointer);
+    }
+
+    internal void UpdateTargets(IReadOnlyList<Rectangle> monitors, IReadOnlyList<Rectangle> windows, Rectangle? limit)
+    {
+        this.windows = windows.ToArray(); ExpandMonitors(monitors); WindowLimit = limit;
+    }
+    internal void ChangeAnchor(CaptureAnchor anchor)
+    {
+        if (!Enum.IsDefined(anchor)) throw new ArgumentOutOfRangeException(nameof(anchor));
+        FixedAnchor = anchor;
+        anchorOffset = new Size(anchor is CaptureAnchor.TopRight or CaptureAnchor.BottomRight ? fixedDimensions.Width : 0,
+            anchor is CaptureAnchor.BottomLeft or CaptureAnchor.BottomRight ? fixedDimensions.Height : 0);
+        if (mode == CaptureMode.FixedRegion) PositionFixed(RawCurrent);
     }
 
     internal bool Space()

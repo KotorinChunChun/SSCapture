@@ -136,12 +136,12 @@ internal static partial class Program
             var session = MonitorSession(true);
             try
             {
-                var modeMenu = (ToolStripMenuItem)session.SelectionMenu.Items["CaptureModeMenu"]!;
+                var modeMenu = (ToolStripMenuItem)session.SelectionMenu.Command("CaptureModeMenu")!;
                 Equal(5, modeMenu.DropDownItems.Count);
                 ((ToolStripMenuItem)modeMenu.DropDownItems.Cast<ToolStripMenuItem>().Single(i => (CaptureMode)i.Tag! == CaptureMode.Window)).PerformClick();
                 Equal(CaptureMode.Window, session.Mode);
                 session.MoveTo(new(-100, 20)); Equal(SelectionTestMonitors[0], session.Selection);
-                var grid = (ToolStripMenuItem)session.SelectionMenu.Items["Grid20"]!;
+                var grid = (ToolStripMenuItem)session.SelectionMenu.Command("Grid20")!;
                 grid.PerformClick(); Check(session.Grid20 && grid.Checked, "20pxが有効にならない");
                 session.ChangeMode(CaptureMode.FixedRegion);
                 Check(session.Grid20, "モード変更で20px設定が失われた");
@@ -157,7 +157,7 @@ internal static partial class Program
             bool internalFocus = true;
             using var menu = new CaptureContextMenu(OutputDestination.Clipboard, _ => { }, () => { }, () => { },
                 changeMode: _ => { }, ownsPopupFocus: () => internalFocus);
-            var child = ((ToolStripMenuItem)menu.Items["CaptureModeMenu"]!).DropDown;
+            var child = ((ToolStripMenuItem)menu.Command("CaptureModeMenu")!).DropDown;
             bool Closing(ToolStripDropDownCloseReason reason)
             {
                 var args = new ToolStripDropDownClosingEventArgs(reason);

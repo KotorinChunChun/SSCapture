@@ -175,13 +175,14 @@ internal static partial class Program
                             NativeSmokeInput.RequireTarget(overlay.Handle, point);
                             await OpenSelectionMenu(overlay, bounds, input, token);
                             CaptureContextMenu menu = overlay.SelectionMenu;
-                            ToolStripMenuItem file = menu.Items.OfType<ToolStripMenuItem>()
+                            ToolStripMenuItem file = menu.AllCommands
                                 .Single(item => Equals(item.Tag, OutputDestination.File));
-                            Point itemPoint = menu.PointToScreen(new Point(file.Bounds.Left + file.Bounds.Width / 2,
+                            var popup = RevealMenuCommand(menu, file);
+                            Point itemPoint = popup.PointToScreen(new Point(file.Bounds.Left + file.Bounds.Width / 2,
                                 file.Bounds.Top + file.Bounds.Height / 2));
                             input.Move(itemPoint);
                             await Task.Delay(60, token);
-                            NativeSmokeInput.RequireMenuTarget(overlay.Handle, menu.Handle, itemPoint);
+                            NativeSmokeInput.RequireMenuTarget(overlay.Handle, popup.Handle, itemPoint);
                             input.LeftDown();
                             await Task.Delay(60, token);
                             input.LeftUp();
@@ -314,13 +315,14 @@ internal static partial class Program
                         {
                             await OpenSelectionMenu(overlay, bounds, input, token);
                             CaptureContextMenu selectionMenu = overlay.SelectionMenu;
-                            ToolStripMenuItem file = selectionMenu.Items.OfType<ToolStripMenuItem>()
+                            ToolStripMenuItem file = selectionMenu.AllCommands
                                 .Single(item => Equals(item.Tag, OutputDestination.File));
-                            Point itemPoint = selectionMenu.PointToScreen(new Point(file.Bounds.Left + file.Bounds.Width / 2,
+                            var popup = RevealMenuCommand(selectionMenu, file);
+                            Point itemPoint = popup.PointToScreen(new Point(file.Bounds.Left + file.Bounds.Width / 2,
                                 file.Bounds.Top + file.Bounds.Height / 2));
                             input.Move(itemPoint);
                             await Task.Delay(60, token);
-                            NativeSmokeInput.RequireMenuTarget(overlay.Handle, selectionMenu.Handle, itemPoint);
+                            NativeSmokeInput.RequireMenuTarget(overlay.Handle, popup.Handle, itemPoint);
                             input.LeftDown();
                             await Task.Delay(60, token);
                             input.LeftUp();
