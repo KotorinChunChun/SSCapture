@@ -8,6 +8,20 @@ internal static partial class Program
 {
     private static void NotificationUpgradeTests()
     {
+        Run("通知用画像は履歴OFF・Clipboardのみでも余白と減色済み", () => WithServiceDirectory(directory => RunOutputTask(async () =>
+        {
+            CaptureDelivery? delivery = null; int history = 0;
+            using var image = new Bitmap(20, 10);
+            using var router = new OutputRouter(directory, copyImage: _ => Task.CompletedTask,
+                captured: (_, _, _) => history++, delivered: d => delivery = d);
+            await router.ScreenshotAsync(image, OutputDestination.Clipboard, new AppSettings
+            { KeepHistory = false, ScreenshotPaddingPixels = 2, ScreenshotColorDepth = ScreenshotColorDepth.Indexed8,
+                NotificationClickAction = NotificationClickAction.ExternalApplication });
+            Equal(0, history); Check(delivery?.NotificationPath is not null, "通知用ファイルがない");
+            using var output = new Bitmap(delivery!.NotificationPath!);
+            Equal(new Size(24, 14), output.Size);
+            byte[] png = File.ReadAllBytes(delivery.NotificationPath!); Equal((byte)8, png[24]); Equal((byte)3, png[25]);
+        })));
         Run("通知は期限と同時に近接しても保持し離脱後1秒待つ", () =>
         {
             var lifetime = new NotificationLifetime(0, 1000);
@@ -18,15 +32,40 @@ internal static partial class Program
             Check(!lifetime.Expired(50_999, Point.Empty, bounds, 96), "離脱猶予が短い");
             Check(lifetime.Expired(51_000, Point.Empty, bounds, 96), "期限に消えない");
         });
-        Run("通知の接近幅はDPIに追従し残時間を保持する", () =>
+        Run("通知の接近幅はDPIに追従し満額を保持する", () =>
         {
             var life = new NotificationLifetime(0, 5000); var bounds = new Rectangle(100, 100, 400, 100);
             Check(!life.Expired(500, new(40, 120), bounds, 192) && life.Held, "64pxで保持しない");
             Check(!life.Expired(20_000, new(10, 120), bounds, 192) && life.Held, "96pxで保持しない");
             Check(!life.Expired(20_000, new(0, 120), bounds, 192), "離脱時に残時間を失う");
-            Check(!life.Expired(24_499, Point.Empty, bounds, 192), "残時間が縮んだ");
-            Check(life.Expired(24_500, Point.Empty, bounds, 192), "残時間が復帰しない");
+            Check(!life.Expired(24_999, Point.Empty, bounds, 192), "残時間が縮んだ");
+            Check(life.Expired(25_000, Point.Empty, bounds, 192), "満額の期限に消えない");
         });
+        Run("遠くからの接近も満額保持しOFFは延長しない", () =>
+        {
+            var bounds = new Rectangle(1000, 1000, 400, 100);
+            var life = new NotificationLifetime(0, 5000);
+            Check(!life.Expired(100, Point.Empty, bounds, 96), "初回で消えた");
+            Check(!life.Expired(4900, new(100, 100), bounds, 96) && life.Held, "接近を検出しない");
+            Check(!life.Expired(8000, new(100, 100), bounds, 96), "満額を維持しない");
+            Check(life.Expired(13000, new(100, 100), bounds, 96), "静止後も延長する");
+            var off = new NotificationLifetime(0, 1000, false);
+            Check(off.Expired(1000, bounds.Location, bounds, 96), "OFFで延長した");
+        });
+        Run("通知クリックは出力用とは別の登録アプリを一度だけ開く", () => WithServiceDirectory(directory =>
+        {
+            string path = Path.Combine(directory, "image.png"); File.WriteAllText(path, "fixture");
+            var toast = new FakeCaptureToast(); var launched = new List<System.Diagnostics.ProcessStartInfo>();
+            using var feedback = new CaptureFeedback(createToast: () => toast, sound: new FakeCompletionSound(), timer: new FakeFeedbackTimer(), launch: launched.Add);
+            var app = new ExternalApplication { Id = "notify", Name = "通知用", Executable = Environment.ProcessPath! };
+            var settings = new AppSettings { ImageEditors = [app], NotificationApplicationId = app.Id,
+                NotificationClickAction = NotificationClickAction.ExternalApplication };
+            feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, NotificationPath: path), settings);
+            Action click = toast.Activate!; click(); click();
+            Equal(1, launched.Count); Check(launched[0].ArgumentList.Contains(path), "通知画像を渡さない");
+            feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.File, OutputDestination.None, SavedPath: path), settings with { NotificationClickAction = NotificationClickAction.None });
+            Check(toast.Activate is null, "何もしないにクリック動作が残る");
+        }));
         Run("通知タイマーは近接中だけ延長し撮影前には必ず止まる", () =>
         {
             long now = 0; Point pointer = new(80, 100);

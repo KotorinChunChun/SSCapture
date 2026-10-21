@@ -3,6 +3,7 @@ using SSCapture.UI;
 namespace SSCapture.Services;
 
 internal enum NotificationCorner { BottomRight, BottomLeft }
+internal enum NotificationClickAction { None, OpenFolder, ExternalApplication }
 
 internal interface ICaptureToast : IDisposable
 {
@@ -34,6 +35,7 @@ internal sealed class CaptureFeedback : IDisposable
     private readonly IFeedbackTimer timer;
     private readonly Action<string>? warning;
     private readonly Action<string> openSavedFile;
+    private readonly Action<System.Diagnostics.ProcessStartInfo> launch;
     private int notificationSerial;
     private ICaptureToast? toast;
     private volatile bool disposed;
@@ -44,13 +46,14 @@ internal sealed class CaptureFeedback : IDisposable
 
     internal CaptureFeedback(Action<string>? warning = null, Func<ICaptureToast>? createToast = null,
         ICompletionSound? sound = null, IFeedbackTimer? timer = null, Action<string>? openSavedFile = null,
-        Func<long>? now = null, Func<Point>? pointer = null)
+        Func<long>? now = null, Func<Point>? pointer = null, Action<System.Diagnostics.ProcessStartInfo>? launch = null)
     {
         this.warning = warning;
         this.createToast = createToast ?? (() => new CaptureToastForm());
         this.sound = sound ?? new CompletionSound(warning: Warn);
         this.timer = timer ?? new FeedbackTimer();
         this.openSavedFile = openSavedFile ?? (path => ExplorerSelection.Open(path));
+        this.launch = launch ?? (info => { using var process = System.Diagnostics.Process.Start(info); });
         this.now = now ?? (() => Environment.TickCount64);
         this.pointer = pointer ?? Capture.CaptureNative.CursorPosition;
         this.timer.Elapsed += PollLifetime;
@@ -70,8 +73,13 @@ internal sealed class CaptureFeedback : IDisposable
         try
         {
             int serial = ++notificationSerial;
-            Action? activate = result.Completed.HasFlag(OutputDestination.File) && result.SavedPath is string path
-                ? () => OpenSavedFile(serial, path) : null;
+            Action? activate = settings.NotificationClickAction switch
+            {
+                NotificationClickAction.OpenFolder when result.Completed.HasFlag(OutputDestination.File) && result.SavedPath is string path
+                    => () => OpenSavedFile(serial, path),
+                NotificationClickAction.ExternalApplication => () => OpenApplication(serial, result, settings),
+                _ => null
+            };
             toast ??= createToast();
             if (!toast.TryShow(result.Message, result.HasFailure, settings.NotificationCorner, out string? error,
                 activate, settings.NotificationDisplay, result.CaptureBounds))
@@ -81,7 +89,7 @@ internal sealed class CaptureFeedback : IDisposable
                 return;
             }
             int duration = checked(settings.NotificationDurationSeconds * 1000);
-            lifetime = new NotificationLifetime(this.now(), duration);
+            lifetime = new NotificationLifetime(this.now(), duration, settings.HoldNotificationWhileApproaching);
             timer.Restart(toast.DisplayBounds.IsEmpty ? duration : 50);
         }
         catch (Exception ex)
@@ -117,6 +125,21 @@ internal sealed class CaptureFeedback : IDisposable
         HideForCapture();
         try { openSavedFile(path); }
         catch (Exception ex) { Warn("保存ファイルをExplorerで表示できません: " + ex.Message); }
+    }
+
+    private void OpenApplication(int serial, CaptureDelivery result, AppSettings settings)
+    {
+        if (disposed || serial != notificationSerial) return;
+        HideForCapture();
+        try
+        {
+            var app = settings.ImageEditors.Concat(settings.VideoEditors).FirstOrDefault(a => a.Id == settings.NotificationApplicationId)
+                ?? throw new InvalidOperationException("通知で開く外部アプリが登録されていません。");
+            string path = result.SavedPath ?? result.NotificationPath ?? throw new IOException("通知から開く画像・動画を準備できませんでした。");
+            if (!File.Exists(path)) throw new FileNotFoundException("通知のファイルが見つかりません。", path);
+            launch(OutputRouter.EditorStartInfo(app.Executable, path, app.Arguments));
+        }
+        catch (Exception ex) { Warn("通知から外部アプリを開けません: " + ex.Message); }
     }
 
     private void Warn(string text)

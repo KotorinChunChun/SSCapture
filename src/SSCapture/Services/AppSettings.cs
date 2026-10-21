@@ -27,6 +27,9 @@ internal sealed record AppSettings
     public bool KeepHistory { get; init; } = true;
     public NotificationDisplay NotificationDisplay { get; init; } = Services.NotificationDisplay.Captured;
     public int NotificationDurationSeconds { get; init; } = 1;
+    public bool HoldNotificationWhileApproaching { get; init; } = true;
+    public NotificationClickAction NotificationClickAction { get; init; } = Services.NotificationClickAction.OpenFolder;
+    public string NotificationApplicationId { get; init; } = "";
     [System.Text.Json.Serialization.JsonIgnore]
     public bool ShowCaptureNotification => NotificationDurationSeconds > 0;
     public bool PlayCaptureSound { get; init; } = true;
@@ -73,6 +76,10 @@ internal sealed record AppSettings
     {
         ExternalApplication.ValidateList(ImageEditors, SelectedImageEditorId);
         ExternalApplication.ValidateList(VideoEditors, SelectedVideoEditorId);
+        if (!Enum.IsDefined(NotificationClickAction)) throw new ArgumentException("通知クリックの動作が正しくありません。");
+        ExternalApplication.ValidateReference(ImageEditors.Concat(VideoEditors).ToArray(), NotificationApplicationId);
+        if (NotificationClickAction == Services.NotificationClickAction.ExternalApplication && string.IsNullOrEmpty(NotificationApplicationId))
+            throw new ArgumentException("通知で開く外部アプリを選択してください。");
         if (!Enum.IsDefined(MetadataMode)) throw new ArgumentException("撮影情報の保存形式が正しくありません。");
         if (CapturePresets is null || CapturePresets.Length > 50 || CapturePresets.Any(p => p is null))
             throw new ArgumentException("プリセットは50件以内で指定してください。");
