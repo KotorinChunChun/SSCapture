@@ -32,6 +32,13 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         }
     }
     internal ToolStripMenuItem Command(string name) => AllCommands.Single(i => i.Name == name);
+    internal void CloseForCapture()
+    {
+        // ToolStripControlHostから閉じた場合も、独立した子ポップアップを画面へ残さない。
+        foreach (var command in AllCommands.Reverse().Where(i => i.HasDropDownItems && i.DropDown.Visible).ToArray())
+            command.DropDown.Close(ToolStripDropDownCloseReason.ItemClicked);
+        Close(ToolStripDropDownCloseReason.ItemClicked);
+    }
 
     internal CaptureContextMenu(OutputDestination selected, Action<OutputDestination> changeDestination,
         Action openSettings, Action cancel, CaptureMode mode = CaptureMode.Rectangle, bool grid20 = false,

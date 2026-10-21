@@ -11,22 +11,40 @@ internal static partial class Program
     {
         directory = Path.GetFullPath(directory); Directory.CreateDirectory(directory);
         Rectangle work = Screen.PrimaryScreen!.WorkingArea;
-        using var host = new Form { Text = WindowTitle.Create("撮影メニュー最終確認"), StartPosition = FormStartPosition.Manual,
+        using var host = new CaptureMenuPreviewHost { Text = WindowTitle.Create("撮影メニュー最終確認"), StartPosition = FormStartPosition.Manual,
             Bounds = new(work.X + work.Width / 2, work.Y, work.Width - work.Width / 2, work.Height), Font = new Font("Yu Gothic UI", 12) };
         var status = new Label { Dock = DockStyle.Fill, Padding = new(20), Text = "開始後、右クリックで3分類を確認。画面固定・カーソルの切替で合成背景が変わります。固定寸法を入力しEnterで確定してください。" };
         var button = SettingsForm.MakeButton("メニュー確認を開始", "StartMenuPreview"); button.Dock = DockStyle.Top; button.Height = 56;
         host.Controls.Add(status); host.Controls.Add(button);
         SessionController? session = null; int acquired = 0;
+        host.KeyPreview = true;
+        using var repaint = new System.Windows.Forms.Timer { Interval = 100 };
+        repaint.Tick += (_, _) => { if (session is not null) host.Invalidate(); };
+        repaint.Start();
+        host.Paint += (_, e) =>
+        {
+            if (session is null || session.Completion.IsCompleted) return;
+            e.Graphics.DrawImageUnscaled(session.Snapshot.Image, 0, 0);
+            var rect = session.Selection; rect.Offset(-session.Snapshot.Bounds.X, -session.Snapshot.Bounds.Y);
+            e.Graphics.DrawRectangle(Pens.DeepSkyBlue, rect);
+        };
+        host.MouseDown += (_, e) =>
+        {
+            if (session is null) return;
+            if (e.Button == MouseButtons.Right) session.SelectionMenu.Show(host, e.Location);
+        };
+        host.CommandKey = key => session?.HandleCommandKey(key) == true;
         button.Click += async (_, _) =>
         {
             button.Enabled = false;
+            button.Visible = status.Visible = false;
             try
             {
                 Rectangle bounds = host.RectangleToScreen(host.ClientRectangle);
                 DesktopSnapshot Frame(bool cursor, bool observe)
                 {
                     bool hidden = Application.OpenForms.OfType<CaptureOverlay>().All(f => !f.Visible);
-                    if (!hidden) throw new InvalidOperationException("再取得前に選択画面が隠れていません。");
+                    if (!hidden || session?.SelectionMenu.Visible == true) throw new InvalidOperationException("再取得前に選択UIが隠れていません。");
                     acquired++;
                     var image = new Bitmap(bounds.Width, bounds.Height);
                     using (var g = Graphics.FromImage(image))
@@ -41,7 +59,10 @@ internal static partial class Program
                 session = new(new(CaptureMode.FixedRegion, CaptureIntent.Screenshot, OutputDestination.File, FixedSize: new(320, 180),
                     ShowSelectionGuide: false, OutputSettings: new AppSettings()), Frame(false, false), [],
                     initialPointer: new(bounds.X + 420, bounds.Y + 300), recapture: Frame);
-                session.Start();
+                // 多段メニュー自体を通常ウィンドウへ所有させる。選択オーバーレイへの
+                // 自動前面化は操作ツールでは対象を取り違えるため、画素・枠はホストへ描画する。
+                session.MoveTo(new(bounds.X + 420, bounds.Y + 300));
+                host.Invalidate();
                 using var outcome = await session.Completion;
                 if (outcome.Image is null) { status.Text = "キャンセルしました。再開できます。"; Log("cancelled"); }
                 else
@@ -53,11 +74,17 @@ internal static partial class Program
                 }
             }
             catch (Exception ex) { status.Text = ex.ToString(); Log("failed", ex.ToString()); }
-            finally { session?.Cancel(); session = null; button.Enabled = true; host.Activate(); }
+            finally { session?.Cancel(); session = null; button.Enabled = true; button.Visible = status.Visible = true; host.Invalidate(); host.Activate(); }
         };
         host.FormClosed += (_, _) => session?.Cancel();
         Application.Run(host); return 0;
         void Log(string action, object? data = null) => File.AppendAllText(Path.Combine(directory, "operations.jsonl"),
             JsonSerializer.Serialize(new { at = DateTimeOffset.Now, action, data }) + Environment.NewLine);
+    }
+    private sealed class CaptureMenuPreviewHost : Form
+    {
+        internal Func<Keys, bool>? CommandKey;
+        internal CaptureMenuPreviewHost() { DoubleBuffered = true; }
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData) => CommandKey?.Invoke(keyData) == true || base.ProcessCmdKey(ref msg, keyData);
     }
 }

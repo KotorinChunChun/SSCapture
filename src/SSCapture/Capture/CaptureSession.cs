@@ -201,7 +201,7 @@ internal sealed class SessionController
         Point pointer = lastPointerPosition ?? initialPointer;
         if (wasFixed) gesture.PlaceFixed(new Rectangle(previous.Location, size), pointer); else gesture.Move(pointer);
         SelectionMenu.SetMode(Mode); UpdateMenu(); ReplaceGuide(); RefreshOverlays();
-        if (SelectionMenu.Visible) SelectionMenu.Close(ToolStripDropDownCloseReason.ItemClicked);
+        SelectionMenu.CloseForCapture();
     }
     internal void ChangeMonitorLimit(bool enabled)
     {
@@ -250,7 +250,7 @@ internal sealed class SessionController
         try
         {
             snapTimer?.Stop();
-            UI.CaptureUiPreparation.Prepare(overlays.Cast<Form?>().Append(guide), () => SelectionMenu.Close(ToolStripDropDownCloseReason.ItemClicked));
+            UI.CaptureUiPreparation.Prepare(overlays.Cast<Form?>().Append(guide), SelectionMenu.CloseForCapture);
             replacement = TakeFrame(next);
             if (replacement.Bounds != Snapshot.Bounds || !replacement.Monitors.OrderBy(m => m.X).ThenBy(m => m.Y).SequenceEqual(Snapshot.Monitors.OrderBy(m => m.X).ThenBy(m => m.Y)))
                 throw new IOException("画面構成が変わりました。撮影を開始し直してください。");
@@ -271,13 +271,7 @@ internal sealed class SessionController
             {
                 menuOpen = menuTransition = false;
                 // サブメニュー内で移動したポインタを新しい追従基準にし、固定枠を飛ばさない。
-                if (!starting && Mode == CaptureMode.FixedRegion)
-                {
-                    Point pointer = CaptureNative.CursorPosition();
-                    if (selectionBounds is Rectangle limit)
-                        pointer = new(Math.Clamp(pointer.X, limit.Left, limit.Right - 1), Math.Clamp(pointer.Y, limit.Top, limit.Bottom - 1));
-                    gesture.PlaceFixed(gesture.Selection, pointer); lastPointerPosition = pointer;
-                }
+                RebaseFixedPointer();
                 foreach (var overlay in overlays.Where(o => !o.IsDisposed && SelectionMonitors.Contains(o.MonitorBounds))) overlay.Show();
                 var owner = overlays.FirstOrDefault(o => o.Visible && o.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays.FirstOrDefault(o => o.Visible);
                 owner?.Activate(); owner?.Focus();
@@ -303,8 +297,9 @@ internal sealed class SessionController
             ReleasePointer();
             cursorConfinement?.Dispose(); cursorConfinement = null;
             Rectangle containing = Snapshot.Monitors.FirstOrDefault(m => m.Contains(bounds));
-            selectionBounds = options.LimitToStartingMonitor && !containing.IsEmpty ? containing : null;
+            selectionBounds = OutputSettings.LimitToStartingMonitor && !containing.IsEmpty ? containing : null;
             SelectionMonitors = selectionBounds is Rectangle limited ? [limited] : Snapshot.Monitors;
+            OutputSettings = OutputSettings with { LimitToStartingMonitor = selectionBounds is not null };
             // 元のドラッグは右クリック時点で終了済み。プリセットは新しい固定枠として呼び出す。
             Mode = CaptureMode.FixedRegion; activeFixedSize = bounds.Size;
             gesture = CreateGesture(Mode, grid);
@@ -389,7 +384,7 @@ internal sealed class SessionController
             gesture = CreateGesture(mode, grid20);
             SelectionMenu.SetMode(mode);
             SelectionMenu.SetRatio(AspectRatio);
-            if (SelectionMenu.Visible) SelectionMenu.Close(ToolStripDropDownCloseReason.ItemClicked);
+            SelectionMenu.CloseForCapture();
             if (mode == CaptureMode.FullScreen)
             {
                 CompleteSelection(new CaptureSelection(selectionBounds ?? Snapshot.Bounds, null, Destination));
@@ -665,7 +660,7 @@ internal sealed class SessionController
     private void MenuClosed(object? sender, ToolStripDropDownClosedEventArgs e)
     {
         menuOpen = false;
-        if (completed || refreshing) return;
+        if (completed || refreshing || starting) return;
         menuTransition = true;
         // Popup activation can transiently clear GetForegroundWindow. Check focus
         // after the closing input message instead of treating that transition as exit.
@@ -684,6 +679,7 @@ internal sealed class SessionController
             menuTransition = false;
             owner.Activate();
             owner.Focus();
+            RebaseFixedPointer();
             Move();
         }));
     }
@@ -704,6 +700,15 @@ internal sealed class SessionController
     internal void ApplicationDeactivated()
     {
         if (!starting && !refreshing && !menuOpen && !menuTransition) Cancel();
+    }
+
+    private void RebaseFixedPointer()
+    {
+        if (starting || Mode != CaptureMode.FixedRegion) return;
+        Point pointer = CaptureNative.CursorPosition();
+        if (selectionBounds is Rectangle limit)
+            pointer = new(Math.Clamp(pointer.X, limit.Left, limit.Right - 1), Math.Clamp(pointer.Y, limit.Top, limit.Bottom - 1));
+        gesture.PlaceFixed(gesture.Selection, pointer); lastPointerPosition = pointer;
     }
 
     internal void Cancel() => FinishCommand(false);

@@ -104,6 +104,20 @@ internal static partial class Program
             width.Value = 321; height.Value = 123; Click(); Equal(new Size(321, 123), applied!.Value);
             width.Value = height.Value = 32768; Click(); Equal(new Size(321, 123), applied!.Value);
         });
+        Run("固定寸法の適用は親子ポップアップをすべて閉じて選択を続行", () =>
+        {
+            var session = MenuSession(); using var host = new Form { ShowInTaskbar = false };
+            try
+            {
+                host.Show(); session.SelectionMenu.Show(host, new Point(20, 20));
+                session.SelectionMenu.Command("CaptureRangeGroup").ShowDropDown();
+                session.SelectionMenu.Command("FixedSizeMenu").ShowDropDown();
+                session.ChangeFixedSize(new(321, 123));
+                Check(!session.Completion.IsCompleted, "未開始の確認セッションをキャンセルした");
+                Check(!session.SelectionMenu.Visible && session.SelectionMenu.AllCommands.All(i => !i.HasDropDownItems || !i.DropDown.Visible), "子ポップアップが残る");
+            }
+            finally { session.Cancel(); }
+        });
         Run("画面固定とカーソルは両方向で再取得し固定枠を保持", () =>
         {
             var calls = new List<(bool, bool)>();
@@ -189,6 +203,21 @@ internal static partial class Program
                 Equal(SelectionTestMonitors[1], session.SelectionMonitors.Single());
                 session.UpdateMonitorRestriction(new(-20, 30), true);
                 Check(!session.SelectionMenu.Command("LimitToStartingMonitor").Checked, "CtrlShift解除が表示されない");
+            }
+            finally { session.Cancel(); }
+        });
+        Run("入力プリセットも今回解除したモニタ制限を再有効化しない", () =>
+        {
+            var displays = SelectionTestMonitors.Select((m, i) => new DisplayLayout("m" + i, "画面" + i, m, 96, 96)).ToArray();
+            var desktop = SelectionTestMonitors.Aggregate(Rectangle.Union);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Recording, OutputDestination.None),
+                new(new Bitmap(desktop.Width, desktop.Height), desktop, SelectionTestMonitors), [], initialPointer: new(-100, 20), readPresetDisplays: () => displays);
+            try
+            {
+                session.ChangeMonitorLimit(false);
+                session.ApplyInputPreset(RegionCoordinates.FromBounds("右の枠", new(20, 20, 100, 80), displays));
+                Equal(2, session.SelectionMonitors.Count);
+                Check(!session.SelectionMenu.Command("LimitToStartingMonitor").Checked, "入力プリセットが制限を復活させた");
             }
             finally { session.Cancel(); }
         });
