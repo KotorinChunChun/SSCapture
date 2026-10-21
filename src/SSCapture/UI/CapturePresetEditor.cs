@@ -12,11 +12,13 @@ internal sealed class CapturePresetEditor : UserControl
     private readonly ComboBox metadataMode;
     private readonly Label status;
     private readonly Func<AppSettings> readSettings;
+    private readonly AppSettings initialSettings;
     internal CapturePreset[] Presets => list.Items.Cast<CapturePreset>().ToArray();
 
     internal CapturePresetEditor(AppSettings initial, Func<AppSettings> readSettings)
     {
         this.readSettings = readSettings;
+        initialSettings = initial;
         Name = "CapturePresetEditor"; Dock = DockStyle.Fill;
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Margin = Padding.Empty };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -74,9 +76,9 @@ internal sealed class CapturePresetEditor : UserControl
 
     private void Fill(CapturePreset preset)
     {
-        var current = IsHandleCreated ? readSettings() : null;
-        RefreshApps(imageApp, current?.ImageEditors ?? [], preset.ImageEditorId);
-        RefreshApps(videoApp, current?.VideoEditors ?? [], preset.VideoEditorId);
+        var current = IsHandleCreated ? readSettings() : initialSettings;
+        RefreshApps(imageApp, current.ImageEditors, preset.ImageEditorId);
+        RefreshApps(videoApp, current.VideoEditors, preset.VideoEditorId);
         presetName.Text = preset.Name; directory.Text = preset.SaveDirectory; pattern.Text = preset.FileNamePattern;
         padding.Value = preset.PaddingPixels;
         metadataMode.SelectedIndex = (int)preset.MetadataMode;

@@ -23,16 +23,25 @@ internal static class CaptureContextWorker
                 try
                 {
                     var automation = (IAutomation)instance;
+                    SetProviderTimeouts(instance);
                     Console.WriteLine("ready");
                     string? line;
                     while ((line = Console.ReadLine()) is not null && line.Length < 1024)
                     {
-                        PixelPoint point = JsonSerializer.Deserialize<PixelPoint>(line)!;
+                        ContextRequest request = JsonSerializer.Deserialize<ContextRequest>(line)!;
+                        PixelPoint point = request.Point;
                         DateTimeOffset observed = DateTimeOffset.Now;
+                        nint before = GetForegroundWindow(); GetWindowThreadProcessId(before, out uint beforePid);
                         ElementMetadata focused = ReadElement(() => automation.Focused());
+                        if (focused.ProcessId == request.ParentProcessId || beforePid == request.ParentProcessId) focused = new("unavailable", "captureApplicationFocused", ObservedAt: observed);
                         ElementMetadata under = ReadElement(() => automation.FromPoint(new NativePoint(point.X, point.Y)));
-                        var context = new CaptureContext(observed, focused, under, ReadApplication(GetForegroundWindow()),
-                            ReadApplication(GetAncestor(WindowFromPoint(new NativePoint(point.X, point.Y)), 2)));
+                        nint after = GetForegroundWindow(); GetWindowThreadProcessId(after, out uint afterPid);
+                        bool changed = before != after || beforePid != afterPid;
+                        if (changed) focused = focused with { Status = "partial", Reason = "foregroundChangedDuringObservation" };
+                        var foreground = ReadApplication(before);
+                        if (changed) foreground = foreground with { Status = "partial", Reason = "foregroundChangedDuringObservation" };
+                        var context = new CaptureContext(observed, focused with { ObservedAt = observed }, under with { ObservedAt = DateTimeOffset.Now }, foreground,
+                            ReadApplication(GetAncestor(WindowFromPoint(new NativePoint(point.X, point.Y)), 2)), ForegroundChanged: changed, CompletedAt: DateTimeOffset.Now);
                         Console.WriteLine(JsonSerializer.Serialize(context, new JsonSerializerOptions(CaptureMetadata.JsonOptions) { WriteIndented = false }));
                     }
                     result = 0;
@@ -53,6 +62,7 @@ internal static class CaptureContextWorker
             object? Value(int id) => element.Property(id);
             string? Text(int id) => Value(id) as string is { } text ? text[..Math.Min(text.Length, 2048)] : null;
             bool password = Value(30019) is not false; // 不明な場合もNameを読まない。
+            if (password) return new("partial", "passwordOrUnknownNameExcluded", ControlType: Value(30003) as int?);
             PixelBounds? bounds = Value(30001) is double[] { Length: 4 } r && r.All(double.IsFinite)
                 ? new((int)r[0], (int)r[1], (int)r[2], (int)r[3]) : null;
             return new("ok", AutomationId: Text(30011), ControlType: Value(30003) as int?, Name: password ? null : Text(30005),
@@ -61,6 +71,22 @@ internal static class CaptureContextWorker
         catch (COMException e) { return new(e.HResult == unchecked((int)0x80070005) ? "accessDenied" : "unavailable", $"HRESULT:0x{e.HResult:X8}"); }
         finally { if (element is not null) Marshal.FinalReleaseComObject(element); }
     }
+
+    private static void SetProviderTimeouts(object instance)
+    {
+        nint unknown = Marshal.GetIUnknownForObject(instance), automation2 = 0;
+        try
+        {
+            Guid id = new("34723aff-0c9d-49d0-9896-7ab52df8cd8a");
+            Marshal.ThrowExceptionForHR(Marshal.QueryInterface(unknown, in id, out automation2));
+            nint table = Marshal.ReadIntPtr(automation2);
+            // SDK: IUIAutomationはIUnknown込み58スロット、IUIAutomation2のput_ConnectionTimeout=61/put_TransactionTimeout=63。
+            foreach (int slot in new[] { 61, 63 })
+                Marshal.ThrowExceptionForHR(Marshal.GetDelegateForFunctionPointer<PutTimeout>(Marshal.ReadIntPtr(table, slot * nint.Size))(automation2, 200));
+        }
+        finally { if (automation2 != 0) Marshal.Release(automation2); Marshal.Release(unknown); }
+    }
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int PutTimeout(nint self, uint milliseconds);
 
     internal static ApplicationMetadata ReadApplication(nint window)
     {
@@ -102,7 +128,9 @@ internal static class CaptureContextWorker
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetWindowRect(nint window, out NativeRect rect);
 }
 
-internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory = null) : IDisposable
+internal sealed record ContextRequest(PixelPoint Point, int ParentProcessId);
+
+internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory = null, int? originatingProcessId = null) : IDisposable
 {
     private Process? process;
     private readonly SemaphoreSlim gate = new(1);
@@ -114,7 +142,8 @@ internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory 
         if (!await gate.WaitAsync(0)) return CaptureContextWorker.Unavailable("workerBusy");
         try
         {
-            using var timeout = new CancellationTokenSource(timeoutMilliseconds);
+            // 初回はCLR/COM起動分を含む500ms、継続時は250ms。プロバイダー単体は200ms。
+            using var timeout = new CancellationTokenSource(timeoutMilliseconds == 250 && (process is null || process.HasExited) ? 500 : timeoutMilliseconds);
             if (process is null || process.HasExited)
             {
                 DisposeProcess();
@@ -127,7 +156,7 @@ internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory 
                 _ = process.StandardError.BaseStream.CopyToAsync(Stream.Null);
                 if (await ReadBoundedAsync(process.StandardOutput, 64, timeout.Token) != "ready") throw new IOException("UIA workerが応答しません。");
             }
-            await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(PixelPoint.From(point)).AsMemory(), timeout.Token);
+            await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new ContextRequest(PixelPoint.From(point), originatingProcessId ?? Environment.ProcessId)).AsMemory(), timeout.Token);
             await process.StandardInput.FlushAsync(timeout.Token);
             string line = await ReadBoundedAsync(process.StandardOutput, 65536, timeout.Token);
             return JsonSerializer.Deserialize<CaptureContext>(line, CaptureMetadata.JsonOptions) ?? CaptureContextWorker.Unavailable("emptyResponse");

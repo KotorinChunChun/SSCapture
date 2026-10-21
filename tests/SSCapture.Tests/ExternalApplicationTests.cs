@@ -31,6 +31,9 @@ internal static partial class Program
         {
             var apps = new[] { new ExternalApplication { Id = "a", Name = "A", Executable = @"C:\a.exe" }, new ExternalApplication { Id = "b", Name = "B", Executable = @"C:\b.exe" } };
             var settings = new AppSettings { ImageEditors = apps, SelectedImageEditorId = "a" };
+            using var editor = new CapturePresetEditor(settings, () => settings);
+            var application = (ComboBox)editor.Controls.Find("PresetImageEditor", true).Single();
+            Equal(3, application.Items.Count); Equal("A", ((ExternalApplication)application.SelectedItem!).Name);
             var session = OutputSession(settings);
             try
             {

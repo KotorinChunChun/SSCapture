@@ -12,6 +12,22 @@ internal static partial class Program
 
     private static void MetadataContextTests()
     {
+        Run("撮影中のFile ON切替に備え記録方式が有効なら開始時に準備する", () =>
+        {
+            Check(!CaptureMetadata.RequiresPreparation(new AppSettings()), "全記録OFFで準備");
+            Check(CaptureMetadata.RequiresPreparation(new AppSettings { MetadataMode = CaptureMetadataMode.Both }), "File OFFで記録準備が欠落");
+            Check(CaptureMetadata.RequiresPreparation(new AppSettings { CapturePresets = [new CapturePreset { Name = "記録", MetadataMode = CaptureMetadataMode.Json }] }), "プリセットの記録準備が欠落");
+        });
+        Run("UI矩形の相対位置と自由形状の範囲外判定を記録", () =>
+        {
+            var at = DateTimeOffset.Now;
+            var context = CaptureContextWorker.Unavailable("fixture") with { FocusedElement = new("ok", Bounds: new(-20, 10, 40, 30)) };
+            var data = CaptureMetadata.Create(new(0, 0, 100, 100), 12, at, new(at, new(90, 90), true, true), context,
+                polygon: [new(0, 0), new(100, 0), new(0, 100)]);
+            Equal(new PixelBounds(-20, 10, 40, 30), data.FocusedElement.RelativeCapture);
+            Equal(new PixelBounds(-8, 22, 40, 30), data.FocusedElement.RelativeOutput);
+            Equal(false, data.FocusedElement.InsideCapture); Equal(false, data.Pointer.InsidePolygon); Check(!data.Pointer.Drawn, "自由形状外に描画済みを記録");
+        });
         Run("撮影情報は負座標・範囲外位置を切り詰めず余白分だけ出力座標を変える", () =>
         {
             var data = SampleMetadata(12);
@@ -23,7 +39,7 @@ internal static partial class Program
         Run("撮影情報のDTO往復は未取得理由・null・取得時刻・フォーカスを維持", () =>
         {
             var data = SampleMetadata(); string json = JsonSerializer.Serialize(data, CaptureMetadata.JsonOptions);
-            Equal(data, JsonSerializer.Deserialize<CaptureMetadata>(json, CaptureMetadata.JsonOptions));
+            Equal(json, JsonSerializer.Serialize(JsonSerializer.Deserialize<CaptureMetadata>(json, CaptureMetadata.JsonOptions), CaptureMetadata.JsonOptions));
             using var doc = JsonDocument.Parse(json); Equal("focus", doc.RootElement.GetProperty("focusedElement").GetProperty("automationId").GetString());
             Equal(JsonValueKind.Null, doc.RootElement.GetProperty("pointerElement").GetProperty("name").ValueKind);
             Check(!json.Contains("ValuePattern") && !json.Contains("TextPattern"), "本文を記録");
@@ -62,7 +78,14 @@ internal static partial class Program
             try
             {
                 form.Activate(); focus.Focus(); form.Update();
-                using var client = new CaptureContextClient();
+                var activationWait = Stopwatch.StartNew();
+                while (!Capture.CaptureNative.OwnsForegroundWindow())
+                {
+                    if (activationWait.Elapsed.TotalSeconds > 40) throw new TimeoutException("専用画面の前面化を確認できません。");
+                    await Task.Delay(50);
+                }
+                focus.Focus(); form.Update(); await Task.Delay(50);
+                using var client = new CaptureContextClient(originatingProcessId: 0);
                 Point point = pointer.PointToScreen(new Point(20, 20));
                 var watch = Stopwatch.StartNew();
                 var context = await client.ObserveAsync(point, timeoutMilliseconds: 1500);
@@ -74,6 +97,25 @@ internal static partial class Program
                 Equal("ok", context.FocusedElement.Status); Equal("フォーカス確認", context.FocusedElement.Name);
                 Equal("ポインタ確認", context.PointerElement.Name); Equal(Environment.ProcessId, context.ForegroundApplication.ProcessId);
                 Equal("ok", second.FocusedElement.Status);
+                focus.UseSystemPasswordChar = true; focus.AccessibleName = "除外する秘密の名前"; focus.Focus(); form.Update();
+                var password = await client.ObserveAsync(point);
+                Equal("partial", password.FocusedElement.Status); Equal<string?>(null, password.FocusedElement.Name);
+                Equal<string?>(null, password.FocusedElement.AutomationId);
+                File.WriteAllText(Path.Combine(directory, "password.json"), JsonSerializer.Serialize(password, CaptureMetadata.JsonOptions));
+                using var own = new CaptureContextClient(); var ownContext = await own.ObserveAsync(point);
+                Equal("captureApplicationFocused", ownContext.FocusedElement.Reason);
+                Rectangle captureBounds = form.RectangleToScreen(new Rectangle(20, 220, 400, 70));
+                var settings = new AppSettings { SaveDirectory = directory, DefaultDestination = OutputDestination.File,
+                    MetadataMode = CaptureMetadataMode.Both, ScreenshotPaddingPixels = 12, ScreenshotColorDepth = ScreenshotColorDepth.Indexed8 };
+                var capture = await Capture.InstantCapture.TakeWithContextAsync(captureBounds, settings);
+                using (capture.Image)
+                using (var router = new OutputRouter(Path.Combine(directory, "work")))
+                    await router.ScreenshotAsync(capture.Image, OutputDestination.File, settings, "native.png", metadata: capture.Metadata);
+                Equal(PixelBounds.From(captureBounds), capture.Metadata!.CaptureBounds);
+                Check(File.Exists(Path.Combine(directory, "native.json")), "実取得のJSON未保存");
+                byte[] png = File.ReadAllBytes(Path.Combine(directory, "native.png")); Equal((byte)8, png[24]); Equal((byte)3, png[25]);
+                Check(ReadPngChunks(png).Any(c => c.Type == "iTXt"), "実取得のXMP未保存");
+                CaptureContextClient.Shared.Dispose();
                 Console.WriteLine("CONTEXT PASS " + File.ReadAllText(Path.Combine(directory, "timing.txt")));
             }
             catch (Exception ex) { failure = ex; }

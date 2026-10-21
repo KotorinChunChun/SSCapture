@@ -8,9 +8,7 @@ internal static class CaptureSession
         ValidateCall(options);
         Point initialPointer = CaptureNative.CursorPosition();
         // Freeze before showing any overlay or menu, with no intentional capture delay.
-        bool metadata = options.Intent == CaptureIntent.Screenshot && options.OutputSettings is { } settings &&
-            (settings.DefaultDestination.HasFlag(OutputDestination.File) && settings.MetadataMode != Services.CaptureMetadataMode.None ||
-             settings.CapturePresets.Any(p => p.Destination.HasFlag(OutputDestination.File) && p.MetadataMode != Services.CaptureMetadataMode.None));
+        bool metadata = options.Intent == CaptureIntent.Screenshot && options.OutputSettings is { } settings && Services.CaptureMetadata.RequiresPreparation(settings);
         DesktopSnapshot snapshot = DesktopSnapshot.Take(options.IncludeCursor, metadata);
         if (metadata)
             snapshot.Context = await Services.CaptureContextClient.Shared.ObserveAsync(new Point(snapshot.Pointer!.Screen.X, snapshot.Pointer.Screen.Y));
@@ -306,13 +304,14 @@ internal sealed class SessionController
         catch (Exception ex) { Fail(ex); }
     }
 
-    internal void Move(bool queuedKeyState = false)
+    internal void Move(bool queuedKeyState = false, Point? eventPosition = null)
     {
         if (completed || menuOpen || menuTransition) return;
         try
         {
             Keys modifiers = ReadModifiers(queuedKeyState);
-            MoveTo(CaptureNative.CursorPosition(), (modifiers & Keys.Alt) != 0,
+            // キュー内のDown/Upを現在位置で読み替えると、高速ドラッグがクリックに化ける。
+            MoveTo(eventPosition ?? CaptureNative.CursorPosition(), (modifiers & Keys.Alt) != 0,
                 (modifiers & Keys.Shift) != 0, (modifiers & Keys.Control) != 0);
         }
         catch (Exception ex) { Fail(ex); }
@@ -387,7 +386,7 @@ internal sealed class SessionController
         foreach (CaptureOverlay overlay in overlays) overlay.Invalidate();
     }
 
-    internal void MouseDown(CaptureOverlay overlay, MouseButtons button)
+    internal void MouseDown(CaptureOverlay overlay, MouseButtons button, Point? eventPosition = null)
     {
         if (completed || menuOpen || menuTransition) return;
         if (suppressedButtons != MouseButtons.None) return;
@@ -398,7 +397,7 @@ internal sealed class SessionController
             return;
         }
         if (button is not (MouseButtons.Left or MouseButtons.Middle) || pressedButton != MouseButtons.None) return;
-        Move(true);
+        Move(true, eventPosition);
         if (completed) return;
         dragOwner = overlay;
         pressedButton = button;
@@ -407,11 +406,11 @@ internal sealed class SessionController
         if (!overlay.Capture) Cancel();
     }
 
-    internal void MouseUp(MouseButtons button)
+    internal void MouseUp(MouseButtons button, Point? eventPosition = null)
     {
         if ((suppressedButtons & button) != 0) { suppressedButtons &= ~button; return; }
         if (completed || menuOpen || menuTransition || button != pressedButton || pressedButton == MouseButtons.None) return;
-        Move(true);
+        Move(true, eventPosition);
         if (completed) return;
         CaptureSelection? selection = button == MouseButtons.Middle
             ? gesture.MonitorSelection(gesture.RawCurrent, Destination)
@@ -554,7 +553,8 @@ internal sealed class SessionController
                     var context = frame.Context ?? await Services.CaptureContextClient.Shared.ObserveAsync(new Point(pointer.Screen.X, pointer.Screen.Y));
                     if (current is not null) context = context with { FocusAtSelectionStart = Snapshot.Context?.FocusedElement };
                     metadata = Services.CaptureMetadata.Create(selection.Bounds, OutputSettings.ScreenshotPaddingPixels, frame.CapturedAt, pointer, context,
-                        Mode == CaptureMode.Window && !entireMonitor && context.PointerApplication.Bounds == Services.PixelBounds.From(selection.Bounds) ? context.PointerApplication : null);
+                        Mode == CaptureMode.Window && !entireMonitor && context.PointerApplication.Bounds == Services.PixelBounds.From(selection.Bounds) ? context.PointerApplication : null,
+                        selection.Polygon);
                 }
                 // A display-layout change must not silently shift the chosen physical region.
                 if (!frame.Bounds.Contains(selection.Bounds))

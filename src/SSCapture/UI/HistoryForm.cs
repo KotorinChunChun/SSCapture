@@ -13,7 +13,8 @@ internal sealed class HistoryForm : Form
     private readonly Button copyButton, editButton, clearButton;
     private bool operating, refreshPending, disposedResources;
 
-    public HistoryForm(CaptureHistory history, Func<Guid, Task<string>> copy, Func<Guid, Task<string>> edit)
+    public HistoryForm(CaptureHistory history, Func<Guid, Task<string>> copy, Func<Guid, Task<string>> edit,
+        Func<IReadOnlyList<ExternalApplication>>? applications = null, Func<Guid, string, Task<string>>? editWithApplication = null)
     {
         this.history = history;
         this.copy = copy;
@@ -67,7 +68,18 @@ internal sealed class HistoryForm : Form
         clearButton = Button("履歴を消去", "ClearHistory", 138, ButtonRole.Danger);
         clearButton.Click += (_, _) => ClearHistory();
         editButton = Button("画像編集アプリへ送る", "EditHistoryImage", 212, ButtonRole.Secondary);
-        editButton.Click += async (_, _) => await SendAsync(edit);
+        editButton.Click += async (_, _) =>
+        {
+            var apps = applications?.Invoke() ?? [];
+            if (apps.Count == 0 || editWithApplication is null) { await SendAsync(edit); return; }
+            var choices = new ContextMenuStrip();
+            foreach (var app in apps)
+            {
+                string appId = app.Id;
+                choices.Items.Add(app.Name, null, async (_, _) => await SendAsync(id => editWithApplication(id, appId)));
+            }
+            choices.Closed += (_, _) => choices.Dispose(); choices.Show(editButton, new Point(0, editButton.Height));
+        };
         copyButton = Button("再コピー", "CopyHistoryImage", 124, ButtonRole.Primary);
         copyButton.Click += async (_, _) => await SendAsync(copy);
         buttons.Controls.AddRange([close, clearButton, editButton, copyButton]);

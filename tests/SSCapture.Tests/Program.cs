@@ -9,11 +9,13 @@ internal static partial class Program
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Contains("--context-stall")) { Console.WriteLine("ready"); Console.In.ReadLine(); Thread.Sleep(30000); return 0; }
+        if (args.FirstOrDefault() == "--editor-received") { File.WriteAllText(Path.Combine(args[3], "editor-" + args[1] + ".json"), System.Text.Json.JsonSerializer.Serialize(new { application = args[1], image = args[2] })); return 0; }
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         if (args.Contains("--clipboard-color-smoke")) return ClipboardColorSmoke(args[1], args[2]);
         if (args.Contains("--preparation-smoke")) return PreparationSmoke(args[1]);
         if (args.Contains("--context-smoke")) return ContextSmoke(args[1]);
+        if (args.Contains("--upgrade-ui-preview")) return UpgradeUiPreview(args[1]);
         if (args.Contains("--padding-ui-preview")) return PaddingUiPreview(args[1]);
         if (args.Contains("--selection-guide-preview")) return SelectionGuidePreview(args[1]);
         if (args.Contains("--overlay-placement-smoke")) return RunOverlayPlacementSmoke();

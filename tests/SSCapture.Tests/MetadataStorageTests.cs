@@ -30,7 +30,8 @@ internal static partial class Program
                 var xml = XDocument.Parse(Encoding.UTF8.GetString(xmp, 22, xmp.Length - 22));
                 XNamespace ns = PngMetadata.Namespace;
                 Equal(metadata.CaptureId, xml.Descendants(ns + "captureId").Single().Value);
-                Equal(metadata, JsonSerializer.Deserialize<CaptureMetadata>(xml.Descendants(ns + "contextJson").Single().Value, CaptureMetadata.JsonOptions));
+                Equal(JsonSerializer.Serialize(metadata, CaptureMetadata.JsonOptions),
+                    JsonSerializer.Serialize(JsonSerializer.Deserialize<CaptureMetadata>(xml.Descendants(ns + "contextJson").Single().Value, CaptureMetadata.JsonOptions), CaptureMetadata.JsonOptions));
                 using var rendered = Image.FromStream(new MemoryStream(changed)); Equal(image.Size, rendered.Size);
                 byte[] repeated = PngMetadata.Embed(changed, metadata); Equal(1, ReadPngChunks(repeated).Count(c => c.Type == "iTXt"));
                 changed[20] ^= 1; PaddingRejected(() => { try { PngMetadata.Embed(changed, metadata); } catch (InvalidDataException e) { throw new ArgumentException(e.Message); } });

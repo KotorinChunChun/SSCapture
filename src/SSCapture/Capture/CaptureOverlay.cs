@@ -103,9 +103,9 @@ internal sealed class CaptureOverlay : Form
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
-    protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); session.MouseDown(this, e.Button); }
-    protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); session.Move(true); }
-    protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); session.MouseUp(e.Button); }
+    protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); session.MouseDown(this, e.Button, new Point(MonitorBounds.X + e.X, MonitorBounds.Y + e.Y)); }
+    protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); session.Move(true, new Point(MonitorBounds.X + e.X, MonitorBounds.Y + e.Y)); }
+    protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); session.MouseUp(e.Button, new Point(MonitorBounds.X + e.X, MonitorBounds.Y + e.Y)); }
     protected override void OnMouseCaptureChanged(EventArgs e) { base.OnMouseCaptureChanged(e); session.CaptureLost(this); }
     protected override void OnFormClosing(FormClosingEventArgs e) { base.OnFormClosing(e); session.Cancel(); }
 

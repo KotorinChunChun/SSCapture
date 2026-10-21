@@ -6,6 +6,20 @@ internal static partial class Program
 {
     private static void SelectionInteractionTests()
     {
+        Run("高速ドラッグのDown/Upは現在カーソル位置ではなくイベント座標で確定", () =>
+        {
+            var session = OutputSession(new Services.AppSettings());
+            using var overlay = new CaptureOverlay(session, new(0, 0, 400, 300));
+            try
+            {
+                _ = overlay.Handle;
+                session.MouseDown(overlay, MouseButtons.Left, new(40, 50));
+                session.MouseUp(MouseButtons.Left, new(240, 180));
+                using var outcome = session.Completion.GetAwaiter().GetResult();
+                Equal(new Rectangle(40, 50, 200, 130), outcome.Selection!.Bounds);
+            }
+            finally { session.Cancel(); }
+        });
         Run("Shift高さ固定を離すと静止中でもポインタの角へ復元", () =>
         {
             var g = RectangleGesture();
