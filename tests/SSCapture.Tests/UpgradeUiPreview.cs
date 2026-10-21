@@ -24,11 +24,12 @@ internal static partial class Program
             Font = new Font("Yu Gothic UI", 12), AutoScaleMode = AutoScaleMode.Dpi };
         var status = new Label { Name = "UpgradeStatus", Dock = DockStyle.Top, Height = 100, Padding = new Padding(16), Text = "設定・撮影・通知を操作して確認します。画像はこの専用画面の内部だけを囲んでください。" };
         host.Controls.Add(status);
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 58 };
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 116 };
         host.Controls.Add(buttons); buttons.BringToFront();
         SettingsForm? settingsForm = null; bool operating = false; int captures = 0;
         using var toast = new CaptureToastForm(location: () => (host.RectangleToScreen(host.ClientRectangle), host.DeviceDpi));
-        using var feedback = new CaptureFeedback(createToast: () => toast, openSavedFile: path => { status.Text = "PASS 通知クリック: " + Path.GetFileName(path); Log("notification-click"); });
+        using var feedback = new CaptureFeedback(createToast: () => toast, openSavedFile: path => { status.Text = "PASS 通知クリック: " + Path.GetFileName(path); Log("notification-click"); },
+            launch: info => { using var child = Process.Start(info) ?? throw new IOException("検証アプリ起動失敗"); status.Text = "PASS 未保存通知: 生成後に検証アプリを起動"; Log("lazy-launched", new { arguments = info.ArgumentList.ToArray() }); });
         using var router = new OutputRouter(Path.Combine(directory, "work"));
         var notify = SettingsForm.MakeButton("通知の近接保持", "ShowUpgradeToast");
         notify.Anchor = AnchorStyles.Bottom | AnchorStyles.Right; notify.Width = 230;
@@ -62,6 +63,25 @@ internal static partial class Program
         Button("固定ONで撮影", "UpgradeFreezeOn", () => Capture(true));
         Button("固定OFFで撮影", "UpgradeFreezeOff", () => Capture(false));
         Button("撮影前の通知消去", "UpgradeHideToast", () => { feedback.HideForCapture(); status.Text = "通知visible=" + toast.Visible; Log("notification-force-hidden", new { visible = toast.Visible }); });
+        Button("未保存画像の通知", "UpgradeLazyNotification", () =>
+        {
+            using var image = new Bitmap(120, 80); using (var g = Graphics.FromImage(image)) g.Clear(Color.AliceBlue);
+            string folder = Path.Combine(directory, "lazy-notification");
+            feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None,
+                NotificationImage: new NotificationImage(image, folder)), settings with
+                { NotificationClickAction = NotificationClickAction.ExternalApplication, NotificationApplicationId = "B", NotificationDurationSeconds = 30 });
+            int files = Directory.Exists(folder) ? Directory.GetFiles(folder, "*.png").Length : 0;
+            status.Text = "未保存画像の通知。生成前のファイル数=" + files + "。通知クリックで生成して検証アプリBへ。";
+            Log("lazy-shown", new { files });
+        });
+        Button("余白・入力メニュー", "UpgradeCaptureMenu", () =>
+        {
+            var menu = new CaptureContextMenu(OutputDestination.Clipboard, _ => { }, () => { }, () => { }, defaultPadding: 12,
+                changePadding: value => { status.Text = "今回の余白=" + value + "px"; Log("padding-selected", value); },
+                inputPresets: settings.SavedRegions, applyInputPreset: preset => { status.Text = "入力枠=" + preset.Name; Log("input-selected", preset.Name); });
+            menu.Closed += (_, _) => host.BeginInvoke((Action)(() => menu.Dispose()));
+            menu.Show(host, new Point(200, 170));
+        });
         host.Shown += (_, _) => { notify.Location = new(host.ClientSize.Width - notify.Width - 24, host.ClientSize.Height - notify.Height - 24); File.WriteAllText(Path.Combine(directory, "layout.json"), JsonSerializer.Serialize(new { host.Bounds, work })); };
         host.FormClosed += (_, _) => { settingsForm?.Dispose(); CaptureContextClient.Shared.Dispose(); };
         Application.Run(host); return 0;
