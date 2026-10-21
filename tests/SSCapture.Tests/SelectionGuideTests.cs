@@ -99,22 +99,33 @@ internal static partial class Program
                 Check(!SelectionGuideForm.ShouldHideForPointer(bounds, near, false, dpi, true), "ドラッグ終了後も隠れる");
             }
         });
-        Run("案内の一時非表示と復帰は手動OFFを保存しない", () =>
+        Run("案内はドラッグ外も逃げて表示を保ち手動OFFを保存しない", () =>
         {
             int saved = 0, cancelled = 0;
             using var guide = new SelectionGuideForm(new(0, 0, 1000, 700), CaptureIntent.Screenshot,
                 () => cancelled++, dismiss: () => saved++);
             _ = guide.Handle;
+            guide.Show();
             Point near = guide.Bounds.Location;
-            guide.UpdatePointer(near, true);
-            Check(!guide.Visible, "ドラッグ中に隠れない");
-            guide.UpdatePointer(new(guide.Left - 200, guide.Top), true);
-            Check(guide.Visible, "離れても復帰しない");
-            guide.UpdatePointer(near, true);
-            Check(!guide.Visible, "再近接で隠れない");
             guide.UpdatePointer(near, false);
-            Check(guide.Visible, "ドラッグ終了後に復帰しない");
+            Check(guide.Visible && guide.Location != near, "ドラッグ外で逃げない");
+            Rectangle moved = guide.Bounds;
+            guide.UpdatePointer(near, true);
+            Equal(moved, guide.Bounds);
+            guide.UpdatePointer(moved.Location, true);
+            Check(guide.Visible && guide.Bounds != moved, "再近接で逃げない");
             Equal(0, saved); Equal(0, cancelled);
+        });
+        Run("案内の回避は負座標・DPIでも同一モニタ内の遠い角", () =>
+        {
+            Rectangle monitor = new(-2560, -200, 2560, 1440);
+            foreach (int dpi in new[] { 96, 144, 192 })
+            {
+                Rectangle bounds = new(-800, 900, 720, 180);
+                var next = SelectionGuideForm.AvoidPointer(bounds, monitor, bounds.Location, dpi);
+                Check(monitor.Contains(next) && next != bounds, "同一画面の遠い角に逃げない");
+                Equal(next, SelectionGuideForm.AvoidPointer(next, monitor, bounds.Location, dpi));
+            }
         });
         Run("案内の表示設定保存が失敗しても撮影を終了しない", () =>
         {

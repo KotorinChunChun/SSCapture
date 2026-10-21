@@ -79,7 +79,7 @@ internal sealed class SessionController
     internal bool ShowSelectionGuide { get; private set; }
     private Point menuPointer;
     private readonly Point initialPointer;
-    private readonly Rectangle? selectionBounds;
+    private Rectangle? selectionBounds;
     private readonly Func<Rectangle, IDisposable> confineCursor;
     private IDisposable? cursorConfinement;
     private CaptureOverlay? dragOwner;
@@ -108,7 +108,7 @@ internal sealed class SessionController
     internal Rectangle Selection => gesture.Selection;
     internal List<Point> Points => gesture.Points;
     internal OutputDestination Destination { get; private set; }
-    internal IReadOnlyList<Rectangle> SelectionMonitors { get; }
+    internal IReadOnlyList<Rectangle> SelectionMonitors { get; private set; }
     internal CaptureContextMenu SelectionMenu { get; }
     internal bool FixedSelectionValid => Mode != CaptureMode.FixedRegion || gesture.FixedSelection(Destination) is not null;
     internal bool DimCaptureBackground => options.DimCaptureBackground;
@@ -133,8 +133,6 @@ internal sealed class SessionController
             selectionBounds = snapshot.Monitors.FirstOrDefault(monitor => monitor.Contains(this.initialPointer));
             if (selectionBounds.Value.IsEmpty) throw new InvalidOperationException("開始位置のモニタが見つかりません。もう一度選択してください。");
             SelectionMonitors = [selectionBounds.Value];
-            windows = windows.Select(window => Rectangle.Intersect(window, selectionBounds.Value))
-                .Where(CaptureGeometry.IsUsable).ToArray();
         }
         else SelectionMonitors = snapshot.Monitors;
         this.windows = windows.ToArray();
@@ -152,7 +150,7 @@ internal sealed class SessionController
     }
 
     private SelectionGesture CreateGesture(CaptureMode mode, bool grid20) =>
-        new(mode, SelectionMonitors, windows, options.FixedSize ?? new Size(1280, 720), options.FixedAnchor) { Grid20 = grid20, AspectRatio = AspectRatio };
+        new(mode, SelectionMonitors, windows, options.FixedSize ?? new Size(1280, 720), options.FixedAnchor) { Grid20 = grid20, AspectRatio = AspectRatio, WindowLimit = selectionBounds };
 
     internal void ChangeAspectRatio(CaptureAspectRatio ratio)
     {
@@ -310,9 +308,12 @@ internal sealed class SessionController
         try
         {
             Keys modifiers = ReadModifiers(queuedKeyState);
+            Point position = eventPosition ?? CaptureNative.CursorPosition();
+            bool crossing = (modifiers & (Keys.Shift | Keys.Control)) == (Keys.Shift | Keys.Control);
+            UpdateMonitorRestriction(position, crossing);
             // キュー内のDown/Upを現在位置で読み替えると、高速ドラッグがクリックに化ける。
-            MoveTo(eventPosition ?? CaptureNative.CursorPosition(), (modifiers & Keys.Alt) != 0,
-                (modifiers & Keys.Shift) != 0, (modifiers & Keys.Control) != 0);
+            MoveTo(position, (modifiers & Keys.Alt) != 0,
+                !crossing && (modifiers & Keys.Shift) != 0, !crossing && (modifiers & Keys.Control) != 0);
         }
         catch (Exception ex) { Fail(ex); }
     }
@@ -334,6 +335,25 @@ internal sealed class SessionController
         RefreshOverlays();
     }
 
+    internal void UpdateMonitorRestriction(Point pointer, bool crossing)
+    {
+        if (completed || selectionBounds is not Rectangle bounds) return;
+        if (crossing)
+        {
+            cursorConfinement?.Dispose(); cursorConfinement = null;
+            if (!bounds.Contains(pointer) && Snapshot.Monitors.Any(m => m.Contains(pointer)))
+            {
+                selectionBounds = null;
+                SelectionMonitors = Snapshot.Monitors;
+                gesture.ExpandMonitors(SelectionMonitors);
+                if (!starting)
+                    foreach (Rectangle monitor in SelectionMonitors.Where(m => overlays.All(o => o.MonitorBounds != m)))
+                    { var overlay = new CaptureOverlay(this, monitor); overlays.Add(overlay); overlay.Show(); }
+            }
+        }
+        else if (!starting && cursorConfinement is null) cursorConfinement = confineCursor(bounds);
+    }
+
     internal void ModifiersChanged() => UpdateModifiers(false);
     internal void AltKeyChanged() => UpdateModifiers(true);
 
@@ -345,6 +365,12 @@ internal sealed class SessionController
             if (Control.MouseButtons == MouseButtons.None) suppressedButtons = MouseButtons.None;
             Keys modifiers = ReadModifiers(queuedKeyState);
             bool snap = (modifiers & Keys.Alt) != 0, height = (modifiers & Keys.Shift) != 0, width = (modifiers & Keys.Control) != 0;
+            bool crossing = height && width;
+            Point currentPointer = CaptureNative.CursorPosition();
+            UpdateMonitorRestriction(currentPointer, crossing);
+            if (crossing) height = width = false;
+            // キーだけでなくポインタもポーリング。案内上ではoverlayへMouseMoveが来ない。
+            if (currentPointer != lastPointerPosition) MoveTo(currentPointer, snap, height, width);
             if ((snap != lastSnap || height != lastHeightLock || width != lastWidthLock) && lastPointerPosition is Point point)
                 MoveTo(point, snap, height, width);
         }

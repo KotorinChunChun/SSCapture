@@ -18,6 +18,29 @@ internal static partial class Program
 
     private static void SelectionMonitorTests()
     {
+        Run("CtrlShiftの別モニタ移動だけが撮影単位の制限を解除する", () =>
+        {
+            var session = MonitorSession(true);
+            try
+            {
+                session.UpdateMonitorRestriction(new(20, 30), false); Equal(1, session.SelectionMonitors.Count);
+                session.UpdateMonitorRestriction(new(-20, 30), true); Equal(1, session.SelectionMonitors.Count);
+                session.UpdateMonitorRestriction(new(20, -50), true); Equal(1, session.SelectionMonitors.Count);
+                session.UpdateMonitorRestriction(new(20, 30), true); Equal(2, session.SelectionMonitors.Count);
+                session.MoveTo(new(600, 400)); Equal(new Point(600, 400), session.Current);
+                session.UpdateMonitorRestriction(new(-20, 30), false); Equal(2, session.SelectionMonitors.Count);
+            }
+            finally { session.Cancel(); }
+            var next = MonitorSession(true); Equal(1, next.SelectionMonitors.Count); next.Cancel();
+        });
+        Run("モニタ拡張はドラッグの始点と選択を維持する", () =>
+        {
+            var gesture = new SelectionGesture(CaptureMode.Rectangle, [SelectionTestMonitors[0]], []);
+            gesture.Begin(new(-100, 20), new(4, 4)); gesture.Move(new(-20, 50));
+            gesture.ExpandMonitors(SelectionTestMonitors); gesture.Move(new(100, 120));
+            Equal(new Rectangle(-100, 20, 200, 100), gesture.Selection);
+            Check(gesture.IsPressed && gesture.HasDragged, "ドラッグをリセットした");
+        });
         Run("開始画面限定は既定ON・旧設定ON・明示OFFを保存", () => WithServiceDirectory(directory =>
         {
             var store = new SettingsStore(Path.Combine(directory, "settings.json"));

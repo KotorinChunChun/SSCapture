@@ -4,10 +4,11 @@ namespace SSCapture.Capture;
 internal sealed class SelectionGesture
 {
     private readonly CaptureMode mode;
-    private readonly IReadOnlyList<Rectangle> monitors;
+    private IReadOnlyList<Rectangle> monitors;
     private readonly IReadOnlyList<Rectangle> windows;
-    private readonly Rectangle? desktopBounds;
-    private readonly SelectionSnap snapEdges;
+    private Rectangle? desktopBounds;
+    private SelectionSnap snapEdges;
+    internal Rectangle? WindowLimit { get; set; }
     private readonly Size fixedDimensions;
     private Size anchorOffset;
     internal CaptureAnchor FixedAnchor { get; private set; }
@@ -116,7 +117,19 @@ internal sealed class SelectionGesture
             : null;
     }
 
-    internal Rectangle WindowAt(Point point) => windows.FirstOrDefault(window => window.Contains(point));
+    internal Rectangle WindowAt(Point point)
+    {
+        Rectangle found = windows.FirstOrDefault(window => window.Contains(point));
+        return WindowLimit is Rectangle limit ? Rectangle.Intersect(found, limit) : found;
+    }
+
+    internal void ExpandMonitors(IReadOnlyList<Rectangle> expanded)
+    {
+        monitors = expanded.ToArray();
+        WindowLimit = null;
+        desktopBounds = monitors.Aggregate(Rectangle.Union);
+        snapEdges = new SelectionSnap(monitors, windows);
+    }
 
     internal bool Space()
     {
