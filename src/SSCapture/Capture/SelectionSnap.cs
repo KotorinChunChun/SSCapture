@@ -4,10 +4,14 @@ namespace SSCapture.Capture;
 internal sealed class SelectionSnap
 {
     internal const int Distance = 20;
+    private readonly int distance;
     private readonly Edge[] edges;
 
-    internal SelectionSnap(IReadOnlyList<Rectangle> monitors, IReadOnlyList<Rectangle> windows)
+    internal SelectionSnap(IReadOnlyList<Rectangle> monitors, IReadOnlyList<Rectangle> windows, int distance = Distance)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(distance, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(distance, 32768);
+        this.distance = distance;
         List<Edge> collected = [];
         // Preserve the frozen window order for equally close candidates.
         foreach (Rectangle bounds in windows.Concat(monitors))
@@ -24,7 +28,7 @@ internal sealed class SelectionSnap
 
     internal Point Apply(Point point)
     {
-        long bestX = Distance * Distance + 1, bestY = bestX;
+        long bestX = (long)distance * distance + 1, bestY = bestX;
         int x = point.X, y = point.Y;
         foreach (Edge edge in edges)
         {
@@ -32,7 +36,7 @@ internal sealed class SelectionSnap
             int along = edge.Vertical ? point.Y : point.X;
             long beyond = Math.Abs((long)along - Math.Clamp(along, edge.First, edge.Last));
             // Reject before squaring, including extreme negative desktop coordinates.
-            if (across > Distance || beyond > Distance) continue;
+            if (across > this.distance || beyond > this.distance) continue;
             long distance = across * across + beyond * beyond;
             if (edge.Vertical && distance < bestX) { bestX = distance; x = edge.Coordinate; }
             if (!edge.Vertical && distance < bestY) { bestY = distance; y = edge.Coordinate; }

@@ -46,6 +46,7 @@ internal static partial class Program
         Run("5つの撮影モード", () => Equal(5, Enum.GetValues<CaptureMode>().Length));
         CaptureTests();
         CaptureMenuEditingTests();
+        PresetConsolidationTests();
         OverlayWindowTests();
         SelectionMonitorTests();
         ServiceTests();

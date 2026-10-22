@@ -5,7 +5,7 @@ namespace SSCapture.Services;
 
 internal static partial class FileNamePattern
 {
-    internal const string Default = "{yyyymmdd}_{hhmmss}.png";
+    internal const string Default = "{yyyymmdd}_{hhmmss}.{ext}";
     [GeneratedRegex(@"\{([^{}]*)\}")]
     private static partial Regex Token();
     [GeneratedRegex(@"^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
@@ -19,7 +19,7 @@ internal static partial class FileNamePattern
         // Validate the pattern separately so braces in recognized text remain literal.
         string skeleton = Token().Replace(pattern, match => match.Groups[1].Value switch
         {
-            "yyyymmdd" or "hhmmss" or "ocr" or "#" or "##" or "region" => "x",
+            "yyyymmdd" or "hhmmss" or "ocr" or "#" or "##" or "region" or "ext" => "x",
             _ => throw new ArgumentException($"未対応のファイル名変数: {match.Value}")
         });
         if (skeleton.Contains('{') || skeleton.Contains('}')) throw new ArgumentException("ファイル名変数の括弧が正しくありません。");
@@ -29,7 +29,7 @@ internal static partial class FileNamePattern
         if (ocr.Length == 0)
         {
             int stemEnd = pattern.EndsWith(".png", StringComparison.OrdinalIgnoreCase) || pattern.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
-                ? pattern.Length - 4 : pattern.Length;
+                ? pattern.Length - 4 : pattern.EndsWith(".{ext}", StringComparison.Ordinal) ? pattern.Length - 6 : pattern.Length;
             if (pattern[..stemEnd].EndsWith("_{ocr}", StringComparison.Ordinal))
                 pattern = pattern.Remove(stemEnd - "_{ocr}".Length, "_{ocr}".Length);
         }
@@ -41,6 +41,7 @@ internal static partial class FileNamePattern
             "region" => CleanRegion(region),
             "#" => sequence.ToString(CultureInfo.InvariantCulture),
             "##" => sequence.ToString("D2", CultureInfo.InvariantCulture),
+            "ext" => intent == CaptureIntent.Screenshot ? "png" : "mp4",
             _ => throw new ArgumentException("未対応のファイル名変数です。")
         });
         string extension = intent == CaptureIntent.Screenshot ? ".png" : ".mp4";

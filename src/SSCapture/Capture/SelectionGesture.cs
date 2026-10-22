@@ -22,6 +22,14 @@ internal sealed class SelectionGesture
     private readonly DragAxis horizontal = new();
     private readonly DragAxis vertical = new();
     internal bool Grid20 { get; set; }
+    internal int SnapDistancePixels { get; private set; } = 20;
+    internal int GridStepPixels { get; private set; } = 20;
+    internal void SetSnapPrecision(int distance, int step)
+    {
+        if (step is < 1 or > 32768) throw new ArgumentOutOfRangeException(nameof(step));
+        var next = new SelectionSnap(monitors, windows, distance);
+        SnapDistancePixels = distance; GridStepPixels = step; snapEdges = next;
+    }
     internal bool IsPressed { get; private set; }
     internal bool HasDragged { get; private set; }
     internal Point Current { get; private set; }
@@ -128,7 +136,7 @@ internal sealed class SelectionGesture
         monitors = expanded.ToArray();
         WindowLimit = null;
         desktopBounds = monitors.Aggregate(Rectangle.Union);
-        snapEdges = new SelectionSnap(monitors, windows);
+        snapEdges = new SelectionSnap(monitors, windows, SnapDistancePixels);
     }
 
     internal void PlaceFixed(Rectangle bounds, Point pointer)
@@ -210,14 +218,15 @@ internal sealed class SelectionGesture
     private int Quantize(int coordinate, int origin, bool horizontalAxis)
     {
         long delta = (long)coordinate - origin;
-        long units = (Math.Abs(delta) + 10) / 20;
-        long result = origin + Math.Sign(delta) * units * 20;
+        long step = GridStepPixels;
+        long units = (Math.Abs(delta) + step / 2) / step;
+        long result = origin + Math.Sign(delta) * units * step;
         if (desktopBounds is Rectangle monitor)
         {
             int first = horizontalAxis ? monitor.Left : monitor.Top;
             int last = horizontalAxis ? monitor.Right : monitor.Bottom;
-            if (result < first) result = origin - ((long)origin - first) / 20 * 20;
-            if (result > last) result = origin + ((long)last - origin) / 20 * 20;
+            if (result < first) result = origin - ((long)origin - first) / step * step;
+            if (result > last) result = origin + ((long)last - origin) / step * step;
         }
         return (int)Math.Clamp(result, int.MinValue, int.MaxValue);
     }

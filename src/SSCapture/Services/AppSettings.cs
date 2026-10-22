@@ -41,6 +41,8 @@ internal sealed record AppSettings
     public int ScreenshotPaddingPixels { get; init; }
     public ScreenshotColorDepth ScreenshotColorDepth { get; init; }
     public bool Grid20 { get; init; }
+    public int SnapDistancePixels { get; init; } = 20;
+    public int GridStepPixels { get; init; } = 20;
     public bool ShowSelectionGuide { get; init; } = true;
     public OutputDestination DefaultDestination { get; init; } = OutputDestination.Clipboard;
     public bool RecordSystemAudio { get; init; }
@@ -74,6 +76,8 @@ internal sealed record AppSettings
 
     internal void Validate()
     {
+        if (SnapDistancePixels is < 1 or > 32768 || GridStepPixels is < 1 or > 32768)
+            throw new ArgumentException("吸着距離と刻み幅は1～32768pxで指定してください。");
         ExternalApplication.ValidateList(ImageEditors, SelectedImageEditorId);
         ExternalApplication.ValidateList(VideoEditors, SelectedVideoEditorId);
         if (!Enum.IsDefined(NotificationClickAction)) throw new ArgumentException("通知クリックの動作が正しくありません。");

@@ -174,8 +174,18 @@ internal sealed class SessionController
         SelectionMenu.Closed += MenuClosed;
     }
 
-    private SelectionGesture CreateGesture(CaptureMode mode, bool grid20) =>
-        new(mode, SelectionMonitors, windows, activeFixedSize, activeAnchor) { Grid20 = grid20, AspectRatio = AspectRatio, WindowLimit = selectionBounds };
+    private SelectionGesture CreateGesture(CaptureMode mode, bool grid20)
+    {
+        var next = new SelectionGesture(mode, SelectionMonitors, windows, activeFixedSize, activeAnchor) { Grid20 = grid20, AspectRatio = AspectRatio, WindowLimit = selectionBounds };
+        next.SetSnapPrecision(OutputSettings.SnapDistancePixels, OutputSettings.GridStepPixels);
+        return next;
+    }
+    internal void ChangeSnapPrecision(int distance, int step)
+    {
+        gesture.SetSnapPrecision(distance, step);
+        OutputSettings = OutputSettings with { SnapDistancePixels = distance, GridStepPixels = step };
+        UpdateMenu(); RefreshOverlays();
+    }
 
     private void UpdateMenu() => SelectionMenu.UpdateEditing(OutputSettings, activeFixedSize, activeAnchor, selectionBounds is not null);
     internal void ChangeColor(Services.ScreenshotColorDepth depth)
