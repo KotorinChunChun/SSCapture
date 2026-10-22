@@ -56,7 +56,7 @@ internal static partial class Program
         });
         Run("減色・暗転・基点は今回だけ適用してメニューと出力へ反映", () =>
         {
-            var original = new AppSettings(); var session = MenuSession(settings: original);
+            var original = new AppSettings { DimCaptureBackground = false }; var session = MenuSession(settings: original);
             try
             {
                 session.MoveTo(new(100, 100));

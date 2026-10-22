@@ -24,6 +24,9 @@ internal sealed class SettingsStore(string path)
             AppSettings settings = JsonSerializer.Deserialize<AppSettings>(json, Options)
                 ?? throw new JsonException("設定が空です。");
             using var document = JsonDocument.Parse(json);
+            // 旧設定で省略されていた暗転は、当時の初期値OFFを維持する。
+            if (!document.RootElement.TryGetProperty(nameof(AppSettings.DimCaptureBackground), out _))
+                settings = settings with { DimCaptureBackground = false };
             if (!document.RootElement.TryGetProperty(nameof(AppSettings.NotificationDurationSeconds), out _)
                 && document.RootElement.TryGetProperty(nameof(AppSettings.ShowCaptureNotification), out var showNotification)
                 && showNotification.ValueKind == JsonValueKind.False)
@@ -80,6 +83,7 @@ internal sealed class SettingsStore(string path)
                 using var old = JsonDocument.Parse(File.ReadAllText(filePath, Encoding.UTF8));
                 if (!old.RootElement.TryGetProperty("SchemaVersion", out var version) || version.GetInt32() < 3) suffix = ".schema2.bak";
                 else if (!old.RootElement.TryGetProperty(nameof(AppSettings.PresetSchemaVersion), out var profiles) || profiles.GetInt32() < 1) suffix = ".presets-v0.bak";
+                else if (profiles.GetInt32() < 2) suffix = ".presets-v1.bak";
             }
             catch (JsonException) { suffix = ".invalid.bak"; }
             if (suffix is not null && !File.Exists(filePath + suffix)) File.Copy(filePath, filePath + suffix, false);

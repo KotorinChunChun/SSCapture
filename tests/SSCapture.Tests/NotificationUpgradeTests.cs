@@ -109,8 +109,9 @@ internal static partial class Program
             feedback.HideForCapture(); Check(!toast.Visible && !timer.Running, "撮影前も保持した");
             timer.Fire(); Check(!toast.Visible && !timer.Running, "古い期限で再表示した");
         });
-        Run("暗転は新規・旧設定でOFFとなりON/OFFを保存", () => WithServiceDirectory(directory =>
+        Run("暗転は新規ON・省略された旧設定OFFを保ちON/OFFを保存", () => WithServiceDirectory(directory =>
         {
+            Check(new AppSettings().DimCaptureBackground, "新規の暗転がONではない");
             var path = Path.Combine(directory, "settings.json"); File.WriteAllText(path, "{}");
             var store = new SettingsStore(path); Check(!store.Load(out _).DimCaptureBackground, "旧設定が暗転した");
             foreach (bool value in new[] { true, false })

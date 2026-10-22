@@ -23,7 +23,7 @@ internal static partial class Program
         {
             var store = new SettingsStore(Path.Combine(directory, "settings.json"));
             File.WriteAllText(Path.Combine(directory, "settings.json"), "{}");
-            Equal(1, store.Load(out var warning).CapturePresets.Length); Equal<string?>(null, warning);
+            Equal(3, store.Load(out var warning).CapturePresets.Length); Equal<string?>(null, warning);
             var settings = new AppSettings { CapturePresets = [CapturePreset.FromSettings("資料", new AppSettings { ScreenshotPaddingPixels = 20 })] };
             store.Save(settings); SettingsEqual(settings, store.Load(out warning)); Equal<string?>(null, warning);
         }));
@@ -82,12 +82,12 @@ internal static partial class Program
             using var form = new SettingsForm(new AppSettings { ScreenshotPaddingPixels = 10 }, s => { saved = s; return null; }, () => { }, () => []);
             var editor = (CapturePresetEditor)form.Controls.Find("CapturePresetEditor", true).Single();
             form.Controls.Find("CapturePresetName", true).Single().Text = "資料";
-            editor.StoreCurrent(); Equal(1, editor.Presets.Length);
+            editor.StoreCurrent(); Equal(3, editor.Presets.Length);
             Check(form.Controls.Find("PresetPaddingPixels", true).Length == 0, "出力側に重複余白がある");
             ((ComboBox)form.Controls.Find("ScreenshotColorDepth", true).Single()).SelectedIndex = (int)ScreenshotColorDepth.Indexed4;
-            editor.StoreCurrent(); Equal(1, editor.Presets.Length); Equal(ScreenshotColorDepth.Indexed4, editor.Presets[0].ColorDepth);
+            editor.StoreCurrent(); Equal(3, editor.Presets.Length); Equal(ScreenshotColorDepth.Indexed4, editor.Presets[0].ColorDepth);
             typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(form, null);
-            Equal(1, saved!.CapturePresets.Length); Equal(ScreenshotColorDepth.Indexed4, saved.CapturePresets[0].ColorDepth);
+            Equal(3, saved!.CapturePresets.Length); Equal(ScreenshotColorDepth.Indexed4, saved.CapturePresets[0].ColorDepth);
             Equal(10, saved.ScreenshotPaddingPixels);
         });
         Run("プリセットは選択結果から共通出力まで適用され余白と命名を共有", () => WithOutputDirectory(directory => RunOutputTask(async () =>

@@ -36,7 +36,7 @@ internal sealed record AppSettings
     public bool PlayCaptureSound { get; init; } = true;
     public NotificationCorner NotificationCorner { get; init; } = Services.NotificationCorner.BottomRight;
     public bool FreezeFrame { get; init; } = true;
-    public bool DimCaptureBackground { get; init; }
+    public bool DimCaptureBackground { get; init; } = true;
     public CaptureMetadataMode MetadataMode { get; init; }
     public bool LimitToStartingMonitor { get; init; } = true;
     public int ScreenshotPaddingPixels { get; init; }

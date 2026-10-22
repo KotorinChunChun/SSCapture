@@ -7,6 +7,71 @@ internal static partial class Program
 {
     private static void PresetConsolidationTests()
     {
+        Run("新規は入力出力各3件と矩形コピー既定・暗転ON", () =>
+        {
+            var settings = new AppSettings().ApplyDefaults(); settings.Validate();
+            Equal(2, settings.PresetSchemaVersion); Equal(3, settings.SavedRegions.Length); Equal(3, settings.CapturePresets.Length);
+            Equal(CaptureMode.Rectangle, settings.DefaultMode); Equal(OutputDestination.Clipboard, settings.DefaultDestination);
+            Check(settings.DimCaptureBackground && settings.FreezeFrame && !settings.IncludeCursor && !settings.Grid20, "標準入力の初期条件が異なる");
+            Equal(0, settings.ScreenshotPaddingPixels); Equal(ScreenshotColorDepth.Original, settings.ScreenshotColorDepth);
+            Equal(CaptureMetadataMode.None, settings.MetadataMode); Equal("Win+Shift+S", settings.ScreenshotShortcut1);
+            Equal("Rectangle,Window,FixedRegion", string.Join(',', settings.SavedRegions.Select(p => p.Mode)));
+            Check(settings.SavedRegions.All(p => !p.UseFixedCoordinates && p.FreezeFrame && p.PaddingPixels == 0 && !p.IncludeCursor && p.Shortcut == ""), "初期入力に座標・キー・加工が混入");
+            Equal(new Size(1280, 720), settings.SavedRegions.Single(p => p.Mode == CaptureMode.FixedRegion).Bounds.Size);
+            Check(settings.CapturePresets.Select(p => p.Destination).ToHashSet().SetEquals([OutputDestination.Clipboard, OutputDestination.File, OutputDestination.Clipboard | OutputDestination.File]), "初期出力の組合せが異なる");
+            Check(settings.CapturePresets.All(p => !p.OpenFolderAfterSave && p.ColorDepth == ScreenshotColorDepth.Original && string.IsNullOrEmpty(p.ImageEditorId) && string.IsNullOrEmpty(p.VideoEditorId)), "初期出力がアプリやフォルダを開く");
+        });
+        Run("初期候補追加はv1の既定・ID・値と重複名を保持", () =>
+        {
+            var baseline = new AppSettings { DefaultMode = CaptureMode.Freeform, ScreenshotPaddingPixels = 17, IncludeCursor = true, DimCaptureBackground = false };
+            var input = SavedRegion.FromSettings("ウィンドウ", baseline) with { Id = "initial-input-window", IsDefault = true };
+            var output = CapturePreset.FromSettings("ファイル保存", baseline) with { Id = "initial-output-file", IsDefault = true };
+            var legacy = baseline with { PresetSchemaVersion = 1, SavedRegions = [input], CapturePresets = [output] };
+            var next = legacy.ApplyDefaults(); next.Validate();
+            Equal(3, next.SavedRegions.Length); Equal(3, next.CapturePresets.Length);
+            Equal(input, next.SavedRegions.Single(p => p.IsDefault)); Equal(output, next.CapturePresets.Single(p => p.IsDefault));
+            Equal(17, next.ScreenshotPaddingPixels); Equal(CaptureMode.Freeform, next.DefaultMode); Check(next.IncludeCursor && !next.DimCaptureBackground, "既存条件が上書きされた");
+            Equal(3, next.SavedRegions.Select(p => p.Id).Distinct().Count()); Equal(3, next.SavedRegions.Select(p => p.Name).Distinct().Count());
+            Equal(3, next.CapturePresets.Select(p => p.Id).Distinct().Count()); Equal(3, next.CapturePresets.Select(p => p.Name).Distinct().Count());
+        });
+        Run("初期候補は3件以上の既存登録へ追加せず削除後も復活しない", () =>
+        {
+            var settings = new AppSettings().EnsurePresets();
+            var many = settings with { PresetSchemaVersion = 1,
+                SavedRegions = [..settings.SavedRegions, settings.SavedRegions[0] with { Id = "custom-input", Name = "追加", IsDefault = false }],
+                CapturePresets = [..settings.CapturePresets, settings.CapturePresets[0] with { Id = "custom-output", Name = "追加", IsDefault = false }] };
+            var next = many.EnsurePresets(); Equal(4, next.SavedRegions.Length); Equal(4, next.CapturePresets.Length);
+            var removed = settings with { SavedRegions = [settings.SavedRegions.Single(p => p.IsDefault)], CapturePresets = [settings.CapturePresets.Single(p => p.IsDefault)] };
+            Check(ReferenceEquals(removed, removed.EnsurePresets()), "削除済み候補を再追加した"); removed.Validate();
+        });
+        Run("コピー用の無効保存先は新規ファイル候補へ流用しない", () =>
+        {
+            var settings = new AppSettings { SaveDirectory = "relative", FileNamePattern = "{unknown}" }.ApplyDefaults();
+            settings.Validate(); Equal("relative", settings.SaveDirectory); Equal("{unknown}", settings.FileNamePattern);
+            foreach (var preset in settings.CapturePresets.Where(p => p.Destination.HasFlag(OutputDestination.File)))
+            { preset.Validate(); Check(Path.IsPathFullyQualified(preset.SaveDirectory), "無効な保存先を流用"); Equal(FileNamePattern.Default, preset.FileNamePattern); }
+        });
+        Run("v1候補追加は読込だけでは保存せず初回保存時に原本退避", () => WithServiceDirectory(directory =>
+        {
+            string path = Path.Combine(directory, "settings.json");
+            var current = new AppSettings().EnsurePresets(); var legacy = current with { PresetSchemaVersion = 1, SavedRegions = [current.SavedRegions[0]], CapturePresets = [current.CapturePresets[0]], DimCaptureBackground = false };
+            string json = System.Text.Json.JsonSerializer.Serialize(legacy); File.WriteAllText(path, json);
+            var store = new SettingsStore(path); var loaded = store.Load(out var warning); Equal<string?>(null, warning); Equal(3, loaded.SavedRegions.Length); Equal(json, File.ReadAllText(path));
+            store.Save(loaded); Equal(json, File.ReadAllText(path + ".presets-v1.bak"));
+            var restored = store.Load(out warning); Equal<string?>(null, warning); SettingsEqual(loaded, restored); Check(!restored.DimCaptureBackground, "明示OFFを変更");
+            store.Save(restored); Equal(json, File.ReadAllText(path + ".presets-v1.bak"));
+        }));
+        Run("初期3候補は設定一覧と撮影中メニューの双方から選択可能", () =>
+        {
+            var settings = new AppSettings().ApplyDefaults();
+            using var form = new SettingsForm(settings, _ => null, () => { }, () => []);
+            Equal(3, ((ListBox)form.Controls.Find("SavedRegions", true).Single()).Items.Count);
+            Equal(3, ((ListBox)form.Controls.Find("CapturePresetList", true).Single()).Items.Count);
+            Check(((CheckBox)form.Controls.Find("DimCaptureBackground", true).Single()).Checked, "新規設定UIが暗転OFF");
+            using var menu = new CaptureContextMenu(settings.DefaultDestination, _ => { }, () => { }, () => { },
+                inputPresets: settings.SavedRegions, applyInputPreset: _ => { }, presets: settings.CapturePresets, applyPreset: _ => { });
+            Equal(3, menu.Command("InputPresetMenu").DropDownItems.Count); Equal(3, menu.Command("CapturePresetMenu").DropDownItems.Count);
+        });
         Run("統合画面は9分類と内部区分で旧入力・命名ページを重複表示しない", () =>
         {
             using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
@@ -26,8 +91,8 @@ internal static partial class Program
             var editor = (RegionManagerForm)form.Controls.Find("RegionManagerForm", true).Single();
             ConsolidationClick(form, "DuplicateInputPreset"); form.Controls.Find("RegionName", true).Single().Text = "ウィンドウ用";
             ((ComboBox)form.Controls.Find("CaptureMode", true).Single()).SelectedIndex = (int)CaptureMode.Window;
-            ConsolidationClick(form, "DefaultInputPreset"); Equal(2, editor.Regions.Length); Equal(1, editor.Regions.Count(p => p.IsDefault));
-            ConsolidationClick(form, "DeleteRegion"); Equal(2, editor.Regions.Length);
+            ConsolidationClick(form, "DefaultInputPreset"); Equal(4, editor.Regions.Length); Equal(1, editor.Regions.Count(p => p.IsDefault));
+            ConsolidationClick(form, "DeleteRegion"); Equal(4, editor.Regions.Length);
             SaveConsolidation(form); Check(saved is not null, "保存しない"); Equal(CaptureMode.Window, saved!.DefaultMode);
             ConsolidationClick(form, "DefaultInputSummary"); Equal("入力プリセット", ((TabControl)form.Controls.Find("SettingsTabs", true).Single()).SelectedTab!.Text);
             Equal("ウィンドウ用", form.Controls.Find("RegionName", true).Single().Text);
@@ -40,7 +105,7 @@ internal static partial class Program
             ConsolidationClick(form, "DuplicateCapturePreset"); form.Controls.Find("CapturePresetName", true).Single().Text = "16色";
             ((ComboBox)form.Controls.Find("ScreenshotColorDepth", true).Single()).SelectedIndex = (int)ScreenshotColorDepth.Indexed4;
             form.Controls.Find("FileNamePattern", true).Single().Text = "sample.{ext}";
-            ConsolidationClick(form, "DefaultCapturePreset"); ConsolidationClick(form, "DeleteCapturePreset"); Equal(2, editor.Presets.Length);
+            ConsolidationClick(form, "DefaultCapturePreset"); ConsolidationClick(form, "DeleteCapturePreset"); Equal(4, editor.Presets.Length);
             SaveConsolidation(form); Check(saved is not null, "出力の既定が保存されない");
             Equal(ScreenshotColorDepth.Indexed4, saved!.ScreenshotColorDepth); Equal("sample.{ext}", saved.FileNamePattern); Equal(12, saved.ScreenshotPaddingPixels);
             ConsolidationClick(form, "DefaultOutputSummary"); Equal("16色", form.Controls.Find("CapturePresetName", true).Single().Text);
