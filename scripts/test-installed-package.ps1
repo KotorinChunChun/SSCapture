@@ -48,9 +48,30 @@ function Pipe-Request([string]$Command, [int]$ExpectedPid) {
 }
 function Invoke-Managed([string]$Operation) {
     $helper = Join-Path $testRoot 'maintenance/KotorinToys.Maintenance.exe'
-    $response = & $helper --product SSCapture --root $testRoot --operation $Operation 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0) { throw "管理操作 $Operation が失敗: $response" }
-    return $response | ConvertFrom-Json
+    $start = [Diagnostics.ProcessStartInfo]::new($helper)
+    $start.UseShellExecute = $false; $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true
+    foreach ($argument in @('--product','SSCapture','--root',$testRoot,'--operation',$Operation)) { $start.ArgumentList.Add($argument) }
+    $process = [Diagnostics.Process]::Start($start)
+    try {
+        if (-not $process.WaitForExit(45000)) { throw "管理操作 $Operation が45秒以内に完了しません。強制終了はしません。" }
+        if ($process.ExitCode -ne 0) {
+            $message = $process.StandardError.ReadLineAsync().WaitAsync([TimeSpan]::FromSeconds(5)).GetAwaiter().GetResult()
+            throw "管理操作 $Operation が失敗: $message"
+        }
+        # 起動先GUIへ標準ハンドルが継承されてもEOFを待たない。完全なJSON応答1件だけを読む。
+        $response = ''
+        $responseDeadline = [DateTimeOffset]::UtcNow.AddSeconds(5)
+        for ($lineNumber = 0; $lineNumber -lt 1000; $lineNumber++) {
+            $remaining = $responseDeadline - [DateTimeOffset]::UtcNow
+            if ($remaining -le [TimeSpan]::Zero) { throw '管理JSON応答の読取期限を超えました。' }
+            $line = $process.StandardOutput.ReadLineAsync().WaitAsync($remaining).GetAwaiter().GetResult()
+            if ($null -eq $line) { break }
+            $response += $line + "`n"
+            try { return ConvertFrom-Json -InputObject $response -ErrorAction Stop } catch [ArgumentException] { }
+        }
+        throw "管理操作 $Operation のJSON応答が完結しません。"
+    } finally { $process.Dispose() }
 }
 function Assert-UserData {
     foreach ($relative in $script:dataHashes.Keys) {
@@ -169,6 +190,13 @@ try {
     }
     throw
 } finally {
+    # テスト失敗でも、この実行の専用配置だけを通常終了する。強制終了はしない。
+    $testExe = (Join-Path $testRoot 'SSCapture.exe').Replace('/','\')
+    $testProcesses = @(Get-CimInstance Win32_Process -Filter "Name='SSCapture.exe'" | Where-Object { $_.ExecutablePath -eq $testExe })
+    if ($testProcesses.Count -gt 0) {
+        $cleanup = Invoke-Managed 'stop'
+        if ($cleanup.state -ne '停止中') { throw '専用テストアプリの通常終了を確認できません。元登録の復元を中止しました。' }
+    }
     if ($changed) {
         # テスト先の登録だけを元へ戻す。未知の登録先なら上書きしない。
         if (Test-Path -LiteralPath $key) {
