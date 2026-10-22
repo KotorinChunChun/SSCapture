@@ -40,7 +40,9 @@ $frameworks = @(
 Write-Json 'SSCapture.runtimeconfig.json' @{ runtimeOptions=@{ includedFrameworks=$frameworks } }
 Write-Json 'maintenance/KotorinToys.Maintenance.runtimeconfig.json' @{ runtimeOptions=@{ includedFrameworks=@($frameworks[0]) } }
 $readVersion = { param($Path)
-    if ([IO.Path]::GetFileName($Path) -eq 'coreclr.dll') { return [pscustomobject]@{ ProductVersion='10.0.13+fixture' } }
+    if ([IO.Path]::GetFileName($Path) -in @('coreclr.dll','System.Private.CoreLib.dll','System.Windows.Forms.dll')) {
+        return [pscustomobject]@{ ProductVersion='10.0.13+fixture'; FileMajorPart=10; FileMinorPart=0; FileBuildPart=1326; FilePrivatePart=50504 }
+    }
     [pscustomobject]@{ ProductName='SSCapture'; ProductVersion='0.1.3'; FileVersion='0.1.3.0' }
 }
 function Validate { Assert-ManagedPayload -Root $root -Version '0.1.3' -RuntimeVersion '10.0.13' -ReadVersion $readVersion }
@@ -69,6 +71,23 @@ Case '実EXEの製品名不一致' {
     Rejected { Assert-ManagedPayload $root '0.1.3' '10.0.13' -ReadVersion { [pscustomobject]@{ ProductName='Other'; ProductVersion='0.1.3'; FileVersion='0.1.3.0' } } }
 }
 Case '旧runtimeを拒否' { Rejected { Assert-ManagedPayload $root '0.1.3' '10.0.14' -ReadVersion $readVersion } }
+Case '設定だけ新版でDesktop実体が旧版なら拒否' {
+    $baselineReader = $readVersion
+    Rejected { Assert-ManagedPayload $root '0.1.3' '10.0.13' -ReadVersion {
+        param($Path)
+        if ([IO.Path]::GetFileName($Path) -eq 'System.Windows.Forms.dll') { return [pscustomobject]@{ ProductVersion='10.0.11+fixture' } }
+        & $baselineReader $Path
+    } }
+}
+Case 'CoreCLRだけ別ビルドなら拒否' {
+    $baselineReader = $readVersion
+    Rejected { Assert-ManagedPayload $root '0.1.3' '10.0.13' -ReadVersion {
+        param($Path)
+        $info = & $baselineReader $Path
+        if ([IO.Path]::GetFileName($Path) -eq 'coreclr.dll') { $info.FileBuildPart = 1126 }
+        $info
+    } }
+}
 Case '補助だけ旧runtimeを拒否' {
     Write-Json 'maintenance/KotorinToys.Maintenance.runtimeconfig.json' @{ runtimeOptions=@{ includedFrameworks=@(@{name='Microsoft.NETCore.App';version='10.0.11'}) } }
     try { Rejected { Validate } } finally { Write-Json 'maintenance/KotorinToys.Maintenance.runtimeconfig.json' @{ runtimeOptions=@{ includedFrameworks=@($frameworks[0]) } } }

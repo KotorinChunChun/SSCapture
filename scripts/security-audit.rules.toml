@@ -1,0 +1,4 @@
+# 採用元: KotorinToys 29cd3c17b931bb910bcacbfef6289135f0593a39 / dev/scripts/security-audit.rules.toml
+title = "KotorinToys public security audit"
+[extend]
+useDefault = true

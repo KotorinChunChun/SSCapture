@@ -27,6 +27,13 @@ await Run("既知旧版のtool.json欠落だけを認識", () => Done(() =>
     Check(!File.Exists(Path.Combine(f.Root, "tool.json")));
 }));
 await Run("正式登録なしを拒否", async () => { var f = New(); f.Registration = null; await Rejected(() => Done(() => f.Validator.Validate(f.Root, true, true))); });
+await Run("既知日本語setupの旧版表示名を限定認識", async () =>
+{
+    var f = New(); f.Registration = f.Registration! with { Name = "SSCapture バージョン 0.1.2" };
+    Check(f.Validator.Validate(f.Root, true, false).Legacy);
+    f.Registration = f.Registration with { Name = "SSCapture バージョン 0.1.1" };
+    await Rejected(() => Done(() => f.Validator.Validate(f.Root, true, false)));
+});
 await Run("別製品名を拒否", async () => { var f = New(); f.Registration = f.Registration! with { Name = "Other" }; await Rejected(() => Done(() => f.Validator.Validate(f.Root, true, false))); });
 await Run("登録先違いを拒否", async () => { var f = New(); f.Registration = f.Registration! with { Directory = f.Payload }; await Rejected(() => Done(() => f.Validator.Validate(f.Root, true, false))); });
 await Run("削除登録違いを拒否", async () => { var f = New(); f.Registration = f.Registration! with { Uninstall = "\"C:\\other\\unins000.exe\"" }; await Rejected(() => Done(() => f.Validator.Validate(f.Root, true, false))); });
@@ -80,6 +87,28 @@ await Run("更新後照合と旧所有物の整理", async () =>
     Check(f.Store.Load(f.Root)?.Phase == "completed");
     Check(!File.Exists(Path.Combine(f.Root, "old-runtime.txt")));
     f.CheckData();
+});
+await Run("配置後失敗で削除補助も旧版へ復元", async () =>
+{
+    var f = New(); var uninstaller = Path.Combine(f.Root, "unins000.exe");
+    var oldHash = SafeFiles.Hash(uninstaller);
+    await f.Update.Prepare(f.Root, f.Payload);
+    f.InstallPayload(); File.WriteAllText(uninstaller, "new uninstaller");
+    File.WriteAllText(Path.Combine(f.Root, "unins000.dat"), "new metadata");
+    f.Update.ObserveInstalled(f.Root);
+    f.Update.Recover(f.Root);
+    Check(SafeFiles.Hash(uninstaller) == oldHash);
+    Check(!File.Exists(Path.Combine(f.Root, "unins000.dat")));
+    Check(f.Store.Load(f.Root)?.Phase == "recovered"); f.CheckData();
+});
+await Run("配置確認後に外部変更された削除補助を上書きしない", async () =>
+{
+    var f = New(); await f.Update.Prepare(f.Root, f.Payload); f.InstallPayload();
+    f.Update.ObserveInstalled(f.Root);
+    File.WriteAllText(Path.Combine(f.Root, "unins000.exe"), "external change");
+    await Rejected(() => Done(() => f.Update.ObserveInstalled(f.Root)));
+    await Rejected(() => Done(() => f.Update.Recover(f.Root)));
+    Check(File.ReadAllText(Path.Combine(f.Root, "SSCapture.exe")) == "new");
 });
 await Run("復旧時の外部変更を上書きしない", async () =>
 {

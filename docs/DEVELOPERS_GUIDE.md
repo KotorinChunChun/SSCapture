@@ -42,12 +42,14 @@ pwsh -File scripts/package.ps1
 
 `setup-package.ps1`は公式Inno Setup 6.2.2と展開ツールをSHA256照合後、`.tools`へ展開します。システムへのインストール・レジストリ登録は行いません。指定版が配置済みなら再取得しません。
 
-`package.ps1`は通常テスト後、毎回新しい`release/work`へWindows x64用ランタイム同梱版を発行します。テストも同じ作業先の`tests`へ分離し、起動中の検証画面を上書きしません。利用中の`artifacts/app`や`data`は配布元に使いません。FFmpeg/FFprobe、OneOCR、PDB、個人設定を含めず、`release/v0.1.2`へ次の3ファイルを生成します。
+`package.ps1`は通常テスト後、毎回新しい`dev/history/vX.Y.Z/logs/package-<識別子>/app`へWindows x64用ランタイム同梱版を発行します。テストも同じ作業先の`tests`へ分離し、起動中の検証画面を上書きしません。利用中の`artifacts/app`や`data`は配布元に使いません。FFmpeg/FFprobe、OneOCR、PDB、個人設定を含めず、`release/v0.1.4`へ次の3ファイルを生成します。
 
-- `SSCapture-0.1.2-setup.exe`
+- `SSCapture-0.1.4-setup.exe`
 - `SSCapture-packages.json`
 - `SSCapture-SHA256SUMS.txt`
 
 版は`tool.json`から取得し、実行ファイル・アセンブリ・ランタイム同梱を検査します。実プッシュ・タグ・Release公開は行いません。公開時は[Release規則](../dev/RELEASE_RULE.md)に従います。
+
+明示された公開用生成のみ `-PublicRelease` を指定します。目録の公開状態と未署名種別が切り替わりますが、外部公開は別工程です。生成setupは非実行展開し、発行元と両配置の全ファイル・目録を照合します。秘密情報検査と公式最新ランタイム版の検査が完了しない場合は生成を止めます。
 
 同梱ライセンスはNAudio、実際に使用した.NET Runtime Pack、Inno Setupから取得します。Inno Setup用の`.iss`は日本語を正しく扱うためUTF-8 BOM付きで保存します。

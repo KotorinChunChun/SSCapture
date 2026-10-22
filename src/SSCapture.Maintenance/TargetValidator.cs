@@ -15,6 +15,7 @@ internal sealed class TargetValidator(
     Func<string, ExecutableIdentity>? readExecutable = null,
     PayloadManifest? legacy = null)
 {
+    public bool UsesSystemRegistration => readRegistration is null;
     public const string RegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\KotorinToys.SSCapture_is1";
     public static readonly ToolDefinition Definition = new("ss-capture", "SSCapture", "SSCapture.exe", "README.md",
         AppId: "KotorinToys.SSCapture", InstalledExecutable: "SSCapture.exe");
@@ -31,6 +32,9 @@ internal sealed class TargetValidator(
             AssemblyName.GetAssemblyName(SafeFiles.Resolve(root, "SSCapture.dll")).Version?.ToString() ?? "");
     }
     public Registration? CurrentRegistration() => (readRegistration ?? ReadRegistration)();
+    public static bool IsProductRegistrationName(string name, string version) =>
+        name == "SSCapture" || name == "SSCapture " + version ||
+        version == "0.1.2" && name == "SSCapture バージョン 0.1.2";
     public ValidatedTarget Validate(string path, bool allowLegacy, bool allowFresh)
     {
         var root = SafeFiles.Root(path);
@@ -42,7 +46,7 @@ internal sealed class TargetValidator(
             return new(root, "", false, true, null);
         }
         if (!string.Equals(SafeFiles.Root(registration.Directory), root, StringComparison.OrdinalIgnoreCase) ||
-            registration.Name != "SSCapture" && registration.Name != "SSCapture " + registration.Version || !PayloadManifest.VersionNumber(registration.Version))
+            !IsProductRegistrationName(registration.Name, registration.Version) || !PayloadManifest.VersionNumber(registration.Version))
             throw new IOException("正式登録・製品名・導入先が一致しません。");
         var uninstaller = SafeFiles.Resolve(root, "unins000.exe");
         if (!string.Equals(registration.Uninstall.Trim().Trim('"'), uninstaller, StringComparison.OrdinalIgnoreCase) || !File.Exists(uninstaller))

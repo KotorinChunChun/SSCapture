@@ -9,8 +9,15 @@ $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
 $env:DOTNET_CLI_HOME = Join-Path $projectRoot '.tools\cli'
 $env:NUGET_PACKAGES = Join-Path $projectRoot '.tools\nuget'
 function Invoke-Dotnet {
-    & $dotnetExe @args
-    if ($LASTEXITCODE -ne 0) { throw "dotnet failed: $LASTEXITCODE" }
+    # 別SDKを指す継承値があると、dotnet.exeだけ新版でも旧ランタイムを発行する。
+    # 選択したCLI自身にSDKを解決させる。利用者の永続環境設定は変更しない。
+    $inheritedSdkPath = $env:MSBuildSDKsPath
+    try {
+        $env:MSBuildSDKsPath = $null
+        & $dotnetExe @args
+        if ($LASTEXITCODE -ne 0) { throw "dotnet failed: $LASTEXITCODE" }
+    }
+    finally { $env:MSBuildSDKsPath = $inheritedSdkPath }
 }
 
 function Get-BuildDependencyPaths {

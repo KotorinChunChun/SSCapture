@@ -7,13 +7,13 @@
 | 項目 | 値 |
 | --- | --- |
 | リポジトリ | `KotorinChunChun/SSCapture`、main |
-| 現在の版・タグ | `0.1.2` / `v0.1.2` |
+| 現在の版・タグ | `0.1.4` / `v0.1.4` |
 | AppId | `KotorinToys.SSCapture` |
 | 導入先の既定 | `{localappdata}\Programs\SSCapture` |
 | 対象 | Windows 11 x64、ユーザー単位 |
 | 形式 | Inno Setupインストーラー、.NET 10 Desktop Runtime同梱 |
 | 公開状態 | 未署名のprereleaseを継続 |
-| 公開用出力先 | `release/v0.1.2/`、Git除外 |
+| 公開用出力先 | `release/v0.1.4/`、Git除外 |
 
 v0.1.0の公開EXEを実行せず、SHA256照合とヘッダー展開でAppId・導入先を確認した。AppId・導入先・設定JSON形式は変更しない。既存導入先は`UsePreviousAppDir`で継承する。稼働中はAppMutexで更新を止め、強制終了しない。アプリの終了後に更新する。
 
@@ -25,6 +25,8 @@ v0.1.0の公開EXEを実行せず、SHA256照合とヘッダー展開でAppId・
 pwsh -File scripts/setup-package.ps1
 pwsh -File scripts/package.ps1
 ```
+
+公開の明示指示を受けた生成では `pwsh -File scripts/package.ps1 -PublicRelease` を使い、目録をpublished/unsigned-public-buildとして生成する。この指定だけでは外部公開しない。未公開の検証用生成は従来どおり指定なしとする。
 
 通常テスト後、新規発行先から生成する。FFmpeg/FFprobe/OneOCR/onnxruntime・個人設定・PDBを除外し、版とランタイム同梱を検査する。公開用の3ファイルはEXE、packages.json、SHA256SUMSとする。その他の`release/work`は公開しない。目録の`signature=unsigned-public-build`は署名済みを意味しない。
 
@@ -48,10 +50,10 @@ pwsh -File scripts/package.ps1
 git fetch origin --prune
 git status --short
 git rev-list --left-right --count origin/main...HEAD
-Get-FileHash release/v0.1.2/SSCapture-0.1.2-setup.exe -Algorithm SHA256
+Get-FileHash release/v0.1.4/SSCapture-0.1.4-setup.exe -Algorithm SHA256
 git push origin main
 $releaseCommit = git rev-parse HEAD
-gh release create v0.1.2 release/v0.1.2/SSCapture-0.1.2-setup.exe release/v0.1.2/SSCapture-packages.json release/v0.1.2/SSCapture-SHA256SUMS.txt --repo KotorinChunChun/SSCapture --target $releaseCommit --title 'SSCapture v0.1.2' --notes-file docs/releases/v0.1.2.md --prerelease
+gh release create v0.1.4 release/v0.1.4/SSCapture-0.1.4-setup.exe release/v0.1.4/SSCapture-packages.json release/v0.1.4/SSCapture-SHA256SUMS.txt --repo KotorinChunChun/SSCapture --target $releaseCommit --title 'SSCapture v0.1.4' --notes-file docs/releases/v0.1.4.md --prerelease
 ```
 
 mainだけをプッシュする。不要な過去タグの一括送信・force pushを行わない。Release作成後はタグの対象コミット、3資産のサイズ・SHA256、ノートを確認し、実公開URLを報告する。

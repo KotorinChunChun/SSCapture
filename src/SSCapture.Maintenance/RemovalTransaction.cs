@@ -18,18 +18,27 @@ internal sealed class RemovalTransaction(TargetValidator validator, Func<string,
         var journal = new OperationJournal(Guid.NewGuid().ToString("N"), operations.Owner, root, "remove", "prepared",
             target.Version, "", [], before);
         operations.Save(journal);
-        var result = reservations.Remove("ss-capture");
-        if (!result.Success) throw new IOException(result.Detail);
-        CheckRemovalJournal(journal, completed: true);
-        operations.Save(journal with { Phase = "reservations-removed" });
+        try
+        {
+            var result = reservations.Remove("ss-capture");
+            if (!result.Success) throw new IOException(result.Detail);
+            CheckRemovalJournal(journal, completed: true);
+            operations.Save(journal with { Phase = "reservations-removed" });
+        }
+        catch
+        {
+            // 準備中の失敗は呼出元が「準備成功」を記録する前に発生する。
+            // この実行の記録から復旧し、復旧不可なら未完了記録を残す。
+            Recover(root);
+            throw;
+        }
     }
     public void Recover(string root)
     {
         var journal = Required(root);
         if (journal.Phase is "completed" or "recovered") return;
         var pending = File.Exists(Path.Combine(settings.DirectoryPath, "removal-operation.json"));
-        var completed = File.Exists(Path.Combine(settings.DirectoryPath, "last-removal-operation.json"));
-        if (!pending && !completed && Serialize(settings.Load()) == journal.ReservationBefore)
+        if (!pending && Serialize(settings.Load()) == journal.ReservationBefore)
         { operations.Save(journal with { Phase = "recovered" }); return; }
         CheckRemovalJournal(journal, completed: !pending);
         var result = reservations.Recover(completed: !pending, expectedId: "ss-capture");

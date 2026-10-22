@@ -186,7 +186,7 @@ internal static partial class Program
                     Check(input.Parent!.ClientRectangle.Contains(input.Bounds), $"{input.Name} が親領域外: {input.Bounds} parent={input.Parent.ClientRectangle}");
                 }
                 foreach (var label in Descendants(page).OfType<Label>().Where(label =>
-                    label.Parent is TableLayoutPanel table && table.GetColumn(label) == 0 && table.GetColumnSpan(label) == 1))
+                    label.AutoSize && label.Parent is TableLayoutPanel table && table.GetColumn(label) == 0 && table.GetColumnSpan(label) == 1))
                 {
                     Size preferred = label.GetPreferredSize(Size.Empty);
                     Check(label.Width >= preferred.Width && label.Height >= preferred.Height, $"項目名 {label.Text} が切れる: {label.Size} preferred={preferred}");

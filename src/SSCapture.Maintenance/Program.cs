@@ -2,6 +2,8 @@ using System.Text.Json;
 using KotorinToys;
 using SSCapture.Maintenance;
 
+string? diagnosticRoot = null;
+string diagnosticOperation = "";
 try
 {
     if (args.Length % 2 != 0) throw new IOException("引数は名前と値の組で指定してください。");
@@ -12,6 +14,8 @@ try
     if (values.GetValueOrDefault("--product") != "SSCapture") throw new IOException("この補助はSSCapture専用です。");
     var root = SafeFiles.Root(values.GetValueOrDefault("--root") ?? "");
     var operation = values.GetValueOrDefault("--operation") ?? "";
+    diagnosticRoot = root;
+    diagnosticOperation = operation;
     var validator = new TargetValidator();
     if (operation is "verify" or "status" or "show" or "start" or "stop")
     {
@@ -41,7 +45,7 @@ try
         var result = await new ToolManager(target).Stop(managed, timeout.Token);
         if (result.State != "停止中") throw new IOException("正常終了を確認できません: " + result.State + " / " + result.Detail);
     }
-    if (!new[] { "update", "commit-update", "recover-update", "remove", "commit-remove", "recover-remove" }.Contains(operation))
+    if (!new[] { "update", "observe-update", "commit-update", "recover-update", "remove", "commit-remove", "recover-remove" }.Contains(operation))
         throw new IOException("未対応の操作です。");
     var store = new OperationStore(root);
     using var lease = store.Lease();
@@ -51,15 +55,14 @@ try
     {
         case "update":
             var payload = SafeFiles.Root(values.GetValueOrDefault("--payload") ?? "");
-            if (store.Load(root) is { Kind: "update", Phase: not ("completed" or "recovered") }) update.Recover(root);
             await update.Prepare(root, payload);
             break;
         case "commit-update": update.Commit(root); break;
+        case "observe-update": update.ObserveInstalled(root); break;
         case "recover-update":
             if (store.Load(root) is { Kind: "update" }) update.Recover(root);
             break;
         case "remove":
-            if (store.Load(root) is { Kind: "remove", Phase: not ("completed" or "recovered") }) remove.Recover(root);
             await remove.Prepare(root);
             break;
         case "commit-remove": remove.Commit(root); break;
@@ -72,6 +75,16 @@ try
 }
 catch (Exception ex)
 {
+    if (diagnosticRoot != null)
+    {
+        try
+        {
+            var store = new OperationStore(diagnosticRoot);
+            SafeFiles.Write(SafeFiles.Resolve(store.DirectoryPath, diagnosticOperation + "-error.json"),
+                new { root = diagnosticRoot, operation = diagnosticOperation, utc = DateTimeOffset.UtcNow, message = ex.Message });
+        }
+        catch (Exception) { /* 診断記録失敗でも操作の失敗を成功へ変えない。 */ }
+    }
     Console.Error.WriteLine("SSCapture管理処理を中止しました: " + ex.Message);
     return 1;
 }

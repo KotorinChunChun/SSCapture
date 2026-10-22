@@ -20,6 +20,6 @@
   <ItemGroup><PackageReference Include="NAudio.Wasapi" Version="3.1.0" /></ItemGroup>
   <ItemGroup>
     <FrameworkReference Update="Microsoft.NETCore.App" RuntimeFrameworkVersion="10.0.13" Condition="'$(SelfContained)' == 'true'" />
-    <FrameworkReference Update="Microsoft.WindowsDesktop.App" RuntimeFrameworkVersion="10.0.13" Condition="'$(SelfContained)' == 'true'" />
+    <FrameworkReference Update="Microsoft.WindowsDesktop.App.WindowsForms" RuntimeFrameworkVersion="10.0.13" Condition="'$(SelfContained)' == 'true'" />
   </ItemGroup>
 </Project>

@@ -75,6 +75,8 @@ function Assert-ManagedPayload {
     if ($definition.icon -and -not (Test-Path -LiteralPath (Resolve-PayloadPath $Root $definition.icon) -PathType Leaf)) { throw '製品定義のアイコン参照がありません。' }
     $appInfo = & $ReadVersion (Join-Path $Root 'SSCapture.exe')
     if ($appInfo.ProductName -cne 'SSCapture' -or $appInfo.ProductVersion -ne $Version -or $appInfo.FileVersion -ne "$Version.0") { throw '配布EXEの製品名・版が一致しません。' }
+    $desktopInfo = & $ReadVersion (Join-Path $Root 'System.Windows.Forms.dll')
+    if ($desktopInfo.ProductVersion -notmatch ('^' + [regex]::Escape($RuntimeVersion) + '(\+|$)')) { throw 'Windows Desktopランタイム実体の版が一致しません。' }
     foreach ($config in @('SSCapture.runtimeconfig.json','maintenance/KotorinToys.Maintenance.runtimeconfig.json')) {
         $options = (Get-Content -LiteralPath (Join-Path $Root $config) -Raw | ConvertFrom-Json).runtimeOptions
         $expected = if ($config.StartsWith('maintenance/')) { @('Microsoft.NETCore.App') } else { @('Microsoft.NETCore.App','Microsoft.WindowsDesktop.App') }
@@ -85,7 +87,12 @@ function Assert-ManagedPayload {
         if (@($options.includedFrameworks.name | Sort-Object -Unique).Count -ne $expected.Count) { throw "同梱ランタイムの種類が不足しています: $config" }
         $runtimeRoot = Split-Path -Parent (Join-Path $Root $config)
         $runtimeInfo = & $ReadVersion (Join-Path $runtimeRoot 'coreclr.dll')
-        if ($runtimeInfo.ProductVersion -notmatch ('^' + [regex]::Escape($RuntimeVersion) + '(\+|$)')) { throw "ランタイム実体の版が一致しません: $config" }
+        $coreInfo = & $ReadVersion (Join-Path $runtimeRoot 'System.Private.CoreLib.dll')
+        if ($coreInfo.ProductVersion -notmatch ('^' + [regex]::Escape($RuntimeVersion) + '(-servicing\.\d+\.\d+)?(\+|$)')) { throw "ランタイム実体の版が一致しません: $config" }
+        # native coreclrのProductVersionはカンマ区切りのビルド番号。管理DLLと数値4部を照合する。
+        foreach ($part in @('FileMajorPart','FileMinorPart','FileBuildPart','FilePrivatePart')) {
+            if ($null -eq $runtimeInfo.$part -or $runtimeInfo.$part -ne $coreInfo.$part) { throw "CoreCLRとCoreLibの実体が一致しません: $config" }
+        }
     }
     Assert-PayloadLinks $Root
 }
