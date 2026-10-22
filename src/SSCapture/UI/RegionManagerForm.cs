@@ -17,19 +17,25 @@ internal sealed class RegionManagerForm : Form
     private readonly ComboBox anchor;
     private readonly Label displayInfo, status;
     private readonly Button delete, addLast;
+    private readonly ComboBox captureMode;
+    private readonly CheckBox coordinates, freezeFrame, includeCursor;
+    private readonly NumericUpDown padding;
+    private readonly AppSettings? profileSettings;
     private SavedRegion? editing;
     private Rectangle loadedBounds;
     private bool selecting, pickedBounds;
     private bool automaticName, updatingFields;
     private RegionPreviewForm? preview;
     internal SavedRegion[] Regions => regions.Select(Clone).ToArray();
+    internal void SelectDefault() { var preset = regions.FirstOrDefault(p => p.IsDefault); if (preset is not null) ReloadList(preset.Id); }
     private Form Host => TopLevel ? this : Parent?.FindForm() ?? this;
 
     public RegionManagerForm(SavedRegion[] regions, SavedRegion? lastRegion,
         Func<Size?, Task<Rectangle?>> selectRegion, Func<SavedRegion[], string?> saveRegions,
         Func<IReadOnlyList<DisplayLayout>>? displays = null,
-        Func<Size?, CaptureAnchor, Task<Rectangle?>>? selectAnchoredRegion = null, bool embedded = false)
+        Func<Size?, CaptureAnchor, Task<Rectangle?>>? selectAnchoredRegion = null, bool embedded = false, AppSettings? profileSettings = null)
     {
+        this.profileSettings = profileSettings;
         this.regions = regions.Select(Clone).ToList();
         this.lastRegion = lastRegion is null ? null : Clone(lastRegion);
         this.selectRegion = selectRegion;
@@ -75,7 +81,7 @@ internal sealed class RegionManagerForm : Form
         list.Format += (_, e) =>
         {
             if (e.ListItem is SavedRegion region)
-                e.Value = $"{region.Name} / {(string.IsNullOrWhiteSpace(region.Shortcut) ? "なし" : region.Shortcut)} / ({region.Bounds.X}, {region.Bounds.Y}) {region.Bounds.Width}×{region.Bounds.Height}";
+                e.Value = $"{(region.IsDefault ? "★ " : "")}{region.Name} / {(string.IsNullOrWhiteSpace(region.Shortcut) ? "なし" : region.Shortcut)} / {(region.UseFixedCoordinates ? $"({region.Bounds.X}, {region.Bounds.Y}) {region.Bounds.Width}×{region.Bounds.Height}" : SettingsForm.ModeName(region.Mode))}";
         };
         left.Controls.Add(list, 0, 0);
         var addNumeric = Button("新規（数値入力）", "NewNumericRegion", ButtonRole.Secondary);
@@ -153,6 +159,37 @@ internal sealed class RegionManagerForm : Form
         footer.Controls.Add(close);
         root.Controls.Add(footer, 0, 2);
         CancelButton = close;
+        // 名前・キーを共通ヘッダーへ移し、範囲編集と取得条件を分けてスクロールを不要にする。
+        body.Controls.Remove(editor);
+        var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty };
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 80)); right.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); body.Controls.Add(right, 1, 0);
+        var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2 };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 184)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.RowStyles.Add(new RowStyle(SizeType.Percent, 50)); header.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        foreach (var control in new Control[] { name, shortcut })
+        {
+            int row = editor.GetRow(control); var label = editor.GetControlFromPosition(0, row)!;
+            editor.Controls.Remove(label); editor.Controls.Remove(control); header.Controls.Add(label, 0, row); header.Controls.Add(control, 1, row); editor.RowStyles[row].Height = 0;
+        }
+        right.Controls.Add(header, 0, 0);
+        var sections = new TabControl { Name = "InputPresetSections", Dock = DockStyle.Fill }; right.Controls.Add(sections, 0, 1);
+        var conditionPage = new TabPage("取得条件"); var boundsPage = new TabPage("座標・寸法"); sections.TabPages.AddRange([conditionPage, boundsPage]); boundsPage.Controls.Add(editor);
+        var conditions = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 7 };
+        conditions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 184)); conditions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        for (int row = 0; row < 6; row++) conditions.RowStyles.Add(new RowStyle(SizeType.Absolute, 38)); conditions.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); conditionPage.Controls.Add(conditions);
+        captureMode = new ComboBox { Name = "CaptureMode", Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+        foreach (var mode in Enum.GetValues<CaptureMode>()) captureMode.Items.Add(SettingsForm.ModeName(mode)); captureMode.SelectedIndex = 0; AddField(conditions, "撮影モード", captureMode, 0);
+        coordinates = new CheckBox { Name = "InputFixedCoordinates", Text = "登録した座標を使用する", AutoSize = true, Dock = DockStyle.Fill }; AddField(conditions, "位置", coordinates, 1);
+        freezeFrame = new CheckBox { Name = "FreezeFrame", Text = "撮影開始時の画面を固定", AutoSize = true, Dock = DockStyle.Fill }; AddField(conditions, "撮影タイミング", freezeFrame, 2);
+        includeCursor = new CheckBox { Name = "IncludeCursor", Text = "画像・動画に含める", AutoSize = true, Dock = DockStyle.Fill }; AddField(conditions, "カーソル", includeCursor, 3);
+        padding = Number("ScreenshotPaddingPixels", 0, ScreenshotPadding.MaximumPixels); AddField(conditions, "画像の余白 (px)", padding, 4);
+        var profileButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false }; conditions.Controls.Add(profileButtons, 0, 5); conditions.SetColumnSpan(profileButtons, 2);
+        var duplicate = Button("複製", "DuplicateInputPreset", ButtonRole.Secondary); duplicate.Width = 120; duplicate.Dock = DockStyle.None;
+        duplicate.Click += (_, _) => { string copiedName = name.Text; list.ClearSelected(); editing = null; automaticName = false; name.Text = copiedName + "のコピー"; }; profileButtons.Controls.Add(duplicate);
+        var makeDefault = Button("既定にする", "DefaultInputPreset", ButtonRole.Secondary); makeDefault.Width = 144; makeDefault.Dock = DockStyle.None;
+        makeDefault.Click += (_, _) => { if (!StoreCurrent() || editing is null) return; string id = editing.Id; for (int i = 0; i < this.regions.Count; i++) this.regions[i] = this.regions[i] with { IsDefault = this.regions[i].Id == id }; ReloadList(id); }; profileButtons.Controls.Add(makeDefault);
+        void UpdateCoordinates() { x.Enabled = y.Enabled = coordinates.Checked; captureMode.Enabled = !coordinates.Checked; }
+        coordinates.CheckedChanged += (_, _) => UpdateCoordinates();
         list.SelectedIndexChanged += (_, _) => { if (list.SelectedItem is SavedRegion region) LoadRegion(region); };
         name.TextChanged += (_, _) => { if (!updatingFields) automaticName = false; };
         shortcut.ValueChanged += (_, _) => UpdateAutomaticName();
@@ -163,11 +200,26 @@ internal sealed class RegionManagerForm : Form
         if (embedded)
         {
             TopLevel = false; FormBorderStyle = FormBorderStyle.None; MinimumSize = Size.Empty; Dock = DockStyle.Fill;
-            AutoScroll = true; root.Dock = DockStyle.Top; root.Height = 520; root.Padding = new Padding(4);
+            AutoScroll = false; root.Dock = DockStyle.Fill; root.Padding = new Padding(4);
             root.RowStyles[2].Height = 0; footer.Visible = false;
             editor.ColumnStyles[0].Width = 184;
             body.ColumnStyles[0].Width = 25; body.ColumnStyles[1].Width = 75;
             CancelButton = null;
+        }
+        UpdateCoordinates();
+        if (profileSettings is null)
+        {
+            body.Controls.Remove(right); boundsPage.Controls.Remove(editor); body.Controls.Add(editor, 1, 0);
+            foreach (var control in new Control[] { name, shortcut })
+            {
+                int row = header.GetRow(control); var label = header.GetControlFromPosition(0, row)!;
+                header.Controls.Remove(label); header.Controls.Remove(control); editor.Controls.Add(label, 0, row); editor.Controls.Add(control, 1, row); editor.RowStyles[row].Height = 44;
+            }
+            Disposed += (_, _) => right.Dispose();
+        }
+        else
+        {
+            width.Name = "FixedWidth"; height.Name = "FixedHeight"; anchor.Name = "FixedCaptureAnchor";
         }
 
         void Dimension(string label, Control control, int column, int row)
@@ -205,6 +257,8 @@ internal sealed class RegionManagerForm : Form
         try
         {
             name.Text = ""; shortcut.Value = "";
+            captureMode.SelectedIndex = (int)(profileSettings?.DefaultMode ?? CaptureMode.FixedRegion);
+            coordinates.Checked = profileSettings is null; freezeFrame.Checked = profileSettings?.FreezeFrame ?? true; includeCursor.Checked = profileSettings?.IncludeCursor ?? false; padding.Value = profileSettings?.ScreenshotPaddingPixels ?? 0;
             var connected = displays();
             Rectangle screen = connected.Count > 0 ? connected[0].Bounds : new Rectangle(0, 0, 640, 480);
             SetBoundsFields(new Rectangle(screen.Location, new Size(Math.Min(640, screen.Width), Math.Min(480, screen.Height))));
@@ -222,7 +276,7 @@ internal sealed class RegionManagerForm : Form
         {
             var connected = displays();
             Rectangle bounds = RegionCoordinates.Resolve(lastRegion, connected);
-            NewRegion(); SetBoundsFields(bounds); pickedBounds = true;
+            NewRegion(); SetBoundsFields(bounds); pickedBounds = true; coordinates.Checked = true;
             ShowDisplays(connected); SetStatus("前回の範囲を読み込みました（未保存）。");
         }
         catch (Exception ex) { SetStatus(ex.Message, true); }
@@ -234,10 +288,11 @@ internal sealed class RegionManagerForm : Form
         updatingFields = true;
         automaticName = region.Name == RegionAutoName.Create(region.Shortcut, region.Bounds);
         name.Text = region.Name; shortcut.Value = region.Shortcut;
+        captureMode.SelectedIndex = (int)region.Mode; coordinates.Checked = region.UseFixedCoordinates; freezeFrame.Checked = region.FreezeFrame; includeCursor.Checked = region.IncludeCursor; padding.Value = region.PaddingPixels; anchor.SelectedIndex = (int)region.FixedAnchor;
         try
         {
             var connected = displays();
-            SetBoundsFields(RegionCoordinates.Resolve(region, connected));
+            SetBoundsFields(region.UseFixedCoordinates ? RegionCoordinates.Resolve(region, connected) : region.Bounds);
             ShowDisplays(connected); SetStatus("");
         }
         catch (Exception ex)
@@ -273,16 +328,22 @@ internal sealed class RegionManagerForm : Form
     private SavedRegion ReadRegion()
     {
         Rectangle bounds = ReadBounds();
-        SavedRegion next = editing is not null && !pickedBounds && bounds == loadedBounds
+        SavedRegion next = !coordinates.Checked ? (editing ?? new SavedRegion()) with { Bounds = bounds }
+            : editing is not null && editing.UseFixedCoordinates && !pickedBounds && bounds == loadedBounds
             ? editing with { Name = name.Text.Trim(), Shortcut = shortcut.Value }
             : RegionCoordinates.FromBounds(name.Text.Trim(), bounds, displays(), editing?.Id, shortcut.Value);
+        next = next with { Name = name.Text.Trim(), Shortcut = shortcut.Value, ProfileVersion = 1, UseFixedCoordinates = coordinates.Checked,
+            Mode = (CaptureMode)captureMode.SelectedIndex, FixedAnchor = ((AnchorItem)anchor.SelectedItem!).Value,
+            FreezeFrame = freezeFrame.Checked, IncludeCursor = includeCursor.Checked, PaddingPixels = (int)padding.Value,
+            IsDefault = editing?.IsDefault == true || (profileSettings is not null && regions.Count == 0) };
         next.Validate();
         return next;
     }
 
-    private void SaveRegion()
+    private void SaveRegion() => StoreCurrent();
+    internal bool StoreCurrent()
     {
-        if (selecting) return;
+        if (selecting) return false;
         try
         {
             SavedRegion next = ReadRegion();
@@ -290,16 +351,18 @@ internal sealed class RegionManagerForm : Form
             int index = candidate.FindIndex(region => region.Id == next.Id);
             if (index < 0) candidate.Add(next); else candidate[index] = next;
             string? error = saveRegions(candidate.Select(Clone).ToArray());
-            if (error is not null) { SetStatus(error, true); return; }
+            if (error is not null) { SetStatus(error, true); return false; }
             regions.Clear(); regions.AddRange(candidate); ReloadList(next.Id);
             SetStatus("入力プリセットを保存しました。");
+            return true;
         }
-        catch (Exception ex) { SetStatus("保存できませんでした: " + ex.Message, true); }
+        catch (Exception ex) { SetStatus("保存できませんでした: " + ex.Message, true); return false; }
     }
 
     private void DeleteRegion()
     {
         if (selecting || editing is null) return;
+        if (editing.IsDefault) { SetStatus("別の入力プリセットを既定にしてから削除してください。", true); return; }
         try
         {
             var candidate = regions.Where(region => region.Id != editing.Id).Select(Clone).ToArray();
@@ -340,7 +403,7 @@ internal sealed class RegionManagerForm : Form
                 throw new InvalidOperationException("選択した範囲が指定寸法と一致しません。もう一度位置を選んでください。");
             var connected = displays();
             _ = RegionCoordinates.FromBounds("選択範囲", bounds.Value, connected);
-            SetBoundsFields(bounds.Value); pickedBounds = true; ShowDisplays(connected);
+            SetBoundsFields(bounds.Value); pickedBounds = true; coordinates.Checked = true; ShowDisplays(connected);
             SetStatus("選択した範囲は未保存です。");
         }
         catch (Exception ex) { if (!IsDisposed) SetStatus("範囲を選択できませんでした: " + ex.Message, true); }

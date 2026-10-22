@@ -14,7 +14,7 @@ internal static partial class Program
             var preset = CapturePreset.FromSettings("資料", baseline with { ScreenshotPaddingPixels = 20,
                 DefaultDestination = OutputDestination.Clipboard | OutputDestination.File, FileNamePattern = "preset.png" });
             var next = preset.Apply(baseline);
-            Equal(20, next.ScreenshotPaddingPixels); Equal(preset.Destination, next.DefaultDestination);
+            Equal(3, next.ScreenshotPaddingPixels); Equal(preset.Destination, next.DefaultDestination);
             Equal("preset.png", next.FileNamePattern); Equal(3, baseline.ScreenshotPaddingPixels);
             Check(next.IncludeCursor && !next.KeepHistory, "無関係の設定が変化");
             Equal(baseline.ScreenshotShortcut1, next.ScreenshotShortcut1);
@@ -23,7 +23,7 @@ internal static partial class Program
         {
             var store = new SettingsStore(Path.Combine(directory, "settings.json"));
             File.WriteAllText(Path.Combine(directory, "settings.json"), "{}");
-            Equal(0, store.Load(out var warning).CapturePresets.Length); Equal<string?>(null, warning);
+            Equal(1, store.Load(out var warning).CapturePresets.Length); Equal<string?>(null, warning);
             var settings = new AppSettings { CapturePresets = [CapturePreset.FromSettings("資料", new AppSettings { ScreenshotPaddingPixels = 20 })] };
             store.Save(settings); SettingsEqual(settings, store.Load(out warning)); Equal<string?>(null, warning);
         }));
@@ -45,7 +45,7 @@ internal static partial class Program
             try
             {
                 session.ChangePadding(10); Equal(10, session.OutputSettings.ScreenshotPaddingPixels);
-                session.ApplyPreset(settings.CapturePresets[0]); Equal(20, session.OutputSettings.ScreenshotPaddingPixels);
+                session.ApplyPreset(settings.CapturePresets[0]); Equal(10, session.OutputSettings.ScreenshotPaddingPixels);
                 Equal(7, settings.ScreenshotPaddingPixels);
             }
             finally { session.Cancel(); }
@@ -82,11 +82,12 @@ internal static partial class Program
             using var form = new SettingsForm(new AppSettings { ScreenshotPaddingPixels = 10 }, s => { saved = s; return null; }, () => { }, () => []);
             var editor = (CapturePresetEditor)form.Controls.Find("CapturePresetEditor", true).Single();
             form.Controls.Find("CapturePresetName", true).Single().Text = "資料";
-            editor.StoreCurrent(); Equal(1, editor.Presets.Length); Equal(10, editor.Presets[0].PaddingPixels);
-            ((NumericUpDown)form.Controls.Find("PresetPaddingPixels", true).Single()).Value = 20;
-            editor.StoreCurrent(); Equal(1, editor.Presets.Length); Equal(20, editor.Presets[0].PaddingPixels);
+            editor.StoreCurrent(); Equal(1, editor.Presets.Length);
+            Check(form.Controls.Find("PresetPaddingPixels", true).Length == 0, "出力側に重複余白がある");
+            ((ComboBox)form.Controls.Find("ScreenshotColorDepth", true).Single()).SelectedIndex = (int)ScreenshotColorDepth.Indexed4;
+            editor.StoreCurrent(); Equal(1, editor.Presets.Length); Equal(ScreenshotColorDepth.Indexed4, editor.Presets[0].ColorDepth);
             typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(form, null);
-            Equal(1, saved!.CapturePresets.Length); Equal(20, saved.CapturePresets[0].PaddingPixels);
+            Equal(1, saved!.CapturePresets.Length); Equal(ScreenshotColorDepth.Indexed4, saved.CapturePresets[0].ColorDepth);
             Equal(10, saved.ScreenshotPaddingPixels);
         });
         Run("プリセットは選択結果から共通出力まで適用され余白と命名を共有", () => WithOutputDirectory(directory => RunOutputTask(async () =>
@@ -94,7 +95,7 @@ internal static partial class Program
             var settings = OutputSettings(directory);
             var preset = CapturePreset.FromSettings("資料", settings with { ScreenshotPaddingPixels = 20, FileNamePattern = "preset.png" });
             // SessionControllerはSTA検証側で作成するため、出力側はその不変な設定を使用する。
-            var applied = preset.Apply(settings);
+            var applied = preset.Apply(SavedRegion.FromSettings("入力", settings with { ScreenshotPaddingPixels = 20 }).Apply(settings));
             using var image = new Bitmap(20, 20);
             var router = new OutputRouter(Path.Combine(directory, "work"));
             await router.ScreenshotAsync(image, OutputDestination.File, applied);
@@ -111,7 +112,7 @@ internal static partial class Program
                 session.ApplyPreset(CapturePreset.FromSettings("資料", settings with { ScreenshotPaddingPixels = 20, FileNamePattern = "preset.png" }));
                 session.CompleteSelection(new(new Rectangle(10, 10, 40, 30), null, OutputDestination.File));
                 using var outcome = session.Completion.GetAwaiter().GetResult();
-                Equal(20, outcome.OutputSettings!.ScreenshotPaddingPixels); Equal("preset.png", outcome.OutputSettings.FileNamePattern);
+                Equal(3, outcome.OutputSettings!.ScreenshotPaddingPixels); Equal("preset.png", outcome.OutputSettings.FileNamePattern);
                 Equal(new Size(40, 30), outcome.Image!.Size);
             }
             finally { session.Cancel(); }

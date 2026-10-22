@@ -17,7 +17,7 @@ internal sealed partial class TrayApplicationContext
             lastStatus = null;
         if (form is null || form.IsDisposed)
         {
-            form = new SettingsForm(settings, next => SaveSettings(next with { Grid20 = settings.Grid20, ShowSelectionGuide = settings.ShowSelectionGuide }), OpenFolder,
+            form = new SettingsForm(settings, SaveSettings, OpenFolder,
                 openHistory: ShowHistory, lastRegion: lastRegion, selectInputRegion: PickRegionAsync);
             form.FormClosed += (_, _) => form = null;
             form.SetStatus(lastStatus);
@@ -36,6 +36,7 @@ internal sealed partial class TrayApplicationContext
         KeyboardHook? replacement = null;
         try
         {
+            next = next.UpdateDefaultProjections();
             next.Validate();
             replacement = NewHook(next, false);
             store.Save(next);

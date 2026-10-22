@@ -31,6 +31,8 @@ internal sealed class SettingsForm : Form
     private readonly ExternalApplicationsEditor imageApps, videoApps;
     private readonly RegionManagerForm inputPresetEditor;
     private readonly ListBox categories;
+    private readonly NumericUpDown snapDistance, gridStep;
+    private readonly CheckBox gridEnabled, guideEnabled;
 
     public SettingsForm(AppSettings settings, Func<AppSettings, string?> onSave, Action openFolder,
         Func<IReadOnlyList<MicrophoneInfo>>? listMicrophones = null, Action? openRegions = null, Action? openHistory = null,
@@ -38,19 +40,20 @@ internal sealed class SettingsForm : Form
         SavedRegion? lastRegion = null, Func<Size?, CaptureAnchor, Task<Rectangle?>>? selectInputRegion = null,
         Func<IReadOnlyList<DisplayLayout>>? regionDisplays = null)
     {
+        settings = settings.UpdateDefaultProjections();
         initial = settings;
         save = onSave;
         this.now = now ?? (() => DateTimeOffset.Now);
         Text = WindowTitle.Create("設定");
         Name = "SettingsForm";
         MinimizeBox = false;
-        MaximizeBox = false;
+        MaximizeBox = true;
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Yu Gothic UI", 12F);
         BackColor = Color.FromArgb(247, 249, 251);
         ForeColor = Color.FromArgb(28, 37, 47);
-        ClientSize = new Size(1080, 622);
-        MinimumSize = SizeFromClientSize(ClientSize);
+        ClientSize = new Size(1280, 820);
+        MinimumSize = SizeFromClientSize(new Size(1200, 720));
         StartPosition = FormStartPosition.CenterScreen;
         Icon = AppIcon.Create();
         var layout = new TableLayoutPanel { Name = "SettingsLayout", Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 1, RowCount = 3 };
@@ -111,7 +114,7 @@ internal sealed class SettingsForm : Form
         recording2 = KeyField(keys, "録画 2", "RecordingShortcut2", settings.RecordingShortcut2, 3);
         lastRegionKey = KeyField(keys, "前回の範囲", "LastRegionShortcut", settings.LastRegionShortcut, 4);
         var special = new Label { Name = "SpecialCaptureOperations", Dock = DockStyle.Fill,
-            Text = "撮影中の特殊操作（変更不可）\nCtrl: 幅固定（縦方向のみ）　Shift: 高さ固定（横方向のみ）\nAlt: 20px単位・枠吸着\nCtrl＋Shiftを押しながら別モニタへ移動:\n  今回の撮影だけモニタ制限を解除（方向ロックより優先）\nSpace: 矩形は現在位置を新しい始点／固定サイズは基点を時計回り\n操作ガイドはドラッグ中にポインタが近づくと一時的に隠れます。" };
+            Text = "撮影中の特殊操作（変更不可）\nCtrl: 幅固定（縦方向のみ）　Shift: 高さ固定（横方向のみ）\nAlt: 指定刻み幅・枠吸着\nCtrl＋Shiftを押しながら別モニタへ移動:\n  今回の撮影だけモニタ制限を解除（方向ロックより優先）\nSpace: 矩形は現在位置を新しい始点／固定サイズは基点を時計回り\n操作ガイドはドラッグ中にポインタが近づくと一時的に隠れます。" };
         keys.Controls.Add(special, 0, 5); keys.SetColumnSpan(special, 2);
         var regions = inputs;
         fixedWidth = PixelField(regions, "固定幅 (px)", "FixedWidth", settings.FixedWidth, 1);
@@ -126,7 +129,7 @@ internal sealed class SettingsForm : Form
         historyButton.Width = 144; historyButton.Enabled = openHistory is not null;
         historyButton.Click += (_, _) => openHistory?.Invoke();
         Add(historyPage, "管理", historyButton, 1);
-        var instant = Page(tabs, "即時撮影");
+        var instant = Page(tabs, "即時撮影キー");
         ((TabPage)instant.Parent!).AutoScroll = true;
         instant.Dock = DockStyle.Top;
         instant.Height = 440;
@@ -225,12 +228,12 @@ internal sealed class SettingsForm : Form
             Text = "画面共有への映り込みを抑えますが、共有アプリによっては除外できません。\n効果音はPC音声の録音・共有に含まれる場合があります。" };
         notifications.Controls.Add(notificationInfo, 0, 7); notifications.SetColumnSpan(notificationInfo, 2);
         var presetPage = new TabPage("出力プリセット") { BackColor = BackColor, Padding = new Padding(8) };
-        presetEditor = new CapturePresetEditor(settings, ReadSettings);
+        presetEditor = new CapturePresetEditor(settings, () => initial with { ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications });
         presetPage.Controls.Add(presetEditor); tabs.TabPages.Add(presetPage);
         var inputPresetPage = new TabPage("入力プリセット") { BackColor = BackColor, Padding = new Padding(4) };
         inputPresetEditor = new RegionManagerForm(settings.SavedRegions, lastRegion,
             size => PickInputRegion(size, settings.FixedCaptureAnchor), _ => null, regionDisplays,
-            selectAnchoredRegion: PickInputRegion, embedded: true);
+            selectAnchoredRegion: PickInputRegion, embedded: true, profileSettings: settings);
         inputPresetPage.Controls.Add(inputPresetEditor); tabs.TabPages.Add(inputPresetPage); inputPresetEditor.Show();
         async Task<Rectangle?> PickInputRegion(Size? size, CaptureAnchor anchor)
         {
@@ -240,24 +243,37 @@ internal sealed class SettingsForm : Form
                 LimitToStartingMonitor: limitToStartingMonitor.Checked, DimCaptureBackground: dimCaptureBackground.Checked));
             return outcome.Selection?.Bounds;
         }
-        string[] order = ["基本", "入力", "入力プリセット", "出力プリセット", "ファイル名", "撮影情報", "外部アプリ", "ショートカット", "即時撮影", "通知", "履歴", "録画・音声"];
+        // 旧単独ページを廃止し、プリセットの編集欄だけを公開する。
+        MoveSetting(limitToStartingMonitor, basic, 0); MoveSetting(dimCaptureBackground, basic, 1);
+        basic.Controls.Clear();
+        Add(basic, "範囲選択", limitToStartingMonitor, 0); Add(basic, "背景表示", dimCaptureBackground, 1);
+        gridEnabled = Toggle(basic, "刻み調整", "GridEnabled", "指定した刻み幅を常時使用", settings.Grid20, 2);
+        snapDistance = PixelField(basic, "吸着距離 (px)", "SnapDistancePixels", settings.SnapDistancePixels, 3);
+        gridStep = PixelField(basic, "刻み幅 (px)", "GridStepPixels", settings.GridStepPixels, 4);
+        guideEnabled = Toggle(basic, "操作ガイド", "ShowSelectionGuide", "撮影中に表示する", settings.ShowSelectionGuide, 5);
+        var inputSummary = MakeButton("", "DefaultInputSummary", ButtonRole.Secondary); inputSummary.AutoSize = false; inputSummary.Height = 76;
+        var outputSummary = MakeButton("", "DefaultOutputSummary", ButtonRole.Secondary); outputSummary.AutoSize = false; outputSummary.Height = 76;
+        Add(basic, "既定の入力", inputSummary, 6); Add(basic, "既定の出力", outputSummary, 7);
+        basic.RowStyles.Clear(); basic.RowCount = 9;
+        for (int row = 0; row < 8; row++) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, row >= 6 ? 84 : 40)); basic.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        inputSummary.Click += (_, _) => { inputPresetEditor.SelectDefault(); SelectCategory("入力プリセット"); };
+        outputSummary.Click += (_, _) => { presetEditor.SelectDefault(); SelectCategory("出力プリセット"); };
+        void UpdateSummary()
+        {
+            var input = inputPresetEditor.Regions.FirstOrDefault(p => p.IsDefault); var output = presetEditor.Presets.FirstOrDefault(p => p.IsDefault);
+            inputSummary.Text = input is null ? "既定を選択してください" : $"{input.Name} / {ModeName(input.Mode)} / {input.Bounds.Width}×{input.Bounds.Height}px\n固定={input.FreezeFrame} / カーソル={input.IncludeCursor} / 余白={input.PaddingPixels}px　［編集］";
+            outputSummary.Text = output is null ? "既定を選択してください" : $"{output.Name} / {output.Destination} / 減色={output.ColorDepth}\n{output.SaveDirectory}\n{output.FileNamePattern}　［編集］";
+        }
+        oneOcrDirectory.Parent!.Controls.Remove(oneOcrDirectory); presetEditor.AddSharedOcr(oneOcrDirectory);
+        foreach (var removed in new[] { (TabPage)inputs.Parent!, (TabPage)naming.Parent!, (TabPage)metadataPage.Parent! }) { tabs.TabPages.Remove(removed); removed.Dispose(); }
+        directory = (TextBox)presetEditor.Controls.Find("SaveDirectory", true).Single(); fileNamePattern = (TextBox)presetEditor.Controls.Find("FileNamePattern", true).Single(); ocrSeparator = (TextBox)presetEditor.Controls.Find("OcrSeparator", true).Single();
+        clipboardOutput = (CheckBox)presetEditor.Controls.Find("ClipboardOutput", true).Single(); fileOutput = (CheckBox)presetEditor.Controls.Find("FileOutput", true).Single(); externalOutput = (CheckBox)presetEditor.Controls.Find("ExternalOutput", true).Single();
+        openFolderAfterSave = (CheckBox)presetEditor.Controls.Find("OpenFolderAfterSave", true).Single(); screenshotColorDepth = (ComboBox)presetEditor.Controls.Find("ScreenshotColorDepth", true).Single(); metadataMode = (ComboBox)presetEditor.Controls.Find("MetadataMode", true).Single();
+        screenshotPadding = (NumericUpDown)inputPresetEditor.Controls.Find("ScreenshotPaddingPixels", true).Single();
+        tabs.SelectedIndexChanged += (_, _) => UpdateSummary(); UpdateSummary();
+        string[] order = ["基本", "入力プリセット", "録画・音声", "出力プリセット", "外部アプリ", "ショートカット", "即時撮影キー", "通知", "履歴"];
         var ordered = order.Select(title => tabs.TabPages.Cast<TabPage>().Single(p => p.Text == title)).ToArray();
         tabs.TabPages.Clear(); tabs.TabPages.AddRange(ordered);
-        MoveSetting(limitToStartingMonitor, inputs, 5); MoveSetting(dimCaptureBackground, inputs, 6);
-        // 保存先・命名・保存後を同じページへ。先に全ラベルを採取して行の衝突を避ける。
-        Control[] fileFields = [directory, fileNamePattern, ocrSeparator, oneOcrDirectory, openFolderAfterSave];
-        var fileRows = fileFields.Select(control => (control, label: ((TableLayoutPanel)control.Parent!).GetControlFromPosition(0, ((TableLayoutPanel)control.Parent!).GetRow(control))!)).ToArray();
-        foreach (var pair in fileRows) { pair.label.Parent!.Controls.Remove(pair.label); pair.control.Parent!.Controls.Remove(pair.control); }
-        naming.SetRow(namingHelp, 5); naming.SetRowSpan(namingHelp, 1);
-        for (int row = 0; row < fileRows.Length; row++) { naming.Controls.Add(fileRows[row].label, 0, row); naming.Controls.Add(fileRows[row].control, 1, row); }
-        MoveSetting(clipboardOutput.Parent!, basic, 0); MoveSetting(freeze, basic, 1);
-        MoveSetting(screenshotPadding, basic, 2); MoveSetting(screenshotColorDepth, basic, 3);
-        basic.RowCount = 5; basic.RowStyles.Clear();
-        for (int row = 0; row < 4; row++) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        basic.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        inputs.RowCount = 8; inputs.RowStyles.Clear();
-        for (int row = 0; row < 7; row++) inputs.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        inputs.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         void MoveSetting(Control control, TableLayoutPanel destination, int row)
         {
             var source = (TableLayoutPanel)control.Parent!;
@@ -289,6 +305,7 @@ internal sealed class SettingsForm : Form
         void UpdateFileFields() { metadataMode.Enabled = folderButton.Enabled = directory.Enabled = fileNamePattern.Enabled = ocrSeparator.Enabled = oneOcrDirectory.Enabled = openFolderAfterSave.Enabled = fileOutput.Checked; }
         fileOutput.CheckedChanged += (_, _) => UpdateFileFields(); UpdateFileFields();
         SettingsHelp.Apply(this, settingTips);
+        Shown += (_, _) => { var work = Screen.FromControl(this).WorkingArea; MinimumSize = new Size(Math.Min(MinimumSize.Width, work.Width), Math.Min(MinimumSize.Height, work.Height)); if (Width > work.Width || Height > work.Height) Bounds = new Rectangle(work.Location, new Size(Math.Min(Width, work.Width), Math.Min(Height, work.Height))); };
     }
 
     public void SetStatus(string text, bool error = false) => SetStatus(new StatusMessage(text, error, now()));
@@ -330,6 +347,9 @@ internal sealed class SettingsForm : Form
     {
         try
         {
+            if (!inputPresetEditor.StoreCurrent()) throw new ArgumentException("入力プリセットの内容を確認してください。");
+            presetEditor.StoreCurrent();
+            if (presetEditor.Error is string presetError) throw new ArgumentException(presetError);
             var next = ReadSettings();
             string? error = save(next);
             SetStatus(error ?? "設定を保存しました。", error is not null);
@@ -337,23 +357,17 @@ internal sealed class SettingsForm : Form
         catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
         { SetStatus("保存できませんでした: " + ex.Message, true); }
     }
-    private AppSettings ReadSettings() => initial with
+    private AppSettings ReadSettings() => (initial with
             {
-                SaveDirectory = Expand(directory.Text), DefaultMode = ((ModeItem)mode.SelectedItem!).Value,
-                OpenFolderAfterSave = openFolderAfterSave.Checked,
-                FileNamePattern = fileNamePattern.Text, OcrSeparator = ocrSeparator.Text, OneOcrDirectory = Expand(oneOcrDirectory.Text),
-                DefaultDestination = (clipboardOutput.Checked ? OutputDestination.Clipboard : 0) | (fileOutput.Checked ? OutputDestination.File : 0) | (externalOutput.Checked ? OutputDestination.ExternalApp : 0),
-                FreezeFrame = freeze.Checked, DimCaptureBackground = dimCaptureBackground.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
-                ScreenshotPaddingPixels = (int)screenshotPadding.Value,
-                ScreenshotColorDepth = (ScreenshotColorDepth)screenshotColorDepth.SelectedIndex,
-                MetadataMode = (CaptureMetadataMode)metadataMode.SelectedIndex,
+                OneOcrDirectory = Expand(oneOcrDirectory.Text),
+                DimCaptureBackground = dimCaptureBackground.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
+                Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked,
+                SnapDistancePixels = (int)snapDistance.Value, GridStepPixels = (int)gridStep.Value,
                 CapturePresets = presetEditor.Presets,
                 SavedRegions = inputPresetEditor.Regions,
                 ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
                 RecordingShortcut1 = recording1.Value, RecordingShortcut2 = recording2.Value,
-                LastRegionShortcut = lastRegionKey.Value, FixedWidth = (int)fixedWidth.Value, FixedHeight = (int)fixedHeight.Value,
-                FixedCaptureAnchor = ((CaptureAnchorItem)fixedCaptureAnchor.SelectedItem!).Value,
-                IncludeCursor = includeCursor.Checked, KeepHistory = keepHistory.Checked,
+                LastRegionShortcut = lastRegionKey.Value, KeepHistory = keepHistory.Checked,
                 NotificationDurationSeconds = (int)notificationDuration.Value, PlayCaptureSound = playCaptureSound.Checked,
                 HoldNotificationWhileApproaching = holdNotification.Checked,
                 NotificationClickAction = (NotificationClickAction)notificationAction.SelectedIndex,
@@ -368,7 +382,7 @@ internal sealed class SettingsForm : Form
                 VideoEditorArguments = videoApps.SelectedApplication?.Arguments ?? EditorArguments.Default
                 , ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications,
                 SelectedImageEditorId = imageApps.SelectedId, SelectedVideoEditorId = videoApps.SelectedId
-            };
+            }).ApplyDefaults();
     private static string Expand(string text) => Environment.ExpandEnvironmentVariables(text.Trim().Trim('"'));
     private string NotificationAppId() => (notificationApplication?.SelectedItem as NotificationAppItem)?.Id ?? initial.NotificationApplicationId;
     private sealed record NotificationAppItem(string Id, string Label) { public override string ToString() => Label; }

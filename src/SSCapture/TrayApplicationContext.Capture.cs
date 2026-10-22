@@ -53,7 +53,7 @@ internal sealed partial class TrayApplicationContext
         }
     }
 
-    private async Task TakeCaptureAsync(CaptureMode mode, CaptureIntent intent)
+    private async Task TakeCaptureAsync(CaptureMode mode, CaptureIntent intent, SavedRegion? inputPreset = null)
     {
         if (busy || exiting || pendingRecording is not null)
             return;
@@ -74,7 +74,8 @@ internal sealed partial class TrayApplicationContext
         try
         {
             PrepareCaptureUi();
-            using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, settings.DefaultDestination, settings.FreezeFrame, IncludeRecordingImage: intent == CaptureIntent.Recording && (settings.DefaultDestination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(settings.FileNamePattern) || settings.CapturePresets.Any(p => p.Destination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(p.FileNamePattern))), IncludeCursor: settings.IncludeCursor, FixedSize: new Size(settings.FixedWidth, settings.FixedHeight), FixedAnchor: settings.FixedCaptureAnchor, LimitToStartingMonitor: settings.LimitToStartingMonitor, Grid20: settings.Grid20, ShowSelectionGuide: settings.ShowSelectionGuide, OutputSettings: settings, DimCaptureBackground: settings.DimCaptureBackground), SaveGrid20, SaveGuideVisibility);
+            AppSettings startSettings = inputPreset?.Apply(settings) ?? settings;
+            using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, startSettings.DefaultDestination, startSettings.FreezeFrame, IncludeRecordingImage: intent == CaptureIntent.Recording && (startSettings.DefaultDestination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(startSettings.FileNamePattern) || startSettings.CapturePresets.Any(p => p.Destination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(p.FileNamePattern))), IncludeCursor: startSettings.IncludeCursor, FixedSize: new Size(startSettings.FixedWidth, startSettings.FixedHeight), FixedAnchor: startSettings.FixedCaptureAnchor, LimitToStartingMonitor: startSettings.LimitToStartingMonitor, Grid20: startSettings.Grid20, ShowSelectionGuide: startSettings.ShowSelectionGuide, OutputSettings: startSettings, DimCaptureBackground: startSettings.DimCaptureBackground, InitialInputPreset: inputPreset ?? settings.SavedRegions.FirstOrDefault(p => p.IsDefault)), SaveGrid20, SaveGuideVisibility);
             openSettings = outcome.OpenSettings;
             if (outcome.Selection is null)
             {

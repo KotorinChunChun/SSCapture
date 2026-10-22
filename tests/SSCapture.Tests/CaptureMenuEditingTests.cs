@@ -44,11 +44,11 @@ internal static partial class Program
                 var menu = session.SelectionMenu;
                 Equal("CaptureRangeGroup,CaptureOutputGroup,CaptureOperationGroup,OpenSettings,CancelCapture",
                     string.Join(',', menu.Items.OfType<ToolStripMenuItem>().Select(i => i.Name)));
-                foreach (string name in new[] { "CaptureModeMenu", "FixedSizeMenu", "FixedAnchorMenu", "LimitToStartingMonitor", "InputPresetMenu" })
+                foreach (string name in new[] { "CaptureModeMenu", "FixedSizeMenu", "FixedAnchorMenu", "InputPresetMenu", "ScreenshotPaddingMenu", "FreezeFrame", "IncludeCursor" })
                     Check(menu.Command("CaptureRangeGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
-                foreach (string name in new[] { "ScreenshotColorDepthMenu", "MetadataModeMenu", "ScreenshotPaddingMenu", "CapturePresetMenu" })
+                foreach (string name in new[] { "ScreenshotColorDepthMenu", "MetadataModeMenu", "CapturePresetMenu" })
                     Check(menu.Command("CaptureOutputGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
-                foreach (string name in new[] { "FreezeFrame", "IncludeCursor", "DimCaptureBackground", "Grid20", "ShowSelectionGuide" })
+                foreach (string name in new[] { "LimitToStartingMonitor", "DimCaptureBackground", "Grid20", "ShowSelectionGuide" })
                     Check(menu.Command("CaptureOperationGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
                 Check(!menu.Command("FreezeFrame").Enabled && !menu.Command("IncludeCursor").Enabled, "再取得不可の入口を有効にした");
             }

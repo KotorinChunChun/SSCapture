@@ -69,7 +69,17 @@ internal static class SettingsHelp
 
     private static string? Description(string name)
     {
+        if (name == "ScreenshotPaddingPixels") return "選択範囲の外側へ上下左右同じ幅の白い余白を追加します。元画像の縮小や周囲の画面の撮り足しはしません。0～4096物理px、0は余白なし。静止画だけに適用し録画には適用しません。";
+        if (name == "FileNamePattern") return "{yyyymmdd} 年月日 / {hhmmss} 時分秒 / {ext} 静止画png・録画mp4 / {ocr} OCR文字列 / {region} 範囲名 / {#}・{##} 連番。例: {yyyymmdd}_{hhmmss}.{ext}";
         if (Descriptions.TryGetValue(name, out string? description)) return description;
+        if (name == "SnapDistancePixels") return "Alt中、ポインタがウィンドウ枠・モニタ端からこの物理px以内なら吸着します。刻み幅とは別の数値です。1～32768px、既定20px。";
+        if (name == "GridStepPixels") return "範囲の幅・高さを調整する物理pxの刻みです。常時ONまたはAlt中に適用します。枠への吸着距離とは別です。1～32768px、既定20px。";
+        if (name == "GridEnabled") return "指定の刻み幅を常時使用します。OFFでもAlt中は使用します。固定サイズの寸法や画像の解像度は変えません。";
+        if (name == "ShowSelectionGuide") return "撮影中の操作ガイドを表示します。ドラッグ中にポインタが近づくと一時的に隠れます。";
+        if (name == "DefaultInputSummary") return "既定の入力プリセットの概要です。クリックすると、そのプリセットを選択した編集ページへ移動します。";
+        if (name == "DefaultOutputSummary") return "既定の出力プリセットの概要です。クリックすると、そのプリセットを選択した編集ページへ移動します。";
+        if (name == "InputFixedCoordinates") return "ONは登録した位置へ固定枠を表示します。OFFは撮影モードに従い位置や範囲を選びます。再撮影キーはONなら即時撮影、OFFなら選択開始です。";
+        if (name.Contains("InputPreset", StringComparison.Ordinal)) return "入力プリセットを複製、または通常撮影の既定として指定します。暗転・モニタ制限・録画音声は変更しません。";
         if (name is "MetadataMode" or "PresetMetadataMode") return "静止画をファイルに保存する場合の撮影情報です。記録しない・PNG内XMP・別JSON・両方から選択します。UI名・アプリのパス・タイトル等を含むため共有時には注意してください。";
         if (name.EndsWith("EditorArguments", StringComparison.Ordinal)) return Services.EditorArguments.Help;
         if (name.Contains("Editor", StringComparison.Ordinal) || name.Contains("SelectedEditor", StringComparison.Ordinal))

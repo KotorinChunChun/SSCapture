@@ -11,8 +11,8 @@ internal static partial class Program
             var original = new AppSettings { SavedRegions = [region], IncludeCursor = true, FixedWidth = 333, FixedHeight = 222 };
             var store = new SettingsStore(Path.Combine(directory, "settings.json")); store.Save(original);
             var restored = new SettingsStore(Path.Combine(directory, "settings.json")).Load(out var warning);
-            Equal<string?>(null, warning); Equal(region.Id, restored.SavedRegions.Single().Id);
-            Equal(region.Bounds, RegionCoordinates.Resolve(restored.SavedRegions.Single(), RegionLayout));
+            Equal<string?>(null, warning); Equal(region.Id, restored.SavedRegions.Single(p => p.Id == region.Id).Id);
+            Equal(region.Bounds, RegionCoordinates.Resolve(restored.SavedRegions.Single(p => p.Id == region.Id), RegionLayout));
             Equal(333, restored.FixedWidth); Equal(222, restored.FixedHeight); Check(restored.IncludeCursor, "カーソル設定が消失");
             var state = new HotkeyState(HotkeyBinding.ReadAssignments(restored), KeyboardModifiers.LeftWindows | KeyboardModifiers.LeftControl);
             Equal(region.Id, state.Process((int)Keys.F8, true, true).RegionId);

@@ -13,7 +13,8 @@ internal sealed record CaptureOptions(
     bool Grid20 = false,
     bool ShowSelectionGuide = true,
     SSCapture.Services.AppSettings? OutputSettings = null,
-    bool DimCaptureBackground = false);
+    bool DimCaptureBackground = false,
+    SSCapture.Services.SavedRegion? InitialInputPreset = null);
 
 internal sealed record CaptureSelection(
     Rectangle Bounds,

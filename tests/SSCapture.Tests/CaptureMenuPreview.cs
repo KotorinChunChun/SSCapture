@@ -16,6 +16,18 @@ internal static partial class Program
         var status = new Label { Dock = DockStyle.Fill, Padding = new(20), Text = "開始後、右クリックで3分類を確認。画面固定・カーソルの切替で合成背景が変わります。固定寸法を入力しEnterで確定してください。" };
         var button = SettingsForm.MakeButton("メニュー確認を開始", "StartMenuPreview"); button.Dock = DockStyle.Top; button.Height = 56;
         host.Controls.Add(status); host.Controls.Add(button);
+        AppSettings settings = new AppSettings { DefaultMode = CaptureMode.FixedRegion, DefaultDestination = OutputDestination.File,
+            FixedWidth = 320, FixedHeight = 180, SaveDirectory = directory }.EnsurePresets();
+        settings = settings with { CapturePresets = settings.CapturePresets.Append(CapturePreset.FromSettings("256色ファイル", settings with { ScreenshotColorDepth = ScreenshotColorDepth.Indexed8 })).ToArray(),
+            SavedRegions = settings.SavedRegions.Append(SavedRegion.FromSettings("小さい固定枠", settings with { FixedWidth = 200, FixedHeight = 120, ScreenshotPaddingPixels = 10 })).ToArray() };
+        var configure = SettingsForm.MakeButton("設定画面を確認", "ConfigurePresetPreview"); configure.Dock = DockStyle.Top; configure.Height = 56; host.Controls.Add(configure);
+        SettingsForm? settingsForm = null;
+        configure.Click += (_, _) =>
+        {
+            settingsForm?.Dispose();
+            settingsForm = new SettingsForm(settings, next => { next.Validate(); settings = next; new SettingsStore(Path.Combine(directory, "settings.json")).Save(next); Log("settings-saved"); return null; }, () => { }, () => []);
+            settingsForm.StartPosition = FormStartPosition.Manual; settingsForm.Bounds = host.Bounds; settingsForm.Show(); settingsForm.Activate();
+        };
         SessionController? session = null; int acquired = 0;
         host.KeyPreview = true;
         using var repaint = new System.Windows.Forms.Timer { Interval = 100 };
@@ -37,7 +49,7 @@ internal static partial class Program
         button.Click += async (_, _) =>
         {
             button.Enabled = false;
-            button.Visible = status.Visible = false;
+            button.Visible = status.Visible = configure.Visible = false;
             try
             {
                 Rectangle bounds = host.RectangleToScreen(host.ClientRectangle);
@@ -56,8 +68,9 @@ internal static partial class Program
                     Log("reacquired", new { acquired, cursor, observe, overlaysHidden = hidden });
                     return new(image, bounds, [bounds]);
                 }
-                session = new(new(CaptureMode.FixedRegion, CaptureIntent.Screenshot, OutputDestination.File, FixedSize: new(320, 180),
-                    ShowSelectionGuide: false, OutputSettings: new AppSettings()), Frame(false, false), [],
+                session = new(new(CaptureMode.FixedRegion, CaptureIntent.Screenshot, settings.DefaultDestination, settings.FreezeFrame,
+                    IncludeCursor: settings.IncludeCursor, FixedSize: new(settings.FixedWidth, settings.FixedHeight), FixedAnchor: settings.FixedCaptureAnchor,
+                    ShowSelectionGuide: false, OutputSettings: settings), Frame(settings.IncludeCursor, false), [],
                     initialPointer: new(bounds.X + 420, bounds.Y + 300), recapture: Frame);
                 // 多段メニュー自体を通常ウィンドウへ所有させる。選択オーバーレイへの
                 // 自動前面化は操作ツールでは対象を取り違えるため、画素・枠はホストへ描画する。
@@ -70,13 +83,14 @@ internal static partial class Program
                     outcome.Image.Save(Path.Combine(directory, "result.png"));
                     status.Text = $"完了: {outcome.Image.Width}×{outcome.Image.Height}px / 再取得{acquired}回 / カーソル={outcome.OutputSettings!.IncludeCursor} / 画面固定={outcome.OutputSettings.FreezeFrame}";
                     Log("completed", new { width = outcome.Image.Width, height = outcome.Image.Height, acquired,
-                        outcome.OutputSettings.IncludeCursor, outcome.OutputSettings.FreezeFrame, outcome.OutputSettings.ScreenshotColorDepth });
+                        outcome.OutputSettings.IncludeCursor, outcome.OutputSettings.FreezeFrame, outcome.OutputSettings.ScreenshotColorDepth,
+                        outcome.OutputSettings.ScreenshotPaddingPixels, outcome.OutputSettings.SnapDistancePixels, outcome.OutputSettings.GridStepPixels });
                 }
             }
             catch (Exception ex) { status.Text = ex.ToString(); Log("failed", ex.ToString()); }
-            finally { session?.Cancel(); session = null; button.Enabled = true; button.Visible = status.Visible = true; host.Invalidate(); host.Activate(); }
+            finally { session?.Cancel(); session = null; button.Enabled = true; button.Visible = status.Visible = configure.Visible = true; host.Invalidate(); if (!host.IsDisposed) host.Activate(); }
         };
-        host.FormClosed += (_, _) => session?.Cancel();
+        host.FormClosed += (_, _) => { session?.Cancel(); settingsForm?.Dispose(); };
         Application.Run(host); return 0;
         void Log(string action, object? data = null) => File.AppendAllText(Path.Combine(directory, "operations.jsonl"),
             JsonSerializer.Serialize(new { at = DateTimeOffset.Now, action, data }) + Environment.NewLine);

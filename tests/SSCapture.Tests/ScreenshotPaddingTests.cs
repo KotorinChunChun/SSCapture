@@ -83,7 +83,7 @@ internal static partial class Program
             var input = (NumericUpDown)form.Controls.Find("ScreenshotPaddingPixels", true).Single();
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
             Equal("基本", tabs.TabPages[0].Text);
-            Check(tabs.TabPages[0].Contains(input), "余白欄が基本タブにない");
+            Check(tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "入力プリセット").Contains(input), "余白欄が入力プリセットにない");
             Equal(12m, input.Value); Equal(0m, input.Minimum); Equal(4096m, input.Maximum);
             Equal(0, input.DecimalPlaces); Equal(1m, input.Increment);
             foreach (int pixels in new[] { 0, 20, 4096 })
@@ -97,7 +97,7 @@ internal static partial class Program
             LayoutTree(form);
             Check(input.Height >= 24 && input.Parent!.ClientRectangle.Contains(input.Bounds), "余白欄が見切れる");
             var basic = (TableLayoutPanel)input.Parent!;
-            Equal(2, basic.GetRow(input));
+            Equal(4, basic.GetRow(input));
             form.Height += 500;
             LayoutTree(form);
             var label = basic.GetControlFromPosition(0, basic.GetRow(input))!;

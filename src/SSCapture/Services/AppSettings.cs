@@ -9,6 +9,7 @@ internal sealed record AppSettings
     public string OneOcrDirectory { get; init; } = "";
     public CaptureMode DefaultMode { get; init; } = CaptureMode.Rectangle;
     public int SchemaVersion { get; init; } = 3;
+    public int PresetSchemaVersion { get; init; }
     [System.Text.Json.Serialization.JsonIgnore]
     public bool HasShortcuts => HotkeyBinding.ReadAssignments(this).Length > 0;
     public string ScreenshotShortcut1 { get; init; } = "Win+Shift+S";
@@ -85,8 +86,8 @@ internal sealed record AppSettings
         if (NotificationClickAction == Services.NotificationClickAction.ExternalApplication && string.IsNullOrEmpty(NotificationApplicationId))
             throw new ArgumentException("通知で開く外部アプリを選択してください。");
         if (!Enum.IsDefined(MetadataMode)) throw new ArgumentException("撮影情報の保存形式が正しくありません。");
-        if (CapturePresets is null || CapturePresets.Length > 50 || CapturePresets.Any(p => p is null))
-            throw new ArgumentException("プリセットは50件以内で指定してください。");
+        if (CapturePresets is null || CapturePresets.Length > 100 || CapturePresets.Any(p => p is null))
+            throw new ArgumentException("プリセットは100件以内で指定してください。");
         foreach (var preset in CapturePresets)
         {
             preset.Validate();
@@ -98,6 +99,8 @@ internal sealed record AppSettings
             throw new ArgumentException("プリセットのIDまたは名前が重複しています。");
         if (SavedRegions is null || SavedRegions.Any(r => r is null)) throw new ArgumentException("登録範囲の設定が不正です。");
         foreach (var region in SavedRegions) region.Validate();
+        if (PresetSchemaVersion >= 1 && (SavedRegions.Count(p => p.IsDefault) != 1 || CapturePresets.Count(p => p.IsDefault) != 1))
+            throw new ArgumentException("入力・出力それぞれ1件の既定プリセットを指定してください。");
         if (SavedRegions.Any(r => r.Id == LastRegionKeyId)) throw new ArgumentException("登録範囲のIDが予約値です。");
         if (SavedRegions.Select(r => r.Id).Distinct(StringComparer.Ordinal).Count() != SavedRegions.Length)
             throw new ArgumentException("登録範囲のIDが重複しています。");

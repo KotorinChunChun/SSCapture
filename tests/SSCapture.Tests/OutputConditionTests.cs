@@ -52,14 +52,14 @@ internal static partial class Program
         Run("出力プリセットのFile欄も値を保持して無効化する", () =>
         {
             using var editor = new CapturePresetEditor(new AppSettings(), () => new AppSettings());
-            editor.Controls.Find("PresetSaveDirectory", true).Single().Text = "relative";
-            editor.Controls.Find("PresetFileNamePattern", true).Single().Text = "{unknown}";
+            editor.Controls.Find("SaveDirectory", true).Single().Text = "relative";
+            editor.Controls.Find("FileNamePattern", true).Single().Text = "{unknown}";
             editor.Controls.Find("CapturePresetName", true).Single().Text = "コピー専用";
             editor.StoreCurrent(); Equal(1, editor.Presets.Length);
-            Check(!editor.Controls.Find("PresetSaveDirectory", true).Single().Enabled, "プリセットの保存欄が有効");
-            ((CheckBox)editor.Controls.Find("PresetFile", true).Single()).Checked = true;
-            Check(editor.Controls.Find("PresetSaveDirectory", true).Single().Enabled, "File ONでも戻らない");
-            Equal("relative", editor.Controls.Find("PresetSaveDirectory", true).Single().Text);
+            Check(!editor.Controls.Find("SaveDirectory", true).Single().Enabled, "プリセットの保存欄が有効");
+            ((CheckBox)editor.Controls.Find("FileOutput", true).Single()).Checked = true;
+            Check(editor.Controls.Find("SaveDirectory", true).Single().Enabled, "File ONでも戻らない");
+            Equal("relative", editor.Controls.Find("SaveDirectory", true).Single().Text);
         });
     }
 }

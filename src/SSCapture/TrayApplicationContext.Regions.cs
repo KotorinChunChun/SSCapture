@@ -11,6 +11,12 @@ internal sealed partial class TrayApplicationContext
 {
     private async Task TakeRegionAsync(string id)
     {
+        var requested = settings.SavedRegions.FirstOrDefault(r => r.Id == id);
+        if (requested is { UseFixedCoordinates: false })
+        {
+            await TakeCaptureAsync(requested.Mode, CaptureIntent.Screenshot, requested);
+            return;
+        }
         if (exiting || WindowVisibility.RestorePending(namingForm))
             return;
         if (pendingRecording is not null)
@@ -31,9 +37,10 @@ internal sealed partial class TrayApplicationContext
                 throw new InvalidOperationException("撮影範囲がありません。先に矩形で撮影するか、範囲を登録してください。");
             Rectangle bounds = RegionCoordinates.Resolve(region, RegionCoordinates.ReadDisplays());
             DateTimeOffset capturedAt = DateTimeOffset.Now;
-            var capture = await InstantCapture.TakeWithContextAsync(bounds, settings);
+            var regionSettings = region.ProfileVersion >= 1 && id != AppSettings.LastRegionKeyId ? region.Apply(settings) : settings;
+            var capture = await InstantCapture.TakeWithContextAsync(bounds, regionSettings);
             using var image = capture.Image;
-            StoreStatus(await InstantCapture.DeliverAsync(image, settings, capturedAt, output, regionName: region.Name, captureBounds: bounds, metadata: capture.Metadata));
+            StoreStatus(await InstantCapture.DeliverAsync(image, regionSettings, capturedAt, output, regionName: region.Name, captureBounds: bounds, metadata: capture.Metadata));
         }
         catch (Exception ex)
         {

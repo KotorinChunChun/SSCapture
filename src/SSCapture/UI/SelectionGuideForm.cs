@@ -35,7 +35,7 @@ internal sealed class SelectionGuideForm : Form
             Text = fixedSize is Size dimensions
                 ? $"固定サイズ {dimensions.Width} × {dimensions.Height} px　基点: {AnchorText(fixedAnchor)}　左クリック / Enter: 確定\nSpace: 基点を時計回り　矢印: 1px　Shift＋矢印: 10px　Alt: 枠吸着\n中央クリック: 画面全体　右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断　画面外の枠は確定不可"
                 : mode == CaptureMode.Rectangle
-                    ? "左クリック: ウィンドウ　中央クリック: 画面全体　左ドラッグ: 範囲選択\nShift: 高さ固定　Ctrl: 幅固定　Alt: 20px単位＋枠吸着\nSpace: 現在位置を新しい始点に　右クリック: メニュー・縦横比\nEsc: 撮影終了　ドラッグ中の右クリック / Esc: 選択だけ中断"
+                    ? "左クリック: ウィンドウ　中央クリック: 画面全体　左ドラッグ: 範囲選択\nShift: 高さ固定　Ctrl: 幅固定　Alt: 指定刻み幅＋枠吸着\nSpace: 現在位置を新しい始点に　右クリック: メニュー・縦横比\nEsc: 撮影終了　ドラッグ中の右クリック / Esc: 選択だけ中断"
                     : $"左クリック: ウィンドウ　中央クリック: 画面全体\n{(mode == CaptureMode.Freeform ? "左ドラッグ: 輪郭を囲む" : "ウィンドウを選んで左クリックで確定")}\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
         });
     }

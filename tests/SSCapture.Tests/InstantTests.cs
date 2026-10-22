@@ -167,7 +167,7 @@ internal static partial class Program
             using var form = new SettingsForm(new AppSettings(), next => { saved = next; return null; }, () => { }, () => []);
             _ = form.Handle; foreach (Control child in Descendants(form)) _ = child.Handle;
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
-            tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "即時撮影"); LayoutTree(form);
+            tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "即時撮影キー"); LayoutTree(form);
             var last = (HotkeyEditor)form.Controls.Find("InstantShortcut10", true).Single();
             var table = last.Parent!;
             tabs.SelectedTab.ScrollControlIntoView(last); LayoutTree(form);

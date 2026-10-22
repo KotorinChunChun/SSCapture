@@ -8,6 +8,7 @@ internal static partial class Program
 {
     private static void SettingsEqual(AppSettings expected, AppSettings actual)
     {
+        expected = expected.UpdateDefaultProjections();
         Check(expected.InstantShortcuts.SequenceEqual(actual.InstantShortcuts), "即時キー設定の往復不一致" );
         Equal(System.Text.Json.JsonSerializer.Serialize(expected.SavedRegions), System.Text.Json.JsonSerializer.Serialize(actual.SavedRegions));
         Equal(System.Text.Json.JsonSerializer.Serialize(expected.CapturePresets), System.Text.Json.JsonSerializer.Serialize(actual.CapturePresets));

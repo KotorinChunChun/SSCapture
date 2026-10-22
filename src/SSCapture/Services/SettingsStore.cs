@@ -56,20 +56,21 @@ internal sealed class SettingsStore(string path)
             if (!document.RootElement.TryGetProperty("SchemaVersion", out var editorVersion) || editorVersion.GetInt32() < 3)
                 settings = settings.MigrateEditors();
             settings.Validate();
-            return settings;
+            return settings.ApplyDefaults();
         }
-        catch (FileNotFoundException) { return new AppSettings(); }
-        catch (DirectoryNotFoundException) { return new AppSettings(); }
+        catch (FileNotFoundException) { return new AppSettings().ApplyDefaults(); }
+        catch (DirectoryNotFoundException) { return new AppSettings().ApplyDefaults(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
         {
             warning = $"設定を読み込めないため既定値で起動しました。元の設定ファイルは保持されています。{Environment.NewLine}{ex.Message}";
-            return new AppSettings();
+            return new AppSettings().ApplyDefaults();
         }
     }
 
     public void Save(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        settings = settings.UpdateDefaultProjections();
         settings.Validate();
         if (File.Exists(filePath))
         {
@@ -78,6 +79,7 @@ internal sealed class SettingsStore(string path)
             {
                 using var old = JsonDocument.Parse(File.ReadAllText(filePath, Encoding.UTF8));
                 if (!old.RootElement.TryGetProperty("SchemaVersion", out var version) || version.GetInt32() < 3) suffix = ".schema2.bak";
+                else if (!old.RootElement.TryGetProperty(nameof(AppSettings.PresetSchemaVersion), out var profiles) || profiles.GetInt32() < 1) suffix = ".presets-v0.bak";
             }
             catch (JsonException) { suffix = ".invalid.bak"; }
             if (suffix is not null && !File.Exists(filePath + suffix)) File.Copy(filePath, filePath + suffix, false);

@@ -39,6 +39,7 @@ internal static class CaptureSession
                 throw new ArgumentException("画面固定OFFの合成画像検証には画像取得関数を指定してください。", nameof(currentFrameFactory));
             SessionController session = new(options, snapshot, windows ?? [], currentFrameFactory,
                 initialPointer ?? snapshot.Monitors.FirstOrDefault().Location, gridChanged: gridChanged, guideChanged: guideChanged, recapture: recapture, readWindows: readWindows);
+            if (options.InitialInputPreset is { UseFixedCoordinates: true } preset) session.ApplyInputPreset(preset);
             session.Start();
             return session.Completion;
         }
@@ -105,6 +106,9 @@ internal sealed class SessionController
     private Keys ignoredModifiers;
     private Size activeFixedSize;
     private readonly Func<IReadOnlyList<Services.DisplayLayout>> readPresetDisplays;
+    private Services.SavedRegion selectedInput;
+    private Services.CapturePreset selectedOutput;
+    private Rectangle? selectedInputBounds;
     private MouseButtons suppressedButtons;
     private System.Windows.Forms.Timer? snapTimer;
 
@@ -158,7 +162,9 @@ internal sealed class SessionController
         else SelectionMonitors = snapshot.Monitors;
         this.windows = windows.ToArray();
         gesture = CreateGesture(Mode, options.Grid20);
-        SelectionMenu = new CaptureContextMenu(Destination, destination => Destination = destination,
+        selectedInput = options.InitialInputPreset ?? OutputSettings.SavedRegions.FirstOrDefault(p => p.IsDefault) ?? Services.SavedRegion.FromSettings("撮影開始時", OutputSettings with { DefaultMode = Mode, FixedWidth = activeFixedSize.Width, FixedHeight = activeFixedSize.Height, FixedCaptureAnchor = activeAnchor });
+        selectedOutput = OutputSettings.CapturePresets.FirstOrDefault(p => p.IsDefault) ?? Services.CapturePreset.FromSettings("撮影開始時", OutputSettings with { DefaultDestination = Destination });
+        SelectionMenu = new CaptureContextMenu(Destination, ChangeDestination,
             () => FinishCommand(true), Cancel, Mode, options.Grid20, ChangeMode, ChangeGrid20, () => CaptureDesktop(menuPointer),
             showGuide: ShowSelectionGuide, changeGuide: ChangeGuideVisibility, changeRatio: ChangeAspectRatio,
             defaultPadding: OutputSettings.ScreenshotPaddingPixels, changePadding: options.Intent == CaptureIntent.Screenshot ? ChangePadding : null,
@@ -169,9 +175,11 @@ internal sealed class SessionController
             editing: new(OutputSettings, activeFixedSize, activeAnchor, selectionBounds is not null, options.Intent == CaptureIntent.Screenshot,
                 recapture is not null || currentFrameFactory is not null, ChangeFixedSize, ChangeFixedAnchor, ChangeMonitorLimit, ChangeColor,
                 mode => _ = ChangeMetadataAsync(mode), ChangeDim, enabled => _ = ChangeCaptureSourceAsync(enabled, OutputSettings.IncludeCursor),
-                enabled => _ = ChangeCaptureSourceAsync(OutputSettings.FreezeFrame, enabled)));
+                enabled => _ = ChangeCaptureSourceAsync(OutputSettings.FreezeFrame, enabled), ChangeSnapPrecision, ChangeOutputDetails,
+                ChangeOpenFolder, () => _ = ResetInputPresetAsync(), ResetOutputPreset));
         SelectionMenu.SetRatio(AspectRatio);
         SelectionMenu.Closed += MenuClosed;
+        UpdateMenu();
     }
 
     private SelectionGesture CreateGesture(CaptureMode mode, bool grid20)
@@ -187,7 +195,32 @@ internal sealed class SessionController
         UpdateMenu(); RefreshOverlays();
     }
 
-    private void UpdateMenu() => SelectionMenu.UpdateEditing(OutputSettings, activeFixedSize, activeAnchor, selectionBounds is not null);
+    internal bool InputPresetModified => Mode != (selectedInput.UseFixedCoordinates ? CaptureMode.FixedRegion : selectedInput.Mode)
+        || activeFixedSize != selectedInput.Bounds.Size || activeAnchor != selectedInput.FixedAnchor
+        || OutputSettings.FreezeFrame != selectedInput.FreezeFrame || OutputSettings.IncludeCursor != selectedInput.IncludeCursor
+        || OutputSettings.ScreenshotPaddingPixels != selectedInput.PaddingPixels || AspectRatio != CaptureAspectRatio.Free
+        || selectedInputBounds is Rectangle bounds && Selection != bounds;
+    internal bool OutputPresetModified => Destination != selectedOutput.Destination || OutputSettings.SaveDirectory != selectedOutput.SaveDirectory
+        || OutputSettings.FileNamePattern != selectedOutput.FileNamePattern || OutputSettings.OcrSeparator != selectedOutput.OcrSeparator
+        || OutputSettings.ScreenshotColorDepth != selectedOutput.ColorDepth || OutputSettings.OpenFolderAfterSave != selectedOutput.OpenFolderAfterSave
+        || OutputSettings.MetadataMode != selectedOutput.MetadataMode
+        || OutputSettings.SelectedImageEditorId != (selectedOutput.ImageEditorId ?? "")
+        || OutputSettings.SelectedVideoEditorId != (selectedOutput.VideoEditorId ?? "");
+    private void UpdateMenu()
+    {
+        SelectionMenu.UpdateEditing(OutputSettings, activeFixedSize, activeAnchor, selectionBounds is not null);
+        SelectionMenu.SetPresetStatus(selectedInput.Name, selectedOutput.Name, InputPresetModified, OutputPresetModified, selectedInput.Id, selectedOutput.Id);
+    }
+    private void ChangeDestination(OutputDestination destination) { Destination = destination; SelectionMenu.SetDestination(destination); UpdateMenu(); }
+    internal Task ResetInputPresetAsync() => ApplyInputPresetAsync(selectedInput);
+    internal void ResetOutputPreset() => ApplyPreset(selectedOutput);
+    internal void ChangeOpenFolder(bool enabled) { OutputSettings = OutputSettings with { OpenFolderAfterSave = enabled }; UpdateMenu(); }
+    internal void ChangeOutputDetails(string directory, string pattern, string separator)
+    {
+        var next = OutputSettings with { SaveDirectory = Environment.ExpandEnvironmentVariables(directory.Trim().Trim('"')), FileNamePattern = pattern, OcrSeparator = separator };
+        Services.CapturePreset.FromSettings("今回", next with { DefaultDestination = Destination }).Validate();
+        OutputSettings = next; UpdateMenu(); SelectionMenu.CloseForCapture();
+    }
     internal void ChangeColor(Services.ScreenshotColorDepth depth)
     {
         if (!Enum.IsDefined(depth)) throw new ArgumentOutOfRangeException(nameof(depth));
@@ -292,16 +325,40 @@ internal sealed class SessionController
         }
     }
 
-    internal void ApplyInputPreset(Services.SavedRegion preset)
+    internal void ApplyInputPreset(Services.SavedRegion preset) => _ = ApplyInputPresetAsync(preset);
+    internal async Task ApplyInputPresetAsync(Services.SavedRegion preset)
     {
-        if (completed) return;
+        if (completed || refreshing) return;
         try
         {
+            preset.Validate();
+            if (!preset.UseFixedCoordinates)
+            {
+                var next = preset.Apply(OutputSettings);
+                if (next.FreezeFrame != OutputSettings.FreezeFrame || next.IncludeCursor != OutputSettings.IncludeCursor)
+                { await RefreshSnapshotAsync(next); if (SelectionError is not null || completed) return; }
+                else OutputSettings = next;
+                activeFixedSize = preset.Bounds.Size; activeAnchor = preset.FixedAnchor;
+                selectedInput = preset; selectedInputBounds = null; AspectRatio = CaptureAspectRatio.Free;
+                Mode = preset.Mode; ReleasePointer(); gesture = CreateGesture(Mode, Grid20);
+                gesture.Move(lastPointerPosition ?? initialPointer); SelectionError = null;
+                SelectionMenu.SetMode(Mode); SelectionMenu.SetPadding(OutputSettings.ScreenshotPaddingPixels); UpdateMenu(); ReplaceGuide(); RefreshOverlays();
+                if (Mode == CaptureMode.FullScreen) CompleteSelection(new(selectionBounds ?? Snapshot.Bounds, null, Destination));
+                return;
+            }
             var displays = readPresetDisplays();
             if (!displays.Select(d => d.Bounds).OrderBy(b => b.X).ThenBy(b => b.Y)
                 .SequenceEqual(Snapshot.Monitors.OrderBy(b => b.X).ThenBy(b => b.Y)))
                 throw new InvalidOperationException("選択開始後に画面構成が変わりました。撮影を開始し直してください。");
             Rectangle bounds = Services.RegionCoordinates.Resolve(preset, displays);
+            if (preset.ProfileVersion >= 1)
+            {
+                var next = preset.Apply(OutputSettings);
+                if (next.FreezeFrame != OutputSettings.FreezeFrame || next.IncludeCursor != OutputSettings.IncludeCursor)
+                { await RefreshSnapshotAsync(next); if (SelectionError is not null || completed) return; }
+                else OutputSettings = next;
+                activeAnchor = preset.FixedAnchor; SelectionMenu.SetPadding(next.ScreenshotPaddingPixels);
+            }
             SelectionError = null;
             bool grid = Grid20;
             ReleasePointer();
@@ -318,6 +375,7 @@ internal sealed class SessionController
             if (selectionBounds is Rectangle pointerLimit)
                 pointer = new(Math.Clamp(pointer.X, pointerLimit.Left, pointerLimit.Right - 1), Math.Clamp(pointer.Y, pointerLimit.Top, pointerLimit.Bottom - 1));
             gesture.PlaceFixed(bounds, pointer);
+            selectedInput = preset; selectedInputBounds = bounds; AspectRatio = CaptureAspectRatio.Free; gesture.AspectRatio = AspectRatio;
             lastPointerPosition = pointer;
             lastSnap = lastHeightLock = lastWidthLock = false;
             if (!starting)
@@ -340,6 +398,7 @@ internal sealed class SessionController
         if (!Enum.IsDefined(ratio)) throw new ArgumentOutOfRangeException(nameof(ratio));
         AspectRatio = ratio; gesture.AspectRatio = ratio;
         SelectionMenu.SetRatio(ratio);
+        UpdateMenu();
         RefreshOverlays();
     }
 
@@ -348,11 +407,13 @@ internal sealed class SessionController
         if (pixels is < 0 or > SSCapture.Services.ScreenshotPadding.MaximumPixels) throw new ArgumentOutOfRangeException(nameof(pixels));
         OutputSettings = OutputSettings with { ScreenshotPaddingPixels = pixels };
         SelectionMenu.SetPadding(pixels);
+        UpdateMenu();
     }
 
     internal void ApplyPreset(SSCapture.Services.CapturePreset preset)
     {
         OutputSettings = preset.Apply(OutputSettings);
+        selectedOutput = preset;
         Destination = OutputSettings.DefaultDestination;
         SelectionMenu.SetDestination(Destination);
         SelectionMenu.SetPadding(OutputSettings.ScreenshotPaddingPixels);
@@ -366,6 +427,7 @@ internal sealed class SessionController
         SSCapture.Services.ExternalApplication.ValidateReference(apps, id);
         OutputSettings = options.Intent == CaptureIntent.Screenshot ? OutputSettings with { SelectedImageEditorId = id } : OutputSettings with { SelectedVideoEditorId = id };
         SelectionMenu.SetApplication(id);
+        UpdateMenu();
     }
 
     internal void ChangeGrid20(bool enabled)
@@ -661,6 +723,7 @@ internal sealed class SessionController
             foreach (CaptureOverlay form in overlays) form.Invalidate();
             menuOwner = overlay;
             menuOpen = true;
+            UpdateMenu();
             SelectionMenu.Show(overlay, overlay.PointToClient(CaptureNative.CursorPosition()));
             menuTransition = false;
         }

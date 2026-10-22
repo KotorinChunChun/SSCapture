@@ -133,7 +133,7 @@ internal static partial class Program
             Equal(CaptureAnchor.BottomRight, saved.FixedCaptureAnchor);
             Equal("Win+Ctrl+Shift+S", saved.LastRegionShortcut);
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
-            tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "入力");
+            tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "入力プリセット");
             form.Size = form.MinimumSize;
             _ = form.Handle; foreach (var child in Descendants(form)) _ = child.Handle; LayoutTree(form);
             foreach (string name in new[] { "FixedWidth", "FixedHeight", "FixedCaptureAnchor", "IncludeCursor", "LimitToStartingMonitor", "DimCaptureBackground" })
@@ -141,7 +141,7 @@ internal static partial class Program
                 var control = form.Controls.Find(name, true).Single();
                 Check(control.Parent!.ClientRectangle.Contains(control.Bounds), name + " が親領域外");
             }
-            Equal(8, ((TableLayoutPanel)anchor.Parent!).RowCount);
+            Equal(7, ((TableLayoutPanel)anchor.Parent!).RowCount);
             tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "履歴"); LayoutTree(form);
             foreach (string name in new[] { "KeepHistory", "OpenHistory" })
             { var field = form.Controls.Find(name, true).Single(); Check(field.Parent!.ClientRectangle.Contains(field.Bounds), name + "が履歴区分に収まらない"); }
@@ -152,7 +152,7 @@ internal static partial class Program
             using var bitmap = new Bitmap(4, 4);
             using var ocr = new OcrNameForm(bitmap, new AppSettings(), CaptureIntent.Screenshot, DateTimeOffset.Now);
             foreach (Form window in new Form[] { settings, ocr })
-                Check(window.ControlBox && !window.MinimizeBox && !window.MaximizeBox, "タイトルバーのボタン不正");
+                Check(window.ControlBox && !window.MinimizeBox && window.MaximizeBox == (window is SettingsForm), "タイトルバーのボタン不正");
             int shown = 0;
             Check(WindowVisibility.RestorePending(ocr, window => { Check(ReferenceEquals(window, ocr), "既存窓でない"); shown++; }), "新規処理を拒否しない");
             Check(WindowVisibility.RestorePending(ocr, _ => shown++), "再押下でも拒否");
@@ -206,7 +206,7 @@ internal static partial class Program
             layout.Dock = DockStyle.None;
             layout.Size = new Size(240, 180);
             LayoutTree(form);
-            Check(form.Controls.Find("ScreenshotPaddingPixels", true).Single().Width < 420, "Dock断線を寸法検査で検出できない");
+            Check(form.Controls.Find("DefaultInputSummary", true).Single().Width < 420, "Dock断線を寸法検査で検出できない");
         });
         Run("撮影モード5種と未接続マイクIDが設定に保持される", () =>
         {
