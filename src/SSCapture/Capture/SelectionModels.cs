@@ -14,7 +14,14 @@ internal sealed record CaptureOptions(
     bool ShowSelectionGuide = true,
     SSCapture.Services.AppSettings? OutputSettings = null,
     bool DimCaptureBackground = false,
-    SSCapture.Services.SavedRegion? InitialInputPreset = null);
+    SSCapture.Services.SavedRegion? InitialInputPreset = null)
+{
+    internal static CaptureOptions ForInputSelection(SSCapture.Services.AppSettings settings, Size? size, CaptureAnchor anchor) => new(
+        size is null ? CaptureMode.Rectangle : CaptureMode.FixedRegion, CaptureIntent.Recording, OutputDestination.None,
+        FixedSize: size, FixedAnchor: anchor, LimitToStartingMonitor: settings.LimitToStartingMonitor,
+        Grid20: settings.Grid20, ShowSelectionGuide: settings.ShowSelectionGuide, OutputSettings: settings,
+        DimCaptureBackground: settings.DimCaptureBackground);
+}
 
 internal sealed record CaptureSelection(
     Rectangle Bounds,

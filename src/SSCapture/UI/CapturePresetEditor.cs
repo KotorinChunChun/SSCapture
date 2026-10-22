@@ -13,7 +13,14 @@ internal sealed class CapturePresetEditor : UserControl
     private readonly AppSettings initialSettings;
     private readonly TableLayoutPanel naming;
     internal CapturePreset[] Presets => list.Items.Cast<CapturePreset>().ToArray();
-    internal void SelectDefault() { int index = Array.FindIndex(Presets, p => p.IsDefault); if (index >= 0) list.SelectedIndex = index; }
+    internal bool SelectDefault()
+    {
+        if (list.SelectedItem is CapturePreset { IsDefault: true }) return true;
+        StoreCurrent(); if (Error is not null) return false;
+        int index = Array.FindIndex(Presets, p => p.IsDefault);
+        if (index < 0) return false;
+        list.SelectedIndex = index; return true;
+    }
     internal string? Error { get; private set; }
     internal CapturePresetEditor(AppSettings initial, Func<AppSettings> readSettings)
     {

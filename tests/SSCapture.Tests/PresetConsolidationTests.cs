@@ -7,6 +7,101 @@ internal static partial class Program
 {
     private static void PresetConsolidationTests()
     {
+        Run("範囲選択の共通入口は保存済み精度と表示設定を渡す", () =>
+        {
+            var settings = new AppSettings { SnapDistancePixels = 5, GridStepPixels = 7, Grid20 = true, ShowSelectionGuide = false, LimitToStartingMonitor = false };
+            foreach (Size? size in new Size?[] { null, new(80, 60) })
+            {
+                var options = CaptureOptions.ForInputSelection(settings, size, CaptureAnchor.BottomRight);
+                Equal(size is null ? CaptureMode.Rectangle : CaptureMode.FixedRegion, options.Mode);
+                Equal(CaptureIntent.Recording, options.Intent); Equal(OutputDestination.None, options.Destination);
+                Equal(size, options.FixedSize); Equal(CaptureAnchor.BottomRight, options.FixedAnchor);
+                Check(options.Grid20 && !options.ShowSelectionGuide && !options.LimitToStartingMonitor, "表示設定が渡らない");
+                var rect = new Rectangle(0, 0, 200, 200);
+                var session = new SessionController(options, new DesktopSnapshot(new Bitmap(200, 200), rect, [rect]), []);
+                try { Equal(5, session.OutputSettings.SnapDistancePixels); Equal(7, session.OutputSettings.GridStepPixels); } finally { session.Cancel(); }
+            }
+        });
+        Run("位置未指定の範囲確認は無効・座標指定で有効に戻る", () =>
+        {
+            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
+            var check = form.Controls.Find("PreviewRegion", true).Single();
+            Check(!check.Enabled, "位置未指定なのに確認できる");
+            var coordinates = (CheckBox)form.Controls.Find("InputFixedCoordinates", true).Single();
+            coordinates.Checked = true; Check(check.Enabled, "座標指定後も確認できない");
+            coordinates.Checked = false; Check(!check.Enabled, "無効状態へ戻らない");
+            using var tips = new ToolTip(); SettingsHelp.Apply(form, tips);
+            Check((tips.GetToolTip(check) ?? "").Contains("位置が未指定"), "無効理由の説明がない");
+        });
+        Run("既定入力の概要リンクは編集中の名前と余白を再読込しない", () =>
+        {
+            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
+            form.Controls.Find("RegionName", true).Single().Text = "編集中の既定";
+            ((NumericUpDown)form.Controls.Find("ScreenshotPaddingPixels", true).Single()).Value = 23;
+            ConsolidationClick(form, "DefaultInputSummary");
+            Equal("編集中の既定", form.Controls.Find("RegionName", true).Single().Text);
+            Equal(23m, ((NumericUpDown)form.Controls.Find("ScreenshotPaddingPixels", true).Single()).Value);
+        });
+        Run("別の入力から既定への概要移動は編集を画面内一覧へ保持し永続保存しない", () =>
+        {
+            int saves = 0; using var form = new SettingsForm(new AppSettings(), _ => { saves++; return null; }, () => { }, () => []);
+            var editor = (RegionManagerForm)form.Controls.Find("RegionManagerForm", true).Single();
+            var list = (ListBox)form.Controls.Find("SavedRegions", true).Single(); list.SelectedIndex = 1;
+            string id = ((SavedRegion)list.SelectedItem!).Id;
+            form.Controls.Find("RegionName", true).Single().Text = "別入力の編集";
+            ConsolidationClick(form, "DefaultInputSummary");
+            Equal("別入力の編集", editor.Regions.Single(p => p.Id == id).Name);
+            Check(((SavedRegion)list.SelectedItem!).IsDefault, "既定へ移動しない"); Equal(0, saves);
+        });
+        Run("出力概要への移動は既定の未保存編集と別出力の編集を保持", () =>
+        {
+            int saves = 0; using var form = new SettingsForm(new AppSettings(), _ => { saves++; return null; }, () => { }, () => []);
+            var editor = (CapturePresetEditor)form.Controls.Find("CapturePresetEditor", true).Single();
+            var list = (ListBox)form.Controls.Find("CapturePresetList", true).Single();
+            form.Controls.Find("CapturePresetName", true).Single().Text = "既定を編集中";
+            ConsolidationClick(form, "DefaultOutputSummary"); Equal("既定を編集中", form.Controls.Find("CapturePresetName", true).Single().Text);
+            list.SelectedIndex = 1; string id = ((CapturePreset)list.SelectedItem!).Id;
+            form.Controls.Find("CapturePresetName", true).Single().Text = "別出力の編集";
+            ConsolidationClick(form, "DefaultOutputSummary");
+            Equal("別出力の編集", editor.Presets.Single(p => p.Id == id).Name); Check(((CapturePreset)list.SelectedItem!).IsDefault, "既定に戻らない"); Equal(0, saves);
+        });
+        Run("不正な編集中の値がある概要移動は拒否して入力を残す", () =>
+        {
+            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
+            var list = (ListBox)form.Controls.Find("SavedRegions", true).Single(); list.SelectedIndex = 1;
+            form.Controls.Find("RegionName", true).Single().Text = "";
+            ConsolidationClick(form, "DefaultInputSummary"); Equal(1, list.SelectedIndex); Equal("", form.Controls.Find("RegionName", true).Single().Text);
+            Check(form.Controls.Find("Status", true).Single().Text.Contains("切り替えられません"), "拒否理由がない");
+            var outputList = (ListBox)form.Controls.Find("CapturePresetList", true).Single(); outputList.SelectedIndex = 1;
+            form.Controls.Find("CapturePresetName", true).Single().Text = "";
+            ConsolidationClick(form, "DefaultOutputSummary"); Equal(1, outputList.SelectedIndex); Equal("", form.Controls.Find("CapturePresetName", true).Single().Text);
+        });
+        Run("概要は日本語で無関係な固定寸法・保存先と旧余白説明を表示しない", () =>
+        {
+            var settings = new AppSettings().ApplyDefaults();
+            string input = SettingsForm.InputSummary(settings.SavedRegions.Single(p => p.IsDefault));
+            Check(!input.Contains("1280") && !input.Contains("True") && !input.Contains("False"), "矩形へ固定寸法か生の真偽値が出た");
+            string output = SettingsForm.OutputSummary(settings.CapturePresets.Single(p => p.IsDefault));
+            Check(output.Contains("クリップボード") && output.Contains("原色") && !output.Contains("Original") && !output.Contains(settings.SaveDirectory), "コピーだけに未使用保存先が出た");
+            using var form = new SettingsForm(settings, _ => null, () => { }, () => []); using var tips = new ToolTip(); SettingsHelp.Apply(form, tips);
+            var help = tips.GetToolTip(form.Controls.Find("CapturePresetEditor", true).Single()) ?? "";
+            Check(help.Contains("白い余白は入力プリセット") && !help.Contains("登録・更新"), "旧説明のまま");
+        });
+        Run("複製と既定ボタンは最小画面でも36px以上で文字と操作領域が収まる", () =>
+        {
+            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
+            form.SelectCategory("入力プリセット"); form.Size = form.MinimumSize; _ = form.Handle;
+            foreach (Control child in Descendants(form)) _ = child.Handle; LayoutTree(form);
+            foreach (string name in new[] { "DuplicateInputPreset", "DefaultInputPreset" })
+            {
+                var button = (Button)form.Controls.Find(name, true).Single();
+                Size text = TextRenderer.MeasureText(button.Text, button.Font);
+                Check(button.Height >= 36 && button.Height >= text.Height + 6, $"{name}の高さ不足: {button.Size} / 文字{text}");
+                Check(button.Width >= text.Width + 8 && button.Parent!.ClientRectangle.Contains(button.Bounds), $"{name}が親領域外か文字幅不足");
+            }
+            var first = form.Controls.Find("DuplicateInputPreset", true).Single(); var second = form.Controls.Find("DefaultInputPreset", true).Single();
+            Check(first.Right <= second.Left && first.Top == second.Top, "ボタンが重なるか並びがずれる");
+        });
         Run("新規は入力出力各3件と矩形コピー既定・暗転ON", () =>
         {
             var settings = new AppSettings().ApplyDefaults(); settings.Validate();

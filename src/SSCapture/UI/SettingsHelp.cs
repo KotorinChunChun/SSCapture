@@ -15,7 +15,7 @@ internal static class SettingsHelp
         ["LimitToStartingMonitor"] = "ONのときは開始時にポインタがあるモニタだけを暗転し、選択範囲とポインタをそのモニタ内に制限します。他のモニタは映像を更新し続けます。OFFのときは全モニタで選択できます。選択画面を使わない全画面・即時撮影には適用しません。",
         ["ScreenshotPaddingPixels"] = "静止画の外側へ上下左右同じ幅の白い余白を追加します。0～4096物理px、0は余白なしです。コピー・保存・外部アプリ・履歴に共通で適用します。撮影範囲や録画映像は変わりません。余白込みで各辺32768px・合計1億画素以内にしてください。",
         ["ScreenshotColorDepth"] = "静止画を最大256色（8ビット）または16色（4ビット）へ減色します。PNGはパレット形式で保存。コピー・外部アプリ・履歴にも同じ色を使用します。寸法・白余白・完全透明領域を保持し、録画は変更しません。写真やグラデーションは色が変わります。",
-        ["CapturePresetEditor"] = "出力先・余白・保存フォルダー・命名パターンの組合せを登録します。撮影中の右クリックから呼び出しても既定設定は変わりません。登録・更新後は設定画面で保存してください。",
+        ["CapturePresetEditor"] = "出力先・減色・外部アプリ・保存先・命名・OCR・撮影情報の組合せを登録します。白い余白は入力プリセットで設定します。撮影中の適用や個別変更は今回だけです。設定画面の「保存」で確定します。",
         ["FileNamePattern"] = "保存ファイル名の組立て方です。{yyyymmdd}は年月日、{hhmmss}は時分秒、{ocr}は画像から選んだ文字列、{region}は範囲名です。{#}は連番、{##}は2桁の連番です。例: {yyyymmdd}_{hhmmss}_{##}.png。録画は.mp4で保存します。",
         ["OcrSeparator"] = "OCRで選んだ複数の文字列の間に入れる文字です。例: _ を指定すると、文字列をアンダースコアでつなぎます。ファイル名に使用できない文字は指定できません。",
         ["OneOcrDirectory"] = "OneOCRのエンジンとモデルがあるフォルダの完全パスです。空欄のときはSnipping Toolから自動検出します。OCRを使う命名パターンで必要になります。",
@@ -69,6 +69,7 @@ internal static class SettingsHelp
 
     private static string? Description(string name)
     {
+        if (name == "PreviewRegion") return "登録した位置と寸法の枠だけを表示します。位置が未指定の場合は利用できません。先に座標を指定するか範囲を選んでください。撮影や設定保存は行いません。";
         if (name == "ScreenshotPaddingPixels") return "選択範囲の外側へ上下左右同じ幅の白い余白を追加します。元画像の縮小や周囲の画面の撮り足しはしません。0～4096物理px、0は余白なし。静止画だけに適用し録画には適用しません。";
         if (name == "FileNamePattern") return "{yyyymmdd} 年月日 / {hhmmss} 時分秒 / {ext} 静止画png・録画mp4 / {ocr} OCR文字列 / {region} 範囲名 / {#}・{##} 連番。例: {yyyymmdd}_{hhmmss}.{ext}";
         if (Descriptions.TryGetValue(name, out string? description)) return description;

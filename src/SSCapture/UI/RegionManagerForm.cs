@@ -16,7 +16,7 @@ internal sealed class RegionManagerForm : Form
     private readonly HotkeyEditor shortcut;
     private readonly ComboBox anchor;
     private readonly Label displayInfo, status;
-    private readonly Button delete, addLast;
+    private readonly Button delete, addLast, previewBounds;
     private readonly ComboBox captureMode;
     private readonly CheckBox coordinates, freezeFrame, includeCursor;
     private readonly NumericUpDown padding;
@@ -27,7 +27,14 @@ internal sealed class RegionManagerForm : Form
     private bool automaticName, updatingFields;
     private RegionPreviewForm? preview;
     internal SavedRegion[] Regions => regions.Select(Clone).ToArray();
-    internal void SelectDefault() { var preset = regions.FirstOrDefault(p => p.IsDefault); if (preset is not null) ReloadList(preset.Id); }
+    internal bool SelectDefault()
+    {
+        if (editing?.IsDefault == true) return true;
+        if (!StoreCurrent()) return false;
+        var preset = regions.FirstOrDefault(p => p.IsDefault);
+        if (preset is null) return false;
+        ReloadList(preset.Id); return true;
+    }
     private Form Host => TopLevel ? this : Parent?.FindForm() ?? this;
 
     public RegionManagerForm(SavedRegion[] regions, SavedRegion? lastRegion,
@@ -131,7 +138,7 @@ internal sealed class RegionManagerForm : Form
         fixedSize.Click += async (_, _) => await SelectBoundsAsync(new Size((int)width.Value, (int)height.Value));
         pickers.Controls.Add(draw, 0, 0); pickers.Controls.Add(fixedSize, 1, 0);
         editor.Controls.Add(pickers, 0, 4); editor.SetColumnSpan(pickers, 2);
-        var check = Button("範囲を確認", "PreviewRegion", ButtonRole.Secondary);
+        var check = previewBounds = Button("範囲を確認", "PreviewRegion", ButtonRole.Secondary);
         check.Click += (_, _) => PreviewRegion();
         editor.Controls.Add(check, 0, 5); editor.SetColumnSpan(check, 2);
         displayInfo = new Label { Name = "RegionDisplayInfo", Dock = DockStyle.Fill, AutoEllipsis = true,
@@ -176,7 +183,7 @@ internal sealed class RegionManagerForm : Form
         var conditionPage = new TabPage("取得条件"); var boundsPage = new TabPage("座標・寸法"); sections.TabPages.AddRange([conditionPage, boundsPage]); boundsPage.Controls.Add(editor);
         var conditions = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 7 };
         conditions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 184)); conditions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (int row = 0; row < 6; row++) conditions.RowStyles.Add(new RowStyle(SizeType.Absolute, 38)); conditions.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); conditionPage.Controls.Add(conditions);
+        for (int row = 0; row < 6; row++) conditions.RowStyles.Add(new RowStyle(SizeType.Absolute, row == 5 ? 52 : 38)); conditions.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); conditionPage.Controls.Add(conditions);
         captureMode = new ComboBox { Name = "CaptureMode", Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
         foreach (var mode in Enum.GetValues<CaptureMode>()) captureMode.Items.Add(SettingsForm.ModeName(mode)); captureMode.SelectedIndex = 0; AddField(conditions, "撮影モード", captureMode, 0);
         coordinates = new CheckBox { Name = "InputFixedCoordinates", Text = "登録した座標を使用する", AutoSize = true, Dock = DockStyle.Fill }; AddField(conditions, "位置", coordinates, 1);
@@ -187,8 +194,10 @@ internal sealed class RegionManagerForm : Form
         var duplicate = Button("複製", "DuplicateInputPreset", ButtonRole.Secondary); duplicate.Width = 120; duplicate.Dock = DockStyle.None;
         duplicate.Click += (_, _) => { string copiedName = name.Text; list.ClearSelected(); editing = null; automaticName = false; name.Text = copiedName + "のコピー"; }; profileButtons.Controls.Add(duplicate);
         var makeDefault = Button("既定にする", "DefaultInputPreset", ButtonRole.Secondary); makeDefault.Width = 144; makeDefault.Dock = DockStyle.None;
+        foreach (var button in new[] { duplicate, makeDefault })
+        { button.AutoSize = true; button.MinimumSize = new Size(button.Width, 36); button.Height = Math.Max(36, button.GetPreferredSize(Size.Empty).Height); }
         makeDefault.Click += (_, _) => { if (!StoreCurrent() || editing is null) return; string id = editing.Id; for (int i = 0; i < this.regions.Count; i++) this.regions[i] = this.regions[i] with { IsDefault = this.regions[i].Id == id }; ReloadList(id); }; profileButtons.Controls.Add(makeDefault);
-        void UpdateCoordinates() { x.Enabled = y.Enabled = coordinates.Checked; captureMode.Enabled = !coordinates.Checked; }
+        void UpdateCoordinates() { x.Enabled = y.Enabled = previewBounds.Enabled = coordinates.Checked; captureMode.Enabled = !coordinates.Checked; }
         coordinates.CheckedChanged += (_, _) => UpdateCoordinates();
         list.SelectedIndexChanged += (_, _) => { if (list.SelectedItem is SavedRegion region) LoadRegion(region); };
         name.TextChanged += (_, _) => { if (!updatingFields) automaticName = false; };
@@ -417,6 +426,7 @@ internal sealed class RegionManagerForm : Form
     private void PreviewRegion()
     {
         if (selecting) return;
+        if (!coordinates.Checked) { SetStatus("位置が未指定です。「登録した座標を使用する」をONにするか、先に範囲を選んでください。"); return; }
         try
         {
             Rectangle bounds = RegionCoordinates.Resolve(ReadRegion(), displays());
