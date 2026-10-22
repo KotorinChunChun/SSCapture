@@ -10,6 +10,7 @@ $sourceBuild = Join-Path $PSScriptRoot 'build.ps1'
 $sourceCommon = Join-Path $PSScriptRoot 'common.ps1'
 $passed = 0
 $failed = 0
+$preservedSettings = '{"SchemaVersion":3,"ExternalApplicationsVersion":1,"ImageEditors":[{"Id":"paint","Name":"ペイント","Executable":"C:\\Windows\\System32\\mspaint.exe","Arguments":"\"{file}\""},{"Id":"custom","Name":"追加アプリ","Executable":"C:\\custom.exe","Arguments":"\"{file}\""}],"SelectedImageEditorId":"custom"}'
 
 function Assert-Check([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -61,7 +62,7 @@ function Invoke-Dotnet {
     $fakeCommon.Replace('__SOURCE_COMMON__', $sourceCommon.Replace("'", "''")) |
         Set-Content -LiteralPath (Join-Path $scriptDirectory 'common.ps1') -Encoding utf8
     New-Item -ItemType Directory -Path (Join-Path $root 'artifacts\app\data') -Force | Out-Null
-    [IO.File]::WriteAllText((Join-Path $root 'artifacts\app\data\settings.json'), 'preserve fixture settings')
+    [IO.File]::WriteAllText((Join-Path $root 'artifacts\app\data\settings.json'), $preservedSettings)
     Set-FixtureState $root
     return $root
 }
@@ -74,7 +75,7 @@ function Get-FixtureCalls([string]$Root) {
 }
 function Assert-Unpublished([string]$Root) {
     Assert-Check (-not (Test-Path -LiteralPath (Join-Path $Root 'artifacts\app\published.fixture'))) '拒否後に発行された'
-    Assert-Check ([IO.File]::ReadAllText((Join-Path $Root 'artifacts\app\data\settings.json')) -eq 'preserve fixture settings') '既存dataが変更された'
+    Assert-Check ([IO.File]::ReadAllText((Join-Path $Root 'artifacts\app\data\settings.json')) -eq $preservedSettings) '既存の外部アプリ登録・選択が変更された'
 }
 
 Test-Case 'すべての依存・ライセンス不足を出力前に拒否' {
@@ -155,7 +156,7 @@ foreach ($noRestore in @($false, $true)) {
         foreach ($relative in @('published.fixture', 'tools\ffmpeg.exe', 'tools\ffprobe.exe', 'tools\LICENSE', 'tools\README.txt', 'NAudio-LICENSE.txt', 'THIRD_PARTY.md')) {
             Assert-Check (Test-Path -LiteralPath (Join-Path $root "artifacts\app\$relative") -PathType Leaf) "必要な出力がない: $relative"
         }
-        Assert-Check ([IO.File]::ReadAllText((Join-Path $root 'artifacts\app\data\settings.json')) -eq 'preserve fixture settings') '既存dataが変更された'
+        Assert-Check ([IO.File]::ReadAllText((Join-Path $root 'artifacts\app\data\settings.json')) -eq $preservedSettings) '既存の外部アプリ登録・選択が変更された'
     }
 }
 Write-Host "Build script fixtures: $passed passed, $failed failed"

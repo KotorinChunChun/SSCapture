@@ -4,6 +4,7 @@ internal static class PresetSettings
 {
     internal static AppSettings EnsurePresets(this AppSettings settings)
     {
+        settings = EnsureExternalApplications(settings);
         if (settings.PresetSchemaVersion >= 2) return settings;
         settings = EnsureLegacyPresets(settings);
         var inputs = settings.SavedRegions.ToList();
@@ -35,6 +36,27 @@ internal static class PresetSettings
         }
         // 削除した初期候補を次の起動で復活させない。既定や既存の登録内容には触れない。
         return settings with { PresetSchemaVersion = 2, SavedRegions = inputs.ToArray(), CapturePresets = outputs.ToArray() };
+    }
+    private static AppSettings EnsureExternalApplications(AppSettings settings)
+    {
+        if (settings.ExternalApplicationsVersion >= 1) return settings;
+        // Schema3でも旧exe欄だけを持つ設定がある。初期候補より先に登録へ移す。
+        if (settings.ImageEditors.Length == 0 && !string.IsNullOrWhiteSpace(settings.ImageEditorPath))
+            settings = settings with { ImageEditors = [new ExternalApplication { Id = "legacy-image",
+                Name = Path.GetFileNameWithoutExtension(settings.ImageEditorPath), Executable = settings.ImageEditorPath, Arguments = settings.ImageEditorArguments }],
+                SelectedImageEditorId = "legacy-image" };
+        var apps = settings.ImageEditors.ToList();
+        var paint = apps.FirstOrDefault(a => string.Equals(a.Executable, EditorExecutable.LegacyPaint, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(a.Executable, EditorExecutable.PaintAlias, StringComparison.OrdinalIgnoreCase));
+        bool initiallyEmpty = apps.Count == 0 && string.IsNullOrWhiteSpace(settings.ImageEditorPath);
+        if (paint is null && apps.Count < 50)
+        {
+            paint = new ExternalApplication { Id = UniqueId("builtin-paint", apps.Select(a => a.Id)),
+                Name = UniqueName("ペイント", apps.Select(a => a.Name)), Executable = EditorExecutable.PaintPreset };
+            apps.Add(paint);
+        }
+        return settings with { ExternalApplicationsVersion = 1, ImageEditors = apps.ToArray(),
+            SelectedImageEditorId = initiallyEmpty && paint is not null ? paint.Id : settings.SelectedImageEditorId };
     }
     private static AppSettings EnsureLegacyPresets(AppSettings settings)
     {

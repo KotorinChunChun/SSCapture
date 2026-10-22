@@ -17,6 +17,14 @@ internal sealed class ExternalApplicationsEditor : UserControl
     internal ExternalApplication[] Applications => applications.ToArray();
     internal string SelectedId => (selected.SelectedItem as ExternalApplication)?.Id ?? "";
     internal ExternalApplication? SelectedApplication => selected.SelectedItem as ExternalApplication;
+    private bool refreshing;
+    internal event Action<string>? SelectedChanged;
+    internal void SelectApplication(string id)
+    {
+        refreshing = true;
+        try { selected.SelectedIndex = applications.FindIndex(a => a.Id == id) + 1; }
+        finally { refreshing = false; }
+    }
 
     internal ExternalApplicationsEditor(string prefix, ExternalApplication[] apps, string selectedId, string legacyPath,
         string legacyArgs, IReadOnlyList<EditorPreset> examples, Func<IEnumerable<string?>> references)
@@ -35,7 +43,8 @@ internal sealed class ExternalApplicationsEditor : UserControl
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         Controls.Add(root);
         selected = new ComboBox { Name = prefix + "SelectedEditor", DropDownStyle = ComboBoxStyle.DropDownList };
-        Add("既定のアプリ", selected, 0);
+        Add("既定出力のアプリ", selected, 0);
+        selected.SelectedIndexChanged += (_, _) => { if (!refreshing) SelectedChanged?.Invoke(SelectedId); };
         list = new ListBox { Name = prefix + "EditorList", IntegralHeight = false, Dock = DockStyle.Fill };
         root.Controls.Add(list, 0, 1); root.SetColumnSpan(list, 2); root.SetRowSpan(list, 2);
         appName = new TextBox { Name = prefix + "EditorName", MaxLength = 80 }; Add("登録名", appName, 3);
@@ -88,9 +97,15 @@ internal sealed class ExternalApplicationsEditor : UserControl
     }
     private void Refresh(string id)
     {
+        refreshing = true;
+        try
+        {
         list.Items.Clear(); list.Items.AddRange(applications.Cast<object>().ToArray());
         selected.Items.Clear(); selected.Items.Add("なし"); selected.Items.AddRange(applications.Cast<object>().ToArray());
         selected.SelectedIndex = applications.FindIndex(a => a.Id == id) + 1;
+        }
+        finally { refreshing = false; }
+        SelectedChanged?.Invoke(SelectedId);
     }
     private void Store()
     {

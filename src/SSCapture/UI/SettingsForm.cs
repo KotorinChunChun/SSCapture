@@ -229,6 +229,12 @@ internal sealed class SettingsForm : Form
         notifications.Controls.Add(notificationInfo, 0, 7); notifications.SetColumnSpan(notificationInfo, 2);
         var presetPage = new TabPage("出力プリセット") { BackColor = BackColor, Padding = new Padding(8) };
         presetEditor = new CapturePresetEditor(settings, () => initial with { ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications });
+        imageApps.SelectedChanged += id => presetEditor.SetDefaultApplication(true, id);
+        videoApps.SelectedChanged += id => presetEditor.SetDefaultApplication(false, id);
+        presetEditor.DefaultApplicationsChanged += (image, video) =>
+        {
+            imageApps.SelectApplication(image ?? ""); videoApps.SelectApplication(video ?? "");
+        };
         presetPage.Controls.Add(presetEditor); tabs.TabPages.Add(presetPage);
         var inputPresetPage = new TabPage("入力プリセット") { BackColor = BackColor, Padding = new Padding(4) };
         inputPresetEditor = new RegionManagerForm(settings.SavedRegions, lastRegion,

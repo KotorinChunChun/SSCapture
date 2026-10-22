@@ -10,6 +10,7 @@ internal sealed record AppSettings
     public CaptureMode DefaultMode { get; init; } = CaptureMode.Rectangle;
     public int SchemaVersion { get; init; } = 3;
     public int PresetSchemaVersion { get; init; }
+    public int ExternalApplicationsVersion { get; init; }
     [System.Text.Json.Serialization.JsonIgnore]
     public bool HasShortcuts => HotkeyBinding.ReadAssignments(this).Length > 0;
     public string ScreenshotShortcut1 { get; init; } = "Win+Shift+S";

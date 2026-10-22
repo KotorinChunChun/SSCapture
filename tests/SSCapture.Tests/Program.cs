@@ -12,6 +12,17 @@ internal static partial class Program
         if (args.FirstOrDefault() == "--editor-received") { File.WriteAllText(Path.Combine(args[3], "editor-" + args[1] + ".json"), System.Text.Json.JsonSerializer.Serialize(new { application = args[1], image = args[2] })); return 0; }
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
+        if (args.FirstOrDefault() == "--external-editor-launch")
+        {
+            try
+            {
+                var info = Services.OutputRouter.EditorStartInfo(args[1], Path.GetFullPath(args[2]));
+                using var process = System.Diagnostics.Process.Start(info) ?? throw new IOException("起動できません。");
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { info.FileName, Arguments = info.ArgumentList.ToArray(), process.Id }));
+                return 0;
+            }
+            catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
+        }
         if (args.Contains("--clipboard-color-smoke")) return ClipboardColorSmoke(args[1], args[2]);
         if (args.Contains("--preparation-smoke")) return PreparationSmoke(args[1]);
         if (args.Contains("--context-smoke")) return ContextSmoke(args[1]);

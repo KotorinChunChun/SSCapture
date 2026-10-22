@@ -114,7 +114,7 @@ internal static partial class Program
             Check(settings.SavedRegions.All(p => !p.UseFixedCoordinates && p.FreezeFrame && p.PaddingPixels == 0 && !p.IncludeCursor && p.Shortcut == ""), "初期入力に座標・キー・加工が混入");
             Equal(new Size(1280, 720), settings.SavedRegions.Single(p => p.Mode == CaptureMode.FixedRegion).Bounds.Size);
             Check(settings.CapturePresets.Select(p => p.Destination).ToHashSet().SetEquals([OutputDestination.Clipboard, OutputDestination.File, OutputDestination.Clipboard | OutputDestination.File]), "初期出力の組合せが異なる");
-            Check(settings.CapturePresets.All(p => !p.OpenFolderAfterSave && p.ColorDepth == ScreenshotColorDepth.Original && string.IsNullOrEmpty(p.ImageEditorId) && string.IsNullOrEmpty(p.VideoEditorId)), "初期出力がアプリやフォルダを開く");
+            Check(settings.CapturePresets.All(p => !p.OpenFolderAfterSave && p.ColorDepth == ScreenshotColorDepth.Original && !p.Destination.HasFlag(OutputDestination.ExternalApp) && string.IsNullOrEmpty(p.VideoEditorId)), "初期出力がアプリやフォルダを開く");
         });
         Run("初期候補追加はv1の既定・ID・値と重複名を保持", () =>
         {

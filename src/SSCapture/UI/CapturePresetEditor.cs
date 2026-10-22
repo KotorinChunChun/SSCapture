@@ -12,6 +12,22 @@ internal sealed class CapturePresetEditor : UserControl
     private readonly Func<AppSettings> readSettings;
     private readonly AppSettings initialSettings;
     private readonly TableLayoutPanel naming;
+    private bool filling;
+    internal event Action<string?, string?>? DefaultApplicationsChanged;
+    internal void SetDefaultApplication(bool image, string id)
+    {
+        int index = Array.FindIndex(Presets, p => p.IsDefault);
+        if (index < 0) return;
+        var preset = (CapturePreset)list.Items[index]!;
+        filling = true;
+        try
+        {
+            list.Items[index] = image ? preset with { ImageEditorId = id } : preset with { VideoEditorId = id };
+            if (list.SelectedIndex == index)
+                RefreshApps(image ? imageApp : videoApp, image ? readSettings().ImageEditors : readSettings().VideoEditors, id);
+        }
+        finally { filling = false; }
+    }
     internal CapturePreset[] Presets => list.Items.Cast<CapturePreset>().ToArray();
     internal bool SelectDefault()
     {
@@ -54,12 +70,14 @@ internal sealed class CapturePresetEditor : UserControl
         Button("削除", "DeleteCapturePreset", () => { if (list.SelectedItem is CapturePreset p) { if (p.IsDefault) { ShowError("別のプリセットを既定にしてから削除してください。"); return; } list.Items.RemoveAt(list.SelectedIndex); } });
         Button("既定にする", "DefaultCapturePreset", () => { StoreCurrent(); if (Error is not null || list.SelectedItem is not CapturePreset p) return; var all = Presets.Select(x => x with { IsDefault = x.Id == p.Id }).ToArray(); list.Items.Clear(); list.Items.AddRange(all); list.SelectedIndex = Array.FindIndex(all, x => x.Id == p.Id); });
         status = new Label { Name = "PresetEditorStatus", Dock = DockStyle.Fill, Text = "編集内容は設定画面の「保存」で確定します。" }; root.Controls.Add(status, 0, 2); root.SetColumnSpan(status, 2);
-        list.SelectedIndexChanged += (_, _) => { if (list.SelectedItem is CapturePreset p) Fill(p); };
+        list.SelectedIndexChanged += (_, _) => { if (!filling && list.SelectedItem is CapturePreset p) Fill(p); };
         foreach (var preset in initial.CapturePresets) list.Items.Add(preset);
         if (list.Items.Count > 0) list.SelectedIndex = Math.Max(0, Array.FindIndex(Presets, p => p.IsDefault)); else Fill(CapturePreset.FromSettings("", initial));
         file.CheckedChanged += (_, _) => UpdateFileFields(); UpdateFileFields();
         imageApp.Enter += (_, _) => RefreshApps(imageApp, CurrentSettings().ImageEditors, (imageApp.SelectedItem as ExternalApplication)?.Id);
         videoApp.Enter += (_, _) => RefreshApps(videoApp, CurrentSettings().VideoEditors, (videoApp.SelectedItem as ExternalApplication)?.Id);
+        imageApp.SelectedIndexChanged += (_, _) => NotifyDefaultApplications();
+        videoApp.SelectedIndexChanged += (_, _) => NotifyDefaultApplications();
         TableLayoutPanel Page(string title) { var page = new TabPage(title); var fields = Fields(); page.Controls.Add(fields); tabs.TabPages.Add(page); return fields; }
         void Button(string text, string name, Action action) { var b = SettingsForm.MakeButton(text, name); b.Width = 110; b.Click += (_, _) => { try { action(); } catch (ArgumentException ex) { ShowError(ex.Message); } }; buttons.Controls.Add(b); }
     }
@@ -68,9 +86,20 @@ internal sealed class CapturePresetEditor : UserControl
     private void UpdateFileFields() { metadataMode.Enabled = directory.Enabled = pattern.Enabled = separator.Enabled = openFolder.Enabled = file.Checked; }
     private void Fill(CapturePreset p)
     {
+        filling = true;
+        try
+        {
         RefreshApps(imageApp, CurrentSettings().ImageEditors, p.ImageEditorId); RefreshApps(videoApp, CurrentSettings().VideoEditors, p.VideoEditorId);
         presetName.Text = p.Name; directory.Text = p.SaveDirectory; pattern.Text = p.FileNamePattern; separator.Text = p.OcrSeparator; color.SelectedIndex = (int)p.ColorDepth; openFolder.Checked = p.OpenFolderAfterSave; metadataMode.SelectedIndex = (int)p.MetadataMode;
         clipboard.Checked = p.Destination.HasFlag(OutputDestination.Clipboard); file.Checked = p.Destination.HasFlag(OutputDestination.File); external.Checked = p.Destination.HasFlag(OutputDestination.ExternalApp); Error = null;
+        }
+        finally { filling = false; }
+        NotifyDefaultApplications();
+    }
+    private void NotifyDefaultApplications()
+    {
+        if (!filling && list.SelectedItem is CapturePreset { IsDefault: true })
+            DefaultApplicationsChanged?.Invoke((imageApp.SelectedItem as ExternalApplication)?.Id, (videoApp.SelectedItem as ExternalApplication)?.Id);
     }
     private CapturePreset ReadCurrent() => new()
     {
@@ -96,10 +125,15 @@ internal sealed class CapturePresetEditor : UserControl
     private static TableLayoutPanel Fields() { var t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 8 }; t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 176)); t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); for (int i = 0; i < 7; i++) t.RowStyles.Add(new RowStyle(SizeType.Absolute, 38)); t.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); return t; }
     private static void Add(TableLayoutPanel table, string text, Control input, int row) { table.Controls.Add(new Label { Text = text, AutoSize = true, Anchor = AnchorStyles.Left }, 0, row); input.Dock = DockStyle.Fill; input.Margin = new Padding(3, 3, 0, 3); table.Controls.Add(input, 1, row); }
     private static CheckBox Toggle(string text, string name) => new() { Text = text, Name = name, AutoSize = true };
-    private static void RefreshApps(ComboBox combo, ExternalApplication[] apps, string? id)
+    private void RefreshApps(ComboBox combo, ExternalApplication[] apps, string? id)
     {
+        bool prior = filling; filling = true;
+        try
+        {
         combo.Items.Clear(); combo.Items.Add("指定しない"); combo.Items.AddRange(apps.Cast<object>().ToArray());
         if (!string.IsNullOrEmpty(id) && !apps.Any(a => a.Id == id)) combo.Items.Add(new ExternalApplication { Id = id, Name = "未登録: " + id });
         combo.SelectedIndex = Enumerable.Range(1, combo.Items.Count - 1).FirstOrDefault(i => ((ExternalApplication)combo.Items[i]!).Id == id, 0);
+        }
+        finally { filling = prior; }
     }
 }

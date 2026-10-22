@@ -84,6 +84,7 @@ internal sealed class SettingsStore(string path)
                 if (!old.RootElement.TryGetProperty("SchemaVersion", out var version) || version.GetInt32() < 3) suffix = ".schema2.bak";
                 else if (!old.RootElement.TryGetProperty(nameof(AppSettings.PresetSchemaVersion), out var profiles) || profiles.GetInt32() < 1) suffix = ".presets-v0.bak";
                 else if (profiles.GetInt32() < 2) suffix = ".presets-v1.bak";
+                else if (!old.RootElement.TryGetProperty(nameof(AppSettings.ExternalApplicationsVersion), out var apps) || apps.GetInt32() < 1) suffix = ".external-apps-v0.bak";
             }
             catch (JsonException) { suffix = ".invalid.bak"; }
             if (suffix is not null && !File.Exists(filePath + suffix)) File.Copy(filePath, filePath + suffix, false);
