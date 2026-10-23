@@ -45,7 +45,7 @@ internal static partial class Program
                 launch: info => { using var completed = new Bitmap(info.ArgumentList[0]); Equal(10, completed.Width); launches++; launched.SetResult(); });
             feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, NotificationImage: pending), settings);
             Check(!Directory.EnumerateFiles(directory).Any(), "クリック前にディスクへ書いた");
-            var click = toast.Activate!; click(); click(); WaitHistory(launched.Task); Equal(1, launches);
+            var click = toast.Actions!.Edit!; click(); click(); WaitHistory(launched.Task); Equal(1, launches);
             var unused = new NotificationImage(bitmap, directory);
             feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, NotificationImage: unused), settings);
             feedback.HideForCapture();
@@ -91,10 +91,10 @@ internal static partial class Program
             var settings = new AppSettings { ImageEditors = [app], NotificationApplicationId = app.Id,
                 NotificationClickAction = NotificationClickAction.ExternalApplication };
             feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, NotificationPath: path), settings);
-            Action click = toast.Activate!; click(); click();
+            Action click = toast.Actions!.Edit!; click(); click();
             Equal(1, launched.Count); Check(launched[0].ArgumentList.Contains(path), "通知画像を渡さない");
             feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.File, OutputDestination.None, SavedPath: path), settings with { NotificationClickAction = NotificationClickAction.None });
-            Check(toast.Activate is null, "何もしないにクリック動作が残る");
+            Check(toast.Activate is null && toast.Actions!.OpenFolder is not null && toast.Actions.Edit is not null, "本文透過と独立ボタンが共存しない");
         }));
         Run("通知タイマーは近接中だけ延長し撮影前には必ず止まる", () =>
         {

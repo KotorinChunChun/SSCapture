@@ -2,13 +2,15 @@ using SSCapture.UI;
 
 namespace SSCapture.Services;
 
-internal enum NotificationCorner { BottomRight, BottomLeft }
+internal enum NotificationCorner { BottomRight, BottomLeft, TopLeft, TopCenter, TopRight, MiddleLeft, Center, MiddleRight, BottomCenter }
 internal enum NotificationClickAction { None, OpenFolder, ExternalApplication }
+internal sealed record NotificationActions(Action? OpenFolder, Action? Edit, string RepeatHint);
 
 internal interface ICaptureToast : IDisposable
 {
     Rectangle DisplayBounds => Rectangle.Empty;
     int DisplayDpi => 96;
+    void SetActions(NotificationActions actions) { }
     bool TryShow(string message, bool hasFailure, NotificationCorner corner, out string? warning,
         Action? activate = null, NotificationDisplay display = NotificationDisplay.Captured, Rectangle? captureBounds = null);
     void Hide();
@@ -75,16 +77,15 @@ internal sealed class CaptureFeedback : IDisposable
         try
         {
             int serial = ++notificationSerial;
-            Action? activate = settings.NotificationClickAction switch
-            {
-                NotificationClickAction.OpenFolder when result.Completed.HasFlag(OutputDestination.File) && result.SavedPath is string path
-                    => () => OpenSavedFile(serial, path),
-                NotificationClickAction.ExternalApplication => () => OpenApplication(serial, result, settings),
-                _ => null
-            };
+            Action? folder = result.Completed.HasFlag(OutputDestination.File) && result.SavedPath is string path ? () => OpenSavedFile(serial, path) : null;
+            var app = ResolveApplication(result, settings);
+            Action? edit = result.HasSuccess && app is not null && (result.SavedPath is not null || result.NotificationPath is not null || pendingImage is not null)
+                ? () => OpenApplication(serial, result, app) : null;
             toast ??= createToast();
+            string key = string.IsNullOrWhiteSpace(settings.LastRecipeShortcut) ? "未設定" : settings.LastRecipeShortcut;
+            toast.SetActions(new(folder, edit, result.Intent == CaptureIntent.Recording ? $"静止画の直前設定で再撮影: {key}（録画の再開ではありません）" : $"直前の設定で再撮影: {key}"));
             if (!toast.TryShow(result.Message, result.HasFailure, settings.NotificationCorner, out string? error,
-                activate, settings.NotificationDisplay, result.CaptureBounds))
+                null, settings.NotificationDisplay, result.CaptureBounds))
             {
                 HideForCapture();
                 Warn(error ?? "完了表示を画面取得から除外できないため、表示を中止しました。");
@@ -130,15 +131,26 @@ internal sealed class CaptureFeedback : IDisposable
         catch (Exception ex) { Warn("保存ファイルをExplorerで表示できません: " + ex.Message); }
     }
 
-    private async void OpenApplication(int serial, CaptureDelivery result, AppSettings settings)
+    internal static ExternalApplication? ResolveApplication(CaptureDelivery result, AppSettings current)
+    {
+        var registered = current.ImageEditors.Concat(current.VideoEditors).FirstOrDefault(a => a.Id == current.NotificationApplicationId);
+        if (registered is not null) return registered;
+        var captured = result.CaptureSettings;
+        if (captured is null) return null;
+        bool video = result.Intent == CaptureIntent.Recording;
+        string id = video ? captured.SelectedVideoEditorId : captured.SelectedImageEditorId;
+        var original = (video ? captured.VideoEditors : captured.ImageEditors).FirstOrDefault(a => a.Id == id);
+        var available = (video ? current.VideoEditors : current.ImageEditors).FirstOrDefault(a => a.Id == id);
+        return original is not null && original == available ? available : null;
+    }
+
+    private async void OpenApplication(int serial, CaptureDelivery result, ExternalApplication app)
     {
         if (disposed || serial != notificationSerial) return;
         var image = pendingImage; pendingImage = null;
         HideForCapture();
         try
         {
-            var app = settings.ImageEditors.Concat(settings.VideoEditors).FirstOrDefault(a => a.Id == settings.NotificationApplicationId)
-                ?? throw new InvalidOperationException("通知で開く外部アプリが登録されていません。");
             _ = EditorExecutable.Resolve(app.Executable);
             EditorArguments.Validate(app.Arguments);
             string path = result.SavedPath ?? result.NotificationPath ?? (image is not null

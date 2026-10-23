@@ -38,17 +38,17 @@ internal static partial class Program
             var saved = new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.File, OutputDestination.None, SavedPath: "first.png", CaptureBounds: bounds);
             feedback.Notify(saved, settings);
             Equal(5000, timer.Milliseconds); Equal(NotificationDisplay.Display3, toast.Display); Equal<Rectangle?>(bounds, toast.CaptureBounds);
-            Action first = toast.Activate!;
+            Action first = toast.Actions!.OpenFolder!;
             feedback.Notify(saved with { SavedPath = "second.png" }, settings);
             first(); Equal(0, opened.Count);
-            Action second = toast.Activate!;
+            Action second = toast.Actions!.OpenFolder!;
             second(); second(); Equal("second.png", opened.Single());
             Check(!toast.Visible && !timer.Running, "クリック後も通知が残る");
-            feedback.Notify(saved, settings); Action expired = toast.Activate!;
+            feedback.Notify(saved, settings); Action expired = toast.Actions!.OpenFolder!;
             timer.Fire(); expired(); Equal(1, opened.Count);
             feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None), settings);
-            Check(toast.Activate is null, "コピーだけでファイルを開く");
-            feedback.Notify(saved, settings); Action superseded = toast.Activate!;
+            Check(toast.Actions!.OpenFolder is null, "コピーだけでファイルを開く");
+            feedback.Notify(saved, settings); Action superseded = toast.Actions!.OpenFolder!;
             feedback.Notify(saved, settings with { NotificationDurationSeconds = 0 });
             superseded(); Equal(1, opened.Count); Check(!toast.Visible, "0秒でも表示が残る");
         });
@@ -59,7 +59,7 @@ internal static partial class Program
             using var feedback = new CaptureFeedback(text => warning = text, () => toast, new FakeCompletionSound(), new FakeFeedbackTimer(),
                 _ => throw new FileNotFoundException("保存ファイルが移動されています"));
             feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.File, OutputDestination.None, SavedPath: "removed.png"), new AppSettings());
-            toast.Activate!();
+            toast.Actions!.OpenFolder!();
             Check(warning?.Contains("Explorer") == true && !toast.Visible, "クリック失敗を処理できない");
         });
 
@@ -67,7 +67,7 @@ internal static partial class Program
         {
             Rectangle work = new(-2560, -200, 2560, 1360);
             foreach (int dpi in new[] { 96, 120, 144, 192 })
-                foreach (NotificationCorner corner in Enum.GetValues<NotificationCorner>())
+                foreach (NotificationCorner corner in new[] { NotificationCorner.BottomRight, NotificationCorner.BottomLeft })
                 {
                     Rectangle bounds = CaptureToastForm.CalculateBounds(work, dpi, corner);
                     int margin = (int)Math.Round(12 * dpi / 96d);
@@ -263,12 +263,14 @@ internal static partial class Program
         internal int Shows;
         internal bool Allow = true, Visible, Disposed;
         internal Action? Activate;
+        internal NotificationActions? Actions;
+        public void SetActions(NotificationActions actions) => Actions = actions;
         internal NotificationDisplay Display;
         internal Rectangle? CaptureBounds;
         public bool TryShow(string message, bool hasFailure, NotificationCorner corner, out string? warning,
             Action? activate = null, NotificationDisplay display = NotificationDisplay.Captured, Rectangle? captureBounds = null)
         { Shows++; Visible = Allow; Activate = activate; Display = display; CaptureBounds = captureBounds; warning = Allow ? null : "除外を確認できません"; return Allow; }
-        public void Hide() { Visible = false; Activate = null; }
+        public void Hide() { Visible = false; Activate = null; Actions = null; }
         public void Dispose() { Disposed = true; Visible = false; }
     }
 

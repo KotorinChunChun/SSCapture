@@ -8,14 +8,15 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
     internal const uint ExcludeFromCapture = 0x11;
     internal const int NotificationWidth = 392, NotificationHeight = 68;
     private const int WsVisible = 0x10000000;
-    private const int WsExTransparent = 0x00000020;
     internal const int ToastExtendedStyle = 0x08000000 /* NOACTIVATE */ | 0x00000080 /* TOOLWINDOW */
         | 0x00000020 /* TRANSPARENT */ | 0x00080000 /* LAYERED */ | 0x00000008 /* TOPMOST */;
     private readonly Label message;
     private readonly Func<nint, CaptureProtection> protect;
     private readonly Action<CaptureToastForm> show;
     private readonly Func<(Rectangle WorkArea, int Dpi)>? location;
-    private Action? activation;
+    private NotificationActions? actions;
+    private ToastActionForm? actionHost;
+    private readonly bool nativeShow;
     private nint protectedHandle;
     private string? protectionWarning;
     private Font? notificationFont;
@@ -28,6 +29,7 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
     {
         this.protect = protect ?? ProtectNative;
         this.show = show ?? ShowNative;
+        nativeShow = show is null;
         this.location = location;
         Name = "CaptureToastForm";
         Text = WindowTitle.Create("完了");
@@ -50,9 +52,6 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
         message = new Label { Name = "CaptureToastMessage", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
             AutoEllipsis = true, Margin = Padding.Empty, UseMnemonic = false };
         layout.Controls.Add(message, 0, 0);
-        MouseClick += ActivateOnClick;
-        layout.MouseClick += ActivateOnClick;
-        message.MouseClick += ActivateOnClick;
     }
 
     protected override bool ShowWithoutActivation => true;
@@ -63,11 +62,12 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
         {
             CreateParams parameters = base.CreateParams;
             parameters.ExStyle |= ToastExtendedStyle;
-            if (activation is not null) parameters.ExStyle &= ~WsExTransparent; // Only saved results accept clicks.
             parameters.Style &= ~WsVisible;
             return parameters;
         }
     }
+
+    public void SetActions(NotificationActions value) => actions = value;
 
     public bool TryShow(string text, bool hasFailure, NotificationCorner corner, out string? warning,
         Action? activate = null, NotificationDisplay display = NotificationDisplay.Captured, Rectangle? captureBounds = null)
@@ -75,12 +75,9 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
         warning = null;
         try
         {
-            activation = activate;
-            Cursor = activate is null ? Cursors.Default : Cursors.Hand;
-            if (IsHandleCreated && !ApplyClickThroughStyle())
-            {
-                Hide(); warning = "完了表示のクリック状態を設定できないため、表示を中止しました。"; return false;
-            }
+            // 本文は常に別プロセスまで透過。旧activate引数で透過を解除しない。
+            actionHost?.Hide();
+            if (actions is not null) text += Environment.NewLine + actions.RepeatHint;
             var monitor = location?.Invoke() ?? NotificationPlacement.Current(display, captureBounds);
             displayDpi = monitor.Dpi;
             Rectangle bounds = CalculateBounds(monitor.WorkArea, monitor.Dpi, corner, Math.Clamp(text.Count(c => c == '\n') + 1, 1, 4));
@@ -102,17 +99,25 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
             int textWidth = Math.Max(1, bounds.Width - Controls[0].Padding.Horizontal);
             Size measured = TextRenderer.MeasureText(text, message.Font, new Size(textWidth, int.MaxValue),
                 TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
-            int margin = monitor.WorkArea.Bottom - bounds.Bottom;
+            int margin = Math.Min((int)Math.Round(12 * scale), Math.Max(0, (Math.Min(monitor.WorkArea.Width, monitor.WorkArea.Height) - 1) / 2));
+            int actionHeight = actions is null ? 0 : (int)Math.Round(44 * scale);
             int height = Math.Min(Math.Max(bounds.Height, measured.Height + Controls[0].Padding.Vertical),
-                monitor.WorkArea.Height - margin * 2);
-            bounds = new Rectangle(bounds.X, bounds.Bottom - height, bounds.Width, height);
+                monitor.WorkArea.Height - margin * 2 - Math.Min(actionHeight, monitor.WorkArea.Height / 3));
+            bounds = PlaceSize(monitor.WorkArea, monitor.Dpi, corner, new(bounds.Width, Math.Max(1, height + actionHeight)));
+            Controls[0].Padding = new Padding(Controls[0].Padding.Left, Controls[0].Padding.Top, Controls[0].Padding.Right, Controls[0].Padding.Bottom + actionHeight);
             BackColor = hasFailure ? Color.FromArgb(99, 55, 25) : Color.FromArgb(28, 43, 50);
             message.Text = text;
             Bounds = bounds;
             _ = Handle;
             if (!EnsureProtection()) { Hide(); warning = protectionWarning; return false; }
+            if (actions is not null)
+            {
+                actionHost ??= new ToastActionForm(protect, nativeShow);
+                if (!actionHost.Prepare(bounds, monitor.Dpi, actions, out warning)) { Hide(); return false; }
+            }
             show(this);
             if (protectedHandle != Handle) { Hide(); warning = protectionWarning; return false; }
+            if (actions is not null) actionHost?.ShowProtected();
             return true;
         }
         catch (Exception ex)
@@ -123,36 +128,9 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
 
     public new void Hide()
     {
-        activation = null;
+        actionHost?.Clear();
+        actions = null;
         base.Hide();
-        if (IsHandleCreated) ApplyClickThroughStyle();
-    }
-
-    private bool ApplyClickThroughStyle()
-    {
-        const int extendedStyle = -20; // GWL_EXSTYLE
-        nint window = Handle;
-        nint current = IntPtr.Size == 8 ? GetWindowLongPtr64(window, extendedStyle) : GetWindowLong32(window, extendedStyle);
-        // This form always has NOACTIVATE/TOOLWINDOW/LAYERED styles, so zero is
-        // an error, rather than an ambiguous successful read or previous value.
-        if (current == 0) return false;
-        nint desired = activation is null ? current | WsExTransparent : current & ~WsExTransparent;
-        if (current == desired) return true;
-        nint previous = IntPtr.Size == 8 ? SetWindowLongPtr64(window, extendedStyle, desired)
-            : SetWindowLong32(window, extendedStyle, (int)desired);
-        if (previous == 0) return false;
-        // UpdateStyles also reapplies regular Form styles and frame positioning.
-        // Change only click-through, without disturbing visibility or activation.
-        return SetWindowPos(window, 0, 0, 0, 0, 0,
-            0x0001 /* SWP_NOSIZE */ | 0x0002 /* SWP_NOMOVE */ | 0x0004 /* SWP_NOZORDER */
-            | 0x0010 /* SWP_NOACTIVATE */ | 0x0020 /* SWP_FRAMECHANGED */ | 0x0200 /* SWP_NOOWNERZORDER */);
-    }
-
-    private void ActivateOnClick(object? sender, MouseEventArgs e)
-    {
-        if (e.Button != MouseButtons.Left || !Visible || activation is not { } action) return;
-        Hide();
-        action();
     }
 
     internal static Rectangle CalculateBounds(Rectangle workArea, int dpi, NotificationCorner corner, int lines = 1)
@@ -164,8 +142,20 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
         int margin = Math.Min((int)Math.Round(12 * dpi / 96d), Math.Max(0, (Math.Min(workArea.Width, workArea.Height) - 1) / 2));
         int width = Math.Min((int)Math.Round(NotificationWidth * dpi / 96d), workArea.Width - margin * 2);
         int height = Math.Min((int)Math.Round((NotificationHeight + Math.Max(0, lines - 2) * 22) * dpi / 96d), workArea.Height - margin * 2);
-        long left = corner == NotificationCorner.BottomLeft ? (long)workArea.Left + margin : (long)workArea.Left + workArea.Width - margin - width;
-        long top = (long)workArea.Top + workArea.Height - margin - height;
+        return PlaceSize(workArea, dpi, corner, new(width, height));
+    }
+
+    internal static Rectangle PlaceSize(Rectangle workArea, int dpi, NotificationCorner corner, Size size)
+    {
+        int margin = Math.Min((int)Math.Round(12 * dpi / 96d), Math.Max(0, (Math.Min(workArea.Width, workArea.Height) - 1) / 2));
+        int width = Math.Clamp(size.Width, 1, Math.Max(1, workArea.Width - 2 * margin));
+        int height = Math.Clamp(size.Height, 1, Math.Max(1, workArea.Height - 2 * margin));
+        int column = corner switch { NotificationCorner.TopLeft or NotificationCorner.MiddleLeft or NotificationCorner.BottomLeft => 0,
+            NotificationCorner.TopCenter or NotificationCorner.Center or NotificationCorner.BottomCenter => 1, _ => 2 };
+        int row = corner switch { NotificationCorner.TopLeft or NotificationCorner.TopCenter or NotificationCorner.TopRight => 0,
+            NotificationCorner.MiddleLeft or NotificationCorner.Center or NotificationCorner.MiddleRight => 1, _ => 2 };
+        long left = (long)workArea.X + (column == 0 ? margin : column == 1 ? (workArea.Width - width) / 2 : workArea.Width - margin - width);
+        long top = (long)workArea.Y + (row == 0 ? margin : row == 1 ? (workArea.Height - height) / 2 : workArea.Height - margin - height);
         if (left is < int.MinValue or > int.MaxValue || top is < int.MinValue or > int.MaxValue)
             throw new ArgumentException("通知の表示座標が扱える範囲を超えています。");
         return new Rectangle((int)left, (int)top, width, height);
@@ -181,7 +171,7 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
     }
 
     protected override void OnHandleDestroyed(EventArgs e)
-    { protectedHandle = 0; base.OnHandleDestroyed(e); }
+    { protectedHandle = 0; actionHost?.Hide(); base.OnHandleDestroyed(e); }
 
     protected override void SetVisibleCore(bool value)
     {
@@ -214,7 +204,7 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
     protected override void WndProc(ref Message m)
     {
         if (m.Msg == 0x0021 /* WM_MOUSEACTIVATE */) { m.Result = 3 /* MA_NOACTIVATE */; return; }
-        if (m.Msg == 0x0084 /* WM_NCHITTEST */) { m.Result = activation is null ? -1 /* HTTRANSPARENT */ : 1 /* HTCLIENT */; return; }
+        if (m.Msg == 0x0084 /* WM_NCHITTEST */) { m.Result = -1 /* HTTRANSPARENT */; return; }
         if (m.Msg == 0x0046 /* WM_WINDOWPOSCHANGING */ && m.LParam != 0 && protectedHandle != m.HWnd)
         {
             WindowPosition position = Marshal.PtrToStructure<WindowPosition>(m.LParam);
@@ -239,7 +229,7 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
     private static CaptureProtection ProtectNative(nint handle) => CheckProtection(handle, SetWindowDisplayAffinity,
         window => (GetWindowDisplayAffinity(window, out uint affinity), affinity));
 
-    private static void ShowNative(CaptureToastForm form)
+    internal static void ShowNative(Form form)
     {
         if (!form.Visible) form.Show();
         ShowWindow(form.Handle, 4 /* SW_SHOWNOACTIVATE */);
@@ -249,7 +239,7 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { notificationFont?.Dispose(); notificationFont = null; }
+        if (disposing) { actionHost?.Dispose(); notificationFont?.Dispose(); notificationFont = null; }
         base.Dispose(disposing);
     }
 

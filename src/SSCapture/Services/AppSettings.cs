@@ -86,8 +86,6 @@ internal sealed record AppSettings
         ExternalApplication.ValidateList(VideoEditors, SelectedVideoEditorId);
         if (!Enum.IsDefined(NotificationClickAction)) throw new ArgumentException("通知クリックの動作が正しくありません。");
         ExternalApplication.ValidateReference(ImageEditors.Concat(VideoEditors).ToArray(), NotificationApplicationId);
-        if (NotificationClickAction == Services.NotificationClickAction.ExternalApplication && string.IsNullOrEmpty(NotificationApplicationId))
-            throw new ArgumentException("通知で開く外部アプリを選択してください。");
         if (!Enum.IsDefined(MetadataMode)) throw new ArgumentException("撮影情報の保存形式が正しくありません。");
         if (CapturePresets is null || CapturePresets.Length > 100 || CapturePresets.Any(p => p is null))
             throw new ArgumentException("プリセットは100件以内で指定してください。");

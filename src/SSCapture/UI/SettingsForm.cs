@@ -18,7 +18,7 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox dimCaptureBackground;
     private readonly CheckBox includeCursor, keepHistory, playCaptureSound, limitToStartingMonitor;
     private readonly ComboBox notificationCorner, notificationDisplay, fixedCaptureAnchor;
-    private readonly ComboBox notificationAction, notificationApplication;
+    private readonly ComboBox notificationApplication;
     private readonly CheckBox holdNotification;
     private readonly HotkeyEditor[] instantKeys = new HotkeyEditor[10];
     private readonly ComboBox mode, microphone;
@@ -212,28 +212,24 @@ internal sealed class SettingsForm : Form
         durationRow.Margin = new Padding(3, 0, 0, 0);
         playCaptureSound = Toggle(notifications, "効果音", "PlayCaptureSound", "完了時に短い音を鳴らす", settings.PlayCaptureSound, 3);
         holdNotification = Toggle(notifications, "表示時間の保持", "HoldNotificationWhileApproaching", "ポインタの接近・近接中は設定秒数を維持", settings.HoldNotificationWhileApproaching, 4);
-        notificationAction = Combo(notifications, "クリック時", "NotificationClickAction", 5);
-        notificationAction.Items.AddRange(["何もしない", "保存フォルダを開く", "外部アプリで開く"]);
-        notificationAction.SelectedIndex = (int)settings.NotificationClickAction;
-        notificationApplication = Combo(notifications, "開く外部アプリ", "NotificationApplication", 6);
+        notificationApplication = Combo(notifications, "編集ボタンのアプリ", "NotificationApplication", 5);
         void RefreshNotificationApps()
         {
             string id = NotificationAppId();
             notificationApplication.Items.Clear();
-            notificationApplication.Items.Add(new NotificationAppItem("", "選択してください"));
+            notificationApplication.Items.Add(new NotificationAppItem("", "撮影時の出力プリセットのアプリ"));
             foreach (var app in imageApps.Applications.Concat(videoApps.Applications).DistinctBy(a => a.Id))
                 notificationApplication.Items.Add(new NotificationAppItem(app.Id, app.Name));
             notificationApplication.SelectedIndex = Enumerable.Range(0, notificationApplication.Items.Count)
                 .FirstOrDefault(i => ((NotificationAppItem)notificationApplication.Items[i]!).Id == id);
-            notificationApplication.Enabled = notificationAction.SelectedIndex == (int)NotificationClickAction.ExternalApplication;
+            notificationApplication.Enabled = true;
         }
         notificationApplication.Items.Add(new NotificationAppItem(settings.NotificationApplicationId, "")); notificationApplication.SelectedIndex = 0;
         RefreshNotificationApps();
-        notificationAction.SelectedIndexChanged += (_, _) => RefreshNotificationApps();
         tabs.SelectedIndexChanged += (_, _) => { if (tabs.SelectedTab == notifications.Parent) RefreshNotificationApps(); };
         var notificationInfo = new Label { Name = "NotificationInfo", Dock = DockStyle.Fill,
-            Text = "画面共有への映り込みを抑えますが、共有アプリによっては除外できません。\n効果音はPC音声の録音・共有に含まれる場合があります。" };
-        notifications.Controls.Add(notificationInfo, 0, 7); notifications.SetColumnSpan(notificationInfo, 2);
+            Text = "通知本文はクリックを透過し、ボタンだけ操作できます。保存成功時はフォルダを開けます。\n編集アプリは個別指定、または撮影時の出力プリセットを使います。\n画面共有への映り込みを抑えますが、共有アプリによっては除外できません。\n効果音はPC音声の録音・共有に含まれる場合があります。" };
+        notifications.Controls.Add(notificationInfo, 0, 6); notifications.SetColumnSpan(notificationInfo, 2); notifications.SetRowSpan(notificationInfo, 2);
         var presetPage = new TabPage("出力プリセット") { BackColor = BackColor, Padding = new Padding(8) };
         presetEditor = new CapturePresetEditor(settings, () => committed with { ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications });
         presetEditor.PreviousOutput = lastOutputSettings;
@@ -417,7 +413,6 @@ internal sealed class SettingsForm : Form
                 LastRegionShortcut = lastRegionKey.Value, LastRecipeShortcut = lastRecipeKey.Value, KeepHistory = keepHistory.Checked,
                 NotificationDurationSeconds = (int)notificationDuration.Value, PlayCaptureSound = playCaptureSound.Checked,
                 HoldNotificationWhileApproaching = holdNotification.Checked,
-                NotificationClickAction = (NotificationClickAction)notificationAction.SelectedIndex,
                 NotificationApplicationId = NotificationAppId(),
                 NotificationDisplay = ((NotificationDisplayItem)notificationDisplay.SelectedItem!).Value,
                 NotificationCorner = ((CornerItem)notificationCorner.SelectedItem!).Value,
@@ -523,7 +518,13 @@ internal sealed class SettingsForm : Form
         CaptureMode.FullScreen => "全画面", CaptureMode.Freeform => "自由形状", CaptureMode.FixedRegion => "固定サイズ", _ => "矩形"
     };
     private sealed record ModeItem(CaptureMode Value) { public override string ToString() => ModeName(Value); }
-    private sealed record CornerItem(NotificationCorner Value) { public override string ToString() => Value == Services.NotificationCorner.BottomLeft ? "左下" : "右下"; }
+    private sealed record CornerItem(NotificationCorner Value)
+    {
+        public override string ToString() => Value switch
+        { Services.NotificationCorner.TopLeft => "左上", Services.NotificationCorner.TopCenter => "上中央", Services.NotificationCorner.TopRight => "右上",
+          Services.NotificationCorner.MiddleLeft => "左中央", Services.NotificationCorner.Center => "中央", Services.NotificationCorner.MiddleRight => "右中央",
+          Services.NotificationCorner.BottomLeft => "左下", Services.NotificationCorner.BottomCenter => "下中央", _ => "右下" };
+    }
     private sealed record CaptureAnchorItem(CaptureAnchor Value)
     {
         public override string ToString() => Value switch

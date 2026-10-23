@@ -85,7 +85,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                 }
             }, captureBounds, retry.PrepareFile, DescribeCapture(captureBounds), retry,
             sidecar is null ? null : async path => { if (beforeMetadataSave is not null) await beforeMetadataSave(path); await Task.Run(() => sidecar.Write(path)); },
-            settings.ShowCaptureNotification && settings.NotificationClickAction == NotificationClickAction.ExternalApplication
+            settings.ShowCaptureNotification
                 ? () => new NotificationImage(owned, Path.Combine(workRoot, "notification-images")) : null,
             captureSettings: settings with { DefaultDestination = destination });
         return await ExecuteRetryJobAsync(retry);
@@ -105,7 +105,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
             () => Task.Run(() => CopyVideo(source, settings.SaveDirectory, fileName: fileName, namePlan: namePlan)),
             () => Task.FromResult(source), settings.VideoEditorPath, settings.VideoEditorArguments, settings.OpenFolderAfterSave,
             captureBounds: captureBounds, captureDescription: DescribeCapture(captureBounds),
-            notificationPath: settings.ShowCaptureNotification && settings.NotificationClickAction == NotificationClickAction.ExternalApplication ? source : null,
+            notificationPath: settings.ShowCaptureNotification ? source : null,
             captureSettings: settings with { DefaultDestination = destination });
     }
 
