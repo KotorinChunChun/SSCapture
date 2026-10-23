@@ -59,10 +59,11 @@ internal static partial class Program
         Run("既存JSONと画像の対を非上書きで命名し並列保存も衝突させない", () => WithOutputDirectory(directory =>
         {
             File.WriteAllText(Path.Combine(directory, "image.json"), "既存");
-            using var image = new Bitmap(10, 10); var metadata = SampleMetadata();
+            var metadata = SampleMetadata();
             var paths = Enumerable.Range(0, 8).AsParallel().Select(_ =>
             {
-                using var copy = (Bitmap)image.Clone(); return CaptureStorage.SavePng(copy, directory, DateTimeOffset.Now, "image.png", metadata: metadata, metadataMode: CaptureMetadataMode.Both);
+                // 同じGDI+画像の並列Cloneは保証されない。保存の並列競合だけを独立画像で検証する。
+                using var copy = new Bitmap(10, 10); return CaptureStorage.SavePng(copy, directory, DateTimeOffset.Now, "image.png", metadata: metadata, metadataMode: CaptureMetadataMode.Both);
             }).ToArray();
             Equal(8, paths.Distinct().Count()); Check(paths.All(p => Path.GetFileName(p) != "image.png"), "既存JSONと組み合わさった");
             Equal("既存", File.ReadAllText(Path.Combine(directory, "image.json"))); Equal(0, Directory.GetFiles(directory, "*.lock").Length);
