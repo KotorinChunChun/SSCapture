@@ -34,7 +34,7 @@ internal static partial class Program
         }
         if (args.SequenceEqual(["--preset-tests"]))
         {
-            PresetConsolidationTests(); PresetUpgradeTests(); UiTests(); RegionTests(); RegionUiTests(); CapturePresetTests(); ExternalApplicationTests();
+            PresetConsolidationTests(); PresetUpgradeTests(); AutoSaveBindingTests(); UiTests(); RegionTests(); RegionUiTests(); CapturePresetTests(); ExternalApplicationTests();
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }
         if (args.FirstOrDefault() == "--external-editor-launch")
@@ -86,6 +86,7 @@ internal static partial class Program
         CaptureMenuEditingTests();
         PresetConsolidationTests();
         PresetUpgradeTests();
+        AutoSaveBindingTests();
         RecipeTests();
         SnapshotRefactorTests();
         OverlayWindowTests();

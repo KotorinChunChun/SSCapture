@@ -161,18 +161,7 @@ internal sealed class CapturePresetEditor : UserControl
     internal void EnableAutoSave(Func<CapturePreset[], string?> persist)
     {
         autoSave = persist; status.Text = "変更確定時に自動保存します。";
-        void Commit(object? sender, EventArgs e) { if (!filling && !storing) StoreCurrent(); }
-        void Wire(Control root)
-        {
-            foreach (Control c in root.Controls)
-            {
-                if (c is TextBox or NumericUpDown) { c.Validated += Commit; c.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { Commit(c, EventArgs.Empty); e.Handled = e.SuppressKeyPress = true; } }; }
-                else if (c is CheckBox check) check.CheckedChanged += Commit;
-                else if (c is ComboBox combo) combo.SelectedIndexChanged += Commit;
-                Wire(c);
-            }
-        }
-        Wire(this);
+        PresetAutoSaveBinding.Attach(this, () => !filling && !storing, StoreCurrent);
     }
     private void ShowError(string text) { Error = text; status.Text = text; status.ForeColor = Color.DarkRed; }
     private static TableLayoutPanel Fields() { var t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 8 }; t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 176)); t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); for (int i = 0; i < 7; i++) t.RowStyles.Add(new RowStyle(SizeType.Absolute, 38)); t.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); return t; }

@@ -308,18 +308,8 @@ internal sealed class RegionManagerForm : Form
     internal void EnableAutoSave()
     {
         autoSave = true;
-        void Commit(object? sender, EventArgs e) { if (!updatingFields && !reloading && !committing && !selecting) StoreCurrent(); }
-        void Wire(Control parent)
-        {
-            foreach (Control c in parent.Controls)
-            {
-                if (c is TextBox or NumericUpDown) { c.Validated += Commit; c.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { Commit(c, EventArgs.Empty); e.Handled = e.SuppressKeyPress = true; } }; }
-                else if (c is CheckBox check) check.CheckedChanged += Commit;
-                else if (c is ComboBox combo) combo.SelectedIndexChanged += Commit;
-                Wire(c);
-            }
-        }
-        Wire(this);
+        PresetAutoSaveBinding.Attach(this, () => !updatingFields && !reloading && !committing && !selecting,
+            () => StoreCurrent());
     }
     private void MakeDefault()
     {
