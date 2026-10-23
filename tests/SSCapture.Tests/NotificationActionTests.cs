@@ -61,7 +61,7 @@ internal static partial class Program
             feedback.Notify(new(CaptureIntent.Recording, OutputDestination.File, OutputDestination.None, SavedPath: "video.mp4", CaptureSettings: settings), settings with { LastRecipeShortcut = "" });
             Check(toast.Actions!.OpenFolder is not null && toast.Actions.Edit is null, "画像アプリを動画の既定として流用");
             Check(toast.Actions.RepeatHint.Contains("未設定") && toast.Actions.RepeatHint.Contains("録画の再開ではありません"), "録画で誤案内");
-            Equal<ExternalApplication?>(null, CaptureFeedback.ResolveApplication(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, CaptureSettings: settings), settings with { ImageEditors = [] }));
+            Equal<ExternalApplication?>(null, NotificationPresentation.ResolveApplication(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, CaptureSettings: settings), settings with { ImageEditors = [] }));
         }));
         Run("通知の設定画面は9候補と編集アプリだけを表示し旧クリック選択を除去", () =>
         {
@@ -79,7 +79,7 @@ internal static partial class Program
             await router.ScreenshotAsync(image, OutputDestination.ExternalApp, settings);
             Check(delivered!.NotificationPath is not null && File.Exists(delivered.NotificationPath), "起動済み実ファイルを保持しない");
             Check(delivered.NotificationImage is null, "不要な画像を複製");
-            Equal(app, CaptureFeedback.ResolveApplication(delivered, settings));
+            Equal(app, NotificationPresentation.ResolveApplication(delivered, settings));
         })));
     }
 }

@@ -77,14 +77,13 @@ internal sealed class CaptureFeedback : IDisposable
         try
         {
             int serial = ++notificationSerial;
-            Action? folder = result.Completed.HasFlag(OutputDestination.File) && result.SavedPath is string path ? () => OpenSavedFile(serial, path) : null;
-            var app = ResolveApplication(result, settings);
-            Action? edit = result.HasSuccess && app is not null && (result.SavedPath is not null || result.NotificationPath is not null || pendingImage is not null)
+            var presentation = NotificationPresentation.Create(result, settings, pendingImage is not null);
+            Action? folder = presentation.SavedFile is string path ? () => OpenSavedFile(serial, path) : null;
+            Action? edit = presentation.Editor is { } app
                 ? () => OpenApplication(serial, result, app) : null;
             toast ??= createToast();
-            string key = string.IsNullOrWhiteSpace(settings.LastRecipeShortcut) ? "未設定" : settings.LastRecipeShortcut;
-            toast.SetActions(new(folder, edit, result.Intent == CaptureIntent.Recording ? $"静止画の直前設定で再撮影: {key}（録画の再開ではありません）" : $"直前の設定で再撮影: {key}"));
-            if (!toast.TryShow(result.Message, result.HasFailure, settings.NotificationCorner, out string? error,
+            toast.SetActions(new(folder, edit, presentation.RepeatHint));
+            if (!toast.TryShow(presentation.Message, presentation.HasFailure, settings.NotificationCorner, out string? error,
                 null, settings.NotificationDisplay, result.CaptureBounds))
             {
                 HideForCapture();
@@ -129,19 +128,6 @@ internal sealed class CaptureFeedback : IDisposable
         HideForCapture();
         try { openSavedFile(path); }
         catch (Exception ex) { Warn("保存ファイルをExplorerで表示できません: " + ex.Message); }
-    }
-
-    internal static ExternalApplication? ResolveApplication(CaptureDelivery result, AppSettings current)
-    {
-        var registered = current.ImageEditors.Concat(current.VideoEditors).FirstOrDefault(a => a.Id == current.NotificationApplicationId);
-        if (registered is not null) return registered;
-        var captured = result.CaptureSettings;
-        if (captured is null) return null;
-        bool video = result.Intent == CaptureIntent.Recording;
-        string id = video ? captured.SelectedVideoEditorId : captured.SelectedImageEditorId;
-        var original = (video ? captured.VideoEditors : captured.ImageEditors).FirstOrDefault(a => a.Id == id);
-        var available = (video ? current.VideoEditors : current.ImageEditors).FirstOrDefault(a => a.Id == id);
-        return original is not null && original == available ? available : null;
     }
 
     private async void OpenApplication(int serial, CaptureDelivery result, ExternalApplication app)
