@@ -463,7 +463,7 @@ internal sealed class SessionController
                 return;
             }
             lastPointerPosition = null;
-            gesture.Move(menuOpen ? menuPointer : initialPointer);
+            gesture.Move(menuOwner is not null ? menuPointer : initialPointer);
             ReplaceGuide();
             RefreshOverlays();
         }
@@ -748,7 +748,7 @@ internal sealed class SessionController
         owner.BeginInvoke((Action)(() =>
         {
             if (completed || owner.IsDisposed) return;
-            if (!CaptureNative.OwnsForegroundWindow()) { Cancel(); return; }
+            if (e.CloseReason != ToolStripDropDownCloseReason.ItemClicked && !CaptureNative.OwnsForegroundWindow()) { Cancel(); return; }
             menuTransition = false;
             owner.Activate();
             owner.Focus();

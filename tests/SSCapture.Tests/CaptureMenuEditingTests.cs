@@ -36,17 +36,17 @@ internal static partial class Program
 
     private static void CaptureMenuEditingTests()
     {
-        Run("撮影メニューは3分類と設定・キャンセルに整理", () =>
+        Run("撮影メニューのルートは2プリセットと一時カスタマイズ・表示操作", () =>
         {
             var session = MenuSession();
             try
             {
                 var menu = session.SelectionMenu;
-                Equal("CaptureRangeGroup,CaptureOutputGroup,CaptureOperationGroup,OpenSettings,CancelCapture",
+                Equal("InputPresetMenu,CapturePresetMenu,CaptureRangeGroup,CaptureOutputGroup,CaptureOperationGroup,OpenSettings,CancelCapture",
                     string.Join(',', menu.Items.OfType<ToolStripMenuItem>().Select(i => i.Name)));
-                foreach (string name in new[] { "CaptureModeMenu", "FixedSizeMenu", "FixedAnchorMenu", "InputPresetMenu", "ScreenshotPaddingMenu", "FreezeFrame", "IncludeCursor" })
+                foreach (string name in new[] { "CaptureModeMenu", "FixedAnchorMenu", "ScreenshotPaddingMenu", "FreezeFrame", "IncludeCursor" })
                     Check(menu.Command("CaptureRangeGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
-                foreach (string name in new[] { "ScreenshotColorDepthMenu", "MetadataModeMenu", "CapturePresetMenu" })
+                foreach (string name in new[] { "ScreenshotColorDepthMenu", "MetadataModeMenu" })
                     Check(menu.Command("CaptureOutputGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
                 foreach (string name in new[] { "LimitToStartingMonitor", "DimCaptureBackground", "Grid20", "ShowSelectionGuide" })
                     Check(menu.Command("CaptureOperationGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
@@ -92,27 +92,28 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("固定寸法エディタは任意pxの入力と検証", () =>
+        Run("全階層に入力フォームを埋め込まず数値・保存編集は設定へ集約", () =>
         {
-            Size? applied = null;
-            using var editor = new FixedSizeMenuEditor(new(100, 80), s => applied = s);
-            using var host = new Form(); host.Controls.Add(editor); _ = host.Handle; _ = editor.Handle; LayoutTree(host);
-            var width = (NumericUpDown)editor.Controls.Find("CaptureFixedWidth", true).Single();
-            var height = (NumericUpDown)editor.Controls.Find("CaptureFixedHeight", true).Single();
-            var apply = (Button)editor.Controls.Find("ApplyCaptureFixedSize", true).Single();
-            void Click() => typeof(Button).GetMethod("OnClick", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(apply, [EventArgs.Empty]);
-            width.Value = 321; height.Value = 123; Click(); Equal(new Size(321, 123), applied!.Value);
-            width.Value = height.Value = 32768; Click(); Equal(new Size(321, 123), applied!.Value);
+            var session = MenuSession();
+            try
+            {
+                var menu = session.SelectionMenu;
+                Check(!menu.Items.OfType<ToolStripControlHost>().Any() && menu.AllCommands.All(item => !item.DropDownItems.OfType<ToolStripControlHost>().Any()), "入力ホストがある");
+                Check(!menu.AllCommands.Any(item => item.Name is "FixedSizeMenu" or "CapturePrecisionMenu" or "OutputDetailsMenu"), "旧入力フォームの入口が残る");
+                Equal("一時入力カスタマイズ", menu.Command("CaptureRangeGroup").Text);
+                Equal("一時出力カスタマイズ", menu.Command("CaptureOutputGroup").Text);
+            }
+            finally { session.Cancel(); }
         });
-        Run("固定寸法の適用は親子ポップアップをすべて閉じて選択を続行", () =>
+        Run("末端コマンドの適用は親子ポップアップをすべて閉じて選択を続行", () =>
         {
             var session = MenuSession(); using var host = new Form { ShowInTaskbar = false };
             try
             {
                 host.Show(); session.SelectionMenu.Show(host, new Point(20, 20));
                 session.SelectionMenu.Command("CaptureRangeGroup").ShowDropDown();
-                session.SelectionMenu.Command("FixedSizeMenu").ShowDropDown();
-                session.ChangeFixedSize(new(321, 123));
+                session.SelectionMenu.Command("FixedAnchorMenu").ShowDropDown();
+                session.SelectionMenu.Command("AnchorBottomRight").PerformClick();
                 Check(!session.Completion.IsCompleted, "未開始の確認セッションをキャンセルした");
                 Check(!session.SelectionMenu.Visible && session.SelectionMenu.AllCommands.All(i => !i.HasDropDownItems || !i.DropDown.Visible), "子ポップアップが残る");
             }

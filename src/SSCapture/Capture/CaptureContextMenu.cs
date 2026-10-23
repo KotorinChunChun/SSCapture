@@ -22,9 +22,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     private readonly Dictionary<CaptureMetadataMode, ToolStripMenuItem> metadata = [];
     private readonly Func<bool> ownsPopupFocus;
     private OutputDestination currentDestination;
-    private UI.FixedSizeMenuEditor? sizeEditor;
-    private UI.CapturePrecisionEditor? precisionEditor;
-    private UI.CaptureOutputMenuEditor? outputEditor;
+    private bool closingCommand;
 
     internal IEnumerable<ToolStripMenuItem> AllCommands => Walk(Items);
     private static IEnumerable<ToolStripMenuItem> Walk(ToolStripItemCollection items)
@@ -38,10 +36,14 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     internal ToolStripMenuItem Command(string name) => AllCommands.Single(i => i.Name == name);
     internal void CloseForCapture()
     {
-        // ToolStripControlHostから閉じた場合も、独立した子ポップアップを画面へ残さない。
-        foreach (var command in AllCommands.Reverse().Where(i => i.HasDropDownItems && i.DropDown.Visible).ToArray())
-            command.DropDown.Close(ToolStripDropDownCloseReason.ItemClicked);
-        Close(ToolStripDropDownCloseReason.ItemClicked);
+        closingCommand = true;
+        try
+        {
+            foreach (var command in AllCommands.Reverse().Where(i => i.HasDropDownItems && i.DropDown.Visible).ToArray())
+                command.DropDown.Close(ToolStripDropDownCloseReason.ItemClicked);
+            Close(ToolStripDropDownCloseReason.ItemClicked);
+        }
+        finally { closingCommand = false; }
     }
 
     internal CaptureContextMenu(OutputDestination selected, Action<OutputDestination> changeDestination,
@@ -55,8 +57,11 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         this.cancel = cancel;
         this.ownsPopupFocus = ownsPopupFocus ?? (() => CaptureNative.OwnsForegroundWindow() || CaptureNative.ForegroundTransition);
         Font = menuFont;
-        var range = Menu("入力", "CaptureRangeGroup", Items);
-        var output = Menu("出力", "CaptureOutputGroup", Items);
+        var inputPresetsMenu = Menu("入力プリセット", "InputPresetMenu", Items);
+        var outputPresetsMenu = Menu("出力プリセット", "CapturePresetMenu", Items);
+        Items.Add(new ToolStripSeparator());
+        var range = Menu("一時入力カスタマイズ", "CaptureRangeGroup", Items);
+        var output = Menu("一時出力カスタマイズ", "CaptureOutputGroup", Items);
         var operation = Menu("表示・操作", "CaptureOperationGroup", Items);
         if (changeMode is not null)
         {
@@ -69,7 +74,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         }
         if (applyInputPreset is not null)
         {
-            var parent = Menu("入力プリセット", "InputPresetMenu", range.DropDownItems);
+            var parent = inputPresetsMenu;
             foreach (var preset in inputPresets ?? []) Item(preset.Name, preset.Id, () => applyInputPreset(preset), parent.DropDownItems);
             EmptyHint(parent);
         }
@@ -77,10 +82,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         {
             if (editing.ResetInput is not null) Item("選択した入力プリセットに戻す", "ResetInputPreset", editing.ResetInput, range.DropDownItems);
             if (editing.ResetOutput is not null) Item("選択した出力プリセットに戻す", "ResetOutputPreset", editing.ResetOutput, output.DropDownItems);
-            var parent = Menu("固定寸法", "FixedSizeMenu", range.DropDownItems);
-            sizeEditor = new UI.FixedSizeMenuEditor(editing.Size, editing.ChangeSize);
-            parent.DropDownItems.Add(new ToolStripControlHost(sizeEditor) { AutoSize = false, Size = sizeEditor.Size, Padding = Padding.Empty, Margin = Padding.Empty });
-            parent = Menu("固定サイズの基点", "FixedAnchorMenu", range.DropDownItems);
+            var parent = Menu("固定サイズの基点", "FixedAnchorMenu", range.DropDownItems);
             foreach (var value in Enum.GetValues<CaptureAnchor>()) anchors[value] = Item(AnchorName(value), "Anchor" + value, () => editing.ChangeAnchor(value), parent.DropDownItems);
             Toggle("開始画面内だけで選択", "LimitToStartingMonitor", editing.Limited, editing.ChangeLimit, operation.DropDownItems,
                 "今回だけモニタ制限を切り替えます。ONは現在のポインタがあるモニタを対象にします。");
@@ -93,14 +95,14 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         if (captureDesktop is not null) Item("対象画面全体 (中央クリック)", "CaptureDesktop", captureDesktop, range.DropDownItems);
         foreach (var destination in new[] { OutputDestination.Clipboard, OutputDestination.File, OutputDestination.ExternalApp })
         {
-            string text = destination switch { OutputDestination.Clipboard => "クリップボード", OutputDestination.File => "ファイル保存", _ => "外部アプリ" };
+            string text = destination switch { OutputDestination.Clipboard => "クリップボードへコピー", OutputDestination.File => "ファイル保存", _ => "外部アプリ" };
             var item = Item(text, "Destination" + destination, () => { var next = currentDestination ^ destination; changeDestination(next); SetDestination(next); }, output.DropDownItems);
             item.Tag = destination; destinations[destination] = item;
         }
         output.DropDownItems.Add(new ToolStripSeparator());
         if (applyPreset is not null)
         {
-            var parent = Menu("出力プリセット", "CapturePresetMenu", output.DropDownItems);
+            var parent = outputPresetsMenu;
             foreach (var preset in presets ?? []) Item(preset.Name, preset.Id, () => applyPreset(preset), parent.DropDownItems);
             EmptyHint(parent);
         }
@@ -131,21 +133,11 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             freeze.Enabled = cursor.Enabled = editing.CanRefresh;
             Toggle("背景を暗くする", "DimCaptureBackground", editing.Settings.DimCaptureBackground, editing.ChangeDim, operation.DropDownItems);
             if (editing.ChangeOpenFolder is not null) Toggle("保存後にフォルダを開く", "OpenFolderAfterSave", editing.Settings.OpenFolderAfterSave, editing.ChangeOpenFolder, output.DropDownItems);
-            if (editing.ChangePrecision is not null)
-            {
-                var parent = Menu("吸着距離・刻み幅", "CapturePrecisionMenu", operation.DropDownItems);
-                precisionEditor = new(editing.Settings.SnapDistancePixels, editing.Settings.GridStepPixels, editing.ChangePrecision);
-                parent.DropDownItems.Add(new ToolStripControlHost(precisionEditor) { AutoSize = false, Size = precisionEditor.Size });
-            }
-            if (editing.ChangeOutputDetails is not null)
-            {
-                var parent = Menu("保存・命名・OCR", "OutputDetailsMenu", output.DropDownItems);
-                outputEditor = new(editing.Settings, editing.ChangeOutputDetails);
-                parent.DropDownItems.Add(new ToolStripControlHost(outputEditor) { AutoSize = false, Size = outputEditor.Size });
-            }
         }
         if (changeGrid is not null) Toggle("指定刻み幅を使用", "Grid20", grid20, changeGrid, operation.DropDownItems, "表示設定を次回にも保存します。Altを押している間も有効です。");
         if (changeGuide is not null) Toggle("操作ガイドを表示", "ShowSelectionGuide", showGuide, changeGuide, operation.DropDownItems, "表示設定を次回にも保存します。ドラッグ中に近づくと一時的に隠れます。");
+        if (inputPresetsMenu.DropDownItems.Count == 0) EmptyHint(inputPresetsMenu);
+        if (outputPresetsMenu.DropDownItems.Count == 0) EmptyHint(outputPresetsMenu);
         Items.Add(new ToolStripSeparator());
         Item("設定", "OpenSettings", openSettings, Items);
         Item("撮影をキャンセル", "CancelCapture", cancel, Items);
@@ -153,10 +145,10 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         if (editing is not null) UpdateEditing(editing.Settings, editing.Size, editing.Anchor, editing.Limited);
     }
     private ToolStripMenuItem Menu(string text, string name, ToolStripItemCollection owner)
-    { var item = new ToolStripMenuItem(text) { Name = name, DropDown = new SelectionModeDropDown(ownsPopupFocus) }; owner.Add(item); return item; }
-    private static ToolStripMenuItem Item(string text, string name, Action action, ToolStripItemCollection owner)
-    { var item = new ToolStripMenuItem(text) { Name = name }; item.Click += (_, _) => action(); owner.Add(item); return item; }
-    private static ToolStripMenuItem Toggle(string text, string name, bool initial, Action<bool> change, ToolStripItemCollection owner, string? help = null)
+    { var item = new ToolStripMenuItem(text) { Name = name, DropDown = new SelectionModeDropDown(() => !closingCommand && ownsPopupFocus()) }; owner.Add(item); return item; }
+    private ToolStripMenuItem Item(string text, string name, Action action, ToolStripItemCollection owner)
+    { var item = new ToolStripMenuItem(text) { Name = name }; item.Click += (_, _) => { CloseForCapture(); action(); }; owner.Add(item); return item; }
+    private ToolStripMenuItem Toggle(string text, string name, bool initial, Action<bool> change, ToolStripItemCollection owner, string? help = null)
     { ToolStripMenuItem? item = null; item = Item(text, name, () => change(!item!.Checked), owner); item.Checked = initial; item.ToolTipText = help; return item; }
     private static void EmptyHint(ToolStripMenuItem parent)
     { if (parent.DropDownItems.Count == 0) parent.DropDownItems.Add(new ToolStripMenuItem("設定画面で登録してください") { Enabled = false }); }
@@ -179,9 +171,6 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         foreach (var pair in metadata) pair.Value.Checked = pair.Key == settings.MetadataMode;
         foreach (var item in AllCommands) item.Checked = item.Name switch { "FreezeFrame" => settings.FreezeFrame, "IncludeCursor" => settings.IncludeCursor, "DimCaptureBackground" => settings.DimCaptureBackground, "LimitToStartingMonitor" => limited, _ => item.Checked };
         var parent = AllCommands.FirstOrDefault(i => i.Name == "FixedSizeMenu"); if (parent is not null) parent.Text = $"固定寸法（{size.Width}×{size.Height}px）";
-        sizeEditor?.SetSize(size);
-        precisionEditor?.SetValues(settings.SnapDistancePixels, settings.GridStepPixels);
-        outputEditor?.SetValues(settings);
         var precision = AllCommands.FirstOrDefault(i => i.Name == "CapturePrecisionMenu"); if (precision is not null) precision.Text = $"吸着距離 {settings.SnapDistancePixels}px / 刻み幅 {settings.GridStepPixels}px";
         var grid = AllCommands.FirstOrDefault(i => i.Name == "Grid20"); if (grid is not null) grid.Text = $"{settings.GridStepPixels}px単位";
         var folder = AllCommands.FirstOrDefault(i => i.Name == "OpenFolderAfterSave"); if (folder is not null) { folder.Checked = settings.OpenFolderAfterSave; folder.Enabled = currentDestination.HasFlag(OutputDestination.File); }
@@ -194,7 +183,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         if (output is not null) { output.Text = "出力プリセット: " + outputName + (outputChanged ? "（変更あり）" : ""); foreach (var item in output.DropDownItems.OfType<ToolStripMenuItem>()) item.Checked = item.Name == outputId; }
     }
     protected override void OnClosing(ToolStripDropDownClosingEventArgs e)
-    { if (e.CloseReason == ToolStripDropDownCloseReason.AppFocusChange && AllCommands.Any(i => i.HasDropDownItems && i.DropDown.Visible) && ownsPopupFocus()) e.Cancel = true; base.OnClosing(e); }
+    { if (!closingCommand && e.CloseReason == ToolStripDropDownCloseReason.AppFocusChange && AllCommands.Any(i => i.HasDropDownItems && i.DropDown.Visible) && ownsPopupFocus()) e.Cancel = true; base.OnClosing(e); }
     private sealed class SelectionModeDropDown(Func<bool> ownsPopupFocus) : ToolStripDropDownMenu
     { protected override void OnClosing(ToolStripDropDownClosingEventArgs e) { if (e.CloseReason == ToolStripDropDownCloseReason.AppFocusChange && ownsPopupFocus()) e.Cancel = true; base.OnClosing(e); } }
     internal bool HandleCommandKey(Keys keyData) { if ((keyData & Keys.KeyCode) != Keys.Escape) return false; cancel(); return true; }

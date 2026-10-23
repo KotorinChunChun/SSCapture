@@ -17,6 +17,11 @@ internal static partial class Program
             SnapTests(); SelectionUpgradeTests(); SelectionMonitorTests(); SelectionInteractionTests();
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }
+        if (args.SequenceEqual(["--menu-tests"]))
+        {
+            CaptureMenuEditingTests(); SnapTests();
+            Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
+        }
         if (args.FirstOrDefault() == "--external-editor-launch")
         {
             try
