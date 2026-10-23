@@ -20,6 +20,8 @@ internal sealed record AppSettings
     public string[] InstantShortcuts { get; init; } = Enumerable.Range(1, 10).Select(n => $"Win+Shift+{n % 10}").ToArray();
     internal const string LastRegionKeyId = "$last";
     public string LastRegionShortcut { get; init; } = "Win+Ctrl+Shift+S";
+    internal const string LastRecipeKeyId = "$last-recipe";
+    public string LastRecipeShortcut { get; init; } = "";
     public SavedRegion[] SavedRegions { get; init; } = [];
     public CapturePreset[] CapturePresets { get; init; } = [];
     public int FixedWidth { get; init; } = 1280;
@@ -102,7 +104,7 @@ internal sealed record AppSettings
         foreach (var region in SavedRegions) region.Validate();
         if (PresetSchemaVersion >= 1 && (SavedRegions.Count(p => p.IsDefault) != 1 || CapturePresets.Count(p => p.IsDefault) != 1))
             throw new ArgumentException("入力・出力それぞれ1件の既定プリセットを指定してください。");
-        if (SavedRegions.Any(r => r.Id == LastRegionKeyId)) throw new ArgumentException("登録範囲のIDが予約値です。");
+        if (SavedRegions.Any(r => r.Id is LastRegionKeyId or LastRecipeKeyId)) throw new ArgumentException("登録範囲のIDが予約値です。");
         if (SavedRegions.Select(r => r.Id).Distinct(StringComparer.Ordinal).Count() != SavedRegions.Length)
             throw new ArgumentException("登録範囲のIDが重複しています。");
         if (FixedWidth is < 1 or > 32768 || FixedHeight is < 1 or > 32768 || (long)FixedWidth * FixedHeight > 100_000_000)

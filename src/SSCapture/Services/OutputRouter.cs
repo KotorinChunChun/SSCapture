@@ -10,8 +10,10 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
     Func<string, Task>? copyFile = null, Action<ProcessStartInfo>? launch = null, Action<Bitmap, string?, DateTimeOffset>? captured = null,
     Action<CaptureDelivery>? delivered = null, Action<Bitmap, string?, DateTimeOffset, Rectangle?>? capturedWithBounds = null,
     Func<IReadOnlyList<DisplayTarget>>? readDisplays = null, Action? retryChanged = null,
-    long retryByteLimit = 256L * 1024 * 1024, Func<string, Task>? beforeMetadataSave = null) : IDisposable
+    long retryByteLimit = 256L * 1024 * 1024, Func<string, Task>? beforeMetadataSave = null,
+    Action<long, LastCaptureRecipe?>? captureSucceeded = null, Func<IReadOnlyList<DisplayLayout>>? readCaptureLayout = null) : IDisposable
 {
+    private long captureSequence;
     private readonly Func<Bitmap, Task> copyImage = copyImage ?? ClipboardWriter.CopyAsync;
     private readonly Func<string, Task> copyFile = copyFile ?? ClipboardWriter.CopyFileAsync;
     private readonly Action<ProcessStartInfo> launchEditor = launch ?? LaunchProcess;
@@ -21,11 +23,19 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
     public async Task<string> ScreenshotAsync(Bitmap image, OutputDestination destination, AppSettings settings, string? fileName = null, FileNamePlan? namePlan = null,
         DateTimeOffset? capturedAt = null, Action? onDelivered = null, Rectangle? captureBounds = null,
         Func<Task<ScreenshotFileName?>>? requestFileName = null,
-        Func<Bitmap, Task<ScreenshotFileName?>>? requestFileNameForImage = null, CaptureMetadata? metadata = null)
+        Func<Bitmap, Task<ScreenshotFileName?>>? requestFileNameForImage = null, CaptureMetadata? metadata = null,
+        IReadOnlyList<Point>? capturePolygon = null)
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(settings);
         settings = settings.ResolveEditors();
+        long sequence = Interlocked.Increment(ref captureSequence);
+        LastCaptureRecipe? recipe = null;
+        if (captureSucceeded is not null && captureBounds is Rectangle recordedBounds)
+        {
+            try { recipe = LastCaptureRecipe.Create(sequence, recordedBounds, capturePolygon, settings with { DefaultDestination = destination }, (readCaptureLayout ?? RegionCoordinates.ReadDisplays)()); }
+            catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException) { /* 再撮影できない最新範囲は成功時に無効化し、旧範囲と取り違えない。 */ }
+        }
         ValidateDestination(destination);
         if (destination.HasFlag(OutputDestination.File) && settings.MetadataMode != CaptureMetadataMode.None && metadata is null)
             throw new ArgumentException("撮影情報がありません。情報を取得した撮影結果を指定してください。", nameof(metadata));
@@ -67,11 +77,17 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                     captured?.Invoke(owned, saved, captureTime);
                     capturedWithBounds?.Invoke(owned, saved, captureTime, captureBounds);
                 }
-                if (succeeded && !retry.SuccessNotified) { retry.SuccessNotified = true; onDelivered?.Invoke(); }
+                if (succeeded && !retry.SuccessNotified)
+                {
+                    retry.SuccessNotified = true;
+                    if (!retry.IsRetry) captureSucceeded?.Invoke(sequence, recipe);
+                    onDelivered?.Invoke();
+                }
             }, captureBounds, retry.PrepareFile, DescribeCapture(captureBounds), retry,
             sidecar is null ? null : async path => { if (beforeMetadataSave is not null) await beforeMetadataSave(path); await Task.Run(() => sidecar.Write(path)); },
             settings.ShowCaptureNotification && settings.NotificationClickAction == NotificationClickAction.ExternalApplication
-                ? () => new NotificationImage(owned, Path.Combine(workRoot, "notification-images")) : null);
+                ? () => new NotificationImage(owned, Path.Combine(workRoot, "notification-images")) : null,
+            captureSettings: settings with { DefaultDestination = destination });
         return await ExecuteRetryJobAsync(retry);
     }
 
@@ -89,14 +105,15 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
             () => Task.Run(() => CopyVideo(source, settings.SaveDirectory, fileName: fileName, namePlan: namePlan)),
             () => Task.FromResult(source), settings.VideoEditorPath, settings.VideoEditorArguments, settings.OpenFolderAfterSave,
             captureBounds: captureBounds, captureDescription: DescribeCapture(captureBounds),
-            notificationPath: settings.ShowCaptureNotification && settings.NotificationClickAction == NotificationClickAction.ExternalApplication ? source : null);
+            notificationPath: settings.ShowCaptureNotification && settings.NotificationClickAction == NotificationClickAction.ExternalApplication ? source : null,
+            captureSettings: settings with { DefaultDestination = destination });
     }
 
     private async Task<string> DeliverAsync(CaptureIntent intent, OutputDestination destination, Func<Task> copy,
         Func<Task<string>> save, Func<Task<string>> prepareExternal, string executable, string arguments, bool openFolderAfterSave,
         Action<string?, bool, bool>? completed = null, Rectangle? captureBounds = null, Func<Task<bool?>>? prepareFile = null,
         string? captureDescription = null, RetryJob? retry = null, Func<string, Task>? saveMetadata = null,
-        Func<NotificationImage>? notificationImage = null, string? notificationPath = null)
+        Func<NotificationImage>? notificationImage = null, string? notificationPath = null, AppSettings? captureSettings = null)
     {
         var messages = new List<string>();
         var errors = new List<Exception>();
@@ -182,7 +199,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                 if (saved is null && notificationImage is not null) notificationPath ??= retry?.ExternalPath;
                 NotifyDelivered(new CaptureDelivery(intent, succeeded, failed, folderOpenFailed,
                     succeeded.HasFlag(OutputDestination.File) ? saved : null, captureBounds, captureDescription, metadataFailed,
-                    saved is null ? notificationPath : null, saved is null && notificationPath is null ? notificationImage?.Invoke() : null));
+                    saved is null ? notificationPath : null, saved is null && notificationPath is null ? notificationImage?.Invoke() : null, captureSettings));
             }
         }
         if (errors.Count > 0) throw new IOException(result, new AggregateException(errors));

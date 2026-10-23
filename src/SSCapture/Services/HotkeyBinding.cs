@@ -80,7 +80,8 @@ internal readonly record struct HotkeyBinding(int VirtualKey, HotkeyModifiers Mo
             ("静止画のキー2", settings.ScreenshotShortcut2, CaptureIntent.Screenshot, 0, null),
             ("録画のキー1", settings.RecordingShortcut1, CaptureIntent.Recording, 0, null),
             ("録画のキー2", settings.RecordingShortcut2, CaptureIntent.Recording, 0, null),
-            ("前回範囲", settings.LastRegionShortcut, CaptureIntent.Screenshot, 0, AppSettings.LastRegionKeyId)
+            ("前回範囲", settings.LastRegionShortcut, CaptureIntent.Screenshot, 0, AppSettings.LastRegionKeyId),
+            ("直前と同じ設定で再撮影", settings.LastRecipeShortcut, CaptureIntent.Screenshot, 0, AppSettings.LastRecipeKeyId)
         ];
         slots.AddRange(settings.InstantShortcuts.Select((text, index) => ($"即時撮影 {index + 1}", (string?)text, CaptureIntent.Screenshot, index + 1, (string?)null)));
         slots.AddRange(settings.SavedRegions.Select(region => ($"登録範囲「{region.Name}」", (string?)region.Shortcut, CaptureIntent.Screenshot, 0, (string?)region.Id)));

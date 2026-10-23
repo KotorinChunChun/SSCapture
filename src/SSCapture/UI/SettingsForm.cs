@@ -11,7 +11,7 @@ internal sealed class SettingsForm : Form
     private bool manualSave;
     private Action? refreshSaveButton;
     private readonly TextBox directory, imageEditor, videoEditor, imageArguments, videoArguments, fileNamePattern, ocrSeparator, oneOcrDirectory;
-    private readonly HotkeyEditor screenshot1, screenshot2, recording1, recording2, lastRegionKey;
+    private readonly HotkeyEditor screenshot1, screenshot2, recording1, recording2, lastRegionKey, lastRecipeKey;
     private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration, screenshotPadding;
     private readonly ComboBox screenshotColorDepth;
     private readonly ComboBox metadataMode;
@@ -40,7 +40,8 @@ internal sealed class SettingsForm : Form
         Func<IReadOnlyList<MicrophoneInfo>>? listMicrophones = null, Action? openRegions = null, Action? openHistory = null,
         Func<DateTimeOffset>? now = null, Func<IReadOnlyList<DisplayTarget>>? listDisplays = null,
         SavedRegion? lastRegion = null, Func<Size?, CaptureAnchor, Task<Rectangle?>>? selectInputRegion = null,
-        Func<IReadOnlyList<DisplayLayout>>? regionDisplays = null, IStartupRegistration? startupRegistration = null)
+        Func<IReadOnlyList<DisplayLayout>>? regionDisplays = null, IStartupRegistration? startupRegistration = null,
+        AppSettings? lastOutputSettings = null)
     {
         settings = settings.UpdateDefaultProjections();
         committed = settings;
@@ -115,9 +116,13 @@ internal sealed class SettingsForm : Form
         recording1 = KeyField(keys, "録画 1", "RecordingShortcut1", settings.RecordingShortcut1, 2);
         recording2 = KeyField(keys, "録画 2", "RecordingShortcut2", settings.RecordingShortcut2, 3);
         lastRegionKey = KeyField(keys, "前回の範囲", "LastRegionShortcut", settings.LastRegionShortcut, 4);
+        lastRecipeKey = KeyField(keys, "直前の設定で再撮影", "LastRecipeShortcut", settings.LastRecipeShortcut, 5);
+        keys.RowStyles.Clear(); keys.RowCount = 7;
+        for (int row = 0; row < 6; row++) keys.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        keys.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var special = new Label { Name = "SpecialCaptureOperations", Dock = DockStyle.Fill,
             Text = "撮影中の特殊操作（変更不可）\nCtrl: 幅固定（縦方向のみ）　Shift: 高さ固定（横方向のみ）\nAlt: 指定刻み幅・枠吸着\nCtrl＋Shiftを押しながら別モニタへ移動:\n  今回の撮影だけモニタ制限を解除（方向ロックより優先）\nSpace: 矩形は現在位置を新しい始点／固定サイズは基点を時計回り\n操作ガイドはドラッグ中にポインタが近づくと一時的に隠れます。" };
-        keys.Controls.Add(special, 0, 5); keys.SetColumnSpan(special, 2);
+        keys.Controls.Add(special, 0, 6); keys.SetColumnSpan(special, 2);
         var regions = inputs;
         fixedWidth = PixelField(regions, "固定幅 (px)", "FixedWidth", settings.FixedWidth, 1);
         fixedHeight = PixelField(regions, "固定高さ (px)", "FixedHeight", settings.FixedHeight, 2);
@@ -231,6 +236,7 @@ internal sealed class SettingsForm : Form
         notifications.Controls.Add(notificationInfo, 0, 7); notifications.SetColumnSpan(notificationInfo, 2);
         var presetPage = new TabPage("出力プリセット") { BackColor = BackColor, Padding = new Padding(8) };
         presetEditor = new CapturePresetEditor(settings, () => committed with { ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications });
+        presetEditor.PreviousOutput = lastOutputSettings;
         imageApps.SelectedChanged += id => presetEditor.SetDefaultApplication(true, id);
         videoApps.SelectedChanged += id => presetEditor.SetDefaultApplication(false, id);
         presetEditor.DefaultApplicationsChanged += (image, video) =>
@@ -408,7 +414,7 @@ internal sealed class SettingsForm : Form
                 SavedRegions = inputPresetEditor.Regions,
                 ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
                 RecordingShortcut1 = recording1.Value, RecordingShortcut2 = recording2.Value,
-                LastRegionShortcut = lastRegionKey.Value, KeepHistory = keepHistory.Checked,
+                LastRegionShortcut = lastRegionKey.Value, LastRecipeShortcut = lastRecipeKey.Value, KeepHistory = keepHistory.Checked,
                 NotificationDurationSeconds = (int)notificationDuration.Value, PlayCaptureSound = playCaptureSound.Checked,
                 HoldNotificationWhileApproaching = holdNotification.Checked,
                 NotificationClickAction = (NotificationClickAction)notificationAction.SelectedIndex,
@@ -452,6 +458,8 @@ internal sealed class SettingsForm : Form
     private sealed record NotificationAppItem(string Id, string Label) { public override string ToString() => Label; }
     private static NumericUpDown PixelField(TableLayoutPanel table, string label, string name, int value, int row)
     { var control = new NumericUpDown { Name = name, Minimum = 1, Maximum = 32768, Value = value }; Add(table, label, control, row); return control; }
+    internal void UpdateLastOutputSettings(AppSettings? value) => presetEditor.PreviousOutput = value;
+
     private static HotkeyEditor KeyField(TableLayoutPanel table, string label, string name, string value, int row)
     { var control = new HotkeyEditor(name, value); Add(table, label, control, row); control.Margin = new Padding(3, 0, 0, 0); return control; }
 

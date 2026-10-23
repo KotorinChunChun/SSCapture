@@ -20,6 +20,8 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
     private readonly CaptureFeedback feedback;
     private CaptureDelivery? deferredFeedback;
     private readonly CaptureHistory history = new();
+    private readonly CaptureRecipeBook recipes = new();
+    private readonly ToolStripMenuItem sameSettingsItem;
     private readonly RegionStore regionStore;
     private readonly ToolStripMenuItem savedRegionMenu;
     private SavedRegion? lastRegion;
@@ -55,7 +57,8 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         {
             if (settings?.KeepHistory == true)
                 history.Add(image, path, time, bounds);
-        }, delivered: DispatchDelivery, retryChanged: () => Post(RefreshMenu));
+        }, delivered: DispatchDelivery, retryChanged: () => Post(RefreshMenu),
+            captureSucceeded: (sequence, recipe) => { recipes.Remember(sequence, recipe); Post(RefreshMenu); });
         settings = store.Load(out var warning);
         regionStore = new RegionStore(Path.Combine(AppContext.BaseDirectory, "data", "last-region.json"));
         lastRegion = regionStore.Load(out var regionWarning);
@@ -77,6 +80,8 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         menu.Items.Add(recordItem);
         savedRegionMenu = new ToolStripMenuItem("範囲を再撮影");
         menu.Items.Add(savedRegionMenu);
+        sameSettingsItem = new ToolStripMenuItem("直前と同じ設定で再撮影", null, (_, _) => _ = TakeSameSettingsAsync());
+        menu.Items.Add(sameSettingsItem);
         menu.Items.Add("入力プリセット", null, (_, _) => ShowRegions());
         menu.Items.Add("撮影履歴", null, (_, _) => ShowHistory());
         retryOutputItem = new ToolStripMenuItem("失敗した出力を再実行", null, (_, _) => _ = RetryOutputAsync());

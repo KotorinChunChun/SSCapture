@@ -94,6 +94,7 @@ internal static class SettingsHelp
         if (name.StartsWith("ScreenshotShortcut", StringComparison.Ordinal)) return "静止画の範囲選択を開始するキーです。撮影1と撮影2は同じ操作を開始します。" + ShortcutHelp;
         if (name.StartsWith("RecordingShortcut", StringComparison.Ordinal)) return "録画範囲の選択を開始するキーです。録画中に押すと録画を停止します。" + ShortcutHelp;
         if (name == "LastRegionShortcut") return "直前に確定した範囲を選択画面なしで再撮影するキーです。前回範囲がない場合は撮影できません。" + ShortcutHelp;
+        if (name == "LastRecipeShortcut") return "成功した直前の静止画と同じ範囲・入出力設定（一時変更を含む）で新しく撮影します。画像履歴とは別で、終了時に記録を破棄します。初期値は未割当です。" + ShortcutHelp;
         if (name.StartsWith("Region", StringComparison.Ordinal) || name is "SavedRegions" or "NewNumericRegion" or "AddLastRegion" or "DrawRegion" or "PickFixedRegion" or "PreviewRegion" or "SaveRegion" or "DeleteRegion" or "CloseRegions")
             return "入力プリセットの名前・物理pxの位置と寸法・再撮影キーを編集します。設定画面では変更確定時に自動保存します。固定サイズは撮影時に位置を選び、固定位置とサイズは保存した場所を動かさず使用します。";
         if (name is "ImageEditorPreset" or "VideoEditorPreset") return "外部編集アプリの実行ファイルとパラメータの入力例です。選ぶと入力欄へ反映します。実際のインストール先に合わせて変更し、保存してください。";

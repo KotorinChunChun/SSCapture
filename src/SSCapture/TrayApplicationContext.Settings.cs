@@ -18,11 +18,13 @@ internal sealed partial class TrayApplicationContext
         if (form is null || form.IsDisposed)
         {
             form = new SettingsForm(settings, SaveSettings, OpenFolder,
-                openHistory: ShowHistory, lastRegion: lastRegion, selectInputRegion: PickRegionAsync);
+                openHistory: ShowHistory, lastRegion: lastRegion, selectInputRegion: PickRegionAsync,
+                lastOutputSettings: recipes.Current?.Settings);
             form.FormClosed += (_, _) => form = null;
             form.SetStatus(lastStatus);
         }
 
+        form.UpdateLastOutputSettings(recipes.Current?.Settings);
         WindowVisibility.Show(form);
         if (form.WindowState == FormWindowState.Minimized)
             form.WindowState = FormWindowState.Normal;
@@ -91,6 +93,7 @@ internal sealed partial class TrayApplicationContext
     private void RefreshMenu()
     {
         retryOutputItem.Enabled = output.HasPendingRetry && !busy && pendingRecording is null && recorder is null;
+        sameSettingsItem.Enabled = recipes.Current is not null && !busy && pendingRecording is null && recorder is null;
         pause.Enabled = settings.HasShortcuts;
         pause.Checked = hook is null || !hook.Enabled;
         foreach (var (mode, item) in modeItems)
