@@ -199,6 +199,8 @@ internal sealed class SessionController
         || activeFixedSize != selectedInput.Bounds.Size || activeAnchor != selectedInput.FixedAnchor
         || OutputSettings.FreezeFrame != selectedInput.FreezeFrame || OutputSettings.IncludeCursor != selectedInput.IncludeCursor
         || OutputSettings.ScreenshotPaddingPixels != selectedInput.PaddingPixels || AspectRatio != CaptureAspectRatio.Free
+        || OutputSettings.RecordSystemAudio != selectedInput.RecordSystemAudio || OutputSettings.RecordMicrophone != selectedInput.RecordMicrophone
+        || OutputSettings.MicrophoneDeviceId != selectedInput.MicrophoneDeviceId
         || selectedInputBounds is Rectangle bounds && Selection != bounds;
     internal bool OutputPresetModified => Destination != selectedOutput.Destination || OutputSettings.SaveDirectory != selectedOutput.SaveDirectory
         || OutputSettings.FileNamePattern != selectedOutput.FileNamePattern || OutputSettings.OcrSeparator != selectedOutput.OcrSeparator
@@ -375,6 +377,7 @@ internal sealed class SessionController
             if (selectionBounds is Rectangle pointerLimit)
                 pointer = new(Math.Clamp(pointer.X, pointerLimit.Left, pointerLimit.Right - 1), Math.Clamp(pointer.Y, pointerLimit.Top, pointerLimit.Bottom - 1));
             gesture.PlaceFixed(bounds, pointer);
+            gesture.FixedPosition = bounds;
             selectedInput = preset; selectedInputBounds = bounds; AspectRatio = CaptureAspectRatio.Free; gesture.AspectRatio = AspectRatio;
             lastPointerPosition = pointer;
             lastSnap = lastHeightLock = lastWidthLock = false;

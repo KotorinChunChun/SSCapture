@@ -7,7 +7,9 @@ namespace SSCapture.UI;
 
 internal sealed class SettingsForm : Form
 {
-    private readonly AppSettings initial;
+    private AppSettings committed;
+    private bool manualSave;
+    private Action? refreshSaveButton;
     private readonly TextBox directory, imageEditor, videoEditor, imageArguments, videoArguments, fileNamePattern, ocrSeparator, oneOcrDirectory;
     private readonly HotkeyEditor screenshot1, screenshot2, recording1, recording2, lastRegionKey;
     private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration, screenshotPadding;
@@ -41,7 +43,7 @@ internal sealed class SettingsForm : Form
         Func<IReadOnlyList<DisplayLayout>>? regionDisplays = null, IStartupRegistration? startupRegistration = null)
     {
         settings = settings.UpdateDefaultProjections();
-        initial = settings;
+        committed = settings;
         save = onSave;
         this.now = now ?? (() => DateTimeOffset.Now);
         Text = WindowTitle.Create("設定");
@@ -228,7 +230,7 @@ internal sealed class SettingsForm : Form
             Text = "画面共有への映り込みを抑えますが、共有アプリによっては除外できません。\n効果音はPC音声の録音・共有に含まれる場合があります。" };
         notifications.Controls.Add(notificationInfo, 0, 7); notifications.SetColumnSpan(notificationInfo, 2);
         var presetPage = new TabPage("出力プリセット") { BackColor = BackColor, Padding = new Padding(8) };
-        presetEditor = new CapturePresetEditor(settings, () => initial with { ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications });
+        presetEditor = new CapturePresetEditor(settings, () => committed with { ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications });
         imageApps.SelectedChanged += id => presetEditor.SetDefaultApplication(true, id);
         videoApps.SelectedChanged += id => presetEditor.SetDefaultApplication(false, id);
         presetEditor.DefaultApplicationsChanged += (image, video) =>
@@ -238,9 +240,10 @@ internal sealed class SettingsForm : Form
         presetPage.Controls.Add(presetEditor); tabs.TabPages.Add(presetPage);
         var inputPresetPage = new TabPage("入力プリセット") { BackColor = BackColor, Padding = new Padding(4) };
         inputPresetEditor = new RegionManagerForm(settings.SavedRegions, lastRegion,
-            size => PickInputRegion(size, settings.FixedCaptureAnchor), _ => null, regionDisplays,
+            size => PickInputRegion(size, settings.FixedCaptureAnchor), CommitInputs, regionDisplays,
             selectAnchoredRegion: PickInputRegion, embedded: true, profileSettings: settings);
         inputPresetPage.Controls.Add(inputPresetEditor); tabs.TabPages.Add(inputPresetPage); inputPresetEditor.Show();
+        inputPresetEditor.AttachRecordingSettings(systemAudio, micAudio, microphone);
         async Task<Rectangle?> PickInputRegion(Size? size, CaptureAnchor anchor)
         {
             if (selectInputRegion is not null) return await selectInputRegion(size, anchor);
@@ -273,13 +276,13 @@ internal sealed class SettingsForm : Form
             outputSummary.Text = output is null ? "既定を選択してください" : OutputSummary(output);
         }
         oneOcrDirectory.Parent!.Controls.Remove(oneOcrDirectory); presetEditor.AddSharedOcr(oneOcrDirectory);
-        foreach (var removed in new[] { (TabPage)inputs.Parent!, (TabPage)naming.Parent!, (TabPage)metadataPage.Parent! }) { tabs.TabPages.Remove(removed); removed.Dispose(); }
+        foreach (var removed in new[] { (TabPage)inputs.Parent!, (TabPage)naming.Parent!, (TabPage)metadataPage.Parent!, (TabPage)audio.Parent! }) { tabs.TabPages.Remove(removed); removed.Dispose(); }
         directory = (TextBox)presetEditor.Controls.Find("SaveDirectory", true).Single(); fileNamePattern = (TextBox)presetEditor.Controls.Find("FileNamePattern", true).Single(); ocrSeparator = (TextBox)presetEditor.Controls.Find("OcrSeparator", true).Single();
         clipboardOutput = (CheckBox)presetEditor.Controls.Find("ClipboardOutput", true).Single(); fileOutput = (CheckBox)presetEditor.Controls.Find("FileOutput", true).Single(); externalOutput = (CheckBox)presetEditor.Controls.Find("ExternalOutput", true).Single();
         openFolderAfterSave = (CheckBox)presetEditor.Controls.Find("OpenFolderAfterSave", true).Single(); screenshotColorDepth = (ComboBox)presetEditor.Controls.Find("ScreenshotColorDepth", true).Single(); metadataMode = (ComboBox)presetEditor.Controls.Find("MetadataMode", true).Single();
         screenshotPadding = (NumericUpDown)inputPresetEditor.Controls.Find("ScreenshotPaddingPixels", true).Single();
         tabs.SelectedIndexChanged += (_, _) => UpdateSummary(); UpdateSummary();
-        string[] order = ["基本", "入力プリセット", "録画・音声", "出力プリセット", "外部アプリ", "ショートカット", "即時撮影キー", "通知", "履歴"];
+        string[] order = ["基本", "入力プリセット", "出力プリセット", "外部アプリ", "ショートカット", "即時撮影キー", "通知", "履歴"];
         var ordered = order.Select(title => tabs.TabPages.Cast<TabPage>().Single(p => p.Text == title)).ToArray();
         tabs.TabPages.Clear(); tabs.TabPages.AddRange(ordered);
         void MoveSetting(Control control, TableLayoutPanel destination, int row)
@@ -313,6 +316,20 @@ internal sealed class SettingsForm : Form
         void UpdateFileFields() { metadataMode.Enabled = folderButton.Enabled = directory.Enabled = fileNamePattern.Enabled = ocrSeparator.Enabled = oneOcrDirectory.Enabled = openFolderAfterSave.Enabled = fileOutput.Checked; }
         fileOutput.CheckedChanged += (_, _) => UpdateFileFields(); UpdateFileFields();
         SettingsHelp.Apply(this, settingTips);
+        inputPresetEditor.EnableAutoSave();
+        presetEditor.EnableAutoSave(CommitOutputs);
+        void UpdateSaveButton()
+        {
+            bool presetPageSelected = tabs.SelectedTab?.Text is "入力プリセット" or "出力プリセット";
+            saveButton.Visible = !presetPageSelected; AcceptButton = presetPageSelected ? null : saveButton;
+        }
+        tabs.SelectedIndexChanged += (_, _) => UpdateSaveButton(); UpdateSaveButton();
+        refreshSaveButton = UpdateSaveButton;
+        FormClosing += (_, e) =>
+        {
+            if (!inputPresetEditor.StoreCurrent()) { e.Cancel = true; SelectCategory("入力プリセット"); return; }
+            presetEditor.StoreCurrent(); if (presetEditor.Error is not null) { e.Cancel = true; SelectCategory("出力プリセット"); }
+        };
         Shown += (_, _) => { var work = Screen.FromControl(this).WorkingArea; MinimumSize = new Size(Math.Min(MinimumSize.Width, work.Width), Math.Min(MinimumSize.Height, work.Height)); if (Width > work.Width || Height > work.Height) Bounds = new Rectangle(work.Location, new Size(Math.Min(Width, work.Width), Math.Min(Height, work.Height))); };
     }
 
@@ -320,7 +337,7 @@ internal sealed class SettingsForm : Form
     internal void SelectCategory(string title)
     {
         for (int index = 0; index < categories.Items.Count; index++)
-            if (((TabPage)categories.Items[index]!).Text == title) { categories.SelectedIndex = index; return; }
+            if (((TabPage)categories.Items[index]!).Text == title) { categories.SelectedIndex = index; refreshSaveButton?.Invoke(); return; }
     }
 
     public void SetStatus(StatusMessage? message)
@@ -353,6 +370,7 @@ internal sealed class SettingsForm : Form
     }
     private void SaveSettings()
     {
+        manualSave = true;
         try
         {
             if (!inputPresetEditor.StoreCurrent()) throw new ArgumentException("入力プリセットの内容を確認してください。");
@@ -360,12 +378,27 @@ internal sealed class SettingsForm : Form
             if (presetEditor.Error is string presetError) throw new ArgumentException(presetError);
             var next = ReadSettings();
             string? error = save(next);
+            if (error is null) committed = next;
             SetStatus(error ?? "設定を保存しました。", error is not null);
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
         { SetStatus("保存できませんでした: " + ex.Message, true); }
+        finally { manualSave = false; }
     }
-    private AppSettings ReadSettings() => (initial with
+    private string? CommitInputs(SavedRegion[] regions) => CommitPresetChanges(committed with { SavedRegions = regions });
+    private string? CommitOutputs(CapturePreset[] presets) => CommitPresetChanges(committed with { CapturePresets = presets });
+    private string? CommitPresetChanges(AppSettings next)
+    {
+        if (manualSave) return null;
+        try
+        {
+            next = next.ApplyDefaults(); next.Validate();
+            string? error = save(next); if (error is null) committed = next;
+            return error;
+        }
+        catch (Exception ex) { return "自動保存できません: " + ex.Message; }
+    }
+    private AppSettings ReadSettings() => (committed with
             {
                 OneOcrDirectory = Expand(oneOcrDirectory.Text),
                 DimCaptureBackground = dimCaptureBackground.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
@@ -392,7 +425,7 @@ internal sealed class SettingsForm : Form
                 SelectedImageEditorId = imageApps.SelectedId, SelectedVideoEditorId = videoApps.SelectedId
             }).ApplyDefaults();
     private static string Expand(string text) => Environment.ExpandEnvironmentVariables(text.Trim().Trim('"'));
-    private AppSettings CurrentSelectionSettings() => initial with
+    private AppSettings CurrentSelectionSettings() => committed with
     {
         LimitToStartingMonitor = limitToStartingMonitor.Checked, DimCaptureBackground = dimCaptureBackground.Checked,
         Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked,
@@ -401,7 +434,7 @@ internal sealed class SettingsForm : Form
     internal static string InputSummary(SavedRegion preset)
     {
         string size = preset.UseFixedCoordinates || preset.Mode == CaptureMode.FixedRegion ? $" / {preset.Bounds.Width}×{preset.Bounds.Height}px" : "";
-        string mode = preset.UseFixedCoordinates ? $"登録位置（{preset.Bounds.X}, {preset.Bounds.Y}）" : ModeName(preset.Mode);
+        string mode = preset.UseFixedCoordinates ? $"固定位置とサイズ（{preset.Bounds.X}, {preset.Bounds.Y}）" : ModeName(preset.Mode);
         return $"{preset.Name} / {mode}{size}\n画面固定={(preset.FreezeFrame ? "ON" : "OFF")} / カーソル={(preset.IncludeCursor ? "含む" : "含めない")} / 余白={preset.PaddingPixels}px　［編集］";
     }
     internal static string OutputSummary(CapturePreset preset)
@@ -415,7 +448,7 @@ internal sealed class SettingsForm : Form
         string file = preset.Destination.HasFlag(OutputDestination.File) ? $"\n{preset.SaveDirectory}\n{preset.FileNamePattern}" : "";
         return $"{preset.Name} / {output} / {color}{file}　［編集］";
     }
-    private string NotificationAppId() => (notificationApplication?.SelectedItem as NotificationAppItem)?.Id ?? initial.NotificationApplicationId;
+    private string NotificationAppId() => (notificationApplication?.SelectedItem as NotificationAppItem)?.Id ?? committed.NotificationApplicationId;
     private sealed record NotificationAppItem(string Id, string Label) { public override string ToString() => Label; }
     private static NumericUpDown PixelField(TableLayoutPanel table, string label, string name, int value, int row)
     { var control = new NumericUpDown { Name = name, Minimum = 1, Maximum = 32768, Value = value }; Add(table, label, control, row); return control; }

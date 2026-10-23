@@ -22,6 +22,7 @@ internal sealed class SelectionGesture
     private readonly DragAxis horizontal = new();
     private readonly DragAxis vertical = new();
     internal bool Grid20 { get; set; }
+    internal Rectangle? FixedPosition { get; set; }
     internal int SnapDistancePixels { get; private set; } = 20;
     internal int GridStepPixels { get; private set; } = 20;
     internal void SetSnapPrecision(int distance, int step)
@@ -74,6 +75,7 @@ internal sealed class SelectionGesture
         pointerInitialized = true;
         if (mode == CaptureMode.FixedRegion)
         {
+            if (FixedPosition is Rectangle fixedPosition) { Selection = fixedPosition; return; }
             // Repeated pointer messages and the confirming click retain arrow nudges.
             // A physical move or Alt transition deliberately returns to the pointer.
             if (!unchanged) PositionFixed(Resolve(point, snap));
@@ -157,11 +159,12 @@ internal sealed class SelectionGesture
         FixedAnchor = anchor;
         anchorOffset = new Size(anchor is CaptureAnchor.TopRight or CaptureAnchor.BottomRight ? fixedDimensions.Width : 0,
             anchor is CaptureAnchor.BottomLeft or CaptureAnchor.BottomRight ? fixedDimensions.Height : 0);
-        if (mode == CaptureMode.FixedRegion) PositionFixed(RawCurrent);
+        if (mode == CaptureMode.FixedRegion && FixedPosition is null) PositionFixed(RawCurrent);
     }
 
     internal bool Space()
     {
+        if (FixedPosition is not null) return true;
         if (mode == CaptureMode.FixedRegion)
         {
             FixedAnchor = (CaptureAnchor)(((int)FixedAnchor + 1) % 4);
@@ -186,7 +189,7 @@ internal sealed class SelectionGesture
 
     internal bool Nudge(Keys keyData)
     {
-        if (mode != CaptureMode.FixedRegion || (keyData & Keys.Modifiers & ~Keys.Shift) != 0) return false;
+        if (mode != CaptureMode.FixedRegion || FixedPosition is not null || (keyData & Keys.Modifiers & ~Keys.Shift) != 0) return false;
         int step = (keyData & Keys.Shift) != 0 ? 10 : 1;
         Size movement = (keyData & Keys.KeyCode) switch
         {

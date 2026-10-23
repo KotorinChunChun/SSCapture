@@ -214,7 +214,7 @@ internal static partial class Program
             {
                 using var form = NewSettings(new AppSettings { DefaultMode = captureMode, MicrophoneDeviceId = "missing" });
                 var combo = (ComboBox)form.Controls.Find("CaptureMode", true).Single();
-                Equal(5, combo.Items.Count);
+                Equal(6, combo.Items.Count);
                 Equal((int)captureMode, combo.SelectedIndex);
                 var microphones = (ComboBox)form.Controls.Find("MicrophoneDevice", true).Single();
                 Equal("missing", ((MicrophoneInfo)microphones.SelectedItem!).Id);

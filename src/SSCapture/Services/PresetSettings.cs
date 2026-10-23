@@ -5,7 +5,7 @@ internal static class PresetSettings
     internal static AppSettings EnsurePresets(this AppSettings settings)
     {
         settings = EnsureExternalApplications(settings);
-        if (settings.PresetSchemaVersion >= 2) return settings;
+        if (settings.PresetSchemaVersion >= 2) return UpgradePresets(settings);
         settings = EnsureLegacyPresets(settings);
         var inputs = settings.SavedRegions.ToList();
         var outputs = settings.CapturePresets.ToList();
@@ -35,7 +35,33 @@ internal static class PresetSettings
                 with { Id = UniqueId(id, outputs.Select(p => p.Id)) });
         }
         // 削除した初期候補を次の起動で復活させない。既定や既存の登録内容には触れない。
-        return settings with { PresetSchemaVersion = 2, SavedRegions = inputs.ToArray(), CapturePresets = outputs.ToArray() };
+        return UpgradePresets(settings with { PresetSchemaVersion = 2, SavedRegions = inputs.ToArray(), CapturePresets = outputs.ToArray() });
+    }
+    private static AppSettings UpgradePresets(AppSettings settings)
+    {
+        if (settings.PresetSchemaVersion >= 3) return settings;
+        var baseline = new AppSettings();
+        bool Untouched(SavedRegion p, CaptureMode mode, string name) => p.Name == name && !p.UseFixedCoordinates && p.Mode == mode &&
+            p.Bounds == new Rectangle(0, 0, baseline.FixedWidth, baseline.FixedHeight) && p.Shortcut == "" &&
+            p.FixedAnchor == CaptureAnchor.TopLeft && p.FreezeFrame && !p.IncludeCursor && p.PaddingPixels == 0;
+        var inputs = settings.SavedRegions.Where(p => !(p.Id == "initial-input-window" && !p.IsDefault && Untouched(p, CaptureMode.Window, "ウィンドウ")))
+            .Select(p =>
+            {
+                if (p.Id == "standard-input" && Untouched(p, CaptureMode.Rectangle, "標準")) p = p with { Name = "囲った範囲" };
+                return p.ProfileVersion >= 2 ? p : p with { ProfileVersion = 2, RecordSystemAudio = settings.RecordSystemAudio,
+                    RecordMicrophone = settings.RecordMicrophone, MicrophoneDeviceId = settings.MicrophoneDeviceId };
+            }).ToList();
+        foreach (Size size in new[] { new Size(1280, 720), new Size(1920, 1080), new Size(2560, 1440), new Size(3840, 2160) })
+        {
+            if (inputs.Count >= 50 || inputs.Any(p => !p.UseFixedCoordinates && p.Mode == CaptureMode.FixedRegion && p.Bounds.Size == size)) continue;
+            inputs.Add(SavedRegion.FromSettings(UniqueName($"固定サイズ {size.Width}×{size.Height}", inputs.Select(p => p.Name)),
+                baseline with { DefaultMode = CaptureMode.FixedRegion, FixedWidth = size.Width, FixedHeight = size.Height }) with
+                { Id = UniqueId($"initial-input-fixed-{size.Width}-{size.Height}", inputs.Select(p => p.Id)) });
+        }
+        var outputs = settings.CapturePresets.Select(p => p.Id == "standard-output" && p.Name == "標準" &&
+            p == (CapturePreset.FromSettings("標準", baseline with { SelectedImageEditorId = p.ImageEditorId ?? "", SelectedVideoEditorId = p.VideoEditorId ?? "" })
+                with { Id = p.Id, IsDefault = p.IsDefault }) ? p with { Name = "クリップボード" } : p).ToArray();
+        return settings with { PresetSchemaVersion = 3, SavedRegions = inputs.ToArray(), CapturePresets = outputs };
     }
     private static AppSettings EnsureExternalApplications(AppSettings settings)
     {
@@ -89,7 +115,8 @@ internal static class PresetSettings
         {
             SavedRegions = settings.SavedRegions.Select(p => !p.IsDefault ? p : p with
             { Mode = settings.DefaultMode, Bounds = p.UseFixedCoordinates ? p.Bounds : new Rectangle(p.Bounds.Location, new(settings.FixedWidth, settings.FixedHeight)),
-                FixedAnchor = settings.FixedCaptureAnchor, FreezeFrame = settings.FreezeFrame, IncludeCursor = settings.IncludeCursor, PaddingPixels = settings.ScreenshotPaddingPixels }).ToArray(),
+                FixedAnchor = settings.FixedCaptureAnchor, FreezeFrame = settings.FreezeFrame, IncludeCursor = settings.IncludeCursor, PaddingPixels = settings.ScreenshotPaddingPixels,
+                RecordSystemAudio = settings.RecordSystemAudio, RecordMicrophone = settings.RecordMicrophone, MicrophoneDeviceId = settings.MicrophoneDeviceId }).ToArray(),
             CapturePresets = settings.CapturePresets.Select(p => !p.IsDefault ? p : CapturePreset.FromSettings(p.Name, settings) with { Id = p.Id, IsDefault = true }).ToArray()
         };
     }

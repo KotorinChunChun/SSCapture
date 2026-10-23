@@ -9,7 +9,7 @@ internal static class SettingsHelp
         ["ApplyStartup"] = "自動起動のON/OFFだけを適用します。他の設定編集中の値は保存しません。OFFにしても現在のアプリは終了しません。",
         ["SaveDirectory"] = "ファイル保存を有効にしたときの保存先です。フォルダの完全パスを指定してください。保存先が存在しない場合は保存時に作成します。",
         ["DimCaptureBackground"] = "選択中の背景だけを暗くします。初期設定はOFFです。画面固定・撮影時点・選択枠とは独立した設定です。",
-        ["CaptureMode"] = "撮影開始時の選択方法です。矩形はドラッグ、ウィンドウは対象をクリック、全画面は全モニタを撮影します。自由形状は輪郭を囲み、固定サイズは指定した幅・高さで選びます。撮影中の右クリックで一時変更できます。",
+        ["CaptureMode"] = "矩形はドラッグ、ウィンドウは対象をクリック、全画面は全モニタ、自由形状は輪郭を囲みます。固定サイズは撮影時に位置を選ぶ枠、固定位置とサイズは保存した座標と寸法をそのまま使う定位置です。",
         ["ClipboardOutput"] = "ONのときは撮影結果をクリップボードへコピーします。他の出力先と併用できます。録画では動画ファイルをコピーします。",
         ["FileOutput"] = "ONのときは保存先と命名パターンに従って画像・動画を保存します。他の出力先と併用できます。",
         ["ExternalOutput"] = "ONのときは撮影結果を指定した画像・動画編集アプリへ渡します。対応する実行ファイルとパラメータを設定してください。即時撮影には適用しません。",
@@ -18,7 +18,7 @@ internal static class SettingsHelp
         ["LimitToStartingMonitor"] = "ONのときは開始時にポインタがあるモニタだけを暗転し、選択範囲とポインタをそのモニタ内に制限します。他のモニタは映像を更新し続けます。OFFのときは全モニタで選択できます。選択画面を使わない全画面・即時撮影には適用しません。",
         ["ScreenshotPaddingPixels"] = "静止画の外側へ上下左右同じ幅の白い余白を追加します。0～4096物理px、0は余白なしです。コピー・保存・外部アプリ・履歴に共通で適用します。撮影範囲や録画映像は変わりません。余白込みで各辺32768px・合計1億画素以内にしてください。",
         ["ScreenshotColorDepth"] = "静止画を最大256色（8ビット）または16色（4ビット）へ減色します。PNGはパレット形式で保存。コピー・外部アプリ・履歴にも同じ色を使用します。寸法・白余白・完全透明領域を保持し、録画は変更しません。写真やグラデーションは色が変わります。",
-        ["CapturePresetEditor"] = "出力先・減色・外部アプリ・保存先・命名・OCR・撮影情報の組合せを登録します。白い余白は入力プリセットで設定します。撮影中の適用や個別変更は今回だけです。設定画面の「保存」で確定します。",
+        ["CapturePresetEditor"] = "出力先・減色・外部アプリ・保存先・命名・OCR・撮影情報の組合せを登録し、変更確定時に自動保存します。白い余白は入力プリセットで設定します。撮影中の適用や個別変更は今回だけです。",
         ["FileNamePattern"] = "保存ファイル名の組立て方です。{yyyymmdd}は年月日、{hhmmss}は時分秒、{ocr}は画像から選んだ文字列、{region}は範囲名です。{#}は連番、{##}は2桁の連番です。例: {yyyymmdd}_{hhmmss}_{##}.png。録画は.mp4で保存します。",
         ["OcrSeparator"] = "OCRで選んだ複数の文字列の間に入れる文字です。例: _ を指定すると、文字列をアンダースコアでつなぎます。ファイル名に使用できない文字は指定できません。",
         ["OneOcrDirectory"] = "OneOCRのエンジンとモデルがあるフォルダの完全パスです。空欄のときはSnipping Toolから自動検出します。OCRを使う命名パターンで必要になります。",
@@ -83,7 +83,8 @@ internal static class SettingsHelp
         if (name == "DefaultInputSummary") return "既定の入力プリセットの概要です。クリックすると、そのプリセットを選択した編集ページへ移動します。";
         if (name == "DefaultOutputSummary") return "既定の出力プリセットの概要です。クリックすると、そのプリセットを選択した編集ページへ移動します。";
         if (name == "InputFixedCoordinates") return "ONは登録した位置へ固定枠を表示します。OFFは撮影モードに従い位置や範囲を選びます。再撮影キーはONなら即時撮影、OFFなら選択開始です。";
-        if (name.Contains("InputPreset", StringComparison.Ordinal)) return "入力プリセットを複製、または通常撮影の既定として指定します。暗転・モニタ制限・録画音声は変更しません。";
+        if (name.Contains("InputPreset", StringComparison.Ordinal)) return "入力プリセットを追加・複製し、通常撮影の既定を選べます。録画音声も含めて変更確定時に自動保存します。暗転・モニタ制限は基本設定です。";
+        if (name is "AddCapturePreset" or "DeleteCapturePreset" or "DefaultCapturePreset" or "CapturePresetName") return "出力プリセットを追加・削除し、既定を選びます。変更確定時に自動保存します。追加は新規・直前の出力設定・選択を複製から選べます。";
         if (name is "MetadataMode" or "PresetMetadataMode") return "静止画をファイルに保存する場合の撮影情報です。記録しない・PNG内XMP・別JSON・両方から選択します。UI名・アプリのパス・タイトル等を含むため共有時には注意してください。";
         if (name.EndsWith("EditorArguments", StringComparison.Ordinal)) return Services.EditorArguments.Help;
         if (name.Contains("Editor", StringComparison.Ordinal) || name.Contains("SelectedEditor", StringComparison.Ordinal))
@@ -94,7 +95,7 @@ internal static class SettingsHelp
         if (name.StartsWith("RecordingShortcut", StringComparison.Ordinal)) return "録画範囲の選択を開始するキーです。録画中に押すと録画を停止します。" + ShortcutHelp;
         if (name == "LastRegionShortcut") return "直前に確定した範囲を選択画面なしで再撮影するキーです。前回範囲がない場合は撮影できません。" + ShortcutHelp;
         if (name.StartsWith("Region", StringComparison.Ordinal) || name is "SavedRegions" or "NewNumericRegion" or "AddLastRegion" or "DrawRegion" or "PickFixedRegion" or "PreviewRegion" or "SaveRegion" or "DeleteRegion" or "CloseRegions")
-            return "入力プリセットの名前・物理pxの位置と寸法・再撮影キーを編集します。「この範囲を保存」で一覧に反映し、設定画面の「保存」で確定します。撮影中は右クリックから枠を呼び出して調整できます。";
+            return "入力プリセットの名前・物理pxの位置と寸法・再撮影キーを編集します。設定画面では変更確定時に自動保存します。固定サイズは撮影時に位置を選び、固定位置とサイズは保存した場所を動かさず使用します。";
         if (name is "ImageEditorPreset" or "VideoEditorPreset") return "外部編集アプリの実行ファイルとパラメータの入力例です。選ぶと入力欄へ反映します。実際のインストール先に合わせて変更し、保存してください。";
         if (name is "ImageEditorPath" or "VideoEditorPath") return "撮影結果を渡す編集アプリの.exeファイルの完全パスです。外部アプリへの出力がONのときに使用します。空欄の場合は外部アプリを起動できません。";
         if (name is "ImageEditorArguments" or "VideoEditorArguments") return "外部アプリへ渡す起動引数です。{file}は完全パス、{directory}はフォルダ、{filename}はファイル名に置換します。空白を含むパスを渡せるよう、\"{file}\"のように引用符で囲んでください。";

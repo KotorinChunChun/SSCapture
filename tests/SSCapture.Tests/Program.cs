@@ -22,6 +22,11 @@ internal static partial class Program
             CaptureMenuEditingTests(); SnapTests();
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }
+        if (args.SequenceEqual(["--preset-tests"]))
+        {
+            PresetConsolidationTests(); PresetUpgradeTests(); UiTests(); RegionTests(); RegionUiTests(); CapturePresetTests(); ExternalApplicationTests();
+            Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
+        }
         if (args.FirstOrDefault() == "--external-editor-launch")
         {
             try
@@ -68,6 +73,7 @@ internal static partial class Program
         CaptureTests();
         CaptureMenuEditingTests();
         PresetConsolidationTests();
+        PresetUpgradeTests();
         OverlayWindowTests();
         SelectionMonitorTests();
         ServiceTests();

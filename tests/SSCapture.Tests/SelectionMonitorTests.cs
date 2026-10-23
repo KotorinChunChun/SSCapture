@@ -33,10 +33,10 @@ internal static partial class Program
                 Equal(CaptureMode.FixedRegion, session.Mode); Equal(region.Bounds, session.Selection);
                 Check(!session.Completion.IsCompleted, "プリセット選択で即撮影した");
                 session.MoveTo(new(0, 20)); Equal(region.Bounds, session.Selection);
-                session.HandleCommandKey(Keys.Right); Equal(new Rectangle(41, 60, 120, 80), session.Selection);
+                session.HandleCommandKey(Keys.Right); session.HandleCommandKey(Keys.Space); session.MoveTo(new(210, 200)); Equal(region.Bounds, session.Selection);
                 session.HandleCommandKey(Keys.Enter);
                 using var result = session.Completion.GetAwaiter().GetResult();
-                Equal(new Rectangle(41, 60, 120, 80), result.Selection!.Bounds);
+                Equal(region.Bounds, result.Selection!.Bounds);
             }
             finally { session.Cancel(); }
         });

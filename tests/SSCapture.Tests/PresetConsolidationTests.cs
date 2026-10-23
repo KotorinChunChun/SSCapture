@@ -27,9 +27,9 @@ internal static partial class Program
             using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
             var check = form.Controls.Find("PreviewRegion", true).Single();
             Check(!check.Enabled, "位置未指定なのに確認できる");
-            var coordinates = (CheckBox)form.Controls.Find("InputFixedCoordinates", true).Single();
-            coordinates.Checked = true; Check(check.Enabled, "座標指定後も確認できない");
-            coordinates.Checked = false; Check(!check.Enabled, "無効状態へ戻らない");
+            var mode = (ComboBox)form.Controls.Find("CaptureMode", true).Single();
+            mode.SelectedIndex = 5; Check(check.Enabled, "固定位置モード後も確認できない");
+            mode.SelectedIndex = 0; Check(!check.Enabled, "無効状態へ戻らない");
             using var tips = new ToolTip(); SettingsHelp.Apply(form, tips);
             Check((tips.GetToolTip(check) ?? "").Contains("位置が未指定"), "無効理由の説明がない");
         });
@@ -42,7 +42,7 @@ internal static partial class Program
             Equal("編集中の既定", form.Controls.Find("RegionName", true).Single().Text);
             Equal(23m, ((NumericUpDown)form.Controls.Find("ScreenshotPaddingPixels", true).Single()).Value);
         });
-        Run("別の入力から既定への概要移動は編集を画面内一覧へ保持し永続保存しない", () =>
+        Run("別の入力から既定への概要移動は編集を確定して自動保存する", () =>
         {
             int saves = 0; using var form = new SettingsForm(new AppSettings(), _ => { saves++; return null; }, () => { }, () => []);
             var editor = (RegionManagerForm)form.Controls.Find("RegionManagerForm", true).Single();
@@ -51,7 +51,7 @@ internal static partial class Program
             form.Controls.Find("RegionName", true).Single().Text = "別入力の編集";
             ConsolidationClick(form, "DefaultInputSummary");
             Equal("別入力の編集", editor.Regions.Single(p => p.Id == id).Name);
-            Check(((SavedRegion)list.SelectedItem!).IsDefault, "既定へ移動しない"); Equal(0, saves);
+            Check(((SavedRegion)list.SelectedItem!).IsDefault, "既定へ移動しない"); Check(saves > 0, "確定した入力を自動保存しない");
         });
         Run("出力概要への移動は既定の未保存編集と別出力の編集を保持", () =>
         {
@@ -63,7 +63,7 @@ internal static partial class Program
             list.SelectedIndex = 1; string id = ((CapturePreset)list.SelectedItem!).Id;
             form.Controls.Find("CapturePresetName", true).Single().Text = "別出力の編集";
             ConsolidationClick(form, "DefaultOutputSummary");
-            Equal("別出力の編集", editor.Presets.Single(p => p.Id == id).Name); Check(((CapturePreset)list.SelectedItem!).IsDefault, "既定に戻らない"); Equal(0, saves);
+            Equal("別出力の編集", editor.Presets.Single(p => p.Id == id).Name); Check(((CapturePreset)list.SelectedItem!).IsDefault, "既定に戻らない"); Check(saves > 0, "確定した出力を自動保存しない");
         });
         Run("不正な編集中の値がある概要移動は拒否して入力を残す", () =>
         {
@@ -92,27 +92,28 @@ internal static partial class Program
             using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
             form.SelectCategory("入力プリセット"); form.Size = form.MinimumSize; _ = form.Handle;
             foreach (Control child in Descendants(form)) _ = child.Handle; LayoutTree(form);
-            foreach (string name in new[] { "DuplicateInputPreset", "DefaultInputPreset" })
+            foreach (string name in new[] { "AddInputPreset", "DeleteRegion", "DefaultInputPreset" })
             {
                 var button = (Button)form.Controls.Find(name, true).Single();
                 Size text = TextRenderer.MeasureText(button.Text, button.Font);
                 Check(button.Height >= 36 && button.Height >= text.Height + 6, $"{name}の高さ不足: {button.Size} / 文字{text}");
                 Check(button.Width >= text.Width + 8 && button.Parent!.ClientRectangle.Contains(button.Bounds), $"{name}が親領域外か文字幅不足");
             }
-            var first = form.Controls.Find("DuplicateInputPreset", true).Single(); var second = form.Controls.Find("DefaultInputPreset", true).Single();
+            var first = form.Controls.Find("AddInputPreset", true).Single(); var second = form.Controls.Find("DefaultInputPreset", true).Single();
             Check(first.Right <= second.Left && first.Top == second.Top, "ボタンが重なるか並びがずれる");
         });
-        Run("新規は入力出力各3件と矩形コピー既定・暗転ON", () =>
+        Run("新規は入力5件・出力3件と矩形コピー既定・暗転ON", () =>
         {
             var settings = new AppSettings().ApplyDefaults(); settings.Validate();
-            Equal(2, settings.PresetSchemaVersion); Equal(3, settings.SavedRegions.Length); Equal(3, settings.CapturePresets.Length);
+            Equal(3, settings.PresetSchemaVersion); Equal(5, settings.SavedRegions.Length); Equal(3, settings.CapturePresets.Length);
             Equal(CaptureMode.Rectangle, settings.DefaultMode); Equal(OutputDestination.Clipboard, settings.DefaultDestination);
             Check(settings.DimCaptureBackground && settings.FreezeFrame && !settings.IncludeCursor && !settings.Grid20, "標準入力の初期条件が異なる");
             Equal(0, settings.ScreenshotPaddingPixels); Equal(ScreenshotColorDepth.Original, settings.ScreenshotColorDepth);
             Equal(CaptureMetadataMode.None, settings.MetadataMode); Equal("Win+Shift+S", settings.ScreenshotShortcut1);
-            Equal("Rectangle,Window,FixedRegion", string.Join(',', settings.SavedRegions.Select(p => p.Mode)));
+            Equal("Rectangle,FixedRegion,FixedRegion,FixedRegion,FixedRegion", string.Join(',', settings.SavedRegions.Select(p => p.Mode)));
             Check(settings.SavedRegions.All(p => !p.UseFixedCoordinates && p.FreezeFrame && p.PaddingPixels == 0 && !p.IncludeCursor && p.Shortcut == ""), "初期入力に座標・キー・加工が混入");
-            Equal(new Size(1280, 720), settings.SavedRegions.Single(p => p.Mode == CaptureMode.FixedRegion).Bounds.Size);
+            Equal("1280x720,1920x1080,2560x1440,3840x2160", string.Join(',', settings.SavedRegions.Where(p => p.Mode == CaptureMode.FixedRegion).Select(p => $"{p.Bounds.Width}x{p.Bounds.Height}")));
+            Equal("囲った範囲", settings.SavedRegions.Single(p => p.IsDefault).Name); Equal("クリップボード", settings.CapturePresets.Single(p => p.IsDefault).Name);
             Check(settings.CapturePresets.Select(p => p.Destination).ToHashSet().SetEquals([OutputDestination.Clipboard, OutputDestination.File, OutputDestination.Clipboard | OutputDestination.File]), "初期出力の組合せが異なる");
             Check(settings.CapturePresets.All(p => !p.OpenFolderAfterSave && p.ColorDepth == ScreenshotColorDepth.Original && !p.Destination.HasFlag(OutputDestination.ExternalApp) && string.IsNullOrEmpty(p.VideoEditorId)), "初期出力がアプリやフォルダを開く");
         });
@@ -123,10 +124,10 @@ internal static partial class Program
             var output = CapturePreset.FromSettings("ファイル保存", baseline) with { Id = "initial-output-file", IsDefault = true };
             var legacy = baseline with { PresetSchemaVersion = 1, SavedRegions = [input], CapturePresets = [output] };
             var next = legacy.ApplyDefaults(); next.Validate();
-            Equal(3, next.SavedRegions.Length); Equal(3, next.CapturePresets.Length);
+            Equal(6, next.SavedRegions.Length); Equal(3, next.CapturePresets.Length);
             Equal(input, next.SavedRegions.Single(p => p.IsDefault)); Equal(output, next.CapturePresets.Single(p => p.IsDefault));
             Equal(17, next.ScreenshotPaddingPixels); Equal(CaptureMode.Freeform, next.DefaultMode); Check(next.IncludeCursor && !next.DimCaptureBackground, "既存条件が上書きされた");
-            Equal(3, next.SavedRegions.Select(p => p.Id).Distinct().Count()); Equal(3, next.SavedRegions.Select(p => p.Name).Distinct().Count());
+            Equal(6, next.SavedRegions.Select(p => p.Id).Distinct().Count()); Equal(6, next.SavedRegions.Select(p => p.Name).Distinct().Count());
             Equal(3, next.CapturePresets.Select(p => p.Id).Distinct().Count()); Equal(3, next.CapturePresets.Select(p => p.Name).Distinct().Count());
         });
         Run("初期候補は3件以上の既存登録へ追加せず削除後も復活しない", () =>
@@ -135,7 +136,7 @@ internal static partial class Program
             var many = settings with { PresetSchemaVersion = 1,
                 SavedRegions = [..settings.SavedRegions, settings.SavedRegions[0] with { Id = "custom-input", Name = "追加", IsDefault = false }],
                 CapturePresets = [..settings.CapturePresets, settings.CapturePresets[0] with { Id = "custom-output", Name = "追加", IsDefault = false }] };
-            var next = many.EnsurePresets(); Equal(4, next.SavedRegions.Length); Equal(4, next.CapturePresets.Length);
+            var next = many.EnsurePresets(); Equal(6, next.SavedRegions.Length); Equal(4, next.CapturePresets.Length);
             var removed = settings with { SavedRegions = [settings.SavedRegions.Single(p => p.IsDefault)], CapturePresets = [settings.CapturePresets.Single(p => p.IsDefault)] };
             Check(ReferenceEquals(removed, removed.EnsurePresets()), "削除済み候補を再追加した"); removed.Validate();
         });
@@ -151,7 +152,7 @@ internal static partial class Program
             string path = Path.Combine(directory, "settings.json");
             var current = new AppSettings().EnsurePresets(); var legacy = current with { PresetSchemaVersion = 1, SavedRegions = [current.SavedRegions[0]], CapturePresets = [current.CapturePresets[0]], DimCaptureBackground = false };
             string json = System.Text.Json.JsonSerializer.Serialize(legacy); File.WriteAllText(path, json);
-            var store = new SettingsStore(path); var loaded = store.Load(out var warning); Equal<string?>(null, warning); Equal(3, loaded.SavedRegions.Length); Equal(json, File.ReadAllText(path));
+            var store = new SettingsStore(path); var loaded = store.Load(out var warning); Equal<string?>(null, warning); Equal(5, loaded.SavedRegions.Length); Equal(json, File.ReadAllText(path));
             store.Save(loaded); Equal(json, File.ReadAllText(path + ".presets-v1.bak"));
             var restored = store.Load(out warning); Equal<string?>(null, warning); SettingsEqual(loaded, restored); Check(!restored.DimCaptureBackground, "明示OFFを変更");
             store.Save(restored); Equal(json, File.ReadAllText(path + ".presets-v1.bak"));
@@ -160,24 +161,25 @@ internal static partial class Program
         {
             var settings = new AppSettings().ApplyDefaults();
             using var form = new SettingsForm(settings, _ => null, () => { }, () => []);
-            Equal(3, ((ListBox)form.Controls.Find("SavedRegions", true).Single()).Items.Count);
+            Equal(5, ((ListBox)form.Controls.Find("SavedRegions", true).Single()).Items.Count);
             Equal(3, ((ListBox)form.Controls.Find("CapturePresetList", true).Single()).Items.Count);
             Check(((CheckBox)form.Controls.Find("DimCaptureBackground", true).Single()).Checked, "新規設定UIが暗転OFF");
             using var menu = new CaptureContextMenu(settings.DefaultDestination, _ => { }, () => { }, () => { },
                 inputPresets: settings.SavedRegions, applyInputPreset: _ => { }, presets: settings.CapturePresets, applyPreset: _ => { });
-            Equal(3, menu.Command("InputPresetMenu").DropDownItems.Count); Equal(3, menu.Command("CapturePresetMenu").DropDownItems.Count);
+            Equal(5, menu.Command("InputPresetMenu").DropDownItems.Count); Equal(3, menu.Command("CapturePresetMenu").DropDownItems.Count);
         });
         Run("統合画面は9分類と内部区分で旧入力・命名ページを重複表示しない", () =>
         {
             using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
-            Equal("基本,入力プリセット,録画・音声,出力プリセット,外部アプリ,ショートカット,即時撮影キー,通知,履歴", string.Join(',', tabs.TabPages.Cast<TabPage>().Select(p => p.Text)));
+            Equal("基本,入力プリセット,出力プリセット,外部アプリ,ショートカット,即時撮影キー,通知,履歴", string.Join(',', tabs.TabPages.Cast<TabPage>().Select(p => p.Text)));
             var input = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "入力プリセット"); var output = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "出力プリセット");
             Check(input.Contains(form.Controls.Find("ScreenshotPaddingPixels", true).Single()), "入力に余白がない");
             Check(output.Contains(form.Controls.Find("ScreenshotColorDepth", true).Single()), "出力に減色がない");
             Check(tabs.TabPages[0].Contains(form.Controls.Find("LimitToStartingMonitor", true).Single()), "モニタ制限が基本にない");
             Check(!((RegionManagerForm)input.Controls[0]).AutoScroll, "入力にスクロールがある");
-            Check(!input.Contains(form.Controls.Find("SystemAudio", true).Single()), "録画音声が入力に混入");
+            Check(input.Contains(form.Controls.Find("SystemAudio", true).Single()), "録画音声が入力にない");
+            Equal("取得条件,座標・寸法,録画・音声", string.Join(',', ((TabControl)form.Controls.Find("InputPresetSections", true).Single()).TabPages.Cast<TabPage>().Select(p => p.Text)));
         });
         Run("入力の複製・既定・削除保護と基本概要からの編集", () =>
         {
@@ -186,8 +188,8 @@ internal static partial class Program
             var editor = (RegionManagerForm)form.Controls.Find("RegionManagerForm", true).Single();
             ConsolidationClick(form, "DuplicateInputPreset"); form.Controls.Find("RegionName", true).Single().Text = "ウィンドウ用";
             ((ComboBox)form.Controls.Find("CaptureMode", true).Single()).SelectedIndex = (int)CaptureMode.Window;
-            ConsolidationClick(form, "DefaultInputPreset"); Equal(4, editor.Regions.Length); Equal(1, editor.Regions.Count(p => p.IsDefault));
-            ConsolidationClick(form, "DeleteRegion"); Equal(4, editor.Regions.Length);
+            ConsolidationClick(form, "DefaultInputPreset"); Equal(6, editor.Regions.Length); Equal(1, editor.Regions.Count(p => p.IsDefault));
+            ConsolidationClick(form, "DeleteRegion"); Equal(6, editor.Regions.Length);
             SaveConsolidation(form); Check(saved is not null, "保存しない"); Equal(CaptureMode.Window, saved!.DefaultMode);
             ConsolidationClick(form, "DefaultInputSummary"); Equal("入力プリセット", ((TabControl)form.Controls.Find("SettingsTabs", true).Single()).SelectedTab!.Text);
             Equal("ウィンドウ用", form.Controls.Find("RegionName", true).Single().Text);
@@ -321,6 +323,12 @@ internal static partial class Program
             finally { session.Cancel(); }
         });
     }
-    private static void ConsolidationClick(Control form, string name) => typeof(Button).GetMethod("OnClick", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form.Controls.Find(name, true).Single(), [EventArgs.Empty]);
+    private static void ConsolidationClick(Control form, string name)
+    {
+        if (form.Controls.Find(name, true).FirstOrDefault() is Control button)
+            typeof(Button).GetMethod("OnClick", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(button, [EventArgs.Empty]);
+        else
+            Descendants(form).Where(c => c.ContextMenuStrip is not null).SelectMany(c => c.ContextMenuStrip!.Items.OfType<ToolStripMenuItem>()).Single(i => i.Name == name).PerformClick();
+    }
     private static void SaveConsolidation(SettingsForm form) => typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, null);
 }
