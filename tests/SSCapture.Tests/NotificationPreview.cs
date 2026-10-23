@@ -20,9 +20,9 @@ internal static partial class Program
             : "通知は中央に表示します。本文のクリック通過、ボタンの1回受信と非アクティブ維持を確認します。個人画像・クリップボードは使用しません。" };
         host.Controls.Add(status);
         int attempt = 0; long expectedForeground = 0;
-        void Log(string action, object? value = null) => File.AppendAllText(Path.Combine(directory, underlay ? "underlay.jsonl" : "actions.jsonl"),
+        void Log(string action, object? value = null) => AppendPreviewObservation(Path.Combine(directory, underlay ? "underlay.jsonl" : "actions.jsonl"),
             JsonSerializer.Serialize(new { at = DateTimeOffset.Now, pid = Environment.ProcessId, attempt, action,
-                foreground = (long)PreviewForegroundWindow(), expectedForeground, value }) + Environment.NewLine);
+                foreground = (long)PreviewForegroundWindow(), expectedForeground, value }));
         if (underlay)
         {
             int clicks = 0;
@@ -33,12 +33,17 @@ internal static partial class Program
             host.Shown += (_, _) => File.WriteAllText(Path.Combine(directory, "underlay-ready.json"), JsonSerializer.Serialize(new { handle = (long)host.Handle, host.Bounds }));
             var observation = new Label { Dock = DockStyle.Bottom, Height = 100, Padding = new(16), Text = "通知のボタン操作を待っています。" };
             host.Controls.Add(observation);
+            var next = new Button { Dock = DockStyle.Bottom, Height = 48, Text = "通知が消えた後、次の試験の設定画面に戻る" };
+            next.Click += (_, _) => File.WriteAllText(Path.Combine(directory, "return-to-controls.request"), Guid.NewGuid().ToString("N"));
+            host.Controls.Add(next);
             using var observe = new System.Windows.Forms.Timer { Interval = 150 };
             observe.Tick += (_, _) =>
             {
                 try
                 {
-                    string? last = File.ReadLines(Path.Combine(directory, "actions.jsonl")).LastOrDefault();
+                    using var stream = new FileStream(Path.Combine(directory, "actions.jsonl"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var reader = new StreamReader(stream);
+                    string? last = reader.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
                     if (last is null) return;
                     using var item = JsonDocument.Parse(last);
                     var root = item.RootElement;
@@ -59,6 +64,8 @@ internal static partial class Program
         toast.Activated += (_, _) => Log("toast-activated");
         var button = new Button { Text = "別プロセス上に通知を表示", Dock = DockStyle.Top, Height = 52 };
         var savedMode = new CheckBox { Text = "保存済み画像で確認（OFFは編集時だけ一時画像生成）", Dock = DockStyle.Top, Height = 36 };
+        var recreate = new CheckBox { Text = "次回表示前に通知のハンドルを作り直す", Dock = DockStyle.Top, Height = 36 };
+        host.Controls.Add(recreate); recreate.BringToFront();
         host.Controls.Add(savedMode); savedMode.BringToFront();
         host.Controls.Add(button); button.BringToFront();
         button.Click += async (_, _) =>
@@ -79,6 +86,16 @@ internal static partial class Program
                 using (var ready = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, "underlay-ready.json"))))
                     expectedForeground = ready.RootElement.GetProperty("handle").GetInt64();
                 Log("before-notification", new { saved = savedMode.Checked });
+                if (recreate.Checked)
+                {
+                    var oldActions = Application.OpenForms.OfType<ToastActionForm>().SingleOrDefault();
+                    long oldBody = (long)toast.Handle, oldAction = oldActions is null ? 0L : (long)oldActions.Handle;
+                    var rebuild = typeof(Control).GetMethod("RecreateHandle", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+                    rebuild.Invoke(toast, null);
+                    if (oldActions is not null) rebuild.Invoke(oldActions, null);
+                    Log("handles-recreated", new { oldBody, body = (long)toast.Handle, oldAction,
+                        actionHost = oldActions is null ? 0L : (long)oldActions.Handle });
+                }
                 using var image = new Bitmap(120, 80); using (var g = Graphics.FromImage(image)) g.Clear(Color.LightCoral);
                 var app = new ExternalApplication { Id = "fixture", Name = "専用の代替編集処理", Executable = Environment.ProcessPath! };
                 string? saved = savedMode.Checked ? CaptureStorage.SavePng(image, directory, DateTimeOffset.Now, "fixture.png") : null;
@@ -109,6 +126,7 @@ internal static partial class Program
         using var poll = new System.Windows.Forms.Timer { Interval = 25 };
         bool hadToast = false;
         long previousForeground = 0;
+        string? returnRequest = null;
         poll.Tick += (_, _) =>
         {
             if (toast.Visible)
@@ -117,11 +135,28 @@ internal static partial class Program
                 long current = (long)PreviewForegroundWindow();
                 if (current != previousForeground) { previousForeground = current; Log("foreground-change"); }
             }
-            else if (hadToast) { hadToast = false; Log("notification-hidden"); host.Show(); }
+            else if (hadToast) { hadToast = false; Log("notification-hidden"); }
+            // 非同期の画像生成/編集コールバックへ再表示が割り込まない。利用者の明示操作でだけ戻る。
+            if (!toast.Visible && File.Exists(Path.Combine(directory, "return-to-controls.request")))
+            {
+                string request = File.ReadAllText(Path.Combine(directory, "return-to-controls.request"));
+                if (request != returnRequest) { returnRequest = request; Log("return-request"); host.Show(); }
+            }
         };
         poll.Start();
         host.FormClosed += (_, _) => { feedback.HideForCapture(); if (child is { HasExited: false }) child.CloseMainWindow(); child?.Dispose(); };
         Application.Run(host); return 0;
+    }
+    private static void AppendPreviewObservation(string path, string line)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+            using var writer = new StreamWriter(stream);
+            writer.WriteLine(line);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { Console.Error.WriteLine($"観測ログの書込み失敗: {ex.Message}"); }
     }
     [DllImport("user32.dll", EntryPoint = "GetForegroundWindow")] private static extern nint PreviewForegroundWindow();
 }

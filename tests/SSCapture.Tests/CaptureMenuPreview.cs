@@ -87,7 +87,7 @@ internal static partial class Program
                 var active = session;
                 foreach (var command in active.SelectionMenu.AllCommands)
                     command.Click += (_, _) => Log("menu-command", new { command.Name, command.Text, leaf = !command.HasDropDownItems, active.Mode,
-                        visibleMenus = VisibleMenus(active), active.OutputSettings.FreezeFrame, active.OutputSettings.IncludeCursor });
+                        visibleMenus = VisibleMenus(active), active.SelectionError, active.OutputSettings.FreezeFrame, active.OutputSettings.IncludeCursor });
                 active.SelectionMenu.Closed += (_, e) => Log("menu-closed", new { e.CloseReason, visibleMenus = VisibleMenus(active) });
                 session.Start();
                 foreach (var overlay in Application.OpenForms.OfType<CaptureOverlay>())
@@ -123,8 +123,8 @@ internal static partial class Program
         Application.Run(host); return 0;
         static int VisibleMenus(SessionController active) => (active.SelectionMenu.Visible ? 1 : 0)
             + active.SelectionMenu.AllCommands.Count(c => c.HasDropDownItems && c.DropDown.Visible);
-        void Log(string action, object? data = null) => File.AppendAllText(Path.Combine(directory, "operations.jsonl"),
-            JsonSerializer.Serialize(new { at = DateTimeOffset.Now, attempt, action, foreground = (long)PreviewForegroundWindow(), data }) + Environment.NewLine);
+        void Log(string action, object? data = null) => AppendPreviewObservation(Path.Combine(directory, "operations.jsonl"),
+            JsonSerializer.Serialize(new { at = DateTimeOffset.Now, attempt, action, foreground = (long)PreviewForegroundWindow(), data }));
     }
     private sealed class CaptureMenuPreviewHost : Form
     {
