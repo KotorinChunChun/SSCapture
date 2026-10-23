@@ -20,11 +20,17 @@ Windows 11用の常駐スクリーンショット・領域録画ツールです�
 
 ### 起動とショートカット
 
-`artifacts/app/SSCapture.exe` を実行します。実行フォルダは書き込み可能な場所に置いてください。以下のコマンドはリポジトリのルートで実行します。設定を表示して起動する場合:
+`artifacts/app/SSCapture.exe` を引数なしで実行すると設定画面を開きます。起動済みなら既存プロセスの設定を開き、もう1個常駐しません。`--settings`も使用できます。`--startup`または`--hidden`では画面を表示せず常駐します（両方の指定があれば非表示を優先）。実行フォルダは書き込み可能な場所に置いてください。以下のコマンドはリポジトリのルートで実行します。
 
 ```powershell
 pwsh -File scripts/start.ps1 -Settings
 ```
+
+正式インストール版では「基本」→「自動起動」をONにして、その欄の「適用」でWindowsサインイン時の無表示起動を登録できます。新規の既定はOFFで、ビルド・初回起動では登録しません。OFFの適用は次回以降の自動起動を解除するだけで、現在の常駐は続きます。
+
+KotorinToysと同じユーザー別の設定・所有タスクを使います。本体で直接タスクを設定した場合も同じ状態を表示します。本体経由を設定済みなら二重登録せず、本体の「本体設定・自動起動」から変更します。開発版・別配置は登録できません。旧ショートカットなど外部の自動起動登録は勝手に移行・削除せず、競合時は案内を表示します。設定全体の「保存」やプリセットの保存ではOSの予約を変えません。
+
+開発版を画面なしで起動する場合は`pwsh -File scripts/start.ps1 -Hidden`を使います。コマンドで正式導入版の予約を管理する場合は`pwsh -File scripts/startup.ps1 -Action Status -InstallDirectory '正式インストール先'`（Enable/Disableも指定可能）を使います。
 
 | 操作 | 動作 |
 | --- | --- |
@@ -239,15 +245,15 @@ OCR命名画面が未完了のときに撮影キーを押すと、同じ画面�
 
 ## サインイン時の起動
 
-初期状態では自動起動を登録しません。必要な場合に実行します。
+初期状態では自動起動を登録しません。「基本」の自動起動欄で適用するか、正式導入先を指定します。
 
 ```powershell
-pwsh -File scripts/startup.ps1 -Action Enable
-pwsh -File scripts/startup.ps1 -Action Status
-pwsh -File scripts/startup.ps1 -Action Disable
+pwsh -File scripts/startup.ps1 -Action Enable -InstallDirectory 'C:\正式導入先\SSCapture'
+pwsh -File scripts/startup.ps1 -Action Status -InstallDirectory 'C:\正式導入先\SSCapture'
+pwsh -File scripts/startup.ps1 -Action Disable -InstallDirectory 'C:\正式導入先\SSCapture'
 ```
 
-ユーザーのスタートアップにショートカットを1つ登録します。アプリフォルダを移動したら再登録してください。
+KotorinToysと共通のユーザー別タスクを登録し、`--startup`で設定画面を表示せず開始します。開発出力への旧ショートカット登録は行いません。旧ショートカット等は外部管理として保持し、二重登録を避けるため先に元の登録を確認します。
 
 ## Windowsとの関係と検証範囲
 

@@ -7,6 +7,19 @@ internal static partial class Program
 {
     internal static int WorkflowPreview(string kind)
     {
+        if (kind == "startup-settings")
+        {
+            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => [], startupRegistration: new FakeStartup());
+            form.Shown += (_, _) =>
+            {
+                var work = Screen.FromControl(form).WorkingArea;
+                form.StartPosition = FormStartPosition.Manual;
+                form.Bounds = new Rectangle(work.Left + work.Width / 2, work.Top, work.Width - work.Width / 2, work.Height);
+                form.SetStatus("自動起動の専用プレビューです。適用は模擬予約だけを変更し、Windowsの実予約・個人設定は変更しません。");
+            };
+            Application.Run(form);
+            return 0;
+        }
         if (kind == "ocr")
         {
             using var image = OcrFixture();

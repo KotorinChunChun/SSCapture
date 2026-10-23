@@ -173,6 +173,7 @@ await Run("所有予約だけを整理し取消で復元", async () =>
     Check(settings.Load().StartupModes["ss-capture"] == "direct_task");
     f.CheckData();
 });
+await Run("単体の自動起動は既定OFF・正式配置限定・共通タスク・失敗時復元", () => Done(() => StartupRegistrationTests.Run(output)));
 Console.WriteLine($"RESULT: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

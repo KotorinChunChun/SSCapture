@@ -106,9 +106,10 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         if (!TryConfigureHook(settings.HasShortcuts, out string? hookError))
             warning = hookError;
         RefreshMenu();
+        // 自動起動の警告は記録だけにし、設定画面を勝手に開かない。
         if (warning is not null)
-            Post(() => Report(warning, true));
-        else if (showSettings)
+            Post(() => StoreStatus(warning, true));
+        if (showSettings)
             Post(ShowSettings);
         management = new("ss-capture", dispatcher, ShowSettings, ExitThread, () => OperationPolicy.MustWaitToStop ? "撮影・録画を完了またはキャンセルしてから終了してください。" : null);
     }

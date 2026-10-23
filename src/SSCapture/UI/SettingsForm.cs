@@ -38,7 +38,7 @@ internal sealed class SettingsForm : Form
         Func<IReadOnlyList<MicrophoneInfo>>? listMicrophones = null, Action? openRegions = null, Action? openHistory = null,
         Func<DateTimeOffset>? now = null, Func<IReadOnlyList<DisplayTarget>>? listDisplays = null,
         SavedRegion? lastRegion = null, Func<Size?, CaptureAnchor, Task<Rectangle?>>? selectInputRegion = null,
-        Func<IReadOnlyList<DisplayLayout>>? regionDisplays = null)
+        Func<IReadOnlyList<DisplayLayout>>? regionDisplays = null, IStartupRegistration? startupRegistration = null)
     {
         settings = settings.UpdateDefaultProjections();
         initial = settings;
@@ -258,8 +258,12 @@ internal sealed class SettingsForm : Form
         var inputSummary = MakeButton("", "DefaultInputSummary", ButtonRole.Secondary); inputSummary.AutoSize = false; inputSummary.Height = 76;
         var outputSummary = MakeButton("", "DefaultOutputSummary", ButtonRole.Secondary); outputSummary.AutoSize = false; outputSummary.Height = 76;
         Add(basic, "既定の入力", inputSummary, 6); Add(basic, "既定の出力", outputSummary, 7);
-        basic.RowStyles.Clear(); basic.RowCount = 9;
-        for (int row = 0; row < 8; row++) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, row >= 6 ? 84 : 40)); basic.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        basic.RowStyles.Clear(); basic.RowCount = 10;
+        for (int row = 0; row < 8; row++) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, row >= 6 ? 84 : 40));
+        basic.RowStyles.Add(new RowStyle(SizeType.Absolute, 96)); basic.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration());
+        Add(basic, "自動起動", startupSettings, 8);
+        Shown += async (_, _) => await startupSettings.RefreshAsync();
         inputSummary.Click += (_, _) => { if (inputPresetEditor.SelectDefault()) SelectCategory("入力プリセット"); else SetStatus("入力プリセットを切り替えられません。入力内容と入力プリセット内のメッセージを確認してください。", true); };
         outputSummary.Click += (_, _) => { if (presetEditor.SelectDefault()) SelectCategory("出力プリセット"); else SetStatus(presetEditor.Error ?? "出力プリセットの入力内容を確認してください。", true); };
         void UpdateSummary()

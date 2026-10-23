@@ -39,12 +39,12 @@ internal static class Program
         using var mutex = new Mutex(true, @"Local\SSCapture.Singleton", out bool firstInstance);
         if (!firstInstance)
         {
-            if (args.Contains("--startup")) return;
+            if (!Services.LaunchBehavior.ShowSettings(args)) return;
             try { using var signal = EventWaitHandle.OpenExisting(@"Local\SSCapture.ShowSettings"); signal.Set(); }
             catch (WaitHandleCannotBeOpenedException) { }
             return;
         }
-        using var context = new TrayApplicationContext(args.Contains("--settings"));
+        using var context = new TrayApplicationContext(Services.LaunchBehavior.ShowSettings(args));
         Application.ThreadException += (_, e) => context.HandleUnexpectedError(e.Exception);
         Application.Run(context);
     }

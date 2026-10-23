@@ -62,6 +62,7 @@ internal static partial class Program
         SelectionMonitorTests();
         ServiceTests();
         UiTests();
+        StartupTests();
         RecordingTests();
         RecordingSessionTests();
         AudioToggleTests();

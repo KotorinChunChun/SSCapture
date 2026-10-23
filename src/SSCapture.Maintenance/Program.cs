@@ -17,6 +17,27 @@ try
     diagnosticRoot = root;
     diagnosticOperation = operation;
     var validator = new TargetValidator();
+    if (operation is "startup-status" or "startup-enable" or "startup-disable")
+    {
+        var tool = TargetValidator.Definition with { Capabilities = ["status", "show", "stop", "silent-start"] };
+        bool InstalledHere()
+        {
+            validator.Validate(root, false, false);
+            var installed = new InstallationDetector().Detect(tool);
+            return installed.State == "導入済み" && string.Equals(installed.Directory, root, StringComparison.OrdinalIgnoreCase);
+        }
+        var startup = new StandaloneStartup(new(HostSettingsStore.DefaultDirectory), new TaskSchedulerGateway(), tool,
+            Path.Combine(root, "SSCapture.exe"), InstalledHere);
+        if (operation == "startup-status")
+            Console.WriteLine(JsonSerializer.Serialize(startup.State(), SafeFiles.Json));
+        else
+        {
+            var changed = startup.SetEnabled(operation == "startup-enable");
+            Console.WriteLine(JsonSerializer.Serialize(changed, SafeFiles.Json));
+            return changed.Success ? 0 : 1;
+        }
+        return 0;
+    }
     if (operation is "verify" or "status" or "show" or "start" or "stop")
     {
         validator.Validate(root, false, false);

@@ -4,6 +4,9 @@ internal static class SettingsHelp
 {
     private static readonly IReadOnlyDictionary<string, string> Descriptions = new Dictionary<string, string>
     {
+        ["StartupSettings"] = "Windowsサインイン時の自動起動です。初期設定はOFFです。KotorinToysと同じ所有予約を参照します。変更はこの欄の「適用」で確定します。設定全体の保存やビルドでは予約を変更しません。",
+        ["StartWithWindows"] = "ONにして「適用」を押すと、次回のWindowsサインイン時から設定画面を表示せず起動します。正式インストール版だけが登録できます。本体経由の予約はKotorinToysで変更してください。",
+        ["ApplyStartup"] = "自動起動のON/OFFだけを適用します。他の設定編集中の値は保存しません。OFFにしても現在のアプリは終了しません。",
         ["SaveDirectory"] = "ファイル保存を有効にしたときの保存先です。フォルダの完全パスを指定してください。保存先が存在しない場合は保存時に作成します。",
         ["DimCaptureBackground"] = "選択中の背景だけを暗くします。初期設定はOFFです。画面固定・撮影時点・選択枠とは独立した設定です。",
         ["CaptureMode"] = "撮影開始時の選択方法です。矩形はドラッグ、ウィンドウは対象をクリック、全画面は全モニタを撮影します。自由形状は輪郭を囲み、固定サイズは指定した幅・高さで選びます。撮影中の右クリックで一時変更できます。",
