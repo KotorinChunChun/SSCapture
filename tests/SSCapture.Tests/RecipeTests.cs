@@ -6,6 +6,16 @@ internal static partial class Program
 {
     static void RecipeTests()
     {
+        Run("OCR命名キャンセルでコピーが成功しても直前の再撮影条件を更新しない", () => WithOutputDirectory(directory => RunOutputTask(async () =>
+        {
+            int remembers = 0, copies = 0;
+            using var image = OutputImage();
+            using var router = new OutputRouter(Path.Combine(directory, "work"), _ => { copies++; return Task.CompletedTask; },
+                captureSucceeded: (_, _) => remembers++, readCaptureLayout: () => RegionLayout);
+            await router.ScreenshotAsync(image, OutputDestination.Clipboard | OutputDestination.File, OutputSettings(directory),
+                captureBounds: new(1, 1, image.Width, image.Height), requestFileName: () => Task.FromResult<ScreenshotFileName?>(null));
+            Equal(1, copies); Equal(0, remembers);
+        })));
         Run("直前設定キーは未割当で前回範囲と独立し重複を拒否", () =>
         {
             Equal("", new AppSettings().LastRecipeShortcut);

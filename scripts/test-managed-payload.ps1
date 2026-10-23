@@ -1,7 +1,11 @@
 [CmdletBinding()]
-param([string]$OutputRoot = 'dev/history/v0.1.3/logs/payload-fixtures')
+param([string]$OutputRoot)
 . (Join-Path $PSScriptRoot 'managed-payload.ps1')
 $repository = Split-Path -Parent $PSScriptRoot
+if (-not $OutputRoot) {
+    $fixtureVersion = [string](Get-Content -LiteralPath (Join-Path $repository 'tool.json') -Raw | ConvertFrom-Json).version
+    $OutputRoot = "dev/history/v$fixtureVersion/logs/payload-fixtures"
+}
 $base = [IO.Path]::GetFullPath($OutputRoot, $repository)
 if (-not $base.StartsWith((Join-Path $repository 'dev\history\'), [StringComparison]::OrdinalIgnoreCase)) { throw 'fixtureは版別ログ配下へ作成してください。' }
 $root = Join-Path $base ([Guid]::NewGuid().ToString('N'))

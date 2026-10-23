@@ -51,11 +51,12 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         CaptureMetadataMode metadataMode = destination.HasFlag(OutputDestination.File) ? settings.MetadataMode : CaptureMetadataMode.None;
         MetadataSidecar? sidecar = metadata is not null && metadataMode.HasFlag(CaptureMetadataMode.Json) ? new(metadata) : null;
         DateTimeOffset captureTime = capturedAt ?? namePlan?.CapturedAt ?? DateTimeOffset.Now;
+        bool fileCancelled = false;
         if (destination.HasFlag(OutputDestination.File) && fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, captureTime, CaptureIntent.Screenshot);
         Func<Task<bool?>>? prepareFile = requestFileName is null && requestFileNameForImage is null ? null : async () =>
         {
             var requested = requestFileNameForImage is not null ? await requestFileNameForImage(owned) : await requestFileName!();
-            if (requested is null) return null;
+            if (requested is null) { fileCancelled = true; return null; }
             fileName = requested.FileName;
             namePlan = requested.NamePlan;
             if (fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, captureTime, CaptureIntent.Screenshot);
@@ -80,7 +81,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                 if (succeeded && !retry.SuccessNotified)
                 {
                     retry.SuccessNotified = true;
-                    if (!retry.IsRetry) captureSucceeded?.Invoke(sequence, recipe);
+                    if (!retry.IsRetry && !fileCancelled) captureSucceeded?.Invoke(sequence, recipe);
                     onDelivered?.Invoke();
                 }
             }, captureBounds, retry.PrepareFile, DescribeCapture(captureBounds), retry,

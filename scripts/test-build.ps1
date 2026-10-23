@@ -4,7 +4,8 @@ param([string]$OutputRoot)
 
 # Generated files and injected process/dotnet results only. No real build,
 # process stop, clipboard access, or write to artifacts/app is performed.
-$fixtureParent = if ($OutputRoot) { [IO.Path]::GetFullPath($OutputRoot, $projectRoot) } else { Join-Path $projectRoot 'artifacts\build-script-tests' }
+$fixtureVersion = [string](Get-Content -LiteralPath (Join-Path $projectRoot 'tool.json') -Raw | ConvertFrom-Json).version
+$fixtureParent = if ($OutputRoot) { [IO.Path]::GetFullPath($OutputRoot, $projectRoot) } else { Join-Path $projectRoot "dev/history/v$fixtureVersion/logs/build-fixtures" }
 $fixtureBase = Join-Path $fixtureParent ([Guid]::NewGuid().ToString('N'))
 $sourceBuild = Join-Path $PSScriptRoot 'build.ps1'
 $sourceCommon = Join-Path $PSScriptRoot 'common.ps1'

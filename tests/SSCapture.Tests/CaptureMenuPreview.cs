@@ -13,7 +13,7 @@ internal static partial class Program
         Rectangle work = Screen.PrimaryScreen!.WorkingArea;
         using var host = new CaptureMenuPreviewHost { Text = WindowTitle.Create("撮影メニュー最終確認"), StartPosition = FormStartPosition.Manual,
             Bounds = new(work.X + work.Width / 2, work.Y, work.Width - work.Width / 2, work.Height), Font = new Font("Yu Gothic UI", 12) };
-        var status = new Label { Dock = DockStyle.Fill, Padding = new(20), Text = "開始後、右クリックで3分類を確認。画面固定・カーソルの切替で合成背景が変わります。固定寸法を入力しEnterで確定してください。" };
+        var status = new Label { Dock = DockStyle.Fill, Padding = new(20), Text = "開始後、右クリックでプリセットと一時カスタマイズを確認。末端コマンド後に矩形へ切替えて左ドラッグしてください。画面固定・カーソルの切替で合成背景が変わります。入力フォームはありません。" };
         var button = SettingsForm.MakeButton("メニュー確認を開始", "StartMenuPreview"); button.Dock = DockStyle.Top; button.Height = 56;
         host.Controls.Add(status); host.Controls.Add(button);
         AppSettings settings = new AppSettings { DefaultMode = CaptureMode.FixedRegion, DefaultDestination = OutputDestination.File,
@@ -72,9 +72,8 @@ internal static partial class Program
                     IncludeCursor: settings.IncludeCursor, FixedSize: new(settings.FixedWidth, settings.FixedHeight), FixedAnchor: settings.FixedCaptureAnchor,
                     ShowSelectionGuide: false, OutputSettings: settings), Frame(settings.IncludeCursor, false), [],
                     initialPointer: new(bounds.X + 420, bounds.Y + 300), recapture: Frame);
-                // 多段メニュー自体を通常ウィンドウへ所有させる。選択オーバーレイへの
-                // 自動前面化は操作ツールでは対象を取り違えるため、画素・枠はホストへ描画する。
-                session.MoveTo(new(bounds.X + 420, bounds.Y + 300));
+                // 合成画素の専用面だけに実オーバーレイを出し、製品と同じ入力経路でT03を確認する。
+                session.Start();
                 host.Invalidate();
                 using var outcome = await session.Completion;
                 if (outcome.Image is null) { status.Text = "キャンセルしました。再開できます。"; Log("cancelled"); }

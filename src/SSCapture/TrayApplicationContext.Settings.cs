@@ -46,8 +46,8 @@ internal sealed partial class TrayApplicationContext
             hook = replacement;
             replacement = null;
             settings = next;
-            if (!settings.ShowCaptureNotification)
-                feedback.HideForCapture();
+            // 旧通知が削除/変更前のアプリへ送信しないよう、設定確定時に破棄する。
+            feedback.HideForCapture();
             if (!settings.KeepHistory)
             {
                 history.Clear();
