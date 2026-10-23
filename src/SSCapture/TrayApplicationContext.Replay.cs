@@ -15,10 +15,7 @@ internal sealed partial class TrayApplicationContext
             var recipe = recipes.Current ?? throw new InvalidOperationException("成功した静止画の記録がありません。先に撮影してください。");
             recipe.ValidateApplications(settings);
             Rectangle bounds = recipe.Resolve(RegionCoordinates.ReadDisplays());
-            AppSettings captureSettings = recipe.Settings with { KeepHistory = settings.KeepHistory, OneOcrDirectory = settings.OneOcrDirectory,
-                NotificationDurationSeconds = settings.NotificationDurationSeconds, PlayCaptureSound = settings.PlayCaptureSound,
-                NotificationApplicationId = settings.NotificationApplicationId, NotificationCorner = settings.NotificationCorner,
-                NotificationDisplay = settings.NotificationDisplay, HoldNotificationWhileApproaching = settings.HoldNotificationWhileApproaching };
+            AppSettings captureSettings = recipe.SettingsForReplay(settings);
             PrepareCaptureUi();
             DateTimeOffset capturedAt = DateTimeOffset.Now;
             var capture = await InstantCapture.TakeWithContextAsync(bounds, captureSettings);

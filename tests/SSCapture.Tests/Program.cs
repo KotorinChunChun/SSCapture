@@ -19,7 +19,7 @@ internal static partial class Program
         }
         if (args.SequenceEqual(["--recipe-tests"]))
         {
-            RecipeTests(); RepeatTests(); InstantTests();
+            RecipeTests(); SnapshotRefactorTests(); RepeatTests(); InstantTests();
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }
         if (args.SequenceEqual(["--snap-tests"]))
@@ -87,6 +87,7 @@ internal static partial class Program
         PresetConsolidationTests();
         PresetUpgradeTests();
         RecipeTests();
+        SnapshotRefactorTests();
         OverlayWindowTests();
         SelectionMonitorTests();
         ServiceTests();
