@@ -99,9 +99,9 @@ internal sealed class SelectionGesture
             }
             Point adjusted = new(x, y);
             Point quantized = Grid20 || snap ? new(Quantize(x, start.X, true), Quantize(y, start.Y, false)) : adjusted;
-            Point snapped = snap ? snapEdges.Apply(adjusted) : adjusted;
-            Current = new Point(horizontal.IsLocked ? horizontal.Value : snapped.X != adjusted.X ? snapped.X : quantized.X,
-                vertical.IsLocked ? vertical.Value : snapped.Y != adjusted.Y ? snapped.Y : quantized.Y);
+            var snapped = Grid20 || snap ? snapEdges.Evaluate(adjusted, includeWindows: snap) : new SelectionSnap.SnapResult(adjusted, false, false);
+            Current = new Point(horizontal.IsLocked ? horizontal.Value : snapped.X ? snapped.Point.X : quantized.X,
+                vertical.IsLocked ? vertical.Value : snapped.Y ? snapped.Point.Y : quantized.Y);
             Current = AspectRatios.Constrain(start, Current, AspectRatio, desktopBounds, horizontal.IsLocked, vertical.IsLocked);
         }
         if (Points.Count == 0 || Points[^1] != point) Points.Add(point);

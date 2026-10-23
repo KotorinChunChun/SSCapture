@@ -87,7 +87,7 @@ internal static partial class Program
             Equal(new Size(80, 60), g.Selection.Size);
             g.Move(new(176, 162)); Equal(new Size(73, 55), g.Selection.Size);
             g.Grid20 = true; g.Move(new(46, 34)); Equal(new Rectangle(43, 27, 60, 80), g.Selection);
-            g.Move(new(999, 999)); Equal(new Size(880, 880), g.Selection.Size);
+            g.Move(new(999, 999)); Equal(new Size(897, 893), g.Selection.Size); // モニタ端1000を刻みより優先。
         });
         Run("Alt枠吸着は20px丸めより優先し固定寸法を維持", () =>
         {

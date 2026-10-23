@@ -12,6 +12,11 @@ internal static partial class Program
         if (args.FirstOrDefault() == "--editor-received") { File.WriteAllText(Path.Combine(args[3], "editor-" + args[1] + ".json"), System.Text.Json.JsonSerializer.Serialize(new { application = args[1], image = args[2] })); return 0; }
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
+        if (args.SequenceEqual(["--snap-tests"]))
+        {
+            SnapTests(); SelectionUpgradeTests(); SelectionMonitorTests(); SelectionInteractionTests();
+            Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
+        }
         if (args.FirstOrDefault() == "--external-editor-launch")
         {
             try
