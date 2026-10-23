@@ -10,6 +10,7 @@ internal static partial class Program
     private static int CaptureMenuPreview(string directory)
     {
         directory = Path.GetFullPath(directory); Directory.CreateDirectory(directory);
+        int attempt = 0;
         Rectangle work = Screen.PrimaryScreen!.WorkingArea;
         using var host = new CaptureMenuPreviewHost { Text = WindowTitle.Create("撮影メニュー最終確認"), StartPosition = FormStartPosition.Manual,
             Bounds = new(work.X + work.Width / 2, work.Y, work.Width - work.Width / 2, work.Height), Font = new Font("Yu Gothic UI", 12) };
@@ -29,9 +30,18 @@ internal static partial class Program
             settingsForm.StartPosition = FormStartPosition.Manual; settingsForm.Bounds = host.Bounds; settingsForm.Show(); settingsForm.Activate();
         };
         SessionController? session = null; int acquired = 0;
+        string? previousState = null;
         host.KeyPreview = true;
         using var repaint = new System.Windows.Forms.Timer { Interval = 100 };
-        repaint.Tick += (_, _) => { if (session is not null) host.Invalidate(); };
+        repaint.Tick += (_, _) =>
+        {
+            if (session is null) return;
+            host.Invalidate();
+            string state = $"{session.Mode}/{session.Dragging}/{VisibleMenus(session)}/{(long)PreviewForegroundWindow()}";
+            if (state == previousState) return;
+            previousState = state;
+            Log("session-state", new { session.Mode, session.Dragging, session.Selection, visibleMenus = VisibleMenus(session) });
+        };
         repaint.Start();
         host.Paint += (_, e) =>
         {
@@ -48,6 +58,7 @@ internal static partial class Program
         host.CommandKey = key => session?.HandleCommandKey(key) == true;
         button.Click += async (_, _) =>
         {
+            attempt++; previousState = null;
             button.Enabled = false;
             button.Visible = status.Visible = configure.Visible = false;
             try
@@ -73,17 +84,36 @@ internal static partial class Program
                     ShowSelectionGuide: false, OutputSettings: settings), Frame(settings.IncludeCursor, false), [],
                     initialPointer: new(bounds.X + 420, bounds.Y + 300), recapture: Frame);
                 // 合成画素の専用面だけに実オーバーレイを出し、製品と同じ入力経路でT03を確認する。
+                var active = session;
+                foreach (var command in active.SelectionMenu.AllCommands)
+                    command.Click += (_, _) => Log("menu-command", new { command.Name, command.Text, leaf = !command.HasDropDownItems, active.Mode,
+                        visibleMenus = VisibleMenus(active), active.OutputSettings.FreezeFrame, active.OutputSettings.IncludeCursor });
+                active.SelectionMenu.Closed += (_, e) => Log("menu-closed", new { e.CloseReason, visibleMenus = VisibleMenus(active) });
                 session.Start();
+                foreach (var overlay in Application.OpenForms.OfType<CaptureOverlay>())
+                {
+                    overlay.MouseDown += (_, e) =>
+                    {
+                        Log("overlay-mouse-down", new { e.Button, e.Location, active.Mode, overlay = (long)overlay.Handle,
+                            visibleMenus = VisibleMenus(active) });
+                        overlay.BeginInvoke(() => Log("after-mouse-down", new { active.Dragging, active.Selection,
+                            visibleMenus = VisibleMenus(active), overlay = overlay.IsDisposed ? 0L : (long)overlay.Handle }));
+                    };
+                    overlay.MouseUp += (_, e) => Log("overlay-mouse-up", new { e.Button, e.Location, active.Dragging,
+                        active.Selection, visibleMenus = VisibleMenus(active) });
+                }
                 host.Invalidate();
                 using var outcome = await session.Completion;
                 if (outcome.Image is null) { status.Text = "キャンセルしました。再開できます。"; Log("cancelled"); }
                 else
                 {
-                    outcome.Image.Save(Path.Combine(directory, "result.png"));
+                    string resultPath = Path.Combine(directory, $"result-{attempt:D2}.png");
+                    outcome.Image.Save(resultPath);
                     status.Text = $"完了: {outcome.Image.Width}×{outcome.Image.Height}px / 再取得{acquired}回 / カーソル={outcome.OutputSettings!.IncludeCursor} / 画面固定={outcome.OutputSettings.FreezeFrame}";
                     Log("completed", new { width = outcome.Image.Width, height = outcome.Image.Height, acquired,
                         outcome.OutputSettings.IncludeCursor, outcome.OutputSettings.FreezeFrame, outcome.OutputSettings.ScreenshotColorDepth,
-                        outcome.OutputSettings.ScreenshotPaddingPixels, outcome.OutputSettings.SnapDistancePixels, outcome.OutputSettings.GridStepPixels });
+                        outcome.OutputSettings.ScreenshotPaddingPixels, outcome.OutputSettings.SnapDistancePixels, outcome.OutputSettings.GridStepPixels,
+                        mode = active.Mode, path = resultPath });
                 }
             }
             catch (Exception ex) { status.Text = ex.ToString(); Log("failed", ex.ToString()); }
@@ -91,8 +121,10 @@ internal static partial class Program
         };
         host.FormClosed += (_, _) => { session?.Cancel(); settingsForm?.Dispose(); };
         Application.Run(host); return 0;
+        static int VisibleMenus(SessionController active) => (active.SelectionMenu.Visible ? 1 : 0)
+            + active.SelectionMenu.AllCommands.Count(c => c.HasDropDownItems && c.DropDown.Visible);
         void Log(string action, object? data = null) => File.AppendAllText(Path.Combine(directory, "operations.jsonl"),
-            JsonSerializer.Serialize(new { at = DateTimeOffset.Now, action, data }) + Environment.NewLine);
+            JsonSerializer.Serialize(new { at = DateTimeOffset.Now, attempt, action, foreground = (long)PreviewForegroundWindow(), data }) + Environment.NewLine);
     }
     private sealed class CaptureMenuPreviewHost : Form
     {
