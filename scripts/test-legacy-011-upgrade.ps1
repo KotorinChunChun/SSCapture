@@ -52,6 +52,11 @@ $hostSettingsHash = if (Test-Path -LiteralPath $hostSettings) { (Get-FileHash -L
 $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'SSCapture.lnk'
 $shortcutHash = if (Test-Path -LiteralPath $shortcut) { (Get-FileHash -LiteralPath $shortcut).Hash } else { $null }
 New-Item -ItemType Directory -Path $run -Force | Out-Null
+$shortcutBackup = Join-Path $run 'original-shortcut.lnk'
+if ($null -ne $shortcutHash) {
+    Copy-Item -LiteralPath $shortcut -Destination $shortcutBackup
+    if ((Get-FileHash -LiteralPath $shortcutBackup).Hash -ne $shortcutHash) { throw 'ショートカットの退避に失敗しました。' }
+}
 & reg.exe export $nativeKey $backup /y | Out-Null
 if ($LASTEXITCODE -ne 0) { throw '元登録の退避に失敗しました。' }
 $backupHash = (Get-FileHash -LiteralPath $backup).Hash
@@ -119,6 +124,18 @@ try {
         if ($restored.DisplayName -ne $current.DisplayName -or $restored.DisplayVersion -ne $current.DisplayVersion -or
             [IO.Path]::GetFullPath([string]$restored.InstallLocation).TrimEnd('\') -ne $originalRoot) { throw '元登録の復元結果が一致しません。' }
         $result.restored = $true
+        # /NOICONSでも固定名のショートカットが作られるため、変更時は退避した元へ戻す。
+        if (Test-Path -LiteralPath $shortcut) {
+            $observedHash = (Get-FileHash -LiteralPath $shortcut).Hash
+            if ($observedHash -ne $shortcutHash) {
+                $observedTarget = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut).TargetPath
+                if ($observedTarget -ne (Join-Path $testRoot 'SSCapture.exe')) { throw 'テスト先と異なるショートカットへの外部変更を検出しました。' }
+                if ($null -eq $shortcutHash) { Remove-Item -LiteralPath $shortcut }
+                else { Copy-Item -LiteralPath $shortcutBackup -Destination $shortcut -Force }
+            }
+        } elseif ($null -ne $shortcutHash) {
+            Copy-Item -LiteralPath $shortcutBackup -Destination $shortcut
+        }
         $changedData = @(Compare-Object -ReferenceObject $originalData -DifferenceObject @(Snapshot (Join-Path $originalRoot 'data')))
         $changedTools = @(Compare-Object -ReferenceObject $originalTools -DifferenceObject @(Snapshot (Join-Path $originalRoot 'tools')))
         $changedCaptures = @(Compare-Object -ReferenceObject $originalCaptures -DifferenceObject @(Snapshot (Join-Path $originalRoot 'Captures')))
