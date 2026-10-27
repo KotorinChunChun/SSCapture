@@ -42,9 +42,9 @@ pwsh -File scripts/package.ps1
 
 `setup-package.ps1`は公式Inno Setup 6.2.2と展開ツールをSHA256照合後、`.tools`へ展開します。システムへのインストール・レジストリ登録は行いません。指定版が配置済みなら再取得しません。
 
-`package.ps1`は通常テスト後、毎回新しい`dev/history/vX.Y.Z/logs/package-<識別子>/app`へWindows x64用ランタイム同梱版を発行します。テストも同じ作業先の`tests`へ分離し、起動中の検証画面を上書きしません。利用中の`artifacts/app`や`data`は配布元に使いません。FFmpeg/FFprobe、OneOCR、PDB、個人設定を含めず、`release/v0.1.5`へ次の3ファイルを生成します。
+`package.ps1`は通常テスト後、毎回新しい`dev/history/vX.Y.Z/logs/package-<識別子>/app`へWindows x64用ランタイム同梱版を発行します。テストも同じ作業先の`tests`へ分離し、起動中の検証画面を上書きしません。利用中の`artifacts/app`や`data`は配布元に使いません。FFmpeg/FFprobe、OneOCR、PDB、個人設定を含めず、`release/v0.1.6`へ次の3ファイルを生成します。
 
-- `SSCapture-0.1.5-setup.exe`
+- `SSCapture-0.1.6-setup.exe`
 - `SSCapture-packages.json`
 - `SSCapture-SHA256SUMS.txt`
 

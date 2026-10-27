@@ -6,10 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <AssemblyVersion>0.1.5.0</AssemblyVersion>
-    <FileVersion>0.1.5.0</FileVersion>
-    <InformationalVersion>0.1.5</InformationalVersion>
-    <Version>0.1.5</Version>
+    <AssemblyVersion>0.1.6.0</AssemblyVersion>
+    <FileVersion>0.1.6.0</FileVersion>
+    <InformationalVersion>0.1.6</InformationalVersion>
+    <Version>0.1.6</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AppHostDotNetSearch Condition="'$(SelfContained)' != 'true'">AppRelative;Global</AppHostDotNetSearch>
@@ -19,7 +19,7 @@
   <ItemGroup><InternalsVisibleTo Include="SSCapture.Tests" /></ItemGroup>
   <ItemGroup><PackageReference Include="NAudio.Wasapi" Version="3.1.0" /></ItemGroup>
   <ItemGroup>
-    <FrameworkReference Update="Microsoft.NETCore.App" RuntimeFrameworkVersion="10.0.13" Condition="'$(SelfContained)' == 'true'" />
-    <FrameworkReference Update="Microsoft.WindowsDesktop.App.WindowsForms" RuntimeFrameworkVersion="10.0.13" Condition="'$(SelfContained)' == 'true'" />
+    <FrameworkReference Update="Microsoft.NETCore.App;Microsoft.WindowsDesktop.App.WindowsForms" RuntimeFrameworkVersion="10.0.14" Condition="'$(SelfContained)' == 'true'" />
+    <KnownFrameworkReference Update="Microsoft.WindowsDesktop.App;Microsoft.WindowsDesktop.App.WindowsForms" DefaultRuntimeFrameworkVersion="10.0.14" LatestRuntimeFrameworkVersion="10.0.14" Condition="'$(SelfContained)' == 'true'" />
   </ItemGroup>
 </Project>

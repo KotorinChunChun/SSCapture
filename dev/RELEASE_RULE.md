@@ -7,15 +7,15 @@
 | 項目 | 値 |
 | --- | --- |
 | リポジトリ | `KotorinChunChun/SSCapture`、main |
-| 現在の版・タグ | `0.1.5` / `v0.1.5` |
+| 現在の版・タグ | `0.1.6` / `v0.1.6` |
 | AppId | `KotorinToys.SSCapture` |
 | 導入先の既定 | `{localappdata}\Programs\SSCapture` |
 | 対象 | Windows 11 x64、ユーザー単位 |
 | 形式 | Inno Setupインストーラー、.NET 10 Desktop Runtime同梱 |
 | 公開状態 | 未署名のprereleaseを継続 |
-| 公開用出力先 | `release/v0.1.5/`、Git除外 |
+| 公開用出力先 | `release/v0.1.6/`、Git除外 |
 
-v0.1.5の公開対象は、確認済み経路と未確認条件を明記した未署名プレリリース。T03の矩形切替→最初のドラッグ、T08の編集/再作成後フォルダーは実入力確認済み。全末端/失敗経路までの実入力は未確認のまま維持する。未確認範囲を説明した後の利用者の再度の「リリースして」に従い、この版に限って制限明記で公開する。配布検査は省略しない。判断経緯と実公開結果は[版別報告](history/v0.1.5/v0.1.5-imp.md#26-制限明記によるプレリリース公開2026-10-24)を正本とする。
+v0.1.6は0.1.1からの更新修正を含む未署名プレリリース。確認できた更新条件と、全操作・物理環境などの未確認条件を明記する。前版までの経緯は[0.1.5の版別報告](history/v0.1.5/v0.1.5-imp.md#26-制限明記によるプレリリース公開2026-10-24)、今回の更新検証は[0.1.6の版別報告](history/v0.1.6/v0.1.6-imp.md)を参照する。
 
 R24の内部整理前の配布候補は公開に流用しない。既存候補を版別logsへ退避し、最新ソースから再生成して全検査を行う。起動中のアプリや通常の導入先はリリース作業だけでは更新しない。
 
@@ -54,10 +54,10 @@ pwsh -File scripts/package.ps1
 git fetch origin --prune
 git status --short
 git rev-list --left-right --count origin/main...HEAD
-Get-FileHash release/v0.1.5/SSCapture-0.1.5-setup.exe -Algorithm SHA256
+Get-FileHash release/v0.1.6/SSCapture-0.1.6-setup.exe -Algorithm SHA256
 git push origin main
 $releaseCommit = git rev-parse HEAD
-gh release create v0.1.5 release/v0.1.5/SSCapture-0.1.5-setup.exe release/v0.1.5/SSCapture-packages.json release/v0.1.5/SSCapture-SHA256SUMS.txt --repo KotorinChunChun/SSCapture --target $releaseCommit --title 'SSCapture v0.1.5' --notes-file docs/releases/v0.1.5.md --prerelease
+gh release create v0.1.6 release/v0.1.6/SSCapture-0.1.6-setup.exe release/v0.1.6/SSCapture-packages.json release/v0.1.6/SSCapture-SHA256SUMS.txt --repo KotorinChunChun/SSCapture --target $releaseCommit --title 'SSCapture v0.1.6' --notes-file docs/releases/v0.1.6.md --prerelease
 ```
 
 mainだけをプッシュする。不要な過去タグの一括送信・force pushを行わない。Release作成後はタグの対象コミット、3資産のサイズ・SHA256、ノートを確認し、実公開URLを報告する。
