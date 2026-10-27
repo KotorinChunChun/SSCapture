@@ -1,4 +1,4 @@
-# SSCapture v0.1.6
+# SSCapture v0.1.7
 
 Windows 11用の軽快な常駐スクリーンショット・領域録画ツールです。Windows標準の **Win＋Shift＋S（Snipping Tool）** を置き換え、範囲の決めやすさ、繰り返し撮影、撮影後の出力を重視しています。
 
@@ -21,7 +21,7 @@ Windows 11用の軽快な常駐スクリーンショット・領域録画ツー�
 
 新規設定では、入力5件（囲った範囲＋720p/1080p/1440p/4Kの固定サイズ）と出力3件を用意します。既定は矩形選択＋クリップボードのみで、画面固定ON・カーソルOFF・白余白なし・減色なし・px吸着OFF。暗転は基本設定で初期ONです。既存の編集済みプリセットやスナップ設定は保持します。
 
-v0.1.6では、旧版0.1.1から更新できない問題を修正しました。設定・履歴を保持して更新できます。[プレリリースのダウンロード](https://github.com/KotorinChunChun/SSCapture/releases/tag/v0.1.6)、[リリースノート](docs/releases/v0.1.6.md)を参照してください。未署名のプレリリースです。メニュー全項目・失敗時の全経路、実サインイン、別PCの混在DPI等は実測未確認のため、確認済み範囲と制限をリリースノートに記載しています。
+v0.1.7では、旧版の登録と実行ファイルの版が異なる場合に更新できない問題を修正しました。設定・履歴を保持して更新できます。[プレリリースのダウンロード](https://github.com/KotorinChunChun/SSCapture/releases/tag/v0.1.7)、[リリースノート](docs/releases/v0.1.7.md)を参照してください。未署名のプレリリースです。メニュー全項目・失敗時の全経路、実サインイン、別PCの混在DPI等は実測未確認のため、確認済み範囲と制限をリリースノートに記載しています。
 
 矩形・ウィンドウ・全画面撮影などはWindows標準にもあります。本ツールは上記の操作と出力の組み合わせを提供します。標準機能の案内は[Microsoft公式のSnipping Toolの使い方](https://support.microsoft.com/ja-jp/windows/apps/use-snipping-tool-to-capture-screenshots)、対応範囲と未確認条件は[検証状況](dev/validation.md)を参照してください。
 

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ss-capture",
   "name": "SSCapture",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "repositoryUrl": "https://github.com/KotorinChunChun/SSCapture",
   "summary": "画面撮影・録画と保存先や命名を管理する",
   "category": "画面キャプチャ",

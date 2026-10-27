@@ -1,4 +1,8 @@
-param([switch]$ApprovedDedicatedMachine)
+param(
+    [switch]$ApprovedDedicatedMachine,
+    [ValidateSet('registered-011','mixed-010-011')][string]$LegacyCase = 'registered-011',
+    [ValidatePattern('^0\.1\.\d+$')][string]$Version = '0.1.6'
+)
 $ErrorActionPreference = 'Stop'
 if (-not $ApprovedDedicatedMachine) { throw '専用PCでの登録退避・復元が必要です。' }
 $repository = Split-Path -Parent $PSScriptRoot
@@ -10,14 +14,14 @@ if ($originalRoot -ne 'C:\develop\KotorinToys\.installed\SSCapture' -or $current
     throw '事前確認した既存登録ではありません。登録を変更しません。'
 }
 if (@(Get-CimInstance Win32_Process -Filter "Name='SSCapture.exe'").Count) { throw 'SSCaptureが動作中です。登録を変更しません。' }
-$run = Join-Path $repository ('dev/history/v0.1.6/logs/legacy-installer-' + [Guid]::NewGuid().ToString('N'))
+$run = Join-Path $repository ("dev/history/v$Version/logs/legacy-installer-" + [Guid]::NewGuid().ToString('N'))
 $testRoot = Join-Path $run '日本語 空白の導入先'
 $backup = Join-Path $run 'original-registration.reg'
 $oldSetup = Join-Path $repository 'dev/history/v0.1.6/logs/public-011/SSCapture-0.1.1-setup.exe'
 $prior = Join-Path $repository 'dev/history/v0.1.6/logs/public-010/{app}'
-$newSetup = Join-Path $repository 'release/v0.1.6/SSCapture-0.1.6-setup.exe'
-$manifest = Get-Content -LiteralPath (Join-Path $repository 'release/v0.1.6/SSCapture-packages.json') -Raw | ConvertFrom-Json
-if ($manifest.packages.Count -ne 1 -or $manifest.packages[0].version -ne '0.1.6' -or
+$newSetup = Join-Path $repository "release/v$Version/SSCapture-$Version-setup.exe"
+$manifest = Get-Content -LiteralPath (Join-Path $repository "release/v$Version/SSCapture-packages.json") -Raw | ConvertFrom-Json
+if ($manifest.packages.Count -ne 1 -or $manifest.packages[0].version -ne $Version -or
     (Get-FileHash -LiteralPath $newSetup).Hash.ToLowerInvariant() -ne $manifest.packages[0].sha256 -or
     (Get-FileHash -LiteralPath $oldSetup).Hash -ne '6562BFF5E8EE22420CED644D27E7C5A4427694883EE21CC411416ADD31601D47') {
     throw '新旧setupの版またはSHA-256が一致しません。'
@@ -78,6 +82,11 @@ try {
         New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $prior $relative) -Destination $target
     }
+    if ($LegacyCase -eq 'mixed-010-011') {
+        # 実行物は0.1.1、登録だけが0.1.0に残った状態をテスト専用登録で再現する。
+        Set-ItemProperty -LiteralPath $key -Name DisplayName -Value 'SSCapture 0.1.0'
+        Set-ItemProperty -LiteralPath $key -Name DisplayVersion -Value '0.1.0'
+    }
     $fixtureHashes = @{}
     foreach ($relative in @('data/settings.json','data/history.json','tools/ffmpeg.exe','Captures/保持画像.png')) {
         $path = Join-Path $testRoot $relative
@@ -87,19 +96,19 @@ try {
     }
     Run-Setup $newSetup @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS',("/LOG=`"$(Join-Path $run 'new-setup.log')`""))
     $updated = Get-ItemProperty -LiteralPath $key
-    if ($updated.DisplayVersion -ne '0.1.6' -or [IO.Path]::GetFullPath([string]$updated.InstallLocation).TrimEnd('\') -ne $testRoot) { throw '更新後の登録が一致しません。' }
+    if ($updated.DisplayVersion -ne $Version -or [IO.Path]::GetFullPath([string]$updated.InstallLocation).TrimEnd('\') -ne $testRoot) { throw '更新後の登録が一致しません。' }
     $info = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $testRoot 'SSCapture.exe'))
-    if ($info.ProductName -ne 'SSCapture' -or $info.ProductVersion -ne '0.1.6') { throw '更新後EXEの製品・版が一致しません。' }
+    if ($info.ProductName -ne 'SSCapture' -or $info.ProductVersion -ne $Version) { throw '更新後EXEの製品・版が一致しません。' }
     $helper = Join-Path $testRoot 'maintenance/KotorinToys.Maintenance.exe'
     $verify = & $helper --product SSCapture --root $testRoot --operation verify
     if ($LASTEXITCODE -ne 0) { throw '更新後の管理補助による導入検出に失敗しました。' }
     $identity = ($verify -join "`n") | ConvertFrom-Json
-    if ($identity.state -ne '導入済み' -or $identity.version -ne '0.1.6') { throw '更新後の製品・版の照合結果が一致しません。' }
+    if ($identity.state -ne '導入済み' -or $identity.version -ne $Version) { throw '更新後の製品・版の照合結果が一致しません。' }
     foreach ($relative in $fixtureHashes.Keys) {
         if ((Get-FileHash -LiteralPath (Join-Path $testRoot $relative)).Hash -ne $fixtureHashes[$relative]) { throw '隔離fixtureの設定・履歴が変わりました。' }
     }
     $result.fixtureDataPreserved = $true
-    $result.checks += '公開0.1.1と0.1.0残存定義から0.1.6 setupで更新・同じ導入先を継承'
+    $result.checks += "公開0.1.1と0.1.0残存定義（$LegacyCase）から$Version setupで更新・同じ導入先を継承"
     $result.checks += '実EXEと登録版・隔離fixtureの設定・履歴・撮影結果・FFmpegを照合'
     $result.status = 'passed'
 } catch {
