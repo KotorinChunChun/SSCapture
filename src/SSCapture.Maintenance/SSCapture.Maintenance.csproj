@@ -13,6 +13,7 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Update="Microsoft.NETCore.App" RuntimeFrameworkVersion="10.0.13" Condition="'$(SelfContained)' == 'true'" />
+    <EmbeddedResource Include="legacy-0.1.1.json" />
     <EmbeddedResource Include="legacy-0.1.2.json" />
     <InternalsVisibleTo Include="SSCapture.Maintenance.Tests" />
   </ItemGroup>

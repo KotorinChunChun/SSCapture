@@ -105,10 +105,11 @@ internal sealed record PayloadManifest(int SchemaVersion, string Id, string Vers
                 throw new IOException("配布ファイルの照合に失敗しました: " + file.Path);
         }
     }
-    public static PayloadManifest Legacy()
+    public static PayloadManifest Legacy(string version)
     {
+        if (version is not ("0.1.1" or "0.1.2")) throw new IOException("この旧版の配布物は照合できません。");
         var assembly = typeof(PayloadManifest).Assembly;
-        using var stream = assembly.GetManifestResourceStream(assembly.GetManifestResourceNames().Single(n => n.EndsWith("legacy-0.1.2.json", StringComparison.Ordinal)))!;
+        using var stream = assembly.GetManifestResourceStream(assembly.GetManifestResourceNames().Single(n => n.EndsWith("legacy-" + version + ".json", StringComparison.Ordinal)))!;
         return JsonSerializer.Deserialize<PayloadManifest>(stream, SafeFiles.Json)!;
     }
 }
