@@ -62,9 +62,10 @@ internal sealed class UpdateTransaction(TargetValidator validator, Func<string, 
         var target = validator.Validate(root, true, true);
         if (!target.Fresh)
         {
-            if (Version.Parse(incoming.Version) < Version.Parse(target.Version)) throw new IOException("旧版への上書きは許可しません。");
+            EnsureNotDowngrade(incoming, target);
             await stop(root);
             target = validator.Validate(root, true, false);
+            EnsureNotDowngrade(incoming, target);
         }
         var before = target.Manifest?.Files.ToDictionary(f => f.Path, f => f.Sha256, StringComparer.OrdinalIgnoreCase) ?? new(StringComparer.OrdinalIgnoreCase);
         if (File.Exists(SafeFiles.Resolve(root, "payload-manifest.json"))) before["payload-manifest.json"] = SafeFiles.Hash(SafeFiles.Resolve(root, "payload-manifest.json"));
@@ -96,6 +97,12 @@ internal sealed class UpdateTransaction(TargetValidator validator, Func<string, 
         }
         // 記録を公開するまではsetupが書込を開始できない。
         store.Save(journal);
+    }
+    static void EnsureNotDowngrade(PayloadManifest incoming, ValidatedTarget target)
+    {
+        var next = Version.Parse(incoming.Version);
+        if (next < Version.Parse(target.Version) || target.Manifest != null && next < Version.Parse(target.Manifest.Version))
+            throw new IOException("登録版または実配布版より古い版への上書きは許可しません。");
     }
     public void ObserveInstalled(string root)
     {

@@ -39,6 +39,62 @@ await Run("0.1.1日本語登録と目録のない旧版を認識", () => Done(()
     var f = New("0.1.1"); f.Registration = f.Registration! with { Name = "SSCapture バージョン 0.1.1" };
     Check(f.Validator.Validate(f.Root, true, false).Legacy);
 }));
+await Run("0.1.0登録と0.1.1実配布版の既知の混在を認識", async () =>
+{
+    var f = New("0.1.1"); f.Registration = f.Registration! with { Version = "0.1.0", Name = "SSCapture 0.1.0" };
+    f.WriteDefinition("0.1.0");
+    var target = f.Validator.Validate(f.Root, true, false);
+    Check(target.Legacy && target.Version == "0.1.0" && target.Manifest!.Version == "0.1.1");
+    await Rejected(() => Done(() => f.Validator.Validate(f.Root, false, false)));
+    await f.Update.Prepare(f.Root, f.Payload); f.InstallPayload();
+    f.Registration = f.Registration with { Version = "0.1.3", Name = "SSCapture 0.1.3" };
+    f.Identity = new("SSCapture", "0.1.3", "0.1.3.0", "0.1.3.0");
+    f.Update.Commit(f.Root); Check(f.Store.Load(f.Root)?.Phase == "completed"); f.CheckData();
+});
+await Run("登録と実配布版が異なる旧版の取消で両方を復旧", async () =>
+{
+    var f = New("0.1.1"); f.Registration = f.Registration! with { Version = "0.1.0", Name = "SSCapture 0.1.0" };
+    f.WriteDefinition("0.1.0");
+    await f.Update.Prepare(f.Root, f.Payload); f.InstallPayload(); f.Update.Recover(f.Root);
+    var target = f.Validator.Validate(f.Root, true, false);
+    Check(target.Version == "0.1.0" && target.Manifest!.Version == "0.1.1"); f.CheckData();
+});
+await Run("登録不一致の例外は識別・定義・配布物が一致する場合だけ許可", async () =>
+{
+    var f = New("0.1.1"); f.Registration = f.Registration! with { Version = "0.1.0", Name = "SSCapture 0.1.0" };
+    await Rejected(() => Done(() => f.Validator.Validate(f.Root, true, false)));
+    f.WriteDefinition("0.1.1"); await Rejected(() => Done(() => f.Validator.Validate(f.Root, true, false)));
+    f.WriteDefinition("0.1.0", "other"); await Rejected(() => Done(() => f.Validator.Validate(f.Root, true, false)));
+    f.WriteDefinition("0.1.0"); f.Identity = f.Identity with { AssemblyVersion = "0.1.0.0" };
+    await Rejected(() => Done(() => f.Validator.Validate(f.Root, true, false)));
+    f.Identity = f.Identity with { AssemblyVersion = "0.1.1.0" }; File.WriteAllText(Path.Combine(f.Root, "SSCapture.dll"), "changed");
+    await Rejected(() => Done(() => f.Validator.Validate(f.Root, true, false)));
+});
+await Run("登録より新しい実配布版からのダウングレードを拒否", async () =>
+{
+    var f = New("0.1.1"); f.Registration = f.Registration! with { Version = "0.1.0", Name = "SSCapture 0.1.0" };
+    f.WriteDefinition("0.1.0");
+    var manifestPath = Path.Combine(f.Payload, "payload-manifest.json");
+    var manifest = PayloadManifest.Read(manifestPath);
+    SafeFiles.Write(manifestPath, manifest with { Version = "0.1.0" });
+    await Rejected(() => f.Update.Prepare(f.Root, f.Payload));
+    Check(f.Store.Load(f.Root) is null); f.CheckData();
+});
+await Run("正常停止中に対象が新しくなった場合もダウングレードを拒否", async () =>
+{
+    var f = New();
+    var transaction = new UpdateTransaction(f.Validator, _ =>
+    {
+        f.Registration = f.Registration! with { Version = "0.1.4", Name = "SSCapture 0.1.4" };
+        f.Identity = new("SSCapture", "0.1.4", "0.1.4.0", "0.1.4.0"); f.WriteDefinition("0.1.4");
+        var files = Directory.GetFiles(f.Root).Where(path => Path.GetFileName(path) != "unins000.exe")
+            .Select(path => new PayloadFile(Path.GetFileName(path), new FileInfo(path).Length, SafeFiles.Hash(path))).ToArray();
+        SafeFiles.Write(Path.Combine(f.Root, "payload-manifest.json"), new PayloadManifest(1, "ss-capture", "0.1.4", files));
+        return Task.CompletedTask;
+    }, f.Store);
+    await Rejected(() => transaction.Prepare(f.Root, f.Payload));
+    Check(f.Store.Load(f.Root) is null); f.CheckData();
+});
 await Run("0.1.1の製品定義だけが存在しても登録済みとして退避", async () =>
 {
     var f = New("0.1.1"); f.WriteDefinition("0.1.1");
@@ -299,6 +355,39 @@ if (args.Length > 4)
             File.Copy(SafeFiles.Resolve(priorRoot, path), target, true);
         }
         f.Registration = f.Registration! with { Name = "SSCapture バージョン 0.1.1" };
+        var validator = new TargetValidator(() => f.Registration);
+        var update = new UpdateTransaction(validator, _ => Task.CompletedTask, f.Store);
+        var next = PayloadManifest.Read(SafeFiles.Resolve(incomingRoot, "payload-manifest.json"));
+        Check(next.Version == "0.1.5"); next.Verify(incomingRoot);
+        await update.Prepare(f.Root, incomingRoot);
+        foreach (var path in next.Files.Select(file => file.Path).Append("payload-manifest.json"))
+        {
+            var target = SafeFiles.Resolve(f.Root, path);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(SafeFiles.Resolve(incomingRoot, path), target, true);
+        }
+        f.Registration = f.Registration with { Version = "0.1.5", Name = "SSCapture 0.1.5" };
+        update.Commit(f.Root);
+        Check(validator.Validate(f.Root, false, false).Version == "0.1.5");
+        Check(f.Store.Load(f.Root)?.Phase == "completed"); f.CheckData();
+    });
+    await Run("実配布物の登録0.1.0・EXE0.1.1から安全に更新", async () =>
+    {
+        var oldRoot = Path.GetFullPath(args[1]); var priorRoot = Path.GetFullPath(args[3]);
+        var incomingRoot = Path.GetFullPath(args[4]); var f = New("0.1.1");
+        foreach (var entry in PayloadManifest.Legacy("0.1.1").Files)
+        {
+            var target = SafeFiles.Resolve(f.Root, entry.Path);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(SafeFiles.Resolve(oldRoot, entry.Path), target, true);
+        }
+        foreach (var path in new[] { "tool.json", "README.md", "docs/usage.md" })
+        {
+            var target = SafeFiles.Resolve(f.Root, path);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(SafeFiles.Resolve(priorRoot, path), target, true);
+        }
+        f.Registration = f.Registration! with { Version = "0.1.0", Name = "SSCapture 0.1.0" };
         var validator = new TargetValidator(() => f.Registration);
         var update = new UpdateTransaction(validator, _ => Task.CompletedTask, f.Store);
         var next = PayloadManifest.Read(SafeFiles.Resolve(incomingRoot, "payload-manifest.json"));
