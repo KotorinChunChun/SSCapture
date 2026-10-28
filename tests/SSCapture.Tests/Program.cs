@@ -53,6 +53,7 @@ internal static partial class Program
         if (args.Contains("--context-smoke")) return ContextSmoke(args[1]);
         if (args.Contains("--upgrade-ui-preview")) return UpgradeUiPreview(args[1]);
         if (args.Contains("--capture-menu-preview")) return CaptureMenuPreview(args[1]);
+        if (args.FirstOrDefault() == "--pinned-preview") return PinnedImagePreview(args[1]);
         if (args.FirstOrDefault() == "--notification-preview") return NotificationPreview(args[1], false);
         if (args.FirstOrDefault() == "--notification-underlay") return NotificationPreview(args[1], true);
         if (args.Contains("--padding-ui-preview")) return PaddingUiPreview(args[1]);
@@ -83,8 +84,11 @@ internal static partial class Program
         }
         if (args.SequenceEqual(["--pinned-tests"]))
         { PinnedImageTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
+        if (args.SequenceEqual(["--command-tests"]))
+        { CaptureCommandTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
         Run("5つの撮影モード", () => Equal(5, Enum.GetValues<CaptureMode>().Length));
         PinnedImageTests();
+        CaptureCommandTests();
         CaptureTests();
         CaptureMenuEditingTests();
         PresetConsolidationTests();

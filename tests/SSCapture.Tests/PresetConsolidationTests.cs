@@ -172,7 +172,7 @@ internal static partial class Program
         {
             using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
-            Equal("基本,入力プリセット,出力プリセット,外部アプリ,ショートカット,即時撮影キー,通知,履歴", string.Join(',', tabs.TabPages.Cast<TabPage>().Select(p => p.Text)));
+            Equal("基本,入力プリセット,出力プリセット,外部アプリ,ショートカット,即時撮影キー,撮影コマンド,通知,履歴", string.Join(',', tabs.TabPages.Cast<TabPage>().Select(p => p.Text)));
             var input = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "入力プリセット"); var output = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "出力プリセット");
             Check(input.Contains(form.Controls.Find("ScreenshotPaddingPixels", true).Single()), "入力に余白がない");
             Check(output.Contains(form.Controls.Find("ScreenshotColorDepth", true).Single()), "出力に減色がない");

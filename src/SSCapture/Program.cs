@@ -5,15 +5,28 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (Services.CaptureCommandLine.Handles(args))
+        {
+            try
+            {
+                var request = Services.CaptureCommandLine.Parse(args);
+                var settings = new Services.SettingsStore(Path.Combine(AppContext.BaseDirectory, "data", "settings.json")).Load(out string? warning);
+                if (warning is not null) throw new InvalidOperationException(warning);
+                var command = Services.CaptureCommandLine.Resolve(request, settings);
+                ConfigureUi();
+                Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
+                using var capture = new Services.CaptureCommandApplicationContext(command);
+                Application.Run(capture);
+                Environment.ExitCode = capture.ExitCode;
+            }
+            catch (Exception ex) { Console.Error.WriteLine(ex.Message); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.FirstOrDefault() == "--capture-context-worker")
         { Environment.ExitCode = Services.CaptureContextWorker.Run(); return; }
         if (args.FirstOrDefault() == "--ocr-worker")
         { Environment.ExitCode = Services.OneOcr.RunWorker(args); return; }
-        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
-        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-        Application.SetDefaultFont(new Font("Yu Gothic UI", 12F));
+        ConfigureUi();
         if (args.Contains("--ui-preview"))
         {
             using var preview = new UI.SettingsForm(new Services.AppSettings(), _ => null, () => { });
@@ -47,5 +60,14 @@ internal static class Program
         using var context = new TrayApplicationContext(Services.LaunchBehavior.ShowSettings(args));
         Application.ThreadException += (_, e) => context.HandleUnexpectedError(e.Exception);
         Application.Run(context);
+    }
+
+    private static void ConfigureUi()
+    {
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.SetDefaultFont(new Font("Yu Gothic UI", 12F));
     }
 }

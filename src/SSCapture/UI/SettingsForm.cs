@@ -284,7 +284,9 @@ internal sealed class SettingsForm : Form
         openFolderAfterSave = (CheckBox)presetEditor.Controls.Find("OpenFolderAfterSave", true).Single(); screenshotColorDepth = (ComboBox)presetEditor.Controls.Find("ScreenshotColorDepth", true).Single(); metadataMode = (ComboBox)presetEditor.Controls.Find("MetadataMode", true).Single();
         screenshotPadding = (NumericUpDown)inputPresetEditor.Controls.Find("ScreenshotPaddingPixels", true).Single();
         tabs.SelectedIndexChanged += (_, _) => UpdateSummary(); UpdateSummary();
-        string[] order = ["基本", "入力プリセット", "出力プリセット", "外部アプリ", "ショートカット", "即時撮影キー", "通知", "履歴"];
+        var commandPage = new TabPage("撮影コマンド") { BackColor = BackColor, Padding = new Padding(8) };
+        commandPage.Controls.Add(new CaptureCommandControl(() => committed, SetStatus)); tabs.TabPages.Add(commandPage);
+        string[] order = ["基本", "入力プリセット", "出力プリセット", "外部アプリ", "ショートカット", "即時撮影キー", "撮影コマンド", "通知", "履歴"];
         var ordered = order.Select(title => tabs.TabPages.Cast<TabPage>().Single(p => p.Text == title)).ToArray();
         tabs.TabPages.Clear(); tabs.TabPages.AddRange(ordered);
         void MoveSetting(Control control, TableLayoutPanel destination, int row)
