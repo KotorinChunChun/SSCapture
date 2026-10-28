@@ -11,7 +11,8 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
     Action<CaptureDelivery>? delivered = null, Action<Bitmap, string?, DateTimeOffset, Rectangle?>? capturedWithBounds = null,
     Func<IReadOnlyList<DisplayTarget>>? readDisplays = null, Action? retryChanged = null,
     long retryByteLimit = 256L * 1024 * 1024, Func<string, Task>? beforeMetadataSave = null,
-    Action<long, LastCaptureRecipe?>? captureSucceeded = null, Func<IReadOnlyList<DisplayLayout>>? readCaptureLayout = null) : IDisposable
+    Action<long, LastCaptureRecipe?>? captureSucceeded = null, Func<IReadOnlyList<DisplayLayout>>? readCaptureLayout = null,
+    Action<Bitmap, Rectangle, AppSettings>? pinImage = null) : IDisposable
 {
     private long captureSequence;
     private readonly Func<Bitmap, Task> copyImage = copyImage ?? ClipboardWriter.CopyAsync;
@@ -29,6 +30,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(settings);
         settings = settings.ResolveEditors();
+        Rectangle pinBounds = captureBounds ?? new Rectangle(Point.Empty, image.Size);
         long sequence = Interlocked.Increment(ref captureSequence);
         LastCaptureRecipe? recipe = null;
         if (captureSucceeded is not null && captureBounds is Rectangle recordedBounds)
@@ -88,7 +90,12 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
             sidecar is null ? null : async path => { if (beforeMetadataSave is not null) await beforeMetadataSave(path); await Task.Run(() => sidecar.Write(path)); },
             settings.ShowCaptureNotification
                 ? () => new NotificationImage(owned, Path.Combine(workRoot, "notification-images")) : null,
-            captureSettings: settings with { DefaultDestination = destination });
+            captureSettings: settings with { DefaultDestination = destination },
+            pin: () =>
+            {
+                if (pinImage is null) throw new InvalidOperationException("ピン留め表示を開始できません。");
+                pinImage(owned, pinBounds, settings);
+            });
         return await ExecuteRetryJobAsync(retry);
     }
 
@@ -101,6 +108,11 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         settings = settings.ResolveEditors();
         if (!File.Exists(source)) throw new FileNotFoundException("動画ファイルがありません。", source);
         ValidateDestination(destination);
+        if (destination.HasFlag(OutputDestination.Pinned))
+        {
+            destination &= ~OutputDestination.Pinned;
+            if (destination == OutputDestination.None) throw new ArgumentException("ピン留め表示は静止画専用です。録画の出力先を選択してください。");
+        }
         if (destination.HasFlag(OutputDestination.File) && fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, DateTimeOffset.Now, CaptureIntent.Recording);
         return await DeliverAsync(CaptureIntent.Recording, destination, () => copyFile(source),
             () => Task.Run(() => CopyVideo(source, settings.SaveDirectory, fileName: fileName, namePlan: namePlan)),
@@ -114,7 +126,8 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         Func<Task<string>> save, Func<Task<string>> prepareExternal, string executable, string arguments, bool openFolderAfterSave,
         Action<string?, bool, bool>? completed = null, Rectangle? captureBounds = null, Func<Task<bool?>>? prepareFile = null,
         string? captureDescription = null, RetryJob? retry = null, Func<string, Task>? saveMetadata = null,
-        Func<NotificationImage>? notificationImage = null, string? notificationPath = null, AppSettings? captureSettings = null)
+        Func<NotificationImage>? notificationImage = null, string? notificationPath = null, AppSettings? captureSettings = null,
+        Action? pin = null)
     {
         var messages = new List<string>();
         var errors = new List<Exception>();
@@ -128,6 +141,11 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         {
             try { await copy(); succeeded |= OutputDestination.Clipboard; messages.Add("コピーしました。"); }
             catch (Exception ex) { failed |= OutputDestination.Clipboard; errors.Add(ex); messages.Add("コピー失敗: " + ex.Message); }
+        }
+        if (destination.HasFlag(OutputDestination.Pinned))
+        {
+            try { (pin ?? throw new InvalidOperationException("ピン留め表示を開始できません。"))(); succeeded |= OutputDestination.Pinned; messages.Add("ピン留めしました。"); }
+            catch (Exception ex) { failed |= OutputDestination.Pinned; errors.Add(ex); messages.Add("ピン留め失敗: " + ex.Message); }
         }
         if (destination.HasFlag(OutputDestination.File))
         {
@@ -232,7 +250,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
 
     private static void ValidateDestination(OutputDestination value)
     {
-        if ((value & ~(OutputDestination.Clipboard | OutputDestination.File | OutputDestination.ExternalApp)) != 0)
+        if ((value & ~(OutputDestination.Clipboard | OutputDestination.File | OutputDestination.ExternalApp | OutputDestination.Pinned)) != 0)
             throw new ArgumentOutOfRangeException(nameof(value));
     }
 

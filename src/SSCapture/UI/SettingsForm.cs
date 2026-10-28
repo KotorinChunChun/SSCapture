@@ -315,8 +315,13 @@ internal sealed class SettingsForm : Form
         categories.DisplayMember = nameof(TabPage.Text); categories.Items.AddRange(tabs.TabPages.Cast<TabPage>().Cast<object>().ToArray()); categories.SelectedIndex = 0;
         categories.SelectedIndexChanged += (_, _) => { if (categories.SelectedIndex >= 0) tabs.SelectedIndex = categories.SelectedIndex; };
         tabs.SelectedIndexChanged += (_, _) => { if (categories.SelectedIndex != tabs.SelectedIndex) categories.SelectedIndex = tabs.SelectedIndex; };
-        void UpdateFileFields() { metadataMode.Enabled = folderButton.Enabled = directory.Enabled = fileNamePattern.Enabled = ocrSeparator.Enabled = oneOcrDirectory.Enabled = openFolderAfterSave.Enabled = fileOutput.Checked; }
-        fileOutput.CheckedChanged += (_, _) => UpdateFileFields(); UpdateFileFields();
+        var pinnedOutput = (CheckBox)presetEditor.Controls.Find("PinnedOutput", true).Single();
+        void UpdateFileFields()
+        {
+            metadataMode.Enabled = openFolderAfterSave.Enabled = fileOutput.Checked;
+            folderButton.Enabled = directory.Enabled = fileNamePattern.Enabled = ocrSeparator.Enabled = oneOcrDirectory.Enabled = fileOutput.Checked || pinnedOutput.Checked;
+        }
+        fileOutput.CheckedChanged += (_, _) => UpdateFileFields(); pinnedOutput.CheckedChanged += (_, _) => UpdateFileFields(); UpdateFileFields();
         SettingsHelp.Apply(this, settingTips);
         inputPresetEditor.EnableAutoSave();
         presetEditor.EnableAutoSave(CommitOutputs);
@@ -444,6 +449,7 @@ internal sealed class SettingsForm : Form
         if (preset.Destination.HasFlag(OutputDestination.Clipboard)) destinations.Add("クリップボード");
         if (preset.Destination.HasFlag(OutputDestination.File)) destinations.Add("ファイル");
         if (preset.Destination.HasFlag(OutputDestination.ExternalApp)) destinations.Add("外部アプリ");
+        if (preset.Destination.HasFlag(OutputDestination.Pinned)) destinations.Add("ピン留め");
         string output = destinations.Count > 0 ? string.Join("＋", destinations) : "出力なし";
         string color = preset.ColorDepth switch { ScreenshotColorDepth.Indexed8 => "256色", ScreenshotColorDepth.Indexed4 => "16色", _ => "原色（減色なし）" };
         string file = preset.Destination.HasFlag(OutputDestination.File) ? $"\n{preset.SaveDirectory}\n{preset.FileNamePattern}" : "";

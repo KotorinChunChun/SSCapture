@@ -119,7 +119,7 @@ internal sealed record AppSettings
         if (!Enum.IsDefined(NotificationCorner)) throw new ArgumentException("通知の表示位置が正しくありません。");
         if (!Enum.IsDefined(NotificationDisplay)) throw new ArgumentException("通知の表示先が正しくありません。");
         if (NotificationDurationSeconds is < 0 or > 3600) throw new ArgumentException("通知の表示時間は0～3600秒の整数で指定してください。");
-        if ((DefaultDestination & ~(OutputDestination.Clipboard | OutputDestination.File | OutputDestination.ExternalApp)) != 0) throw new ArgumentException("送信先が正しくありません。");
+        if ((DefaultDestination & ~(OutputDestination.Clipboard | OutputDestination.File | OutputDestination.ExternalApp | OutputDestination.Pinned)) != 0) throw new ArgumentException("送信先が正しくありません。");
         EditorArguments.Validate(ImageEditorArguments);
         EditorArguments.Validate(VideoEditorArguments);
         if (DefaultDestination.HasFlag(OutputDestination.File))

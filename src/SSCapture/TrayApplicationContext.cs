@@ -18,6 +18,8 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
     private readonly SettingsStore store;
     private readonly OutputRouter output;
     private readonly CaptureFeedback feedback;
+    private readonly PinnedImageManager pinnedImages;
+    private readonly ToolStripMenuItem pinnedVisibility;
     private CaptureDelivery? deferredFeedback;
     private readonly CaptureHistory history = new();
     private readonly CaptureRecipeBook recipes = new();
@@ -52,13 +54,15 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         try { NotificationImage.CleanupPreviousSession(workRoot); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { lastStatus = new StatusMessage("以前の通知用画像を整理できません: " + ex.Message, true, DateTimeOffset.Now); }
         feedback = new CaptureFeedback(message => Post(() => StoreStatus(message, true)));
+        pinnedImages = new PinnedImageManager((message, error) => Post(() => StoreStatus(message, error)));
         store = new SettingsStore(Path.Combine(AppContext.BaseDirectory, "data", "settings.json"));
         output = new OutputRouter(workRoot, capturedWithBounds: (image, path, time, bounds) =>
         {
             if (settings?.KeepHistory == true)
                 history.Add(image, path, time, bounds);
         }, delivered: DispatchDelivery, retryChanged: () => Post(RefreshMenu),
-            captureSucceeded: (sequence, recipe) => { recipes.Remember(sequence, recipe); Post(RefreshMenu); });
+            captureSucceeded: (sequence, recipe) => { recipes.Remember(sequence, recipe); Post(RefreshMenu); },
+            pinImage: pinnedImages.Show);
         settings = store.Load(out var warning);
         regionStore = new RegionStore(Path.Combine(AppContext.BaseDirectory, "data", "last-region.json"));
         lastRegion = regionStore.Load(out var regionWarning);
@@ -84,6 +88,13 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         menu.Items.Add(sameSettingsItem);
         menu.Items.Add("入力プリセット", null, (_, _) => ShowRegions());
         menu.Items.Add("撮影履歴", null, (_, _) => ShowHistory());
+        pinnedVisibility = new ToolStripMenuItem("すべてのピン留めを一時非表示", null, (_, _) => pinnedImages.ToggleVisibility()) { Enabled = false };
+        menu.Items.Add(pinnedVisibility);
+        pinnedImages.Changed += (_, _) =>
+        {
+            pinnedVisibility.Enabled = pinnedImages.Count > 0;
+            pinnedVisibility.Text = pinnedImages.Hidden ? "すべてのピン留めを再表示" : "すべてのピン留めを一時非表示";
+        };
         retryOutputItem = new ToolStripMenuItem("失敗した出力を再実行", null, (_, _) => _ = RetryOutputAsync());
         menu.Items.Add(retryOutputItem);
         menu.Items.Add(new ToolStripSeparator());

@@ -93,9 +93,10 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             foreach (var value in Enum.GetValues<CaptureAspectRatio>()) ratios[value] = Item(AspectRatios.Label(value), "Ratio" + value, () => changeRatio(value), parent.DropDownItems);
         }
         if (captureDesktop is not null) Item("対象画面全体 (中央クリック)", "CaptureDesktop", captureDesktop, range.DropDownItems);
-        foreach (var destination in new[] { OutputDestination.Clipboard, OutputDestination.File, OutputDestination.ExternalApp })
+        foreach (var destination in new[] { OutputDestination.Clipboard, OutputDestination.File, OutputDestination.ExternalApp, OutputDestination.Pinned })
         {
-            string text = destination switch { OutputDestination.Clipboard => "クリップボードへコピー", OutputDestination.File => "ファイル保存", _ => "外部アプリ" };
+            if (destination == OutputDestination.Pinned && editing is { Screenshot: false }) continue;
+            string text = destination switch { OutputDestination.Clipboard => "クリップボードへコピー", OutputDestination.File => "ファイル保存", OutputDestination.Pinned => "ピン留め表示", _ => "外部アプリ" };
             var item = Item(text, "Destination" + destination, () => { var next = currentDestination ^ destination; changeDestination(next); SetDestination(next); }, output.DropDownItems);
             item.Tag = destination; destinations[destination] = item;
         }

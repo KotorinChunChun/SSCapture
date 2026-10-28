@@ -65,7 +65,7 @@ internal static class CaptureSession
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
             throw new InvalidOperationException("撮影は STA UI スレッドで開始してください。");
         if (!Enum.IsDefined(options.Mode) || !Enum.IsDefined(options.Intent) || !Enum.IsDefined(options.FixedAnchor)
-            || (options.Destination & ~(OutputDestination.Clipboard | OutputDestination.File | OutputDestination.ExternalApp)) != 0)
+            || (options.Destination & ~(OutputDestination.Clipboard | OutputDestination.File | OutputDestination.ExternalApp | OutputDestination.Pinned)) != 0)
             throw new ArgumentOutOfRangeException(nameof(options));
         if (options.Mode == CaptureMode.FixedRegion) CaptureGeometry.ValidateFixedSize(options.FixedSize);
     }
@@ -149,7 +149,7 @@ internal sealed class SessionController
         this.initialPointer = initialPointer ?? snapshot.Monitors[0].Location;
         this.confineCursor = confineCursor ?? CursorConfinement.Acquire;
         Snapshot = snapshot;
-        Destination = options.Destination;
+        Destination = options.Intent == CaptureIntent.Recording ? options.Destination & ~OutputDestination.Pinned : options.Destination;
         OutputSettings = (options.OutputSettings ?? new SSCapture.Services.AppSettings()) with
         { FreezeFrame = options.FreezeFrame, IncludeCursor = options.IncludeCursor, DimCaptureBackground = options.DimCaptureBackground,
             LimitToStartingMonitor = options.LimitToStartingMonitor };
@@ -213,7 +213,7 @@ internal sealed class SessionController
         SelectionMenu.UpdateEditing(OutputSettings, activeFixedSize, activeAnchor, selectionBounds is not null);
         SelectionMenu.SetPresetStatus(selectedInput.Name, selectedOutput.Name, InputPresetModified, OutputPresetModified, selectedInput.Id, selectedOutput.Id);
     }
-    private void ChangeDestination(OutputDestination destination) { Destination = destination; SelectionMenu.SetDestination(destination); UpdateMenu(); }
+    private void ChangeDestination(OutputDestination destination) { Destination = options.Intent == CaptureIntent.Recording ? destination & ~OutputDestination.Pinned : destination; SelectionMenu.SetDestination(Destination); UpdateMenu(); }
     internal Task ResetInputPresetAsync() => ApplyInputPresetAsync(selectedInput);
     internal void ResetOutputPreset() => ApplyPreset(selectedOutput);
     internal void ChangeOpenFolder(bool enabled) { OutputSettings = OutputSettings with { OpenFolderAfterSave = enabled }; UpdateMenu(); }
@@ -417,7 +417,7 @@ internal sealed class SessionController
     {
         OutputSettings = preset.Apply(OutputSettings);
         selectedOutput = preset;
-        Destination = OutputSettings.DefaultDestination;
+        Destination = options.Intent == CaptureIntent.Recording ? OutputSettings.DefaultDestination & ~OutputDestination.Pinned : OutputSettings.DefaultDestination;
         SelectionMenu.SetDestination(Destination);
         SelectionMenu.SetPadding(OutputSettings.ScreenshotPaddingPixels);
         SelectionMenu.SetApplication(options.Intent == CaptureIntent.Screenshot ? OutputSettings.SelectedImageEditorId : OutputSettings.SelectedVideoEditorId);

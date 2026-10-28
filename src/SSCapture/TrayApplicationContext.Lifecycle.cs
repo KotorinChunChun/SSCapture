@@ -28,6 +28,7 @@ internal sealed partial class TrayApplicationContext
         tray.Visible = false;
         form?.Close();
         historyForm?.Close();
+        pinnedImages.CloseAll();
         base.ExitThreadCore();
     }
 
@@ -50,6 +51,7 @@ internal sealed partial class TrayApplicationContext
             historyForm?.Dispose();
             history.Dispose();
             output.Dispose();
+            pinnedImages.Dispose();
             CaptureContextClient.Shared.Dispose();
             feedback.Dispose();
         }

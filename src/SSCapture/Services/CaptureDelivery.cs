@@ -21,6 +21,8 @@ internal sealed record CaptureDelivery(CaptureIntent Intent, OutputDestination C
                 (prefix ?? "") + "保存できませんでした");
             Add(OutputDestination.ExternalApp, (prefix ?? "") + "外部アプリへ送りました",
                 (prefix ?? "") + "外部アプリへ送れませんでした");
+            Add(OutputDestination.Pinned, (prefix ?? "") + "ピン留めしました",
+                (prefix ?? "") + "ピン留めできませんでした");
             if (FolderOpenFailed) lines.Add("保存フォルダを開けませんでした");
             if (MetadataFailed) lines.Add("画像は保存済みですが撮影情報JSONを保存できませんでした");
             return string.Join(Environment.NewLine, lines);

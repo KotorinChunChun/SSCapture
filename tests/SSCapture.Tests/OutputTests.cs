@@ -348,6 +348,16 @@ internal static partial class Program
                 string source = Path.Combine(directory, "recording-source.mp4");
                 byte[] bytes = Enumerable.Range(0, 8192).Select(index => (byte)(index % 251)).ToArray();
                 File.WriteAllBytes(source, bytes);
+                if (destination == OutputDestination.Pinned)
+                {
+                    bool rejected = false;
+                    try { await probe.Router(directory).RecordingAsync(source, destination, settings); }
+                    catch (ArgumentException) { rejected = true; }
+                    Check(rejected, "静止画専用のピン留めだけを録画へ指定した場合は拒否する");
+                    Check(bytes.SequenceEqual(File.ReadAllBytes(source)), "動画原本を変更しない");
+                    Equal(0, probe.Files.Count); Equal(0, probe.Launches.Count);
+                    return;
+                }
                 await probe.Router(directory).RecordingAsync(source, destination, settings);
                 Check(bytes.SequenceEqual(File.ReadAllBytes(source)), "動画原本を変更/移動しない");
                 Equal(0, probe.ImageCopies);

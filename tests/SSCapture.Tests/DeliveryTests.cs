@@ -207,7 +207,7 @@ internal static partial class Program
             using var image = OutputImage(); int calls = 0;
             var router = new OutputRouter(Path.Combine(directory, "work"), delivered: _ => calls++);
             bool rejected = false;
-            try { await router.ScreenshotAsync(image, (OutputDestination)8, OutputSettings(directory)); }
+            try { await router.ScreenshotAsync(image, (OutputDestination)16, OutputSettings(directory)); }
             catch (ArgumentOutOfRangeException) { rejected = true; }
             Check(rejected, "不正な出力指定を拒否しない");
             rejected = false;

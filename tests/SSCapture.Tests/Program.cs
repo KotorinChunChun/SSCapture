@@ -81,7 +81,10 @@ internal static partial class Program
             }
             catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
         }
+        if (args.SequenceEqual(["--pinned-tests"]))
+        { PinnedImageTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
         Run("5つの撮影モード", () => Equal(5, Enum.GetValues<CaptureMode>().Length));
+        PinnedImageTests();
         CaptureTests();
         CaptureMenuEditingTests();
         PresetConsolidationTests();

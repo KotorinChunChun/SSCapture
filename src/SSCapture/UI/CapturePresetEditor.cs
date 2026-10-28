@@ -6,7 +6,7 @@ internal sealed class CapturePresetEditor : UserControl
 {
     private readonly ListBox list;
     private readonly TextBox presetName, directory, pattern, separator;
-    private readonly CheckBox clipboard, file, external, openFolder;
+    private readonly CheckBox clipboard, file, external, pinned, openFolder;
     private readonly ComboBox imageApp, videoApp, metadataMode, color;
     private readonly Label status;
     private readonly Func<AppSettings> readSettings;
@@ -55,8 +55,10 @@ internal sealed class CapturePresetEditor : UserControl
         var header = Fields(); header.RowCount = 1; presetName = new TextBox { Name = "CapturePresetName", MaxLength = 80 }; Add(header, "名前", presetName, 0); right.Controls.Add(header, 0, 0);
         var tabs = new TabControl { Name = "OutputPresetSections", Dock = DockStyle.Fill }; right.Controls.Add(tabs, 0, 1);
         var output = Page("出力・画像"); naming = Page("保存・OCR"); var metadata = Page("撮影情報");
-        var outputs = new FlowLayoutPanel { WrapContents = false, AutoSize = true };
-        clipboard = Toggle("クリップボードへコピー", "ClipboardOutput"); file = Toggle("ファイル", "FileOutput"); external = Toggle("外部アプリ", "ExternalOutput"); outputs.Controls.AddRange([clipboard, file, external]); Add(output, "出力先", outputs, 0);
+        var outputs = new FlowLayoutPanel { WrapContents = true, AutoSize = true, Dock = DockStyle.Fill };
+        clipboard = Toggle("クリップボードへコピー", "ClipboardOutput"); file = Toggle("ファイル", "FileOutput"); external = Toggle("外部アプリ", "ExternalOutput");
+        pinned = Toggle("ピン留め表示", "PinnedOutput"); outputs.Controls.AddRange([clipboard, file, external, pinned]); Add(output, "出力先", outputs, 0);
+        output.RowStyles[0].Height = 70;
         color = new ComboBox { Name = "ScreenshotColorDepth", DropDownStyle = ComboBoxStyle.DropDownList }; color.Items.AddRange(["原色を維持（減色なし）", "256色（8ビット）", "16色（4ビット）"]); Add(output, "静止画の減色", color, 1);
         imageApp = new ComboBox { Name = "PresetImageEditor", DropDownStyle = ComboBoxStyle.DropDownList }; Add(output, "画像の外部アプリ", imageApp, 2);
         videoApp = new ComboBox { Name = "PresetVideoEditor", DropDownStyle = ComboBoxStyle.DropDownList }; Add(output, "動画の外部アプリ", videoApp, 3);
@@ -94,7 +96,7 @@ internal sealed class CapturePresetEditor : UserControl
         };
         foreach (var preset in initial.CapturePresets) list.Items.Add(preset);
         if (list.Items.Count > 0) list.SelectedIndex = Math.Max(0, Array.FindIndex(Presets, p => p.IsDefault)); else Fill(CapturePreset.FromSettings("", initial));
-        file.CheckedChanged += (_, _) => UpdateFileFields(); UpdateFileFields();
+        file.CheckedChanged += (_, _) => UpdateFileFields(); pinned.CheckedChanged += (_, _) => UpdateFileFields(); UpdateFileFields();
         imageApp.Enter += (_, _) => RefreshApps(imageApp, CurrentSettings().ImageEditors, (imageApp.SelectedItem as ExternalApplication)?.Id);
         videoApp.Enter += (_, _) => RefreshApps(videoApp, CurrentSettings().VideoEditors, (videoApp.SelectedItem as ExternalApplication)?.Id);
         imageApp.SelectedIndexChanged += (_, _) => NotifyDefaultApplications();
@@ -104,7 +106,11 @@ internal sealed class CapturePresetEditor : UserControl
     }
     private AppSettings CurrentSettings() => IsHandleCreated ? readSettings() : initialSettings;
     internal void AddSharedOcr(Control control) => Add(naming, "OCRエンジン（共通）", control, 4);
-    private void UpdateFileFields() { metadataMode.Enabled = directory.Enabled = pattern.Enabled = separator.Enabled = openFolder.Enabled = file.Checked; }
+    private void UpdateFileFields()
+    {
+        metadataMode.Enabled = openFolder.Enabled = file.Checked;
+        directory.Enabled = pattern.Enabled = separator.Enabled = file.Checked || pinned.Checked;
+    }
     private void Fill(CapturePreset p)
     {
         editing = p;
@@ -113,7 +119,7 @@ internal sealed class CapturePresetEditor : UserControl
         {
         RefreshApps(imageApp, CurrentSettings().ImageEditors, p.ImageEditorId); RefreshApps(videoApp, CurrentSettings().VideoEditors, p.VideoEditorId);
         presetName.Text = p.Name; directory.Text = p.SaveDirectory; pattern.Text = p.FileNamePattern; separator.Text = p.OcrSeparator; color.SelectedIndex = (int)p.ColorDepth; openFolder.Checked = p.OpenFolderAfterSave; metadataMode.SelectedIndex = (int)p.MetadataMode;
-        clipboard.Checked = p.Destination.HasFlag(OutputDestination.Clipboard); file.Checked = p.Destination.HasFlag(OutputDestination.File); external.Checked = p.Destination.HasFlag(OutputDestination.ExternalApp); Error = null;
+        clipboard.Checked = p.Destination.HasFlag(OutputDestination.Clipboard); file.Checked = p.Destination.HasFlag(OutputDestination.File); external.Checked = p.Destination.HasFlag(OutputDestination.ExternalApp); pinned.Checked = p.Destination.HasFlag(OutputDestination.Pinned); Error = null;
         }
         finally { filling = false; }
         NotifyDefaultApplications();
@@ -128,7 +134,7 @@ internal sealed class CapturePresetEditor : UserControl
         Id = editing?.Id ?? Guid.NewGuid().ToString("N"), IsDefault = editing?.IsDefault == true, Name = presetName.Text.Trim(),
         SaveDirectory = Environment.ExpandEnvironmentVariables(directory.Text.Trim().Trim('"')), FileNamePattern = pattern.Text, ColorDepth = (ScreenshotColorDepth)color.SelectedIndex, OpenFolderAfterSave = openFolder.Checked, OcrSeparator = separator.Text,
         ImageEditorId = (imageApp.SelectedItem as ExternalApplication)?.Id, VideoEditorId = (videoApp.SelectedItem as ExternalApplication)?.Id, MetadataMode = (CaptureMetadataMode)metadataMode.SelectedIndex,
-        Destination = (clipboard.Checked ? OutputDestination.Clipboard : 0) | (file.Checked ? OutputDestination.File : 0) | (external.Checked ? OutputDestination.ExternalApp : 0)
+        Destination = (clipboard.Checked ? OutputDestination.Clipboard : 0) | (file.Checked ? OutputDestination.File : 0) | (external.Checked ? OutputDestination.ExternalApp : 0) | (pinned.Checked ? OutputDestination.Pinned : 0)
     };
     internal void StoreCurrent()
     {
