@@ -21,6 +21,7 @@ internal sealed class PinnedImageForm : BrandedForm
     private TextBox? textEditor;
     private Font? textFont;
     private bool exporting;
+    private bool closeAfterExport;
     private readonly ToolTip tips = new() { ShowAlways = true, AutoPopDelay = 20000 };
 
     internal PinnedImageForm(Bitmap image, Point location, AppSettings settings, Action<string, bool>? report = null,
@@ -201,12 +202,13 @@ internal sealed class PinnedImageForm : BrandedForm
     {
         CommitText();
         location = Document.Clamp(location);
-        textFont = new Font("Yu Gothic UI", Math.Max(12, Document.PenWidth * 6 * Zoom), FontStyle.Regular, GraphicsUnit.Pixel);
+        textFont = new Font("Yu Gothic UI", Math.Max(1, Math.Max(12, Document.PenWidth * 6) * Zoom), FontStyle.Regular, GraphicsUnit.Pixel);
         textEditor = new TextBox { Name = "PinnedTextInput", Multiline = true, MaxLength = 4096, AcceptsReturn = true,
             Font = textFont, ForeColor = Document.PenColor, BackColor = Color.White,
             Bounds = new(Math.Clamp((int)(location.X * Zoom), 0, Math.Max(0, ClientSize.Width - 80)),
                 Math.Clamp((int)(location.Y * Zoom), 0, Math.Max(0, ClientSize.Height - 32)),
                 Math.Max(60, Math.Min(360, ClientSize.Width)), Math.Max(28, Math.Min(100, ClientSize.Height))), Tag = location };
+        textEditor.Tag = new PointF(textEditor.Left / Zoom, textEditor.Top / Zoom);
         tips.SetToolTip(textEditor, "Enter: 確定 / Shift+Enter: 改行 / Esc: 取り消し");
         Controls.Add(textEditor); textEditor.Focus();
         textEditor.LostFocus += (_, _) => { if (textEditor is not null && !IsDisposed) CommitText(); };
@@ -217,11 +219,12 @@ internal sealed class PinnedImageForm : BrandedForm
         var editor = textEditor;
         if (editor is null) return;
         textEditor = null;
+        bool restoreFocus = editor.ContainsFocus;
         string text = editor.Text;
         PointF location = (PointF)editor.Tag!;
         Controls.Remove(editor); editor.Dispose(); textFont?.Dispose(); textFont = null;
         if (commit && !string.IsNullOrWhiteSpace(text)) Document.Add(PinnedDrawingTool.Text, [location], text);
-        Focus();
+        if (restoreFocus && !Disposing) Focus();
     }
     private Bitmap Export(bool selected)
     {
@@ -236,7 +239,7 @@ internal sealed class PinnedImageForm : BrandedForm
         CommitText(); exporting = true;
         try { using var image = Export(true); await copyImage(image); Notify("ピン留め画像をコピーしました。", false); }
         catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException) { Notify("コピーできませんでした: " + ex.Message, true); }
-        finally { exporting = false; }
+        finally { FinishExport(); }
     }
     internal async Task SaveAsync()
     {
@@ -244,7 +247,22 @@ internal sealed class PinnedImageForm : BrandedForm
         CommitText(); exporting = true;
         try { using var image = Document.Render(); string path = await saveImage(image); Notify("保存しました: " + path, false); }
         catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException) { Notify("保存できませんでした: " + ex.Message, true); }
-        finally { exporting = false; }
+        finally { FinishExport(); }
+    }
+    private void FinishExport()
+    {
+        exporting = false;
+        if (closeAfterExport && !IsDisposed) Close();
+    }
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        base.OnFormClosing(e);
+        if (exporting)
+        {
+            // 最後の窓を閉じるCLIでも、借用画像の配送完了までメッセージループを保つ。
+            closeAfterExport = true;
+            e.Cancel = true;
+        }
     }
     private void Notify(string message, bool error)
     {

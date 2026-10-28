@@ -22,10 +22,10 @@ internal sealed class PinnedImageManager(Action<string, bool>? report = null, Fu
         try
         {
             windows.Add(window);
-            window.FormClosed += (_, _) => { windows.Remove(window); if (windows.Count == 0) Hidden = false; Changed?.Invoke(this, EventArgs.Empty); };
-            // 新規出力は表示する。既存窓の一時非表示を勝手に解除しない。
-            window.Show();
-            if (Hidden) window.Hide();
+            // 未表示の窓はFormClosedを経由せずDisposeされる場合もある。
+            window.Disposed += (_, _) => { if (!windows.Remove(window)) return; if (windows.Count == 0) Hidden = false; Changed?.Invoke(this, EventArgs.Empty); };
+            // 一時非表示中に追加しても表示を一瞬挟まない。
+            if (!Hidden) window.Show();
             Changed?.Invoke(this, EventArgs.Empty);
         }
         catch { windows.Remove(window); window.Dispose(); throw; }
@@ -40,8 +40,9 @@ internal sealed class PinnedImageManager(Action<string, bool>? report = null, Fu
     }
     internal void CloseAll()
     {
-        foreach (var window in windows.ToArray()) { window.Close(); window.Dispose(); }
-        windows.Clear(); Hidden = false;
+        // 非同期出力中の窓は、配送が完了してからDisposedで取り除く。
+        foreach (var window in windows.ToArray()) window.Close();
+        if (windows.Count == 0) Hidden = false;
     }
     public void Dispose() { if (disposed) return; CloseAll(); disposed = true; }
 }

@@ -109,8 +109,9 @@ internal sealed record AppSettings
             throw new ArgumentException("固定サイズは1～32768px、合計1億画素以内で指定してください。");
         if (!Enum.IsDefined(FixedCaptureAnchor)) throw new ArgumentException("固定サイズの基点が正しくありません。");
         HotkeyBinding.ValidateSettings(this);
-        if (DefaultDestination.HasFlag(OutputDestination.File)) Services.FileNamePattern.Validate(FileNamePattern, OcrSeparator);
-        if (DefaultDestination.HasFlag(OutputDestination.File) && !string.IsNullOrWhiteSpace(OneOcrDirectory) && (!Path.IsPathFullyQualified(OneOcrDirectory) || OneOcrDirectory.IndexOfAny(Path.GetInvalidPathChars()) >= 0))
+        bool usesSaveSettings = (DefaultDestination & (OutputDestination.File | OutputDestination.Pinned)) != 0;
+        if (usesSaveSettings) Services.FileNamePattern.Validate(FileNamePattern, OcrSeparator);
+        if (usesSaveSettings && !string.IsNullOrWhiteSpace(OneOcrDirectory) && (!Path.IsPathFullyQualified(OneOcrDirectory) || OneOcrDirectory.IndexOfAny(Path.GetInvalidPathChars()) >= 0))
             throw new ArgumentException("OneOCRフォルダは絶対パスか空欄（自動検出）を指定してください。");
         if (!Enum.IsDefined(DefaultMode)) throw new ArgumentException("撮影モードが正しくありません。");
         if (!Enum.IsDefined(ScreenshotColorDepth)) throw new ArgumentException("静止画の減色指定が正しくありません。");
@@ -122,7 +123,7 @@ internal sealed record AppSettings
         if ((DefaultDestination & ~(OutputDestination.Clipboard | OutputDestination.File | OutputDestination.ExternalApp | OutputDestination.Pinned)) != 0) throw new ArgumentException("送信先が正しくありません。");
         EditorArguments.Validate(ImageEditorArguments);
         EditorArguments.Validate(VideoEditorArguments);
-        if (DefaultDestination.HasFlag(OutputDestination.File))
+        if (usesSaveSettings)
         {
             if (string.IsNullOrWhiteSpace(SaveDirectory) || !Path.IsPathFullyQualified(SaveDirectory))
                 throw new ArgumentException("保存先にはフォルダの絶対パスを入力してください。");

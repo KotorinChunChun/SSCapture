@@ -142,6 +142,41 @@ internal static partial class Program
             Check(router.HasPendingRetry, "失敗したピン留めを保持しない");
             failPin = false; await router.RetryFailedAsync(); Equal(1, copies); Equal(2, pins); Check(!router.HasPendingRetry, "成功後も再試行が残る");
         })));
+        Run("最後のピン留めを閉じても非同期コピー完了まで窓の寿命を維持", () => RunPinnedUiTask(async () =>
+        {
+            using var source = PinFixture();
+            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var pins = new PinnedImageManager(copyImage: _ => completion.Task);
+            pins.Show(source, new(-30000, -30000, 60, 40), new AppSettings());
+            var form = pins.Windows.Single();
+            var copying = form.CopyAsync(); form.Close();
+            Equal(1, pins.Count); Check(!form.IsDisposed, "コピー完了前に窓を破棄した");
+            completion.SetResult(); await copying;
+            Equal(0, pins.Count); Check(form.IsDisposed, "コピー完了後の閉じる要求が残った");
+        }));
+        Run("保存失敗でも保留した閉じる操作を完了し画像を早期破棄しない", () => RunPinnedUiTask(async () =>
+        {
+            using var source = PinFixture();
+            var completion = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Bitmap? borrowed = null; bool reported = false;
+            using var form = new PinnedImageForm(source, new(-30000, -30000), new AppSettings(),
+                report: (_, error) => reported = error, saveImage: image => { borrowed = image; return completion.Task; });
+            form.Show(); var saving = form.SaveAsync(); form.Close();
+            Check(!form.IsDisposed, "保存完了前に窓を破棄した"); Equal(source.Size, borrowed!.Size);
+            completion.SetException(new IOException("注入失敗")); await saving;
+            Check(reported, "保存失敗を通知しない"); Check(form.IsDisposed, "保存失敗後に閉じる要求が残った");
+        }));
+        Run("非表示中に追加したピン留めも再表示まで隠し全窓を閉じられる", () =>
+        {
+            using var source = PinFixture(); using var pins = new PinnedImageManager();
+            pins.Show(source, new(-30000, -30000, 60, 40), new AppSettings()); pins.ToggleVisibility();
+            pins.Show(source, new(-30000, -30000, 60, 40), new AppSettings());
+            Equal(2, pins.Count); Check(pins.Windows.All(w => !w.Visible), "非表示中の追加が画面へ出た");
+            pins.ToggleVisibility(); Check(pins.Windows.All(w => w.Visible), "追加分を再表示できない");
+            pins.ToggleVisibility();
+            pins.Show(source, new(-30000, -30000, 60, 40), new AppSettings());
+            pins.CloseAll(); Equal(0, pins.Count); Check(!pins.Hidden, "全窓閉鎖後に非表示状態が残る");
+        });
         Run("ピン留め成功後に保存だけ失敗しても再実行で窓を増やさない", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {
             using var image = PinFixture(); int pins = 0; string blocked = Path.Combine(directory, "blocked"); File.WriteAllText(blocked, "障害");
@@ -157,6 +192,21 @@ internal static partial class Program
             var read = store.Load(out var warning); Check(warning is null, warning ?? ""); Equal(OutputDestination.Pinned, read.DefaultDestination);
             Check(SettingsForm.OutputSummary(CapturePreset.FromSettings("ピン", read)).Contains("ピン留め"), "既定概要に出力がない");
         }));
+        Run("ピン留めだけでも手動保存のフォルダと命名を登録時に検証", () =>
+        {
+            foreach (var settings in new[]
+            {
+                new AppSettings { DefaultDestination = OutputDestination.Pinned, SaveDirectory = "relative" },
+                new AppSettings { DefaultDestination = OutputDestination.Pinned, FileNamePattern = "bad?.png" }
+            })
+            {
+                bool rejected = false;
+                try { CapturePreset.FromSettings("ピン留め", settings).Validate(); }
+                catch (ArgumentException) { rejected = true; }
+                Check(rejected, "手動保存に使えない出力プリセットを許可した");
+            }
+            new AppSettings { DefaultDestination = OutputDestination.Clipboard, SaveDirectory = "relative", FileNamePattern = "bad?.png" }.Validate();
+        });
         }
         finally { SynchronizationContext.SetSynchronizationContext(previousContext); }
     }
