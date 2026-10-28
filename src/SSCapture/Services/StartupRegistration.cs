@@ -33,7 +33,7 @@ internal sealed class StartupRegistration : IStartupRegistration
     static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true };
     static async Task<string> InvokeAsync(string operation)
     {
-        string helper = Path.Combine(AppContext.BaseDirectory, "KotorinToys.Maintenance.exe");
+        string helper = Path.Combine(AppContext.BaseDirectory, "maintenance", "KotorinToys.Maintenance.exe");
         if (!File.Exists(helper)) throw new IOException("自動起動の設定には正式インストール版が必要です。");
         var start = new ProcessStartInfo(helper) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (string argument in new[] { "--product", "SSCapture", "--root", AppContext.BaseDirectory, "--operation", operation }) start.ArgumentList.Add(argument);
