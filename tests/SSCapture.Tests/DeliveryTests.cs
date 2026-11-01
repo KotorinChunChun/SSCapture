@@ -114,8 +114,9 @@ internal static partial class Program
                 catch (IOException) { failed = true; Equal(1, received.Count); }
                 Check(failed, "フォルダ起動エラーを従来の呼び出し元へ返さない");
                 var notification = received.Single();
+                using var preview = notification.NotificationImage;
                 Equal(new CaptureDelivery(intent, OutputDestination.File, OutputDestination.None, true,
-                    Directory.GetFiles(settings.SaveDirectory).Single()), notification with { CaptureSettings = null });
+                    Directory.GetFiles(settings.SaveDirectory).Single()), notification with { CaptureSettings = null, NotificationImage = null });
                 Check(notification.HasSuccess && notification.HasFailure, "保存成功とフォルダ失敗は両立する");
                 Check(notification.Message.Contains("保存フォルダを開けませんでした", StringComparison.Ordinal), "フォルダ失敗の明示なし");
                 Equal(1, Directory.GetFiles(settings.SaveDirectory).Length);

@@ -63,6 +63,24 @@ internal static partial class Program
                 Check(form.Region is not null && !form.Region.IsVisible(0, 0), "角丸がない");
             }
         });
+        Run("通知の小画像はクリックでは開始せずドラッグ操作を一度だけ受け付ける", () =>
+        {
+            using var image = new Bitmap(44, 24);
+            using var host = new ToastActionForm(_ => new(true, null), false);
+            int drags = 0; CancellationToken token = default;
+            Check(host.Prepare(new(100, 100, 392, 168), 96, new(null, null, "Ctrl+F11", image,
+                (_, gesture) => { drags++; token = gesture; return Task.CompletedTask; }), out var warning), warning ?? "表示準備失敗");
+            var preview = host.Controls.Find("NotificationDragImage", true).Single();
+            void Mouse(string method, Point point) => typeof(Control).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(preview, [new MouseEventArgs(MouseButtons.Left, 1, point.X, point.Y, 0)]);
+            Mouse("OnMouseDown", new(10, 10)); Mouse("OnMouseUp", new(10, 10)); Equal(0, drags);
+            Mouse("OnMouseDown", new(10, 10)); Mouse("OnMouseMove", new(11, 10)); Equal(0, drags);
+            Mouse("OnMouseMove", new(30, 30)); Mouse("OnMouseMove", new(35, 35)); Equal(1, drags);
+            Check(!token.IsCancellationRequested, "開始時点で取り消される");
+            Mouse("OnMouseUp", new(35, 35)); Check(token.IsCancellationRequested, "ボタンを離しても古い操作が生存");
+            Mouse("OnMouseDown", new(10, 10)); Mouse("OnMouseMove", new(30, 30)); Equal(2, drags);
+            host.Clear(); Check(token.IsCancellationRequested, "通知消去後も操作が生存");
+        });
         Run("通知の操作ホスト除外に失敗したら本文も表示しない", () =>
         {
             var handles = new HashSet<nint>(); int shown = 0;

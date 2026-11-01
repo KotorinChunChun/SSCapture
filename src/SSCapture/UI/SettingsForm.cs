@@ -228,7 +228,7 @@ internal sealed class SettingsForm : Form
         RefreshNotificationApps();
         tabs.SelectedIndexChanged += (_, _) => { if (tabs.SelectedTab == notifications.Parent) RefreshNotificationApps(); };
         var notificationInfo = new Label { Name = "NotificationInfo", Dock = DockStyle.Fill,
-            Text = "通知本文はクリックを透過し、ボタンだけ操作できます。保存成功時はフォルダを開けます。\n編集アプリは個別指定、または撮影時の出力プリセットを使います。\n画面共有への映り込みを抑えますが、共有アプリによっては除外できません。\n効果音はPC音声の録音・共有に含まれる場合があります。" };
+            Text = "通知本文はクリックを透過し、ボタンと小画像だけ操作できます。保存成功時はフォルダを開けます。\n編集アプリは個別指定、または撮影時の出力プリセットを使います。\n画面共有への映り込みを抑えますが、共有アプリによっては除外できません。\n効果音はPC音声の録音・共有に含まれる場合があります。" };
         notifications.Controls.Add(notificationInfo, 0, 6); notifications.SetColumnSpan(notificationInfo, 2); notifications.SetRowSpan(notificationInfo, 2);
         var presetPage = new TabPage("出力プリセット") { BackColor = BackColor, Padding = new Padding(8) };
         presetEditor = new CapturePresetEditor(settings, () => committed with { ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications });

@@ -12,6 +12,7 @@ internal static partial class Program
         if (args.FirstOrDefault() == "--editor-received") { File.WriteAllText(Path.Combine(args[3], "editor-" + args[1] + ".json"), System.Text.Json.JsonSerializer.Serialize(new { application = args[1], image = args[2] })); return 0; }
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
+        if (args.FirstOrDefault() == "--notification-drag-preview") return NotificationDragPreview(args[1]);
         if (args.SequenceEqual(["--notification-tests"]))
         {
             NotificationUpgradeTests(); NotificationActionTests(); NotificationPresentationTests(); NotificationDragTests(); FeedbackTests();
