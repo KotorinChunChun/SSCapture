@@ -3,13 +3,15 @@ using SSCapture.Services;
 
 namespace SSCapture.UI;
 
-// 本文のLAYERED/TRANSPARENT窓とは分離。Regionの2矩形だけが入力を受ける。
+// 本文のLAYERED/TRANSPARENT窓とは分離。操作とサムネイルだけが入力を受ける。
 internal sealed class ToastActionForm : Form
 {
     internal const int ActionExtendedStyle = 0x08000000 | 0x80 | 0x80000 | 0x8;
     private readonly Func<nint, CaptureProtection> protect;
     private readonly bool nativeShow;
     private readonly Button folder, edit;
+    private readonly PictureBox preview;
+    private readonly ToolTip tips = new();
     private nint protectedHandle;
     private NotificationActions? actions;
     private bool ready;
@@ -20,15 +22,25 @@ internal sealed class ToastActionForm : Form
         Name = "CaptureToastActions"; Text = WindowTitle.Create("完了操作");
         FormBorderStyle = FormBorderStyle.None; StartPosition = FormStartPosition.Manual;
         ShowInTaskbar = false; AutoScaleMode = AutoScaleMode.None; ControlBox = false;
-        BackColor = Color.FromArgb(28, 43, 50);
+        BackColor = ToastCardStyle.Surface;
         folder = Make("フォルダを開く", "NotificationOpenFolder");
         edit = Make("外部アプリで編集", "NotificationEdit");
-        Controls.AddRange([folder, edit]);
+        preview = new PictureBox { Name = "NotificationDragImage", SizeMode = PictureBoxSizeMode.Zoom,
+            BackColor = Color.FromArgb(235, 241, 244), TabStop = false, AccessibleName = "撮影画像をドラッグ" };
+        tips.SetToolTip(preview, "フォルダへドラッグして移動。Ctrlを押すとコピー。対応アプリへドロップして開きます。");
+        Controls.AddRange([folder, edit, preview]);
         folder.Click += (_, _) => InvokeAction(actions?.OpenFolder);
         edit.Click += (_, _) => InvokeAction(actions?.Edit);
     }
-    private static Button Make(string text, string name) => new() { Text = text, Name = name,
-        FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(0, 106, 119), ForeColor = Color.White, TabStop = false, UseMnemonic = false };
+    private static Button Make(string text, string name)
+    {
+        var button = new Button { Text = text, Name = name, FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(237, 244, 246), ForeColor = ToastCardStyle.Accent, TabStop = false, UseMnemonic = false };
+        button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.MouseOverBackColor = Color.FromArgb(220, 235, 239);
+        button.FlatAppearance.MouseDownBackColor = Color.FromArgb(204, 224, 230);
+        return button;
+    }
     protected override bool ShowWithoutActivation => true;
     protected override CreateParams CreateParams
     { get { var p = base.CreateParams; p.ExStyle |= ActionExtendedStyle; p.Style &= ~0x10000000; return p; } }
@@ -41,6 +53,14 @@ internal sealed class ToastActionForm : Form
         int height = Math.Min(ClientSize.Height, Math.Max(1, (int)Math.Round(32 * scale)));
         int top = Math.Max(0, ClientSize.Height - height - Math.Min(inset, ClientSize.Height / 4));
         folder.SetBounds(inset, top, width, height); edit.SetBounds(inset + width + gap, top, width, height);
+        foreach (var button in new[] { folder, edit })
+        {
+            using var shape = ToastCardStyle.Rounded(button.ClientRectangle, Math.Max(1, (int)(6 * scale)));
+            var old = button.Region; button.Region = new Region(shape); old?.Dispose();
+        }
+        preview.Bounds = ToastCardStyle.PreviewBounds(dpi);
+        preview.Image = value.Thumbnail; preview.Visible = value.Thumbnail is not null;
+        preview.Cursor = value.Drag is null ? Cursors.Default : Cursors.Hand;
         if (actionFont is null || actionFont.Size != 14 * scale)
         {
             Font? previous = actionFont; actionFont = new Font("Yu Gothic UI", 14 * scale, FontStyle.Regular, GraphicsUnit.Pixel);
@@ -48,12 +68,13 @@ internal sealed class ToastActionForm : Form
         }
         folder.Enabled = value.OpenFolder is not null; edit.Enabled = value.Edit is not null;
         var region = new Region(folder.Bounds); region.Union(edit.Bounds);
+        if (value.Thumbnail is not null) region.Union(preview.Bounds);
         Region? oldRegion = Region; Region = region; oldRegion?.Dispose();
         _ = Handle;
         CaptureProtection result = protect(Handle);
         warning = result.Warning;
         if (!result.Success) { protectedHandle = 0; SetLayeredWindowAttributes(Handle, 0, 0, 2); return false; }
-        protectedHandle = Handle; ready = true; SetLayeredWindowAttributes(Handle, 0, 245, 2); return true;
+        protectedHandle = Handle; ready = true; SetLayeredWindowAttributes(Handle, 0, 255, 2); return true;
     }
     internal void ShowProtected() { if (ready && protectedHandle == Handle && nativeShow) CaptureToastForm.ShowNative(this); }
     private void InvokeAction(Action? action)
@@ -62,7 +83,7 @@ internal sealed class ToastActionForm : Form
         ready = false; actions = null; Hide(); action();
     }
     public new void Hide() { base.Hide(); }
-    internal void Clear() { ready = false; actions = null; base.Hide(); }
+    internal void Clear() { ready = false; actions = null; preview.Image = null; base.Hide(); }
     protected override void OnHandleCreated(EventArgs e)
     { base.OnHandleCreated(e); protectedHandle = 0; ready = false; SetLayeredWindowAttributes(Handle, 0, 0, 2); }
     protected override void OnHandleDestroyed(EventArgs e)
@@ -82,7 +103,7 @@ internal sealed class ToastActionForm : Form
         base.WndProc(ref m);
     }
     protected override void Dispose(bool disposing)
-    { if (disposing) { actions = null; actionFont?.Dispose(); actionFont = null; } base.Dispose(disposing); }
+    { if (disposing) { actions = null; preview.Image = null; tips.Dispose(); actionFont?.Dispose(); actionFont = null; } base.Dispose(disposing); }
     [StructLayout(LayoutKind.Sequential)]
     private struct WindowPosition { public nint Window, InsertAfter; public int X, Y, Width, Height; public uint Flags; }
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]

@@ -4,7 +4,8 @@ namespace SSCapture.Services;
 
 internal enum NotificationCorner { BottomRight, BottomLeft, TopLeft, TopCenter, TopRight, MiddleLeft, Center, MiddleRight, BottomCenter }
 internal enum NotificationClickAction { None, OpenFolder, ExternalApplication }
-internal sealed record NotificationActions(Action? OpenFolder, Action? Edit, string RepeatHint);
+internal sealed record NotificationActions(Action? OpenFolder, Action? Edit, string RepeatHint,
+    Bitmap? Thumbnail = null, Func<Control, Task>? Drag = null);
 
 internal interface ICaptureToast : IDisposable
 {

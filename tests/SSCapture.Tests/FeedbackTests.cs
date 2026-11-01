@@ -141,7 +141,7 @@ internal static partial class Program
                 foreach (Control child in Descendants(form)) _ = child.Handle;
                 LayoutTree(form);
                 var label = form.Controls.Find("CaptureToastMessage", true).Single();
-                Check(label.Width >= (int)(350 * dpi / 96d) && label.Height >= (int)(90 * dpi / 96d), "4行の表示領域不足");
+                Check(label.Width >= (int)(350 * dpi / 96d) && label.Height > 0, "4行の表示領域不足");
                 Size text = TextRenderer.MeasureText(label.Text, label.Font, new Size(label.Width, int.MaxValue),
                     TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
                 Check(text.Height <= label.Height, $"DPI{dpi}で4行が収まらない {text.Height}/{label.Height}");

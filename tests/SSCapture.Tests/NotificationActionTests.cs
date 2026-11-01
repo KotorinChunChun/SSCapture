@@ -31,13 +31,36 @@ internal static partial class Program
             var actionFlags = (CreateParams)typeof(ToastActionForm).GetProperty("CreateParams", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(host)!;
             Check((actionFlags.ExStyle & 0x20) == 0 && (actionFlags.ExStyle & 0x08000000) != 0, "ボタンが透過またはアクティブ化");
             Check(host.Region is not null && !host.Region.IsVisible(1, 1), "ボタン外が入力を遮断");
-            foreach (Control button in host.Controls)
+            foreach (Control button in host.Controls.OfType<Button>())
             {
                 Check(host.ClientRectangle.Contains(button.Bounds), "ボタンがつぶれる/はみ出す");
                 Check(host.Region!.IsVisible(button.Left + 2, button.Top + 2), "ボタンが入力領域にない");
             }
             Check(!host.ShowInTaskbar, "タスクバーに表示");
             form.Hide(); Check(!host.Visible, "撮影前にボタンだけ残留");
+        });
+        Run("通知の小画像と長文はDPIごとに重ならず本文だけ透過する", () =>
+        {
+            using var thumbnail = new Bitmap(44, 20);
+            foreach (int dpi in new[] { 96, 144, 192 })
+            {
+                using var form = new CaptureToastForm(_ => new(true, null), _ => { }, () => (new Rectangle(-1920, -200, 1920, 1440), dpi));
+                form.SetActions(new(() => { }, () => { }, "直前の設定で再撮影: Ctrl+Shift+F11", thumbnail));
+                Check(form.TryShow("コピーしました。\n保存しました。\n外部アプリを開きました。\nDISPLAY2 / 1920×1080px", false, NotificationCorner.BottomRight, out var warning), warning ?? "表示失敗");
+                foreach (Control child in Descendants(form)) _ = child.Handle;
+                LayoutTree(form);
+                var host = (ToastActionForm)typeof(CaptureToastForm).GetField("actionHost", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+                var preview = host.Controls.Find("NotificationDragImage", true).Single();
+                var label = form.Controls.Find("CaptureToastMessage", true).Single();
+                Rectangle textBounds = form.RectangleToClient(label.RectangleToScreen(label.ClientRectangle));
+                Check(preview.Right <= textBounds.Left && form.ClientRectangle.Contains(preview.Bounds), "画像と本文が重なる");
+                Check(host.Region!.IsVisible(preview.Left + 2, preview.Top + 2), "画像がクリック透過");
+                foreach (var button in host.Controls.OfType<Button>())
+                    Check(preview.Bottom < button.Top && form.ClientRectangle.Contains(button.Bounds), "画像とボタンが重なる");
+                Size measured = TextRenderer.MeasureText(label.Text, label.Font, new Size(label.Width, int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+                Check(measured.Height <= label.Height, $"DPI{dpi}: 本文が欠ける");
+                Check(form.Region is not null && !form.Region.IsVisible(0, 0), "角丸がない");
+            }
         });
         Run("通知の操作ホスト除外に失敗したら本文も表示しない", () =>
         {

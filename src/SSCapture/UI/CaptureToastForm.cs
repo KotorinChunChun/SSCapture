@@ -11,6 +11,8 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
     internal const int ToastExtendedStyle = 0x08000000 /* NOACTIVATE */ | 0x00000080 /* TOOLWINDOW */
         | 0x00000020 /* TRANSPARENT */ | 0x00080000 /* LAYERED */ | 0x00000008 /* TOPMOST */;
     private readonly Label message;
+    private readonly Label heading, repeat;
+    private readonly TableLayoutPanel layout;
     private readonly Func<nint, CaptureProtection> protect;
     private readonly Action<CaptureToastForm> show;
     private readonly Func<(Rectangle WorkArea, int Dpi)>? location;
@@ -20,6 +22,8 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
     private nint protectedHandle;
     private string? protectionWarning;
     private Font? notificationFont;
+    private Font? headingFont;
+    private bool hasFailure;
     private int displayDpi = 96;
     public Rectangle DisplayBounds => Bounds;
     public int DisplayDpi => displayDpi;
@@ -40,18 +44,25 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
         // Form.TopMost makes WinForms SetVisibleCore explicitly focus this form,
         // even with ShowWithoutActivation. Keep topmost in native styles instead.
         ControlBox = MinimizeBox = MaximizeBox = false;
-        BackColor = Color.FromArgb(28, 43, 50);
-        ForeColor = Color.White;
+        DoubleBuffered = true;
+        BackColor = ToastCardStyle.Surface;
+        ForeColor = ToastCardStyle.Ink;
         Font = new Font("Yu Gothic UI", 11F);
         ClientSize = new Size(NotificationWidth, NotificationHeight);
-        var layout = new TableLayoutPanel { Name = "CaptureToastLayout", Dock = DockStyle.Fill,
-            ColumnCount = 1, RowCount = 1, Padding = new Padding(16, 10, 16, 10) };
+        layout = new TableLayoutPanel { Name = "CaptureToastLayout", Dock = DockStyle.Fill,
+            ColumnCount = 1, RowCount = 3, Padding = new Padding(16, 12, 16, 12), BackColor = Color.Transparent };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
         Controls.Add(layout);
         message = new Label { Name = "CaptureToastMessage", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
             AutoEllipsis = true, Margin = Padding.Empty, UseMnemonic = false };
-        layout.Controls.Add(message, 0, 0);
+        heading = new Label { Name = "CaptureToastHeading", Text = "SSCapture", Dock = DockStyle.Fill,
+            ForeColor = ToastCardStyle.Accent, Margin = Padding.Empty, UseMnemonic = false };
+        repeat = new Label { Name = "CaptureToastRepeat", Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft,
+            ForeColor = ToastCardStyle.Muted, AutoEllipsis = true, Margin = Padding.Empty, UseMnemonic = false };
+        layout.Controls.Add(heading, 0, 0); layout.Controls.Add(message, 0, 1); layout.Controls.Add(repeat, 0, 2);
     }
 
     protected override bool ShowWithoutActivation => true;
@@ -77,7 +88,6 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
         {
             // 本文は常に別プロセスまで透過。旧activate引数で透過を解除しない。
             actionHost?.Hide();
-            if (actions is not null) text += Environment.NewLine + actions.RepeatHint;
             var monitor = location?.Invoke() ?? NotificationPlacement.Current(display, captureBounds);
             displayDpi = monitor.Dpi;
             Rectangle bounds = CalculateBounds(monitor.WorkArea, monitor.Dpi, corner, Math.Clamp(text.Count(c => c == '\n') + 1, 1, 4));
@@ -91,23 +101,39 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
                 Font? oldFont = notificationFont;
                 notificationFont = new Font("Yu Gothic UI", fontSize, FontStyle.Regular, GraphicsUnit.Pixel);
                 message.Font = notificationFont;
+                repeat.Font = notificationFont;
                 oldFont?.Dispose();
+                heading.Font = headingFont = ReplaceHeadingFont(headingFont, 12 * scale);
             }
-            Controls[0].Padding = new Padding((int)Math.Round(16 * scale), (int)Math.Round(10 * scale),
-                (int)Math.Round(16 * scale), (int)Math.Round(10 * scale));
+            int inset = (int)Math.Round(16 * scale), vertical = (int)Math.Round(12 * scale);
+            layout.Padding = new Padding(inset, vertical, inset, vertical);
+            layout.RowStyles[0].Height = 24 * scale;
+            string repeatText = actions?.RepeatHint ?? "";
+            Size hintSize = TextRenderer.MeasureText(repeatText, message.Font,
+                new Size(Math.Max(1, bounds.Width - inset * 2), int.MaxValue),
+                TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+            layout.RowStyles[2].Height = repeatText.Length == 0 ? 0 : hintSize.Height + 8 * scale;
+            int previewInset = actions?.Thumbnail is null ? 0 : (int)Math.Round(60 * scale);
+            message.Margin = new Padding(previewInset, 0, 0, 0);
             // 範囲文言は改行だけでなく折返しも含めて必要な高さを測る。
-            int textWidth = Math.Max(1, bounds.Width - Controls[0].Padding.Horizontal);
+            int textWidth = Math.Max(1, bounds.Width - layout.Padding.Horizontal - previewInset);
             Size measured = TextRenderer.MeasureText(text, message.Font, new Size(textWidth, int.MaxValue),
                 TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
             int margin = Math.Min((int)Math.Round(12 * scale), Math.Max(0, (Math.Min(monitor.WorkArea.Width, monitor.WorkArea.Height) - 1) / 2));
-            int actionHeight = actions is null ? 0 : (int)Math.Round(44 * scale);
-            int height = Math.Min(Math.Max(bounds.Height, measured.Height + Controls[0].Padding.Vertical),
+            int actionHeight = actions is null ? 0 : (int)Math.Round(48 * scale);
+            int bodyHeight = Math.Max(measured.Height, (int)Math.Round(44 * scale));
+            int height = Math.Min(Math.Max(bounds.Height, bodyHeight + layout.Padding.Vertical + (int)(layout.RowStyles[0].Height + layout.RowStyles[2].Height)),
                 monitor.WorkArea.Height - margin * 2 - Math.Min(actionHeight, monitor.WorkArea.Height / 3));
             bounds = PlaceSize(monitor.WorkArea, monitor.Dpi, corner, new(bounds.Width, Math.Max(1, height + actionHeight)));
-            Controls[0].Padding = new Padding(Controls[0].Padding.Left, Controls[0].Padding.Top, Controls[0].Padding.Right, Controls[0].Padding.Bottom + actionHeight);
-            BackColor = hasFailure ? Color.FromArgb(99, 55, 25) : Color.FromArgb(28, 43, 50);
+            layout.Padding = new Padding(inset, vertical, inset, vertical + actionHeight);
+            this.hasFailure = hasFailure;
+            heading.ForeColor = hasFailure ? Color.FromArgb(161, 85, 16) : ToastCardStyle.Accent;
             message.Text = text;
+            repeat.Text = repeatText;
             Bounds = bounds;
+            using (var shape = ToastCardStyle.Rounded(ClientRectangle, (int)Math.Round(12 * scale)))
+            { var old = Region; Region = new Region(shape); old?.Dispose(); }
+            Invalidate();
             _ = Handle;
             if (!EnsureProtection()) { Hide(); warning = protectionWarning; return false; }
             if (actions is not null)
@@ -131,6 +157,21 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
         actionHost?.Clear();
         actions = null;
         base.Hide();
+    }
+
+    private static Font ReplaceHeadingFont(Font? previous, float size)
+    {
+        var font = new Font("Yu Gothic UI", size, FontStyle.Bold, GraphicsUnit.Pixel);
+        previous?.Dispose(); return font;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        using var path = ToastCardStyle.Rounded(new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1)), ToastCardStyle.Scale(12, displayDpi));
+        using var pen = new Pen(hasFailure ? Color.FromArgb(228, 190, 145) : Color.FromArgb(210, 222, 229));
+        e.Graphics.DrawPath(pen, path);
     }
 
     internal static Rectangle CalculateBounds(Rectangle workArea, int dpi, NotificationCorner corner, int lines = 1)
@@ -197,7 +238,7 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
         }
         protectedHandle = Handle;
         protectionWarning = null;
-        SetLayeredWindowAttributes(Handle, 0, 245, 2);
+        SetLayeredWindowAttributes(Handle, 0, 255, 2);
         return true;
     }
 
@@ -239,7 +280,7 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { actionHost?.Dispose(); notificationFont?.Dispose(); notificationFont = null; }
+        if (disposing) { actionHost?.Dispose(); notificationFont?.Dispose(); notificationFont = null; headingFont?.Dispose(); headingFont = null; }
         base.Dispose(disposing);
     }
 
