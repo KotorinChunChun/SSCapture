@@ -5,7 +5,7 @@ namespace SSCapture.Services;
 internal enum NotificationCorner { BottomRight, BottomLeft, TopLeft, TopCenter, TopRight, MiddleLeft, Center, MiddleRight, BottomCenter }
 internal enum NotificationClickAction { None, OpenFolder, ExternalApplication }
 internal sealed record NotificationActions(Action? OpenFolder, Action? Edit, string RepeatHint,
-    Bitmap? Thumbnail = null, Func<Control, Task>? Drag = null);
+    Bitmap? Thumbnail = null, Func<Control, CancellationToken, Task>? Drag = null);
 
 internal interface ICaptureToast : IDisposable
 {
@@ -47,10 +47,16 @@ internal sealed class CaptureFeedback : IDisposable
     private readonly Func<Point> pointer;
     private NotificationLifetime? lifetime;
     private NotificationImage? pendingImage;
+    private Bitmap? thumbnail;
+    private int draggingSerial;
+    private readonly Func<Control, string, bool> dragFile;
+    private readonly Func<bool> dragButtonDown;
+    private readonly Action<string> retainDragFile;
 
     internal CaptureFeedback(Action<string>? warning = null, Func<ICaptureToast>? createToast = null,
         ICompletionSound? sound = null, IFeedbackTimer? timer = null, Action<string>? openSavedFile = null,
-        Func<long>? now = null, Func<Point>? pointer = null, Action<System.Diagnostics.ProcessStartInfo>? launch = null)
+        Func<long>? now = null, Func<Point>? pointer = null, Action<System.Diagnostics.ProcessStartInfo>? launch = null,
+        Func<Control, string, bool>? dragFile = null, Func<bool>? dragButtonDown = null, Action<string>? retainDragFile = null)
     {
         this.warning = warning;
         this.createToast = createToast ?? (() => new CaptureToastForm());
@@ -60,6 +66,9 @@ internal sealed class CaptureFeedback : IDisposable
         this.launch = launch ?? (info => { using var process = System.Diagnostics.Process.Start(info); });
         this.now = now ?? (() => Environment.TickCount64);
         this.pointer = pointer ?? Capture.CaptureNative.CursorPosition;
+        this.dragFile = dragFile ?? ((source, path) => NotificationFileDrag.Run(source, path));
+        this.dragButtonDown = dragButtonDown ?? (() => (Control.MouseButtons & MouseButtons.Left) != 0);
+        this.retainDragFile = retainDragFile ?? NotificationImage.RetainAfterLaunch;
         this.timer.Elapsed += PollLifetime;
     }
 
@@ -68,7 +77,7 @@ internal sealed class CaptureFeedback : IDisposable
     internal void Notify(CaptureDelivery result, AppSettings settings)
     {
         if (disposed || (!result.HasSuccess && !result.HasFailure)) { result.NotificationImage?.Dispose(); return; }
-        pendingImage?.Dispose(); pendingImage = result.NotificationImage;
+        HideForCapture(); pendingImage = result.NotificationImage;
         if (settings.PlayCaptureSound && result.HasSuccess)
         {
             try { sound.Request(); }
@@ -83,7 +92,25 @@ internal sealed class CaptureFeedback : IDisposable
             Action? edit = presentation.Editor is { } app
                 ? () => OpenApplication(serial, result, app) : null;
             toast ??= createToast();
-            toast.SetActions(new(folder, edit, presentation.RepeatHint));
+            bool canDrag = result.Intent == CaptureIntent.Screenshot && result.HasSuccess
+                && (pendingImage is not null || result.SavedPath is not null || result.NotificationPath is not null);
+            if (canDrag)
+            {
+                try
+                {
+                    if (pendingImage is not null) thumbnail = pendingImage.CreateThumbnail();
+                    else
+                    {
+                        using var fileImage = Image.FromFile(result.SavedPath ?? result.NotificationPath!);
+                        thumbnail = NotificationImage.Thumbnail(fileImage);
+                    }
+                }
+                catch (Exception ex) when (ex is ArgumentException or IOException or OutOfMemoryException or UnauthorizedAccessException
+                    or InvalidOperationException or System.Runtime.InteropServices.ExternalException)
+                { /* 消失・不正ファイルのプレビューは省略し、成功済みの出力結果を維持する。 */ }
+            }
+            toast.SetActions(new(folder, edit, presentation.RepeatHint, thumbnail,
+                canDrag && thumbnail is not null ? (source, gesture) => DragAsync(serial, result, settings, source, gesture) : null));
             if (!toast.TryShow(presentation.Message, presentation.HasFailure, settings.NotificationCorner, out string? error,
                 null, settings.NotificationDisplay, result.CaptureBounds))
             {
@@ -109,12 +136,14 @@ internal sealed class CaptureFeedback : IDisposable
         lifetime = null;
         timer.Stop();
         toast?.Hide();
+        thumbnail?.Dispose(); thumbnail = null;
         pendingImage?.Dispose(); pendingImage = null;
     }
 
     private void PollLifetime()
     {
         if (disposed || lifetime is null || toast is null) return;
+        if (draggingSerial == notificationSerial) return;
         try
         {
             if (toast.DisplayBounds.IsEmpty || lifetime.Expired(now(), pointer(), toast.DisplayBounds, toast.DisplayDpi)) HideForCapture();
@@ -131,6 +160,35 @@ internal sealed class CaptureFeedback : IDisposable
         catch (Exception ex) { Warn("保存ファイルをExplorerで表示できません: " + ex.Message); }
     }
 
+    private async Task DragAsync(int serial, CaptureDelivery result, AppSettings settings, Control source, CancellationToken gesture)
+    {
+        if (disposed || serial != notificationSerial || draggingSerial != 0) return;
+        draggingSerial = serial;
+        timer.Stop();
+        string? temporary = null;
+        try
+        {
+            string path;
+            if (result.SavedPath is not null) path = result.SavedPath;
+            else if (pendingImage is not null) path = temporary = await pendingImage.PrepareAsync();
+            else path = result.NotificationPath ?? throw new IOException("ドラッグする画像がありません。");
+            if (disposed || serial != notificationSerial || source.IsDisposed || gesture.IsCancellationRequested || !dragButtonDown()) return;
+            if (dragFile(source, path) && !disposed && serial == notificationSerial) HideForCapture();
+        }
+        catch (Exception ex) { Warn("通知から画像を渡せません: " + ex.Message); }
+        finally
+        {
+            if (temporary is not null) retainDragFile(temporary);
+            draggingSerial = 0;
+            if (!disposed && serial == notificationSerial && toast is not null)
+            {
+                // キャンセル・失敗・ボタンを早く離した場合も満額で通知へ戻れる。
+                lifetime = new NotificationLifetime(now(), checked(settings.NotificationDurationSeconds * 1000), settings.HoldNotificationWhileApproaching);
+                timer.Restart(toast.DisplayBounds.IsEmpty ? settings.NotificationDurationSeconds * 1000 : 50);
+            }
+        }
+    }
+
     private async void OpenApplication(int serial, CaptureDelivery result, ExternalApplication app)
     {
         if (disposed || serial != notificationSerial) return;
@@ -145,7 +203,7 @@ internal sealed class CaptureFeedback : IDisposable
             if (!File.Exists(path)) throw new FileNotFoundException("通知のファイルが見つかりません。", path);
             if (disposed) return;
             launch(OutputRouter.EditorStartInfo(app.Executable, path, app.Arguments));
-            if (image is not null) NotificationImage.RetainAfterLaunch(path);
+            if (result.SavedPath is null && result.NotificationPath is null && image is not null) retainDragFile(path);
         }
         catch (Exception ex) { Warn("通知から外部アプリを開けません: " + ex.Message); }
         finally { image?.Dispose(); }

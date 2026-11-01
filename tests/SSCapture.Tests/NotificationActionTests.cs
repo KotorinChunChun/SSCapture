@@ -34,7 +34,8 @@ internal static partial class Program
             foreach (Control button in host.Controls.OfType<Button>())
             {
                 Check(host.ClientRectangle.Contains(button.Bounds), "ボタンがつぶれる/はみ出す");
-                Check(host.Region!.IsVisible(button.Left + 2, button.Top + 2), "ボタンが入力領域にない");
+                Check(host.Region!.IsVisible(button.Left + button.Width / 2, button.Top + button.Height / 2), "ボタンが入力領域にない");
+                Check(!host.Region.IsVisible(button.Left, button.Top), "角丸の外側がクリックを吸収する");
             }
             Check(!host.ShowInTaskbar, "タスクバーに表示");
             form.Hide(); Check(!host.Visible, "撮影前にボタンだけ残留");
@@ -101,7 +102,8 @@ internal static partial class Program
             var settings = OutputSettings(directory) with { ImageEditors = [app], SelectedImageEditorId = app.Id };
             await router.ScreenshotAsync(image, OutputDestination.ExternalApp, settings);
             Check(delivered!.NotificationPath is not null && File.Exists(delivered.NotificationPath), "起動済み実ファイルを保持しない");
-            Check(delivered.NotificationImage is null, "不要な画像を複製");
+            using var notificationImage = delivered.NotificationImage;
+            Check(notificationImage is not null, "ドラッグ画像とプレビューがない");
             Equal(app, NotificationPresentation.ResolveApplication(delivered, settings));
         })));
     }

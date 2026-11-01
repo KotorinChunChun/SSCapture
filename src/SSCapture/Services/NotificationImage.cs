@@ -13,8 +13,23 @@ internal sealed class NotificationImage : IDisposable
 
     internal Task<string> PrepareAsync()
     {
-        var bitmap = image ?? throw new ObjectDisposedException(nameof(NotificationImage));
-        return Task.Run(() => CaptureStorage.SavePng(bitmap, directory, DateTimeOffset.Now, "notify-" + Guid.NewGuid().ToString("N") + ".png"));
+        // 通知の差替え・撮影開始が非同期保存へ割り込んでも、この保存用コピーは生存する。
+        var bitmap = (Bitmap)(image ?? throw new ObjectDisposedException(nameof(NotificationImage))).Clone();
+        return Task.Run(() =>
+        {
+            using (bitmap) return CaptureStorage.SavePng(bitmap, directory, DateTimeOffset.Now, "notify-" + Guid.NewGuid().ToString("N") + ".png");
+        });
+    }
+
+    internal Bitmap CreateThumbnail() => Thumbnail(image ?? throw new ObjectDisposedException(nameof(NotificationImage)));
+    internal static Bitmap Thumbnail(Image image)
+    {
+        double scale = Math.Min(88d / image.Width, 88d / image.Height);
+        var thumbnail = new Bitmap(Math.Max(1, (int)Math.Round(image.Width * scale)), Math.Max(1, (int)Math.Round(image.Height * scale)));
+        using var graphics = Graphics.FromImage(thumbnail);
+        graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        graphics.DrawImage(image, new Rectangle(Point.Empty, thumbnail.Size));
+        return thumbnail;
     }
 
     internal static void CleanupPreviousSession(string workRoot)

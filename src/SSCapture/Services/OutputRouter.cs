@@ -218,7 +218,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                 if (saved is null && notificationImage is not null) notificationPath ??= retry?.ExternalPath;
                 NotifyDelivered(new CaptureDelivery(intent, succeeded, failed, folderOpenFailed,
                     succeeded.HasFlag(OutputDestination.File) ? saved : null, captureBounds, captureDescription, metadataFailed,
-                    saved is null ? notificationPath : null, saved is null && notificationPath is null ? notificationImage?.Invoke() : null, captureSettings));
+                    saved is null ? notificationPath : null, notificationImage?.Invoke(), captureSettings));
             }
         }
         if (errors.Count > 0) throw new IOException(result, new AggregateException(errors));

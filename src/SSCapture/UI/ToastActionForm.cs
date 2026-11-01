@@ -11,11 +11,13 @@ internal sealed class ToastActionForm : Form
     private readonly bool nativeShow;
     private readonly Button folder, edit;
     private readonly PictureBox preview;
-    private readonly ToolTip tips = new();
+    private readonly ToolTip tips = new() { ShowAlways = true };
     private nint protectedHandle;
     private NotificationActions? actions;
     private bool ready;
     private Font? actionFont;
+    private Point? dragOrigin;
+    private CancellationTokenSource? dragGesture;
     internal ToastActionForm(Func<nint, CaptureProtection> protect, bool nativeShow)
     {
         this.protect = protect; this.nativeShow = nativeShow;
@@ -29,8 +31,28 @@ internal sealed class ToastActionForm : Form
             BackColor = Color.FromArgb(235, 241, 244), TabStop = false, AccessibleName = "撮影画像をドラッグ" };
         tips.SetToolTip(preview, "フォルダへドラッグして移動。Ctrlを押すとコピー。対応アプリへドロップして開きます。");
         Controls.AddRange([folder, edit, preview]);
+        preview.MouseDown += (_, e) =>
+        {
+            if (e.Button != MouseButtons.Left || !ready || actions?.Drag is null) return;
+            CancelGesture(); dragGesture = new(); dragOrigin = e.Location;
+        };
+        preview.MouseUp += (_, _) => CancelGesture();
+        preview.MouseCaptureChanged += (_, _) => { if (!preview.Capture) CancelGesture(); };
+        preview.MouseMove += async (_, e) =>
+        {
+            if (dragOrigin is not Point origin || dragGesture is null || e.Button != MouseButtons.Left || !ready || actions?.Drag is not { } drag) return;
+            if (!DragThresholdReached(origin, e.Location, SystemInformation.DragSize)) return;
+            dragOrigin = null;
+            await drag(preview, dragGesture.Token);
+        };
         folder.Click += (_, _) => InvokeAction(actions?.OpenFolder);
         edit.Click += (_, _) => InvokeAction(actions?.Edit);
+    }
+    internal static bool DragThresholdReached(Point origin, Point current, Size threshold) =>
+        !new Rectangle(origin.X - threshold.Width / 2, origin.Y - threshold.Height / 2, threshold.Width, threshold.Height).Contains(current);
+    private void CancelGesture()
+    {
+        dragOrigin = null; dragGesture?.Cancel(); dragGesture?.Dispose(); dragGesture = null;
     }
     private static Button Make(string text, string name)
     {
@@ -67,7 +89,12 @@ internal sealed class ToastActionForm : Form
             Font = actionFont; previous?.Dispose();
         }
         folder.Enabled = value.OpenFolder is not null; edit.Enabled = value.Edit is not null;
-        var region = new Region(folder.Bounds); region.Union(edit.Bounds);
+        var region = new Region(); region.MakeEmpty();
+        foreach (var button in new[] { folder, edit })
+        {
+            using var buttonRegion = button.Region!.Clone();
+            buttonRegion.Translate(button.Left, button.Top); region.Union(buttonRegion);
+        }
         if (value.Thumbnail is not null) region.Union(preview.Bounds);
         Region? oldRegion = Region; Region = region; oldRegion?.Dispose();
         _ = Handle;
@@ -83,7 +110,7 @@ internal sealed class ToastActionForm : Form
         ready = false; actions = null; Hide(); action();
     }
     public new void Hide() { base.Hide(); }
-    internal void Clear() { ready = false; actions = null; preview.Image = null; base.Hide(); }
+    internal void Clear() { ready = false; actions = null; CancelGesture(); preview.Image = null; base.Hide(); }
     protected override void OnHandleCreated(EventArgs e)
     { base.OnHandleCreated(e); protectedHandle = 0; ready = false; SetLayeredWindowAttributes(Handle, 0, 0, 2); }
     protected override void OnHandleDestroyed(EventArgs e)
@@ -103,7 +130,7 @@ internal sealed class ToastActionForm : Form
         base.WndProc(ref m);
     }
     protected override void Dispose(bool disposing)
-    { if (disposing) { actions = null; preview.Image = null; tips.Dispose(); actionFont?.Dispose(); actionFont = null; } base.Dispose(disposing); }
+    { if (disposing) { actions = null; CancelGesture(); preview.Image = null; tips.Dispose(); actionFont?.Dispose(); actionFont = null; } base.Dispose(disposing); }
     [StructLayout(LayoutKind.Sequential)]
     private struct WindowPosition { public nint Window, InsertAfter; public int X, Y, Width, Height; public uint Flags; }
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]

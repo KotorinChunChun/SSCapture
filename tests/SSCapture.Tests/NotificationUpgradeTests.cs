@@ -91,9 +91,11 @@ internal static partial class Program
             var settings = new AppSettings { ImageEditors = [app], NotificationApplicationId = app.Id,
                 NotificationClickAction = NotificationClickAction.ExternalApplication };
             feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, NotificationPath: path), settings);
+            Check(toast.Actions is not null, feedback.LastWarning ?? "通知の操作がない");
             Action click = toast.Actions!.Edit!; click(); click();
             Equal(1, launched.Count); Check(launched[0].ArgumentList.Contains(path), "通知画像を渡さない");
             feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.File, OutputDestination.None, SavedPath: path), settings with { NotificationClickAction = NotificationClickAction.None });
+            Check(toast.Actions is not null, feedback.LastWarning ?? "保存済み通知の操作がない");
             Check(toast.Activate is null && toast.Actions!.OpenFolder is not null && toast.Actions.Edit is not null, "本文透過と独立ボタンが共存しない");
         }));
         Run("通知タイマーは近接中だけ延長し撮影前には必ず止まる", () =>

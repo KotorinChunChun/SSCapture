@@ -14,7 +14,7 @@ internal static partial class Program
         Application.EnableVisualStyles();
         if (args.SequenceEqual(["--notification-tests"]))
         {
-            NotificationUpgradeTests(); NotificationActionTests(); NotificationPresentationTests(); FeedbackTests();
+            NotificationUpgradeTests(); NotificationActionTests(); NotificationPresentationTests(); NotificationDragTests(); FeedbackTests();
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }
         if (args.SequenceEqual(["--recipe-tests"]))
@@ -110,6 +110,7 @@ internal static partial class Program
         PreparationTests();
         NotificationUpgradeTests();
         NotificationActionTests();
+        NotificationDragTests();
         NotificationPresentationTests();
         OutputConditionTests();
         ExternalApplicationTests();
