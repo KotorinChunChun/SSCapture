@@ -23,6 +23,17 @@ pwsh -File scripts/test-build.ps1
 
 通常テストは合成画像・注入した処理を使い、実画面撮影・実録音・個人クリップボード操作を行いません。実入力や機器の検証は[開発手順](../dev/development.md)の専用コマンドで別に実施します。
 
+機能別に実行するには `-Suite` を指定します。通知の試験は、保存済み・未保存・保存失敗でのボタンとクリック領域の切り替え、サムネイルのドラッグ操作、一時PNGの生成や取り消しを確認します。
+
+```powershell
+pwsh -File scripts/test.ps1 -Suite Notification -OutputPath dev/history/v0.1.10/logs/notification-cli/tests
+pwsh -File scripts/test.ps1 -Suite Output
+pwsh -File scripts/test.ps1 -Suite Recording
+pwsh -File scripts/test.ps1 -Suite Startup
+```
+
+ほかに `Command`、`Pinned`、`Preset`、`Recipe`、`Snap`、`Menu` を指定できます。通知からExplorerやOfficeへの実際のドロップと、他アプリが前面にある場合のフォーカスは実機で確認します。
+
 ## ローカルで実行する
 
 ```powershell

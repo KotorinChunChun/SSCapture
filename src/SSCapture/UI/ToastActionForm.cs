@@ -88,10 +88,14 @@ internal sealed class ToastActionForm : Form
             Font? previous = actionFont; actionFont = new Font("Yu Gothic UI", 14 * scale, FontStyle.Regular, GraphicsUnit.Pixel);
             Font = actionFont; previous?.Dispose();
         }
-        folder.Enabled = value.OpenFolder is not null; edit.Enabled = value.Edit is not null;
+        bool showFolder = value.OpenFolder is not null;
+        folder.Visible = showFolder;
+        folder.Enabled = showFolder;
+        edit.Enabled = value.Edit is not null;
         var region = new Region(); region.MakeEmpty();
         foreach (var button in new[] { folder, edit })
         {
+            if (button == folder && !showFolder) continue;
             using var buttonRegion = button.Region!.Clone();
             buttonRegion.Translate(button.Left, button.Top); region.Union(buttonRegion);
         }

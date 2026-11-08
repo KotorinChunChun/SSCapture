@@ -40,6 +40,35 @@ internal static partial class Program
             Check(!host.ShowInTaskbar, "タスクバーに表示");
             form.Hide(); Check(!host.Visible, "撮影前にボタンだけ残留");
         });
+        Run("通知の再利用で保存成功時だけフォルダボタンを表示し未保存のドラッグ領域を保つ", () => WithServiceDirectory(directory =>
+        {
+            using var image = new Bitmap(16, 8);
+            string saved = CaptureStorage.SavePng(image, directory, DateTimeOffset.Now, "saved.png");
+            using var form = new CaptureToastForm(_ => new(true, null), _ => { }, () => (new Rectangle(0, 0, 1920, 1080), 144));
+            using var feedback = new CaptureFeedback(createToast: () => form, sound: new FakeCompletionSound(), timer: new FakeFeedbackTimer());
+            var settings = new AppSettings { PlayCaptureSound = false };
+            foreach (var (completed, failed, path, showFolder) in new[]
+            {
+                (OutputDestination.File, OutputDestination.None, (string?)saved, true),
+                (OutputDestination.Clipboard, OutputDestination.None, null, false),
+                (OutputDestination.Clipboard, OutputDestination.File, null, false),
+                (OutputDestination.File, OutputDestination.None, saved, true)
+            })
+            {
+                feedback.Notify(new(CaptureIntent.Screenshot, completed, failed, SavedPath: path,
+                    NotificationImage: new(image, directory)), settings);
+                Check(feedback.LastWarning is null, feedback.LastWarning ?? "通知を準備できない");
+                var host = (ToastActionForm)typeof(CaptureToastForm).GetField("actionHost", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+                var folder = host.Controls.Find("NotificationOpenFolder", true).Single();
+                var preview = (PictureBox)host.Controls.Find("NotificationDragImage", true).Single();
+                var styles = (CreateParams)folder.GetType().GetProperty("CreateParams", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(folder)!;
+                Equal(showFolder, (styles.Style & 0x10000000) != 0);
+                Equal(showFolder, host.Region!.IsVisible(folder.Left + folder.Width / 2, folder.Top + folder.Height / 2));
+                Check(preview.Image is not null && preview.Cursor == Cursors.Hand && host.Region.IsVisible(preview.Left + 2, preview.Top + 2),
+                    "サムネイルからドラッグできない");
+                Equal(saved, Directory.EnumerateFiles(directory).Single());
+            }
+        }));
         Run("通知の小画像と長文はDPIごとに重ならず本文だけ透過する", () =>
         {
             using var thumbnail = new Bitmap(44, 20);
