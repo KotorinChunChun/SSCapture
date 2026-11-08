@@ -54,7 +54,7 @@ internal static partial class Program
             Equal("デスクトップ【1】全体をコピーしました", delivery.Message);
             Equal("デスクトップ【1】の 【100,100】 ～ 【200,200】 をコピーしました", (delivery with { CaptureDescription = "デスクトップ【1】の 【100,100】 ～ 【200,200】" }).Message);
             Equal("デスクトップ【1】全体の動画を保存しました", (delivery with { Intent = CaptureIntent.Recording, Completed = OutputDestination.File }).Message);
-            Equal("デスクトップ【1】全体をコピーしました" + Environment.NewLine + "デスクトップ【1】全体を外部アプリへ送れませんでした",
+            Equal("デスクトップ【1】全体をコピーしました" + Environment.NewLine + "外部アプリへ送れませんでした",
                 (delivery with { Failed = OutputDestination.ExternalApp }).Message);
             Check(!delivery.Message.Contains("非公開"), "保存パスを表示した");
         });

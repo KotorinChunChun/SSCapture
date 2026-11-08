@@ -120,13 +120,19 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
             Size measured = TextRenderer.MeasureText(text, message.Font, new Size(textWidth, int.MaxValue),
                 TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
             int margin = Math.Min((int)Math.Round(12 * scale), Math.Max(0, (Math.Min(monitor.WorkArea.Width, monitor.WorkArea.Height) - 1) / 2));
-            int actionHeight = actions is null ? 0 : (int)Math.Round(48 * scale);
-            int bodyHeight = Math.Max(measured.Height, (int)Math.Round(44 * scale));
+            int actionHeight = actions?.ButtonRows switch
+            {
+                1 => ToastCardStyle.Scale(48, monitor.Dpi),
+                2 => ToastCardStyle.Scale(88, monitor.Dpi),
+                _ => 0
+            };
+            int bodyHeight = actions?.Thumbnail is null ? measured.Height : Math.Max(measured.Height, (int)Math.Round(44 * scale));
             int height = Math.Min(Math.Max(bounds.Height, bodyHeight + layout.Padding.Vertical + (int)(layout.RowStyles[0].Height + layout.RowStyles[2].Height)),
                 monitor.WorkArea.Height - margin * 2 - Math.Min(actionHeight, monitor.WorkArea.Height / 3));
             bounds = PlaceSize(monitor.WorkArea, monitor.Dpi, corner, new(bounds.Width, Math.Max(1, height + actionHeight)));
             layout.Padding = new Padding(inset, vertical, inset, vertical + actionHeight);
             this.hasFailure = hasFailure;
+            heading.Text = actions?.Heading ?? "SSCapture";
             heading.ForeColor = hasFailure ? Color.FromArgb(161, 85, 16) : ToastCardStyle.Accent;
             message.Text = text;
             repeat.Text = repeatText;
@@ -136,14 +142,14 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
             Invalidate();
             _ = Handle;
             if (!EnsureProtection()) { Hide(); warning = protectionWarning; return false; }
-            if (actions is not null)
+            if (actions is { HasInteractiveSurface: true })
             {
                 actionHost ??= new ToastActionForm(protect, nativeShow);
                 if (!actionHost.Prepare(bounds, monitor.Dpi, actions, out warning)) { Hide(); return false; }
             }
             show(this);
             if (protectedHandle != Handle) { Hide(); warning = protectionWarning; return false; }
-            if (actions is not null) actionHost?.ShowProtected();
+            if (actions is { HasInteractiveSurface: true }) actionHost?.ShowProtected();
             return true;
         }
         catch (Exception ex)

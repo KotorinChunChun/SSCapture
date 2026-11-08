@@ -251,6 +251,29 @@ internal static partial class Program
             Check(!sound.IsPlaying, "失敗で再生中状態が残る");
         });
 
+        Run("前回の静止画結果は録画通知に置き換わらず音や出力操作を伴わない", () =>
+        {
+            var toast = new FakeCaptureToast();
+            var sound = new FakeCompletionSound();
+            using var feedback = new CaptureFeedback(createToast: () => toast, sound: sound, timer: new FakeFeedbackTimer());
+            var settings = new AppSettings { PlayCaptureSound = true, NotificationDurationSeconds = 5 };
+            feedback.ShowPreviousScreenshot(settings);
+            Equal(0, toast.Shows);
+            int retries = 0;
+            feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.Clipboard | OutputDestination.File,
+                OutputDestination.ExternalApp, SavedPath: "saved.png", CaptureDescription: "640×360px"), settings, () => retries++);
+            Equal("一部の出力に失敗", toast.Actions!.Heading);
+            var retry = toast.Actions.Retry!;
+            Check(toast.Message.StartsWith("640×360pxをコピー・保存しました") && toast.Message.LastIndexOf("640×360px") == 0, "寸法が重複");
+            feedback.Notify(new(CaptureIntent.Recording, OutputDestination.File, OutputDestination.None), settings);
+            retry();
+            Equal(0, retries);
+            feedback.ShowPreviousScreenshot(settings);
+            Equal("前回の撮影結果", toast.Actions!.Heading);
+            Check(toast.Message.StartsWith("640×360px") && !toast.Actions.HasInteractiveSurface, "参考表示が前回の静止画結果と一致しない");
+            Equal(2, sound.Requests);
+        });
+
         static CaptureToastForm NewToast(Func<nint, CaptureProtection>? protection = null, Action<CaptureToastForm>? show = null)
             => new(protection ?? (_ => new CaptureProtection(true, null)), show ?? (_ => { }),
                 () => (new Rectangle(-1920, 0, 1920, 1040), 96));
@@ -267,9 +290,10 @@ internal static partial class Program
         public void SetActions(NotificationActions actions) => Actions = actions;
         internal NotificationDisplay Display;
         internal Rectangle? CaptureBounds;
+        internal string Message = "";
         public bool TryShow(string message, bool hasFailure, NotificationCorner corner, out string? warning,
             Action? activate = null, NotificationDisplay display = NotificationDisplay.Captured, Rectangle? captureBounds = null)
-        { Shows++; Visible = Allow; Activate = activate; Display = display; CaptureBounds = captureBounds; warning = Allow ? null : "除外を確認できません"; return Allow; }
+        { Shows++; Message = message; Visible = Allow; Activate = activate; Display = display; CaptureBounds = captureBounds; warning = Allow ? null : "除外を確認できません"; return Allow; }
         public void Hide() { Visible = false; Activate = null; Actions = null; }
         public void Dispose() { Disposed = true; Visible = false; }
     }

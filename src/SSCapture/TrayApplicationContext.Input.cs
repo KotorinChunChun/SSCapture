@@ -42,7 +42,7 @@ internal sealed partial class TrayApplicationContext
             return;
         }
 
-        _ = TakeCaptureAsync(settings.DefaultMode, intent);
+        _ = TakeCaptureAsync(settings.DefaultMode, intent, showPreviousOnEscape: intent == CaptureIntent.Screenshot);
     }
 
     private bool TryConfigureHook(bool enabled, out string? error)

@@ -132,7 +132,7 @@ internal static partial class Program
             Equal(1, probe.CapturedCalls); Equal(SaveCancellationTime, probe.History.Entries.Single().CapturedAt);
             using var recovered = probe.History.CloneImage(probe.History.Entries[0].Id);
             Equal(Color.Magenta.ToArgb(), recovered!.GetPixel(1, 1).ToArgb());
-            Equal(new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.None, OutputDestination.Clipboard), probe.Notifications.Single() with { CaptureSettings = null, NotificationImage = null });
+            Equal(new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.None, OutputDestination.Clipboard, RetrySerial: 1), probe.Notifications.Single() with { CaptureSettings = null, NotificationImage = null });
             Equal(0, Directory.GetFileSystemEntries(directory).Length);
         })));
 
@@ -154,7 +154,7 @@ internal static partial class Program
             Equal(expected, probe.Launches[0].ArgumentList.Single());
             Equal(expected, probe.History.Entries.Single().SavedPath);
             Equal(SaveCancellationTime, probe.History.Entries.Single().CapturedAt);
-            Equal(new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.File | OutputDestination.ExternalApp, OutputDestination.Clipboard, SavedPath: expected), probe.Notifications.Single() with { CaptureSettings = null, NotificationImage = null });
+            Equal(new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.File | OutputDestination.ExternalApp, OutputDestination.Clipboard, SavedPath: expected, RetrySerial: 1), probe.Notifications.Single() with { CaptureSettings = null, NotificationImage = null });
         })));
 
         foreach (bool clipboard in new[] { false, true })
@@ -180,7 +180,7 @@ internal static partial class Program
                 Equal<string?>(null, probe.History.Entries.Single().SavedPath);
                 Equal(SaveCancellationTime, probe.History.Entries.Single().CapturedAt);
                 Check(((AggregateException)error.InnerException!).InnerExceptions.Contains(original), "命名処理の元例外が失われた");
-                Equal(new CaptureDelivery(CaptureIntent.Screenshot, clipboard ? OutputDestination.Clipboard : OutputDestination.None, OutputDestination.File), probe.Notifications.Single() with { CaptureSettings = null, NotificationImage = null });
+                Equal(new CaptureDelivery(CaptureIntent.Screenshot, clipboard ? OutputDestination.Clipboard : OutputDestination.None, OutputDestination.File, RetrySerial: 1), probe.Notifications.Single() with { CaptureSettings = null, NotificationImage = null });
                 Equal(0, Directory.GetFileSystemEntries(directory).Length);
             })));
         }
@@ -199,7 +199,7 @@ internal static partial class Program
             Equal(1, probe.CapturedCalls); Equal(1, probe.Regions);
             Equal<string?>(null, probe.History.Entries.Single().SavedPath);
             Equal(SaveCancellationTime, probe.History.Entries.Single().CapturedAt);
-            Equal(new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.File | OutputDestination.ExternalApp), probe.Notifications.Single() with { CaptureSettings = null, NotificationImage = null });
+            Equal(new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.File | OutputDestination.ExternalApp, RetrySerial: 1), probe.Notifications.Single() with { CaptureSettings = null, NotificationImage = null });
             Equal("preserve existing file", File.ReadAllText(blocked));
             Check(!Directory.Exists(Path.Combine(directory, "work")), "保存失敗後に外部アプリ用画像を作った");
         })));

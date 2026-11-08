@@ -53,13 +53,14 @@ internal sealed partial class TrayApplicationContext
         }
     }
 
-    private async Task TakeCaptureAsync(CaptureMode mode, CaptureIntent intent, SavedRegion? inputPreset = null)
+    private async Task TakeCaptureAsync(CaptureMode mode, CaptureIntent intent, SavedRegion? inputPreset = null, bool showPreviousOnEscape = false)
     {
         if (busy || exiting || pendingRecording is not null)
             return;
         busy = true;
         RefreshMenu();
         bool openSettings = false;
+        bool showPrevious = false;
         DateTimeOffset capturedAt = DateTimeOffset.Now;
         long sequence = ++captureSerial;
         IReadOnlyList<DisplayLayout>? captureDisplays = null;
@@ -79,6 +80,7 @@ internal sealed partial class TrayApplicationContext
             openSettings = outcome.OpenSettings;
             if (outcome.Selection is null)
             {
+                showPrevious = showPreviousOnEscape && outcome.EscapedBeforeSelectionInput;
                 StoreStatus("選択をキャンセルしました。");
                 return;
             }
@@ -172,6 +174,7 @@ internal sealed partial class TrayApplicationContext
             {
                 RefreshMenu();
                 FlushFeedback();
+                if (showPrevious) feedback.ShowPreviousScreenshot(settings);
                 if (openSettings)
                     ShowSettings();
             }

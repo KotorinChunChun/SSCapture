@@ -36,7 +36,12 @@ internal sealed partial class OutputRouter
         return job;
     }
 
-    internal async Task<string> RetryFailedAsync()
+    internal bool CanRetry(long serial)
+    {
+        lock (retryGate) return !retrying && pendingRetry?.Serial == serial;
+    }
+
+    internal async Task<string> RetryFailedAsync(long? expectedSerial = null)
     {
         RetryJob job;
         lock (retryGate)
@@ -44,6 +49,8 @@ internal sealed partial class OutputRouter
             if (retryDisposed) throw new ObjectDisposedException(nameof(OutputRouter));
             if (retrying) throw new InvalidOperationException("出力の再実行中です。");
             job = pendingRetry ?? throw new InvalidOperationException("再実行できる出力はありません。");
+            if (expectedSerial is long serial && job.Serial != serial)
+                throw new InvalidOperationException("この通知の出力は再実行できません。");
             pendingRetry = null; retrying = true; job.IsRetry = true;
         }
         RetryChanged();

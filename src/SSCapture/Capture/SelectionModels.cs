@@ -29,11 +29,13 @@ internal sealed record CaptureSelection(
     OutputDestination Destination);
 
 internal sealed class CaptureOutcome(Bitmap? image, CaptureSelection? selection, bool openSettings = false,
-    SSCapture.Services.AppSettings? outputSettings = null, SSCapture.Services.CaptureMetadata? metadata = null) : IDisposable
+    SSCapture.Services.AppSettings? outputSettings = null, SSCapture.Services.CaptureMetadata? metadata = null,
+    bool escapedBeforeSelectionInput = false) : IDisposable
 {
     public Bitmap? Image { get; } = image;
     public CaptureSelection? Selection { get; } = selection;
     public bool OpenSettings { get; } = openSettings;
+    public bool EscapedBeforeSelectionInput { get; } = escapedBeforeSelectionInput;
     public SSCapture.Services.AppSettings? OutputSettings { get; } = outputSettings;
     public SSCapture.Services.CaptureMetadata? Metadata { get; } = metadata;
     public void Dispose() => Image?.Dispose();

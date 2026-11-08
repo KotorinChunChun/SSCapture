@@ -1,3 +1,4 @@
+using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using SSCapture.Services;
 
@@ -9,13 +10,14 @@ internal sealed class ToastActionForm : Form
     internal const int ActionExtendedStyle = 0x08000000 | 0x80 | 0x80000 | 0x8;
     private readonly Func<nint, CaptureProtection> protect;
     private readonly bool nativeShow;
-    private readonly Button folder, edit;
+    private readonly ActionButton folder, edit, retry;
     private readonly PictureBox preview;
     private readonly ToolTip tips = new() { ShowAlways = true };
     private nint protectedHandle;
     private NotificationActions? actions;
     private bool ready;
     private Font? actionFont;
+    private bool previewHover;
     private Point? dragOrigin;
     private CancellationTokenSource? dragGesture;
     internal ToastActionForm(Func<nint, CaptureProtection> protect, bool nativeShow)
@@ -27,10 +29,14 @@ internal sealed class ToastActionForm : Form
         BackColor = ToastCardStyle.Surface;
         folder = Make("フォルダを開く", "NotificationOpenFolder");
         edit = Make("外部アプリで編集", "NotificationEdit");
+        retry = Make("失敗した出力を再実行", "NotificationRetry");
         preview = new PictureBox { Name = "NotificationDragImage", SizeMode = PictureBoxSizeMode.Zoom,
             BackColor = Color.FromArgb(235, 241, 244), TabStop = false, AccessibleName = "撮影画像をドラッグ" };
         tips.SetToolTip(preview, "フォルダへドラッグして移動。Ctrlを押すとコピー。対応アプリへドロップして開きます。");
-        Controls.AddRange([folder, edit, preview]);
+        Controls.AddRange([folder, edit, retry, preview]);
+        preview.MouseEnter += (_, _) => { previewHover = true; preview.Invalidate(); };
+        preview.MouseLeave += (_, _) => { previewHover = false; preview.Invalidate(); };
+        preview.Paint += (_, e) => PaintPreviewGrip(e.Graphics);
         preview.MouseDown += (_, e) =>
         {
             if (e.Button != MouseButtons.Left || !ready || actions?.Drag is null) return;
@@ -47,6 +53,7 @@ internal sealed class ToastActionForm : Form
         };
         folder.Click += (_, _) => InvokeAction(actions?.OpenFolder);
         edit.Click += (_, _) => InvokeAction(actions?.Edit);
+        retry.Click += (_, _) => InvokeAction(actions?.Retry);
     }
     internal static bool DragThresholdReached(Point origin, Point current, Size threshold) =>
         !new Rectangle(origin.X - threshold.Width / 2, origin.Y - threshold.Height / 2, threshold.Width, threshold.Height).Contains(current);
@@ -54,14 +61,30 @@ internal sealed class ToastActionForm : Form
     {
         dragOrigin = null; dragGesture?.Cancel(); dragGesture?.Dispose(); dragGesture = null;
     }
-    private static Button Make(string text, string name)
+    private ActionButton Make(string text, string name)
     {
-        var button = new Button { Text = text, Name = name, FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(237, 244, 246), ForeColor = ToastCardStyle.Accent, TabStop = false, UseMnemonic = false };
-        button.FlatAppearance.BorderSize = 0;
-        button.FlatAppearance.MouseOverBackColor = Color.FromArgb(220, 235, 239);
-        button.FlatAppearance.MouseDownBackColor = Color.FromArgb(204, 224, 230);
+        var button = new ActionButton { Text = text, Name = name, FlatStyle = FlatStyle.Flat,
+            ForeColor = ToastCardStyle.Accent, TabStop = false, UseMnemonic = false };
+        tips.SetToolTip(button, text);
         return button;
+    }
+
+    private void PaintPreviewGrip(Graphics graphics)
+    {
+        if (actions?.Drag is null || preview.Image is null) return;
+        int unit = Math.Max(1, (int)Math.Round(preview.Width / 44d));
+        int left = preview.Width - 15 * unit, top = preview.Height - 18 * unit;
+        using var grip = new SolidBrush(ToastCardStyle.Surface);
+        using var dot = new SolidBrush(ToastCardStyle.Accent);
+        graphics.FillRectangle(grip, left, top, 14 * unit, 17 * unit);
+        for (int row = 0; row < 3; row++)
+        for (int column = 0; column < 2; column++)
+            graphics.FillEllipse(dot, left + (4 + 4 * column) * unit, top + (4 + 4 * row) * unit, 2 * unit, 2 * unit);
+        if (previewHover)
+        {
+            using var outline = new Pen(ToastCardStyle.Accent, unit);
+            graphics.DrawRectangle(outline, 0, 0, preview.Width - 1, preview.Height - 1);
+        }
     }
     protected override bool ShowWithoutActivation => true;
     protected override CreateParams CreateParams
@@ -71,15 +94,8 @@ internal sealed class ToastActionForm : Form
         Hide(); ready = false; actions = value; Bounds = bounds;
         float scale = dpi / 96f;
         int inset = Math.Max(1, (int)Math.Round(12 * scale)), gap = Math.Max(1, (int)Math.Round(8 * scale));
-        int width = Math.Max(1, (ClientSize.Width - 2 * inset - gap) / 2);
         int height = Math.Min(ClientSize.Height, Math.Max(1, (int)Math.Round(32 * scale)));
         int top = Math.Max(0, ClientSize.Height - height - Math.Min(inset, ClientSize.Height / 4));
-        folder.SetBounds(inset, top, width, height); edit.SetBounds(inset + width + gap, top, width, height);
-        foreach (var button in new[] { folder, edit })
-        {
-            using var shape = ToastCardStyle.Rounded(button.ClientRectangle, Math.Max(1, (int)(6 * scale)));
-            var old = button.Region; button.Region = new Region(shape); old?.Dispose();
-        }
         preview.Bounds = ToastCardStyle.PreviewBounds(dpi);
         preview.Image = value.Thumbnail; preview.Visible = value.Thumbnail is not null;
         preview.Cursor = value.Drag is null ? Cursors.Default : Cursors.Hand;
@@ -88,17 +104,21 @@ internal sealed class ToastActionForm : Form
             Font? previous = actionFont; actionFont = new Font("Yu Gothic UI", 14 * scale, FontStyle.Regular, GraphicsUnit.Pixel);
             Font = actionFont; previous?.Dispose();
         }
-        bool showFolder = value.OpenFolder is not null;
-        folder.Visible = showFolder;
-        folder.Enabled = showFolder;
-        edit.Enabled = value.Edit is not null;
+        folder.Visible = value.OpenFolder is not null;
+        edit.Visible = value.Edit is not null;
+        retry.Visible = value.Retry is not null;
+        var buttons = new List<ActionButton>(3);
+        if (value.OpenFolder is not null) buttons.Add(folder);
+        if (value.Edit is not null) buttons.Add(edit);
+        if (value.Retry is not null) buttons.Add(retry);
         var region = new Region(); region.MakeEmpty();
-        foreach (var button in new[] { folder, edit })
+        if (buttons.Count == 3)
         {
-            if (button == folder && !showFolder) continue;
-            using var buttonRegion = button.Region!.Clone();
-            buttonRegion.Translate(button.Left, button.Top); region.Union(buttonRegion);
+            PlaceRow([retry], top);
+            buttons.RemoveAt(2);
+            top = Math.Max(0, top - height - gap);
         }
+        if (buttons.Count != 0) PlaceRow(buttons, top);
         if (value.Thumbnail is not null) region.Union(preview.Bounds);
         Region? oldRegion = Region; Region = region; oldRegion?.Dispose();
         _ = Handle;
@@ -106,6 +126,24 @@ internal sealed class ToastActionForm : Form
         warning = result.Warning;
         if (!result.Success) { protectedHandle = 0; SetLayeredWindowAttributes(Handle, 0, 0, 2); return false; }
         protectedHandle = Handle; ready = true; SetLayeredWindowAttributes(Handle, 0, 255, 2); return true;
+
+        void PlaceRow(IReadOnlyList<ActionButton> row, int y)
+        {
+            int rowInset = Math.Min(inset, Math.Max(0, (ClientSize.Width - row.Count) / 2));
+            int rowGap = Math.Min(gap, Math.Max(0, ClientSize.Width - rowInset * 2 - row.Count));
+            int maxWidth = Math.Max(1, (ClientSize.Width - 2 * rowInset - rowGap * (row.Count - 1)) / row.Count);
+            int right = ClientSize.Width - rowInset;
+            for (int i = row.Count - 1; i >= 0; i--)
+            {
+                ActionButton button = row[i];
+                int width = Math.Min(maxWidth, TextRenderer.MeasureText(button.Text, Font).Width + 2 * inset);
+                button.Radius = ToastCardStyle.Scale(6, dpi);
+                button.SetBounds(Math.Max(0, right - width), y, width, height);
+                using var shape = ToastCardStyle.Rounded(button.Bounds, button.Radius);
+                region.Union(shape);
+                right -= width + rowGap;
+            }
+        }
     }
     internal void ShowProtected() { if (ready && protectedHandle == Handle && nativeShow) CaptureToastForm.ShowNative(this); }
     private void InvokeAction(Action? action)
@@ -135,6 +173,33 @@ internal sealed class ToastActionForm : Form
     }
     protected override void Dispose(bool disposing)
     { if (disposing) { actions = null; CancelGesture(); preview.Image = null; tips.Dispose(); actionFont?.Dispose(); actionFont = null; } base.Dispose(disposing); }
+
+    private sealed class ActionButton : Button
+    {
+        internal int Radius = 6;
+        private bool hovered;
+
+        protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); hovered = true; Invalidate(); }
+        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hovered = false; Invalidate(); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.Clear(ToastCardStyle.Surface);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle bounds = ClientRectangle;
+            if (bounds.Width > 2 && bounds.Height > 2) bounds.Inflate(-1, -1);
+            using var shape = ToastCardStyle.Rounded(bounds, Radius);
+            Color color = hovered ? Color.FromArgb(220, 235, 239) : Color.FromArgb(237, 244, 246);
+            if (Capture && MouseButtons == MouseButtons.Left) color = Color.FromArgb(204, 224, 230);
+            using var fill = new SolidBrush(color);
+            using var outline = new Pen(Color.FromArgb(186, 209, 215));
+            e.Graphics.FillPath(fill, shape);
+            e.Graphics.DrawPath(outline, shape);
+            TextRenderer.DrawText(e.Graphics, Text, Font, ClientRectangle, ForeColor,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
+                TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+        }
+    }
     [StructLayout(LayoutKind.Sequential)]
     private struct WindowPosition { public nint Window, InsertAfter; public int X, Y, Width, Height; public uint Flags; }
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]

@@ -154,11 +154,27 @@ internal static partial class Program
             Check(canceled.SelectionMenu.HandleCommandKey(Keys.Escape), "menu Escapeを通常のmenu closeより先に処理");
             using CaptureOutcome canceledResult = canceled.Completion.GetAwaiter().GetResult();
             Check(canceledResult.Image is null && canceledResult.Selection is null && !canceledResult.OpenSettings, "キャンセル結果");
+            Check(!canceledResult.EscapedBeforeSelectionInput, "メニューから前回結果を表示");
             SessionController settings = new(new CaptureOptions(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.File),
                 new DesktopSnapshot(PatternBitmap(), bounds, [bounds]), []);
             settings.SelectionMenu.AllCommands.Single(item => item.Text == "設定").PerformClick();
             using CaptureOutcome settingsResult = settings.Completion.GetAwaiter().GetResult();
             Check(settingsResult.OpenSettings && settingsResult.Image is null && settingsResult.Selection is null, "設定は撮影せずに返す");
+        });
+        Run("前回結果を要求するのは選択操作前のEscapeだけ", () =>
+        {
+            Rectangle bounds = new(0, 0, 12, 12);
+            foreach (bool operated in new[] { false, true })
+            {
+                SessionController session = new(new CaptureOptions(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard),
+                    new DesktopSnapshot(PatternBitmap(), bounds, [bounds]), []);
+                session.MoveTo(new(3, 4));
+                if (operated) session.AbortSelection();
+                Check(session.HandleCommandKey(Keys.Escape), "Escapeが処理されない");
+                using CaptureOutcome result = session.Completion.GetAwaiter().GetResult();
+                Equal(!operated, result.EscapedBeforeSelectionInput);
+                Check(result.Selection is null && result.Image is null, "キャンセルで撮影した");
+            }
         });
         Run("固定ONは開始画像、固定OFFだけが注入された未来画像を取得", () =>
         {

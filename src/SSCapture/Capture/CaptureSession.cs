@@ -96,6 +96,7 @@ internal sealed class SessionController
     private CaptureOverlay? menuOwner;
     private UI.SelectionGuideForm? guide;
     private MouseButtons pressedButton;
+    private bool hasSelectionInput;
     private bool completed;
     private bool starting = true;
     private bool menuTransition;
@@ -557,6 +558,7 @@ internal sealed class SessionController
         try
         {
             Keys modifiers = ReadModifiers(queuedKeyState);
+            if ((modifiers & (Keys.Alt | Keys.Shift | Keys.Control)) != Keys.None) hasSelectionInput = true;
             Point position = eventPosition ?? CaptureNative.CursorPosition();
             bool crossing = (modifiers & (Keys.Shift | Keys.Control)) == (Keys.Shift | Keys.Control);
             UpdateMonitorRestriction(position, crossing);
@@ -634,7 +636,8 @@ internal sealed class SessionController
         if (refreshing) return true;
         if ((keyData & Keys.KeyCode) == Keys.Escape)
         {
-            if (gesture.IsPressed) AbortSelection(); else Cancel();
+            if (gesture.IsPressed) AbortSelection();
+            else FinishCommand(false, escapedBeforeSelectionInput: !hasSelectionInput && !menuOpen && !menuTransition);
             return true;
         }
         if (completed || menuOpen || menuTransition) return false;
@@ -642,17 +645,19 @@ internal sealed class SessionController
         {
             if (repeated) return true;
             bool handled = gesture.Space();
-            if (handled) { activeAnchor = gesture.FixedAnchor; guide?.UpdateAnchor(activeAnchor); UpdateMenu(); RefreshOverlays(); }
+            if (handled) { hasSelectionInput = true; activeAnchor = gesture.FixedAnchor; guide?.UpdateAnchor(activeAnchor); UpdateMenu(); RefreshOverlays(); }
             return handled;
         }
         if (Mode != CaptureMode.FixedRegion) return false;
         if (keyData == Keys.Enter)
         {
+            hasSelectionInput = true;
             CaptureSelection? selection = gesture.FixedSelection(Destination);
             if (selection is not null) CompleteSelection(selection);
             return true;
         }
         if (!gesture.Nudge(keyData)) return false;
+        hasSelectionInput = true;
         RefreshOverlays();
         return true;
     }
@@ -669,11 +674,13 @@ internal sealed class SessionController
         if (suppressedButtons != MouseButtons.None) return;
         if (button == MouseButtons.Right)
         {
+            hasSelectionInput = true;
             if (gesture.IsPressed) { AbortSelection(); suppressedButtons |= MouseButtons.Right; overlay.Capture = false; }
             else ShowMenu(overlay);
             return;
         }
         if (button is not (MouseButtons.Left or MouseButtons.Middle) || pressedButton != MouseButtons.None) return;
+        hasSelectionInput = true;
         Move(true, eventPosition);
         if (completed) return;
         dragOwner = overlay;
@@ -706,6 +713,7 @@ internal sealed class SessionController
 
     internal void AbortSelection()
     {
+        hasSelectionInput = true;
         suppressedButtons |= pressedButton;
         gesture.Reset();
         ReleasePointer();
@@ -861,14 +869,14 @@ internal sealed class SessionController
         finally { result?.Dispose(); Snapshot.Dispose(); }
     }
 
-    private void FinishCommand(bool openSettings)
+    private void FinishCommand(bool openSettings, bool escapedBeforeSelectionInput = false)
     {
         if (completed) return;
         completed = true;
         try
         {
             CloseOverlays();
-            completion.TrySetResult(new CaptureOutcome(null, null, openSettings));
+            completion.TrySetResult(new CaptureOutcome(null, null, openSettings, escapedBeforeSelectionInput: escapedBeforeSelectionInput));
         }
         catch (Exception ex) { completion.TrySetException(ex); }
         finally { Snapshot.Dispose(); }

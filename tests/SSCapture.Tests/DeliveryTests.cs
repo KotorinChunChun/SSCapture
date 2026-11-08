@@ -49,10 +49,12 @@ internal static partial class Program
                     string saved = Directory.GetFiles(settings.SaveDirectory).Single();
                     Equal(saved, notification.SavedPath);
                     Check(File.ReadAllBytes(saved).Length > 0, "通知時に保存が完了していない");
-                    Check(notification.Message.Contains(intent == CaptureIntent.Screenshot ? "スクリーンショットを保存しました" : "動画を保存しました", StringComparison.Ordinal), "保存対象を区別していない");
+                    string expectedSave = destination.HasFlag(OutputDestination.Clipboard) ? "コピー・保存しました"
+                        : intent == CaptureIntent.Screenshot ? "スクリーンショットを保存しました" : "動画を保存しました";
+                    Check(notification.Message.Contains(expectedSave, StringComparison.Ordinal), "保存結果がない");
                 }
                 else Equal<string?>(null, notification.SavedPath);
-                if (mask == 7) Equal(3, notification.Message.Split(Environment.NewLine).Length);
+                if (mask == 7) Equal(2, notification.Message.Split(Environment.NewLine).Length);
             })));
         }
 
@@ -116,7 +118,8 @@ internal static partial class Program
                 var notification = received.Single();
                 using var preview = notification.NotificationImage;
                 Equal(new CaptureDelivery(intent, OutputDestination.File, OutputDestination.None, true,
-                    Directory.GetFiles(settings.SaveDirectory).Single()), notification with { CaptureSettings = null, NotificationImage = null });
+                    Directory.GetFiles(settings.SaveDirectory).Single()), notification with { CaptureSettings = null, NotificationImage = null, RetrySerial = null });
+                Equal(intent == CaptureIntent.Screenshot, notification.RetrySerial.HasValue);
                 Check(notification.HasSuccess && notification.HasFailure, "保存成功とフォルダ失敗は両立する");
                 Check(notification.Message.Contains("保存フォルダを開けませんでした", StringComparison.Ordinal), "フォルダ失敗の明示なし");
                 Equal(1, Directory.GetFiles(settings.SaveDirectory).Length);

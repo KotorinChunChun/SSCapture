@@ -2,11 +2,11 @@ namespace SSCapture;
 
 internal sealed partial class TrayApplicationContext
 {
-    private async Task RetryOutputAsync()
+    private async Task RetryOutputAsync(long? expectedSerial = null)
     {
         if (busy || exiting || pendingRecording is not null || recorder is not null) return;
         busy = true; RefreshMenu();
-        try { StoreStatus(await output.RetryFailedAsync()); }
+        try { StoreStatus(await output.RetryFailedAsync(expectedSerial)); }
         catch (Exception error) { StoreStatus("出力を再実行できませんでした: " + error.Message, true); }
         finally
         {

@@ -13,8 +13,8 @@ internal sealed record NotificationPresentation(string Message, bool HasFailure,
 
         string key = string.IsNullOrWhiteSpace(current.LastRecipeShortcut) ? "未設定" : current.LastRecipeShortcut;
         string repeatHint = result.Intent == CaptureIntent.Recording
-            ? $"静止画の直前設定で再撮影: {key}（録画の再開ではありません）"
-            : $"直前の設定で再撮影: {key}";
+            ? $"直前の静止画設定で再撮影するキー: {key}"
+            : $"直前の設定で再撮影するキー: {key}";
 
         return new(result.Message, result.HasFailure, savedFile, canEdit ? app : null, repeatHint);
     }

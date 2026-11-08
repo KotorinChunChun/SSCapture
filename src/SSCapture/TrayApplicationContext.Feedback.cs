@@ -22,7 +22,7 @@ internal sealed partial class TrayApplicationContext
             return;
         }
 
-        feedback.Notify(result, settings);
+        ShowDeliveryFeedback(result);
     }
 
     private void DispatchDelivery(CaptureDelivery result)
@@ -44,8 +44,12 @@ internal sealed partial class TrayApplicationContext
             return;
         var result = deferredFeedback;
         deferredFeedback = null;
-        feedback.Notify(result, settings);
+        ShowDeliveryFeedback(result);
     }
+
+    private void ShowDeliveryFeedback(CaptureDelivery result) =>
+        feedback.Notify(result, settings, result.RetrySerial is long serial && output.CanRetry(serial)
+            ? () => _ = RetryOutputAsync(serial) : null);
 
     private void StoreStatus(string text, bool error = false)
     {

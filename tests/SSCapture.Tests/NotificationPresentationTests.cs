@@ -78,8 +78,8 @@ internal static partial class Program
                 var settings = new AppSettings { LastRecipeShortcut = key };
                 string expectedKey = string.IsNullOrWhiteSpace(key) ? "未設定" : key;
                 var shot = new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None);
-                Equal($"直前の設定で再撮影: {expectedKey}", NotificationPresentation.Create(shot, settings, true).RepeatHint);
-                Equal($"静止画の直前設定で再撮影: {expectedKey}（録画の再開ではありません）",
+                Equal($"直前の設定で再撮影するキー: {expectedKey}", NotificationPresentation.Create(shot, settings, true).RepeatHint);
+                Equal($"直前の静止画設定で再撮影するキー: {expectedKey}",
                     NotificationPresentation.Create(shot with { Intent = CaptureIntent.Recording }, settings, true).RepeatHint);
             }
         });

@@ -52,7 +52,8 @@ internal static partial class Program
             string? path = saved ? CaptureStorage.SavePng(fixture, sources, DateTimeOffset.Now, $"capture-{++sequence}.png") : null;
             feedback.Notify(new(CaptureIntent.Screenshot, saved ? OutputDestination.Clipboard | OutputDestination.File : OutputDestination.Clipboard,
                 failure ? OutputDestination.ExternalApp : OutputDestination.None, SavedPath: path, CaptureDescription: "640×360px",
-                NotificationImage: new(fixture, Path.Combine(directory, "work", "notification-images"))), settings);
+                NotificationImage: new(fixture, Path.Combine(directory, "work", "notification-images"))), settings,
+                failure ? () => { status.Text = "再実行操作"; Log("retry-button"); } : null);
             status.Text = path is null ? "未保存" : Path.GetFileName(path);
             var actions = Application.OpenForms.OfType<ToastActionForm>().Single();
             Control preview = actions.Controls.Find("NotificationDragImage", true).Single();
@@ -69,7 +70,8 @@ internal static partial class Program
         }
         Button("未保存通知", "ShowUnsavedNotification", () => Show(false));
         Button("保存済み通知", "ShowSavedNotification", () => Show(true));
-        Button("部分失敗通知", "ShowFailureNotification", () => Show(false, true));
+        Button("部分失敗通知", "ShowFailureNotification", () => Show(true, true));
+        Button("前回結果", "ShowPreviousNotification", () => feedback.ShowPreviousScreenshot(settings));
         Button("ドロップ先フォルダ", "OpenDropFolder", () =>
         {
             var start = new ProcessStartInfo("explorer.exe") { UseShellExecute = true }; start.ArgumentList.Add(target);

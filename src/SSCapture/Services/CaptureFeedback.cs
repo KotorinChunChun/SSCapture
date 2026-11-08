@@ -5,7 +5,17 @@ namespace SSCapture.Services;
 internal enum NotificationCorner { BottomRight, BottomLeft, TopLeft, TopCenter, TopRight, MiddleLeft, Center, MiddleRight, BottomCenter }
 internal enum NotificationClickAction { None, OpenFolder, ExternalApplication }
 internal sealed record NotificationActions(Action? OpenFolder, Action? Edit, string RepeatHint,
-    Bitmap? Thumbnail = null, Func<Control, CancellationToken, Task>? Drag = null);
+    Bitmap? Thumbnail = null, Func<Control, CancellationToken, Task>? Drag = null,
+    Action? Retry = null, string? Heading = null)
+{
+    internal int ButtonRows => (OpenFolder, Edit, Retry) switch
+    {
+        (null, null, null) => 0,
+        (not null, not null, not null) => 2,
+        _ => 1
+    };
+    internal bool HasInteractiveSurface => ButtonRows != 0 || Thumbnail is not null;
+}
 
 internal interface ICaptureToast : IDisposable
 {
@@ -48,6 +58,7 @@ internal sealed class CaptureFeedback : IDisposable
     private NotificationLifetime? lifetime;
     private NotificationImage? pendingImage;
     private Bitmap? thumbnail;
+    private CaptureDelivery? previousScreenshot;
     private int draggingSerial;
     private readonly Func<Control, string, bool> dragFile;
     private readonly Func<bool> dragButtonDown;
@@ -74,11 +85,24 @@ internal sealed class CaptureFeedback : IDisposable
 
     internal string? LastWarning => lastWarning ?? sound.LastWarning;
 
-    internal void Notify(CaptureDelivery result, AppSettings settings)
+    internal void Notify(CaptureDelivery result, AppSettings settings, Action? retryOutput = null)
     {
         if (disposed || (!result.HasSuccess && !result.HasFailure)) { result.NotificationImage?.Dispose(); return; }
+        if (result.Intent == CaptureIntent.Screenshot)
+            previousScreenshot = new(result.Intent, result.Completed, result.Failed, result.FolderOpenFailed,
+                CaptureBounds: result.CaptureBounds, CaptureDescription: result.CaptureDescription, MetadataFailed: result.MetadataFailed);
+        Show(result, settings, retryOutput, reference: false);
+    }
+
+    internal void ShowPreviousScreenshot(AppSettings settings)
+    {
+        if (!disposed && previousScreenshot is { } result) Show(result, settings, null, reference: true);
+    }
+
+    private void Show(CaptureDelivery result, AppSettings settings, Action? retryOutput, bool reference)
+    {
         HideForCapture(); pendingImage = result.NotificationImage;
-        if (settings.PlayCaptureSound && result.HasSuccess)
+        if (!reference && settings.PlayCaptureSound && result.HasSuccess)
         {
             try { sound.Request(); }
             catch (Exception ex) { Warn("効果音を再生できません: " + ex.Message); }
@@ -109,8 +133,16 @@ internal sealed class CaptureFeedback : IDisposable
                     or InvalidOperationException or System.Runtime.InteropServices.ExternalException)
                 { /* 消失・不正ファイルのプレビューは省略し、成功済みの出力結果を維持する。 */ }
             }
+            string? heading = reference ? "前回の撮影結果" : !result.HasFailure ? null
+                : result.HasSuccess ? "一部の出力に失敗" : "出力に失敗";
             toast.SetActions(new(folder, edit, presentation.RepeatHint, thumbnail,
-                canDrag && thumbnail is not null ? (source, gesture) => DragAsync(serial, result, settings, source, gesture) : null));
+                canDrag && thumbnail is not null ? (source, gesture) => DragAsync(serial, result, settings, source, gesture) : null,
+                retryOutput is not null && result.HasFailure ? () =>
+                {
+                    if (disposed || serial != notificationSerial) return;
+                    HideForCapture();
+                    retryOutput();
+                } : null, heading));
             if (!toast.TryShow(presentation.Message, presentation.HasFailure, settings.NotificationCorner, out string? error,
                 null, settings.NotificationDisplay, result.CaptureBounds))
             {

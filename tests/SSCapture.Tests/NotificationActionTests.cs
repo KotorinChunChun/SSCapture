@@ -31,7 +31,7 @@ internal static partial class Program
             var actionFlags = (CreateParams)typeof(ToastActionForm).GetProperty("CreateParams", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(host)!;
             Check((actionFlags.ExStyle & 0x20) == 0 && (actionFlags.ExStyle & 0x08000000) != 0, "ボタンが透過またはアクティブ化");
             Check(host.Region is not null && !host.Region.IsVisible(1, 1), "ボタン外が入力を遮断");
-            foreach (Control button in host.Controls.OfType<Button>())
+            foreach (Control button in host.Controls.OfType<Button>().Where(b => b.Name != "NotificationRetry"))
             {
                 Check(host.ClientRectangle.Contains(button.Bounds), "ボタンがつぶれる/はみ出す");
                 Check(host.Region!.IsVisible(button.Left + button.Width / 2, button.Top + button.Height / 2), "ボタンが入力領域にない");
@@ -75,7 +75,7 @@ internal static partial class Program
             foreach (int dpi in new[] { 96, 144, 192 })
             {
                 using var form = new CaptureToastForm(_ => new(true, null), _ => { }, () => (new Rectangle(-1920, -200, 1920, 1440), dpi));
-                form.SetActions(new(() => { }, () => { }, "直前の設定で再撮影: Ctrl+Shift+F11", thumbnail));
+                form.SetActions(new(() => { }, () => { }, "直前の設定で再撮影するキー: Ctrl+Shift+F11", thumbnail, Retry: () => { }));
                 Check(form.TryShow("コピーしました。\n保存しました。\n外部アプリを開きました。\nDISPLAY2 / 1920×1080px", false, NotificationCorner.BottomRight, out var warning), warning ?? "表示失敗");
                 foreach (Control child in Descendants(form)) _ = child.Handle;
                 LayoutTree(form);
@@ -87,6 +87,9 @@ internal static partial class Program
                 Check(host.Region!.IsVisible(preview.Left + 2, preview.Top + 2), "画像がクリック透過");
                 foreach (var button in host.Controls.OfType<Button>())
                     Check(preview.Bottom < button.Top && form.ClientRectangle.Contains(button.Bounds), "画像とボタンが重なる");
+                var buttons = host.Controls.OfType<Button>().ToArray();
+                Check(!buttons.SelectMany((button, i) => buttons.Skip(i + 1).Select(other => button.Bounds.IntersectsWith(other.Bounds))).Any(overlap => overlap),
+                    "再実行ボタンが他のボタンと重なる");
                 Size measured = TextRenderer.MeasureText(label.Text, label.Font, new Size(label.Width, int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
                 Check(measured.Height <= label.Height, $"DPI{dpi}: 本文が欠ける");
                 Check(form.Region is not null && !form.Region.IsVisible(0, 0), "角丸がない");
@@ -131,7 +134,7 @@ internal static partial class Program
             Check(toast.Actions!.RepeatHint.Contains("Ctrl+F11"), "再実行キーがない");
             feedback.Notify(new(CaptureIntent.Recording, OutputDestination.File, OutputDestination.None, SavedPath: "video.mp4", CaptureSettings: settings), settings with { LastRecipeShortcut = "" });
             Check(toast.Actions!.OpenFolder is not null && toast.Actions.Edit is null, "画像アプリを動画の既定として流用");
-            Check(toast.Actions.RepeatHint.Contains("未設定") && toast.Actions.RepeatHint.Contains("録画の再開ではありません"), "録画で誤案内");
+            Check(toast.Actions.RepeatHint.Contains("未設定") && toast.Actions.RepeatHint.Contains("静止画設定"), "録画で誤案内");
             Equal<ExternalApplication?>(null, NotificationPresentation.ResolveApplication(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, CaptureSettings: settings), settings with { ImageEditors = [] }));
         }));
         Run("通知の設定画面は9候補と編集アプリだけを表示し旧クリック選択を除去", () =>

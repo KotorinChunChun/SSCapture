@@ -6,6 +6,25 @@ internal static partial class Program
 {
     private static void OutputRetryTests()
     {
+        Run("古い通知は新しい失敗ジョブを再実行できない", () => WithOutputDirectory(directory => RunOutputTask(async () =>
+        {
+            using var image = OutputImage();
+            var settings = OutputSettings(directory);
+            int copies = 0;
+            long serial = 0;
+            using var router = new OutputRouter(Path.Combine(directory, "work"),
+                _ => ++copies <= 2 ? Task.FromException(new IOException("copy busy")) : Task.CompletedTask,
+                delivered: result => { serial = result.RetrySerial ?? serial; result.NotificationImage?.Dispose(); });
+            await RetryFailure(() => router.ScreenshotAsync(image, OutputDestination.Clipboard, settings));
+            long old = serial;
+            Check(router.CanRetry(old), "再実行ジョブが通知に対応しない");
+            await RetryFailure(() => router.ScreenshotAsync(image, OutputDestination.Clipboard, settings));
+            bool rejected = false;
+            try { await router.RetryFailedAsync(old); } catch (InvalidOperationException) { rejected = true; }
+            Check(rejected && copies == 2 && router.CanRetry(serial), "別の失敗を再実行した");
+            await router.RetryFailedAsync(serial);
+            Equal(3, copies);
+        })));
         Run("再実行は失敗コピーだけ・成功ファイルと外部送信と履歴を重複させない", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {
             int copies = 0, launches = 0, histories = 0, remembered = 0;
