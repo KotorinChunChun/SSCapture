@@ -106,6 +106,51 @@ internal static partial class Program
             }, options => { selections++; throw new InvalidOperationException("選択を起動した"); });
             Equal(0, result); Equal(1, takes); Equal(1, copies); Equal(0, selections); Equal(0, Directory.GetFiles(directory).Length);
         })));
+        Run("CLI固定撮影は指定プリセットで一度だけ保存し完成パスを返す", () => WithOutputDirectory(directory => RunOutputTask(async () =>
+        {
+            string saveDirectory = Path.Combine(directory, "指定した保存先");
+            AppSettings defaults = CaptureCommandSettings();
+            var input = defaults.SavedRegions.Single(p => p.IsDefault) with
+            { Id = "fixture-input", Name = "試験入力", IsDefault = false, PaddingPixels = 2 };
+            var file = defaults.CapturePresets.Single(p => p.IsDefault) with
+            {
+                Id = "fixture-output", Name = "試験出力", IsDefault = false,
+                Destination = OutputDestination.File, SaveDirectory = saveDirectory,
+                FileNamePattern = "fixture.{ext}", OpenFolderAfterSave = false
+            };
+            var store = new SettingsStore(Path.Combine(directory, "settings.json"));
+            store.Save(defaults with { SavedRegions = [.. defaults.SavedRegions, input], CapturePresets = [.. defaults.CapturePresets, file] });
+            string settingsPath = Path.Combine(directory, "settings.json");
+            byte[] original = File.ReadAllBytes(settingsPath);
+            var request = CaptureCommandLine.Parse(["--capture-region", "-20", "12", "6", "4",
+                "--input-preset", input.Id, "--output-preset", file.Id]);
+            AppSettings loaded = store.Load(out string? warning);
+            Equal<string?>(null, warning);
+            int captures = 0;
+            var reports = new List<string>();
+            using var output = new OutputRouter(Path.Combine(directory, "work"),
+                _ => throw new InvalidOperationException("クリップボードへ出力した"),
+                launch: _ => throw new InvalidOperationException("外部プロセスを起動した"), readDisplays: () => []);
+            int exit = await CaptureCommandRunner.ExecuteAsync(CaptureCommandLine.Resolve(request, loaded), output,
+                (bounds, _) =>
+                {
+                    captures++;
+                    Equal(new Rectangle(-20, 12, 6, 4), bounds);
+                    var image = new Bitmap(bounds.Width, bounds.Height);
+                    image.SetPixel(1, 1, Color.Magenta);
+                    return Task.FromResult<(Bitmap, CaptureMetadata?)>((image, null));
+                }, report: (message, _) => reports.Add(message));
+            string saved = Path.Combine(saveDirectory, "fixture.png");
+            Check(exit == 0, string.Join(Environment.NewLine, reports));
+            Equal(1, captures);
+            Equal(saved, Directory.GetFiles(saveDirectory).Single());
+            Check(reports.Single().Contains(saved, StringComparison.Ordinal), "保存した絶対パスが結果にない");
+            using var result = new Bitmap(saved);
+            Equal(new Size(10, 8), result.Size);
+            Equal(Color.White.ToArgb(), result.GetPixel(0, 0).ToArgb());
+            Equal(Color.Magenta.ToArgb(), result.GetPixel(3, 3).ToArgb());
+            Check(original.SequenceEqual(File.ReadAllBytes(settingsPath)), "設定が書き換わった");
+        })));
         Run("CLI選択撮影は結果画像と変更後の出力条件を配送", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {
             int selections = 0, pins = 0, copies = 0;

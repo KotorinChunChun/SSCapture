@@ -34,6 +34,53 @@ pwsh -File scripts/test.ps1 -Suite Startup
 
 ほかに `Command`、`Pinned`、`Preset`、`Recipe`、`Snap`、`Menu` を指定できます。通知からExplorerやOfficeへの実際のドロップと、他アプリが前面にある場合のフォーカスは実機で確認します。
 
+### 撮影CLIの保存を検証する
+
+`pwsh -File scripts/test.ps1 -Suite Command` では合成画像を使い、座標、入力プリセットの余白、出力プリセットの保存フォルダー、完成パスと終了コードを検証できます。
+
+実プロセスで確認するときは、試験用に新規発行した `SSCapture.exe` と依存ファイルを使います。例では版別ログに `app` を発行し、その実行ファイルの隣に試験用の `data/settings.json` を作ります。
+
+```powershell
+$run = Join-Path $PWD.Path ('dev/history/v0.1.10/logs/capture-cli-' + [Guid]::NewGuid().ToString('N'))
+$app = Join-Path $run 'app'
+. ./scripts/common.ps1
+Invoke-Dotnet publish src/SSCapture/SSCapture.csproj -c Release -r win-x64 --self-contained true '-p:RestoreConfigFile=NuGet.Config' -o $app
+$data = New-Item -ItemType Directory -Path (Join-Path $app 'data')
+$saved = Join-Path $run '試験の保存先'
+@{
+    SchemaVersion = 3
+    PresetSchemaVersion = 1
+    NotificationDurationSeconds = 0
+    KeepHistory = $false
+    SavedRegions = @(@{
+        Id = 'fixture-input'; Name = '試験入力'; IsDefault = $true; ProfileVersion = 2
+        Mode = 'Rectangle'; UseFixedCoordinates = $false; PaddingPixels = 2
+        Bounds = @{ X = 0; Y = 0; Width = 64; Height = 40 }
+    })
+    CapturePresets = @(@{
+        Id = 'fixture-output'; Name = '試験出力'; IsDefault = $true
+        Destination = 'File'; SaveDirectory = $saved; FileNamePattern = 'fixture.{ext}'
+    })
+} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $data.FullName 'settings.json') -Encoding utf8NoBOM
+```
+
+撮影用の単色ウィンドウを前面に置き、64×40px全体がそのウィンドウの内側に入る左上の物理座標を指定します。
+
+```powershell
+$x = [int](Read-Host '左上の物理X座標')
+$y = [int](Read-Host '左上の物理Y座標')
+$stdout = Join-Path $run 'stdout.txt'
+$stderr = Join-Path $run 'stderr.txt'
+$process = Start-Process -FilePath (Join-Path $app 'SSCapture.exe') -WindowStyle Hidden -Wait -PassThru `
+    -ArgumentList @('--capture-region', $x, $y, 64, 40, '--input-preset', 'fixture-input', '--output-preset', 'fixture-output') `
+    -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+$process.ExitCode
+Get-Content -LiteralPath $stdout,$stderr -Encoding utf8
+Get-Item -LiteralPath (Join-Path $saved 'fixture.png')
+```
+
+成功時は終了コード0と、標準出力に `保存しました: <絶対パス>` が返ります。画像は上下左右に2pxの余白を含む68×44pxです。不明なプリセットIDは終了コード1と標準エラーで分かります。選択方式のキャンセルは終了コード2です。
+
 ## ローカルで実行する
 
 ```powershell

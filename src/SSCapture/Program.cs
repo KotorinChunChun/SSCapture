@@ -9,6 +9,11 @@ internal static class Program
         {
             try
             {
+                // リダイレクト時の文字コードを固定し、呼出元のコンソール設定は変更しない。
+                if (Console.IsOutputRedirected)
+                    Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
+                if (Console.IsErrorRedirected)
+                    Console.SetError(new StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
                 var request = Services.CaptureCommandLine.Parse(args);
                 var settings = new Services.SettingsStore(Path.Combine(AppContext.BaseDirectory, "data", "settings.json")).Load(out string? warning);
                 if (warning is not null) throw new InvalidOperationException(warning);
