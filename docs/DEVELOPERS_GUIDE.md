@@ -64,3 +64,10 @@ pwsh -File scripts/package.ps1
 明示された公開用生成のみ `-PublicRelease` を指定します。目録の公開状態と未署名種別が切り替わりますが、外部公開は別工程です。生成setupは非実行展開し、発行元と両配置の全ファイル・目録を照合します。秘密情報検査と公式最新ランタイム版の検査が完了しない場合は生成を止めます。
 
 同梱ライセンスはNAudio、実際に使用した.NET Runtime Pack、Inno Setupから取得します。Inno Setup用の`.iss`は日本語を正しく扱うためUTF-8 BOM付きで保存します。
+
+
+## READMEの撮影
+
+先に`pwsh -File scripts/test.ps1 -Suite Preset`と同じ`-Suite Menu`を実行します。専用のビルド出力を使い、設定はSSCapture.exeの`--ui-preview`、範囲と撮影メニューはSSCapture.Tests.exeの`--capture-menu-preview <専用出力先>`で開きます。後者は合成画像を使い、実画面取得とクリップボード操作をしません。
+
+設定・入力・出力・範囲・メニュー・結果通知の6場面をREADMEへ掲載しました。範囲確定後は専用先のPNGと寸法を読み戻して確認します。実撮影の受入とは区別してください。
