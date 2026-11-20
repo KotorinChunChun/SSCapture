@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace SSCapture.Capture;
 
@@ -33,6 +34,9 @@ internal static class CaptureNative
     private static extern bool GetPhysicalCursorPos(out NativePoint point);
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetPhysicalCursorPos(int x, int y);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool EnumWindows(WindowCallback callback, nint data);
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -50,6 +54,8 @@ internal static class CaptureNative
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(nint window, out NativeRect bounds);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(nint window, StringBuilder text, int count);
     [DllImport("dwmapi.dll")]
     private static extern int DwmGetWindowAttribute(nint window, int attribute, out NativeRect value, int size);
     [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
@@ -84,14 +90,13 @@ internal static class CaptureNative
         return new Point(point.X, point.Y);
     }
 
-    internal static bool AltPressed(bool queuedKeyState = false) =>
-        ((queuedKeyState ? GetKeyState(0x12 /* VK_MENU */) : GetAsyncKeyState(0x12)) & 0x8000) != 0;
-
     internal static Keys Modifiers(bool queuedKeyState = false)
     {
         bool Down(int key) => ((queuedKeyState ? GetKeyState(key) : GetAsyncKeyState(key)) & 0x8000) != 0;
         return (Down(0x10) ? Keys.Shift : Keys.None) | (Down(0x11) ? Keys.Control : Keys.None) | (Down(0x12) ? Keys.Alt : Keys.None);
     }
+
+    internal static bool IsKeyDown(int key) => (GetAsyncKeyState(key) & 0x8000) != 0;
 
     internal static bool IsModifierTransition(int message, nint key) =>
         (message is 0x0100 or 0x0101 or 0x0104 or 0x0105) && (key.ToInt32() is 0x10 or 0x11 or 0x12 or >= 0xa0 and <= 0xa5);
@@ -147,9 +152,9 @@ internal static class CaptureNative
         return monitors;
     }
 
-    internal static IReadOnlyList<Rectangle> WindowBounds(Rectangle desktop)
+    internal static IReadOnlyList<CaptureWindow> CaptureWindows(Rectangle desktop)
     {
-        List<Rectangle> windows = [];
+        List<CaptureWindow> windows = [];
         nint shell = GetShellWindow();
         EnumWindows((window, data) =>
         {
@@ -163,9 +168,19 @@ internal static class CaptureNative
             if (DwmGetWindowAttribute(window, 9, out NativeRect bounds, Marshal.SizeOf<NativeRect>()) != 0
                 && !GetWindowRect(window, out bounds)) return true;
             Rectangle clipped = CaptureGeometry.Clip(bounds.ToRectangle(), desktop);
-            if (CaptureGeometry.IsUsable(clipped)) windows.Add(clipped);
+            if (CaptureGeometry.IsUsable(clipped))
+            {
+                var title = new StringBuilder(512);
+                GetWindowText(window, title, title.Capacity);
+                windows.Add(new(clipped, title.ToString().Replace('\r', ' ').Replace('\n', ' ').Trim()));
+            }
             return true;
         }, 0);
         return windows;
     }
+
+    internal static IReadOnlyList<Rectangle> WindowBounds(Rectangle desktop) =>
+        CaptureWindows(desktop).Select(window => window.Bounds).ToArray();
 }
+
+internal sealed record CaptureWindow(Rectangle Bounds, string Title);

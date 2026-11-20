@@ -40,7 +40,15 @@ internal sealed class ToastActionForm : Form
         preview.MouseDown += (_, e) =>
         {
             if (e.Button != MouseButtons.Left || !ready || actions?.Drag is null) return;
-            CancelGesture(); dragGesture = new(); dragOrigin = e.Location;
+            CancelGesture();
+            if (e.Clicks > 1 && actions.Edit is not null) return;
+            dragGesture = new(); dragOrigin = e.Location;
+        };
+        preview.MouseDoubleClick += (_, e) =>
+        {
+            if (e.Button != MouseButtons.Left || !ready || actions?.Edit is not { } open) return;
+            CancelGesture();
+            InvokeAction(open);
         };
         preview.MouseUp += (_, _) => CancelGesture();
         preview.MouseCaptureChanged += (_, _) => { if (!preview.Capture) CancelGesture(); };
@@ -98,6 +106,8 @@ internal sealed class ToastActionForm : Form
         int top = Math.Max(0, ClientSize.Height - height - Math.Min(inset, ClientSize.Height / 4));
         preview.Bounds = ToastCardStyle.PreviewBounds(dpi);
         preview.Image = value.Thumbnail; preview.Visible = value.Thumbnail is not null;
+        tips.SetToolTip(preview, value.Edit is null ? "フォルダや対応アプリへドラッグできます。Ctrlを押すとコピー。"
+            : "ダブルクリックで編集アプリを開きます。フォルダや対応アプリへドラッグできます。Ctrlを押すとコピー。");
         preview.Cursor = value.Drag is null ? Cursors.Default : Cursors.Hand;
         if (actionFont is null || actionFont.Size != 14 * scale)
         {

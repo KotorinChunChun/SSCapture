@@ -25,7 +25,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         DateTimeOffset? capturedAt = null, Action? onDelivered = null, Rectangle? captureBounds = null,
         Func<Task<ScreenshotFileName?>>? requestFileName = null,
         Func<Bitmap, Task<ScreenshotFileName?>>? requestFileNameForImage = null, CaptureMetadata? metadata = null,
-        IReadOnlyList<Point>? capturePolygon = null)
+        IReadOnlyList<Point>? capturePolygon = null, string? windowTitle = null)
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(settings);
@@ -86,7 +86,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                     if (!retry.IsRetry && !fileCancelled) captureSucceeded?.Invoke(sequence, recipe);
                     onDelivered?.Invoke();
                 }
-            }, captureBounds, retry.PrepareFile, DescribeCapture(captureBounds), retry,
+            }, captureBounds, retry.PrepareFile, string.IsNullOrWhiteSpace(windowTitle) ? DescribeCapture(captureBounds) : $"ウィンドウ「{windowTitle}」", retry,
             sidecar is null ? null : async path => { if (beforeMetadataSave is not null) await beforeMetadataSave(path); await Task.Run(() => sidecar.Write(path)); },
             settings.ShowCaptureNotification
                 ? () => new NotificationImage(owned, Path.Combine(workRoot, "notification-images")) : null,

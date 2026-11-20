@@ -26,7 +26,9 @@ internal sealed record CaptureOptions(
 internal sealed record CaptureSelection(
     Rectangle Bounds,
     IReadOnlyList<Point>? Polygon,
-    OutputDestination Destination);
+    OutputDestination Destination,
+    Point? WindowHitPoint = null,
+    string? WindowTitle = null);
 
 internal sealed class CaptureOutcome(Bitmap? image, CaptureSelection? selection, bool openSettings = false,
     SSCapture.Services.AppSettings? outputSettings = null, SSCapture.Services.CaptureMetadata? metadata = null,

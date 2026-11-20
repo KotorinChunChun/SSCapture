@@ -81,6 +81,7 @@ internal static partial class Program
         Run("20px丸めは開始点基準・負方向・Alt一時有効・境界", () =>
         {
             var g = RectangleGesture();
+            g.SetSnapPrecision(20, 20);
             g.Begin(new(103, 107), new(8, 8)); g.Move(new(176, 162));
             Equal(new Size(73, 55), g.Selection.Size);
             g.Move(new(176, 162), true);
@@ -92,6 +93,7 @@ internal static partial class Program
         Run("Alt枠吸着は20px丸めより優先し固定寸法を維持", () =>
         {
             var g = RectangleGesture();
+            g.SetSnapPrecision(20, 20);
             g.Begin(new(103, 107), new(8, 8)); g.Move(new(183, 167));
             g.Move(new(990, 990), true, lockHeight: true);
             Equal(new Rectangle(103, 107, 897, 60), g.Selection);

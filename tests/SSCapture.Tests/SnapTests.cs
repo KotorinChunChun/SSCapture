@@ -191,7 +191,7 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("選択ガイドは4隅基点とAlt説明を表示領域内に収める", () =>
+        Run("選択ガイドは4隅基点とSpace操作を表示領域内に収める", () =>
         {
             foreach ((CaptureAnchor anchor, string label) in new[] { (CaptureAnchor.TopLeft, "左上"), (CaptureAnchor.TopRight, "右上"),
                 (CaptureAnchor.BottomRight, "右下"), (CaptureAnchor.BottomLeft, "左下") })
@@ -200,7 +200,7 @@ internal static partial class Program
                     new Size(1280, 720), fixedAnchor: anchor);
                 guide.CreateControl(); LayoutTree(guide);
                 var help = (Label)guide.Controls.Find("SelectionHelp", true).Single();
-                Check(help.Text.Contains("基点: " + label, StringComparison.Ordinal) && help.Text.Contains("Alt", StringComparison.Ordinal), "基点かAltの説明が欠落");
+                Check(help.Text.Contains("基点: " + label, StringComparison.Ordinal) && help.Text.Contains("Space", StringComparison.Ordinal), "基点かSpaceの説明が欠落");
                 Size measured = TextRenderer.MeasureText(help.Text, help.Font,
                     new Size(help.Width - help.Padding.Horizontal, int.MaxValue), TextFormatFlags.WordBreak);
                 Check(guide.ClientRectangle.Contains(help.Bounds) && measured.Height <= help.Height - help.Padding.Vertical, "ガイドの文字が領域外");

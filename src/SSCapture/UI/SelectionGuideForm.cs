@@ -10,7 +10,7 @@ internal sealed class SelectionGuideForm : Form
     private CaptureAnchor currentAnchor;
     internal SelectionGuideForm(Rectangle monitor, CaptureIntent intent, Action cancel, Size? fixedSize = null,
         Func<Keys, bool>? handleKey = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft, Action? modifiersChanged = null,
-        CaptureMode mode = CaptureMode.Rectangle, Action? dismiss = null)
+        CaptureMode mode = CaptureMode.Rectangle, Action? dismiss = null, bool spaceEnabled = true)
     {
         this.cancel = cancel;
         this.handleKey = handleKey;
@@ -33,9 +33,9 @@ internal sealed class SelectionGuideForm : Form
         {
             Name = "SelectionHelp", Dock = DockStyle.Fill, Padding = new Padding(8, 4, 8, 4),
             Text = fixedSize is Size dimensions
-                ? $"固定サイズ {dimensions.Width} × {dimensions.Height} px　基点: {AnchorText(fixedAnchor)}　左クリック / Enter: 確定\nSpace: 基点を時計回り　矢印: 1px　Shift＋矢印: 10px　Alt: 枠吸着\n中央クリック: 画面全体　右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断　画面外の枠は確定不可"
+                ? $"固定サイズ {dimensions.Width} × {dimensions.Height} px　基点: {AnchorText(fixedAnchor)}　左クリック / Enter: 確定\n{(spaceEnabled ? "Space: 基点を時計回り　" : "")}矢印: 1px　Shift＋矢印: 10px\n中央クリック: 画面全体　右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断　画面外の枠は確定不可"
                 : mode == CaptureMode.Rectangle
-                    ? "左クリック: ウィンドウ　中央クリック: 画面全体　左ドラッグ: 範囲選択\nShift: 高さ固定　Ctrl: 幅固定　Alt: 指定刻み幅＋枠吸着\nSpace: 現在位置を新しい始点に　右クリック: メニュー・縦横比\nEsc: 撮影終了　ドラッグ中の右クリック / Esc: 選択だけ中断"
+                    ? $"左クリック: ウィンドウ　中央クリック: 画面全体　左ドラッグ: 範囲選択\n{(spaceEnabled ? "Space: 対角の起点に切り替え　" : "")}右クリック: メニュー・縦横比\nEsc: 撮影終了　ドラッグ中の右クリック / Esc: 選択だけ中断"
                     : $"左クリック: ウィンドウ　中央クリック: 画面全体\n{(mode == CaptureMode.Freeform ? "左ドラッグ: 輪郭を囲む" : "ウィンドウを選んで左クリックで確定")}\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
         });
     }
@@ -77,7 +77,7 @@ internal sealed class SelectionGuideForm : Form
     protected override bool ShowWithoutActivation => true;
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if ((keyData & Keys.KeyCode) == Keys.Space && (keyData & Keys.Alt) == 0 && (msg.LParam.ToInt64() & (1L << 30)) != 0) return true;
+        if ((keyData & Keys.KeyCode) == Keys.Space && (msg.LParam.ToInt64() & (1L << 30)) != 0) return true;
         if (handleKey?.Invoke(keyData) == true) return true;
         if (keyData == Keys.Escape) { cancel(); return true; }
         return base.ProcessCmdKey(ref msg, keyData);

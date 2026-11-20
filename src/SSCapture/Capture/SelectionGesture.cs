@@ -13,7 +13,7 @@ internal sealed class SelectionGesture
     private Size anchorOffset;
     internal CaptureAnchor FixedAnchor { get; private set; }
     internal CaptureAspectRatio AspectRatio { get; set; }
-    private bool restarted;
+    private Point? swappedPointer;
     private Point start;
     private Point rawStart;
     private Size threshold;
@@ -24,7 +24,7 @@ internal sealed class SelectionGesture
     internal bool Grid20 { get; set; }
     internal Rectangle? FixedPosition { get; set; }
     internal int SnapDistancePixels { get; private set; } = 20;
-    internal int GridStepPixels { get; private set; } = 20;
+    internal int GridStepPixels { get; private set; } = Services.AppSettings.DefaultGridStepPixels;
     internal void SetSnapPrecision(int distance, int step)
     {
         if (step is < 1 or > 32768) throw new ArgumentOutOfRangeException(nameof(step));
@@ -60,7 +60,7 @@ internal sealed class SelectionGesture
         threshold = dragThreshold;
         IsPressed = true;
         HasDragged = false;
-        restarted = false;
+        swappedPointer = null;
         horizontal.Reset();
         vertical.Reset();
         Points.Clear();
@@ -73,6 +73,8 @@ internal sealed class SelectionGesture
         RawCurrent = point;
         previousSnap = snap;
         pointerInitialized = true;
+        if (swappedPointer == point) return;
+        swappedPointer = null;
         if (mode == CaptureMode.FixedRegion)
         {
             if (FixedPosition is Rectangle fixedPosition) { Selection = fixedPosition; return; }
@@ -118,8 +120,8 @@ internal sealed class SelectionGesture
         Move(point, snap, lockHeight, lockWidth);
         IsPressed = false;
         if (mode == CaptureMode.FixedRegion) return FixedSelection(destination);
-        if (mode == CaptureMode.Window) return FromBounds(WindowAt(point), destination);
-        if (!HasDragged) return restarted ? null : FromBounds(WindowAt(rawStart), destination);
+        if (mode == CaptureMode.Window) return WindowSelection(point, destination);
+        if (!HasDragged) return WindowSelection(rawStart, destination);
         if (!CaptureGeometry.IsUsable(Selection)) return null;
         if (mode != CaptureMode.Freeform) return new CaptureSelection(Selection, null, destination);
         return CaptureGeometry.HasPolygonArea(Points)
@@ -162,7 +164,7 @@ internal sealed class SelectionGesture
         if (mode == CaptureMode.FixedRegion && FixedPosition is null) PositionFixed(RawCurrent);
     }
 
-    internal bool Space()
+    internal bool Space(Func<Point, Point?>? movePointer = null)
     {
         if (FixedPosition is not null) return true;
         if (mode == CaptureMode.FixedRegion)
@@ -173,13 +175,21 @@ internal sealed class SelectionGesture
             PositionFixed(RawCurrent);
             return true;
         }
-        if (mode != CaptureMode.Rectangle || !IsPressed) return false;
-        Begin(RawCurrent, threshold);
-        restarted = true;
+        if (mode != CaptureMode.Rectangle || !IsPressed || !HasDragged || !CaptureGeometry.IsUsable(Selection)) return false;
+        Point previousStart = start;
+        Point? pointer = movePointer is null ? previousStart : movePointer(previousStart);
+        if (pointer is null) return false;
+        start = Current;
+        Current = previousStart;
+        RawCurrent = pointer.Value;
+        swappedPointer = pointer;
+        horizontal.Reset();
+        vertical.Reset();
         return true;
     }
 
-    internal CaptureSelection? WindowSelection(Point point, OutputDestination destination) => FromBounds(WindowAt(point), destination);
+    internal CaptureSelection? WindowSelection(Point point, OutputDestination destination) =>
+        FromBounds(WindowAt(point), destination) is { } selection ? selection with { WindowHitPoint = point } : null;
     internal CaptureSelection? MonitorSelection(Point point, OutputDestination destination) =>
         FromBounds(monitors.FirstOrDefault(monitor => monitor.Contains(point)), destination);
 
@@ -205,6 +215,7 @@ internal sealed class SelectionGesture
     {
         IsPressed = false;
         HasDragged = false;
+        swappedPointer = null;
         horizontal.Reset();
         vertical.Reset();
         if (mode != CaptureMode.FixedRegion) Selection = Rectangle.Empty;

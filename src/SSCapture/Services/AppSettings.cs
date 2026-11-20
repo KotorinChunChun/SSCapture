@@ -46,7 +46,9 @@ internal sealed record AppSettings
     public ScreenshotColorDepth ScreenshotColorDepth { get; init; }
     public bool Grid20 { get; init; }
     public int SnapDistancePixels { get; init; } = 20;
-    public int GridStepPixels { get; init; } = 20;
+    internal const int DefaultGridStepPixels = 1;
+    public int GridStepPixels { get; init; } = DefaultGridStepPixels;
+    public Capture.CaptureKeyMap CaptureKeys { get; init; } = new();
     public bool ShowSelectionGuide { get; init; } = true;
     public OutputDestination DefaultDestination { get; init; } = OutputDestination.Clipboard;
     public bool RecordSystemAudio { get; init; }
@@ -80,6 +82,8 @@ internal sealed record AppSettings
 
     internal void Validate()
     {
+        if (CaptureKeys is null || Capture.CaptureKeyMap.Combinations.Any(keys => !Enum.IsDefined(CaptureKeys.Resolve(keys))))
+            throw new ArgumentException("撮影中のキー割り当てが正しくありません。");
         if (SnapDistancePixels is < 1 or > 32768 || GridStepPixels is < 1 or > 32768)
             throw new ArgumentException("吸着距離と刻み幅は1～32768pxで指定してください。");
         ExternalApplication.ValidateList(ImageEditors, SelectedImageEditorId);

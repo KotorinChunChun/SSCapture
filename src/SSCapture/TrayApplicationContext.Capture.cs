@@ -159,7 +159,7 @@ internal sealed partial class TrayApplicationContext
                     }
                 }
                 : null;
-                var delivery = DeliverAndRememberAsync(outcome.Image, outcome.Selection.Destination, captureSettings, fileName, namePlan, remembered, sequence, capturedAt, outcome.Selection.Bounds, requestFileName, outcome.Metadata, outcome.Selection.Polygon);
+                var delivery = DeliverAndRememberAsync(outcome.Image, outcome.Selection.Destination, captureSettings, fileName, namePlan, remembered, sequence, capturedAt, outcome.Selection.Bounds, requestFileName, outcome.Metadata, outcome.Selection.Polygon, outcome.Selection.WindowTitle);
                 Report(await AwaitDeliveryAsync(delivery, requestFileName is null ? null : namingFinished.Task), false);
             }
         }
@@ -195,7 +195,7 @@ internal sealed partial class TrayApplicationContext
         }
     }
 
-    private async Task<string> DeliverAndRememberAsync(Bitmap image, OutputDestination destination, AppSettings captureSettings, string? fileName, FileNamePlan? namePlan, SavedRegion? remembered, long sequence, DateTimeOffset capturedAt, Rectangle captureBounds, Func<Bitmap, Task<ScreenshotFileName?>>? requestFileName = null, CaptureMetadata? metadata = null, IReadOnlyList<Point>? polygon = null)
+    private async Task<string> DeliverAndRememberAsync(Bitmap image, OutputDestination destination, AppSettings captureSettings, string? fileName, FileNamePlan? namePlan, SavedRegion? remembered, long sequence, DateTimeOffset capturedAt, Rectangle captureBounds, Func<Bitmap, Task<ScreenshotFileName?>>? requestFileName = null, CaptureMetadata? metadata = null, IReadOnlyList<Point>? polygon = null, string? windowTitle = null)
     {
         string warning = "";
         string result = await output.ScreenshotAsync(image, destination, captureSettings, fileName, namePlan, capturedAt, () =>
@@ -214,7 +214,7 @@ internal sealed partial class TrayApplicationContext
             {
                 warning = Environment.NewLine + "前回範囲を保存できませんでした: " + ex.Message;
             }
-        }, captureBounds: captureBounds, requestFileNameForImage: requestFileName, metadata: metadata, capturePolygon: polygon);
+        }, captureBounds: captureBounds, requestFileNameForImage: requestFileName, metadata: metadata, capturePolygon: polygon, windowTitle: windowTitle);
         return result + warning;
     }
 }

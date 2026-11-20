@@ -114,12 +114,19 @@ internal sealed class CaptureOverlay : Form
         base.OnPaint(e);
         Graphics graphics = e.Graphics;
         DrawSnapshot(graphics);
-        if (session.DimCaptureBackground)
+        if (session.DimCaptureBackground || session.HighlightWindow)
             using (SolidBrush dim = new(Color.FromArgb(115, Color.Black))) graphics.FillRectangle(dim, ClientRectangle);
+        if (session.HighlightWindow)
+        {
+            Rectangle target = session.HighlightedWindow;
+            target.Offset(-MonitorBounds.X, -MonitorBounds.Y);
+            if (target.Width > 0 && target.Height > 0) Reveal(graphics, target);
+        }
         Rectangle selection = session.Selection;
         selection.Offset(-MonitorBounds.X, -MonitorBounds.Y);
         DrawSelection(graphics, selection);
         DrawDimensions(graphics, selection);
+        DrawModifierHint(graphics, selection);
         if (session.SelectionError is string error)
         {
             var box = new Rectangle(16, 16, Math.Max(1, ClientSize.Width - 32), 100);
@@ -135,10 +142,7 @@ internal sealed class CaptureOverlay : Form
             DrawFreeformSelection(graphics, border);
         else if (selection.Width > 0 && selection.Height > 0)
         {
-            GraphicsState state = graphics.Save();
-            graphics.SetClip(selection, CombineMode.Intersect);
-            DrawSnapshot(graphics);
-            graphics.Restore(state);
+            if (!session.HighlightWindow) Reveal(graphics, selection);
             graphics.DrawRectangle(border, selection);
         }
     }
@@ -150,10 +154,13 @@ internal sealed class CaptureOverlay : Form
         {
             using GraphicsPath path = new(FillMode.Alternate);
             path.AddPolygon(points);
-            GraphicsState state = graphics.Save();
-            graphics.SetClip(path, CombineMode.Intersect);
-            DrawSnapshot(graphics);
-            graphics.Restore(state);
+            if (!session.HighlightWindow)
+            {
+                GraphicsState state = graphics.Save();
+                graphics.SetClip(path, CombineMode.Intersect);
+                DrawSnapshot(graphics);
+                graphics.Restore(state);
+            }
             graphics.DrawPath(border, path);
         }
         else graphics.DrawLines(border, points);
@@ -163,13 +170,37 @@ internal sealed class CaptureOverlay : Form
     {
         if (selection.Width <= 0 || selection.Height <= 0 || !MonitorBounds.Contains(session.Current)) return;
         string text = $"{selection.Width} × {selection.Height}" + (session.FixedSelectionValid ? "" : " 画面外");
-        Size textSize = TextRenderer.MeasureText(text, dimensionsFont);
-        int x = Math.Clamp(session.Current.X - MonitorBounds.X + 18, 0, Math.Max(0, ClientSize.Width - textSize.Width - 8));
-        int y = Math.Clamp(session.Current.Y - MonitorBounds.Y + 24, 0, Math.Max(0, ClientSize.Height - textSize.Height - 4));
-        Rectangle label = new(x, y, textSize.Width + 8, textSize.Height + 4);
+        DrawPointerLabel(graphics, text, session.Current, 24, reserveHint: true);
+    }
+
+    private void DrawModifierHint(Graphics graphics, Rectangle selection)
+    {
+        if (session.ModifierHint is not string hint || !MonitorBounds.Contains(session.Pointer)) return;
+        bool nearDimensions = selection.Width > 0 && selection.Height > 0
+            && MonitorBounds.Contains(session.Current) && Math.Abs(session.Current.Y - session.Pointer.Y) < 52;
+        DrawPointerLabel(graphics, hint, session.Pointer, nearDimensions ? 52 : 24, reserveHint: false);
+    }
+
+    private void DrawPointerLabel(Graphics graphics, string text, Point pointer, int offset, bool reserveHint)
+    {
+        Size size = TextRenderer.MeasureText(text, dimensionsFont);
+        int height = size.Height + 4;
+        int width = Math.Min(ClientSize.Width, size.Width + 8);
+        int x = Math.Clamp(pointer.X - MonitorBounds.X + 18, 0, Math.Max(0, ClientSize.Width - width));
+        int reserved = reserveHint && session.ModifierHint is not null ? height : 0;
+        int y = Math.Clamp(pointer.Y - MonitorBounds.Y + offset, 0, Math.Max(0, ClientSize.Height - height - reserved));
+        Rectangle label = new(x, y, width, height);
         graphics.FillRectangle(Brushes.Black, label);
         TextRenderer.DrawText(graphics, text, dimensionsFont, label, Color.White,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+    }
+
+    private void Reveal(Graphics graphics, Rectangle bounds)
+    {
+        GraphicsState state = graphics.Save();
+        graphics.SetClip(bounds, CombineMode.Intersect);
+        DrawSnapshot(graphics);
+        graphics.Restore(state);
     }
 
     private void DrawSnapshot(Graphics graphics)

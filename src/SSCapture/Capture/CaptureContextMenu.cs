@@ -135,7 +135,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             Toggle("背景を暗くする", "DimCaptureBackground", editing.Settings.DimCaptureBackground, editing.ChangeDim, operation.DropDownItems);
             if (editing.ChangeOpenFolder is not null) Toggle("保存後にフォルダを開く", "OpenFolderAfterSave", editing.Settings.OpenFolderAfterSave, editing.ChangeOpenFolder, output.DropDownItems);
         }
-        if (changeGrid is not null) Toggle("指定刻み幅を使用", "Grid20", grid20, changeGrid, operation.DropDownItems, "表示設定を次回にも保存します。Altを押している間も有効です。");
+        if (changeGrid is not null) Toggle("指定刻み幅を使用", "Grid20", grid20, changeGrid, operation.DropDownItems, "表示設定を次回にも保存します。スナップ操作中も有効です。");
         if (changeGuide is not null) Toggle("操作ガイドを表示", "ShowSelectionGuide", showGuide, changeGuide, operation.DropDownItems, "表示設定を次回にも保存します。ドラッグ中に近づくと一時的に隠れます。");
         if (inputPresetsMenu.DropDownItems.Count == 0) EmptyHint(inputPresetsMenu);
         if (outputPresetsMenu.DropDownItems.Count == 0) EmptyHint(outputPresetsMenu);

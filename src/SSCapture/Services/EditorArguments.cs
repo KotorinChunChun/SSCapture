@@ -61,12 +61,20 @@ internal sealed record EditorPreset(string Name, string Executable, string Argum
 }
 internal static class EditorPresets
 {
-    public static IReadOnlyList<EditorPreset> Images =>
-    [
-        new("カスタム", "", EditorArguments.Default),
-        new("MS ペイント", EditorExecutable.PaintPreset, EditorArguments.Default),
-        new("Paint.NET", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "paint.net", "paintdotnet.exe"), EditorArguments.Default)
-    ];
+    public static IReadOnlyList<EditorPreset> Images
+    {
+        get
+        {
+            List<EditorPreset> presets =
+            [
+                new("カスタム", "", EditorArguments.Default),
+                new("MS ペイント", EditorExecutable.PaintPreset, EditorArguments.Default),
+                new("Paint.NET", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "paint.net", "paintdotnet.exe"), EditorArguments.Default)
+            ];
+            if (EditorExecutable.FindPPPaint() is string path) presets.Add(new("PPPaint", path, EditorArguments.Default));
+            return presets;
+        }
+    }
     public static IReadOnlyList<EditorPreset> Videos =>
     [
         new("カスタム", "", EditorArguments.Default),

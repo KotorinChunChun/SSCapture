@@ -11,7 +11,7 @@ internal sealed class SettingsStore(string path)
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter<CaptureMode>(), new JsonStringEnumConverter<OutputDestination>(),
             new JsonStringEnumConverter<NotificationCorner>(), new JsonStringEnumConverter<NotificationDisplay>(),
-            new JsonStringEnumConverter<CaptureAnchor>() }
+            new JsonStringEnumConverter<CaptureAnchor>(), new JsonStringEnumConverter<Capture.CaptureKeyAction>() }
     };
     private readonly string filePath = Path.GetFullPath(path);
 

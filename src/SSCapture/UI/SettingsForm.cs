@@ -12,6 +12,7 @@ internal sealed class SettingsForm : Form
     private Action? refreshSaveButton;
     private readonly TextBox directory, imageEditor, videoEditor, imageArguments, videoArguments, fileNamePattern, ocrSeparator, oneOcrDirectory;
     private readonly HotkeyEditor screenshot1, screenshot2, recording1, recording2, lastRegionKey, lastRecipeKey;
+    private readonly CaptureKeyEditor captureKeys;
     private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration, screenshotPadding;
     private readonly ComboBox screenshotColorDepth;
     private readonly ComboBox metadataMode;
@@ -120,9 +121,10 @@ internal sealed class SettingsForm : Form
         keys.RowStyles.Clear(); keys.RowCount = 7;
         for (int row = 0; row < 6; row++) keys.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         keys.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var special = new Label { Name = "SpecialCaptureOperations", Dock = DockStyle.Fill,
-            Text = "撮影中の特殊操作（変更不可）\nCtrl: 幅固定（縦方向のみ）　Shift: 高さ固定（横方向のみ）\nAlt: 指定刻み幅・枠吸着\nCtrl＋Shiftを押しながら別モニタへ移動:\n  今回の撮影だけモニタ制限を解除（方向ロックより優先）\nSpace: 矩形は現在位置を新しい始点／固定サイズは基点を時計回り\n操作ガイドはドラッグ中にポインタが近づくと一時的に隠れます。" };
-        keys.Controls.Add(special, 0, 6); keys.SetColumnSpan(special, 2);
+        captureKeys = new CaptureKeyEditor(settings.CaptureKeys);
+        var captureKeyGroup = new GroupBox { Text = "撮影中の操作", Dock = DockStyle.Fill, Padding = new Padding(10, 8, 10, 6) };
+        captureKeyGroup.Controls.Add(captureKeys);
+        keys.Controls.Add(captureKeyGroup, 0, 6); keys.SetColumnSpan(captureKeyGroup, 2);
         var regions = inputs;
         fixedWidth = PixelField(regions, "固定幅 (px)", "FixedWidth", settings.FixedWidth, 1);
         fixedHeight = PixelField(regions, "固定高さ (px)", "FixedHeight", settings.FixedHeight, 2);
@@ -418,6 +420,7 @@ internal sealed class SettingsForm : Form
                 ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
                 RecordingShortcut1 = recording1.Value, RecordingShortcut2 = recording2.Value,
                 LastRegionShortcut = lastRegionKey.Value, LastRecipeShortcut = lastRecipeKey.Value, KeepHistory = keepHistory.Checked,
+                CaptureKeys = captureKeys.Value,
                 NotificationDurationSeconds = (int)notificationDuration.Value, PlayCaptureSound = playCaptureSound.Checked,
                 HoldNotificationWhileApproaching = holdNotification.Checked,
                 NotificationApplicationId = NotificationAppId(),

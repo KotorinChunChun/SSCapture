@@ -7,6 +7,13 @@ internal static partial class Program
 {
     private static void ExternalApplicationTests()
     {
+        Run("PPPaintは既存の実行ファイルがある導入先だけを候補にする", () =>
+        {
+            const string installed = @"C:\KotorinToys\.installed\PPPaint\PPPaint.exe";
+            string?[] locations = [null, @"relative\PPPaint", @"C:\missing", Path.GetDirectoryName(installed)];
+            Equal(installed, EditorExecutable.FindPPPaint(locations, path => path == installed));
+            Check(EditorExecutable.FindPPPaint(locations, _ => false) is null, "未導入のPPPaintが表示対象になった");
+        });
         Run("ペイントは一度だけ初期登録し外部出力を有効化しない", () => WithServiceDirectory(directory =>
         {
             var settings = new AppSettings().ApplyDefaults();

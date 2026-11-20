@@ -7,7 +7,7 @@ internal sealed record CaptureDelivery(CaptureIntent Intent, OutputDestination C
     public bool HasSuccess => Completed != OutputDestination.None;
     public bool HasFailure => Failed != OutputDestination.None || FolderOpenFailed || MetadataFailed;
 
-    // 通知には対象画面と座標だけを加え、パス・OCR・例外詳細は表示しない。
+    // 通知の対象には撮影したウィンドウ名、または画面と座標を使う。
     public string Message
     {
         get

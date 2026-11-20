@@ -181,7 +181,10 @@ internal static partial class Program
                 LayoutTree(form);
                 foreach (var input in Descendants(page).Where(c => c is TextBox or ComboBox && c.Parent is not UpDownBase))
                 {
-                    Check(input.Width >= (input.Name.EndsWith("EditorPreset", StringComparison.Ordinal) ? 160 : input.Name.EndsWith("Key", StringComparison.Ordinal) ? 200 : page.Text == "入力プリセット" ? 300 : 420), $"{input.Name} 幅 {input.Width}");
+                    int minimumWidth = input.Name.StartsWith("CaptureKeys", StringComparison.Ordinal) ? 290
+                        : input.Name.EndsWith("EditorPreset", StringComparison.Ordinal) ? 160
+                        : input.Name.EndsWith("Key", StringComparison.Ordinal) ? 200 : page.Text == "入力プリセット" ? 300 : 420;
+                    Check(input.Width >= minimumWidth, $"{input.Name} 幅 {input.Width}");
                     Check(input.Height >= 24, $"{input.Name} 高さ {input.Height}");
                     Check(input.Parent!.ClientRectangle.Contains(input.Bounds), $"{input.Name} が親領域外: {input.Bounds} parent={input.Parent.ClientRectangle}");
                 }

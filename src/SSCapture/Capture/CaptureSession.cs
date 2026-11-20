@@ -12,10 +12,10 @@ internal static class CaptureSession
         DesktopSnapshot snapshot = DesktopSnapshot.Take(options.IncludeCursor, metadata);
         if (metadata)
             snapshot.Context = await Services.CaptureContextClient.Shared.ObserveAsync(new Point(snapshot.Pointer!.Screen.X, snapshot.Pointer.Screen.Y));
-        IReadOnlyList<Rectangle> windows;
-        try { windows = CaptureNative.WindowBounds(snapshot.Bounds); }
+        IReadOnlyList<CaptureWindow> windows;
+        try { windows = CaptureNative.CaptureWindows(snapshot.Bounds); }
         catch { snapshot.Dispose(); throw; }
-        return await SelectAsync(options, snapshot, windows, () =>
+        return await SelectAsync(options, snapshot, windows.Select(window => window.Bounds).ToArray(), () =>
         {
             CaptureNative.SynchronizeDesktop();
             return DesktopSnapshot.Take(options.IncludeCursor, metadata);
@@ -23,13 +23,18 @@ internal static class CaptureSession
         {
             CaptureNative.SynchronizeDesktop();
             return DesktopSnapshot.Take(cursor, observe);
-        }, CaptureNative.WindowBounds);
+        }, bounds =>
+        {
+            windows = CaptureNative.CaptureWindows(bounds);
+            return windows.Select(window => window.Bounds).ToArray();
+        }, point => windows.FirstOrDefault(window => window.Bounds.Contains(point))?.Title, captureWindowsKey: true);
     }
 
     /// <summary>Consumes snapshot. Never reads desktop pixels or enumerates real windows.</summary>
     internal static Task<CaptureOutcome> SelectAsync(CaptureOptions options, DesktopSnapshot snapshot,
         IReadOnlyList<Rectangle>? windows = null, Func<DesktopSnapshot>? currentFrameFactory = null, Point? initialPointer = null, Action<bool>? gridChanged = null, Action<bool>? guideChanged = null,
-        Func<bool, bool, DesktopSnapshot>? recapture = null, Func<Rectangle, IReadOnlyList<Rectangle>>? readWindows = null)
+        Func<bool, bool, DesktopSnapshot>? recapture = null, Func<Rectangle, IReadOnlyList<Rectangle>>? readWindows = null,
+        Func<Point, string?>? readTitle = null, bool captureWindowsKey = false)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         try
@@ -38,7 +43,8 @@ internal static class CaptureSession
             if (!options.FreezeFrame && options.Intent == CaptureIntent.Screenshot && currentFrameFactory is null && recapture is null)
                 throw new ArgumentException("画面固定OFFの合成画像検証には画像取得関数を指定してください。", nameof(currentFrameFactory));
             SessionController session = new(options, snapshot, windows ?? [], currentFrameFactory,
-                initialPointer ?? snapshot.Monitors.FirstOrDefault().Location, gridChanged: gridChanged, guideChanged: guideChanged, recapture: recapture, readWindows: readWindows);
+                initialPointer ?? snapshot.Monitors.FirstOrDefault().Location, gridChanged: gridChanged, guideChanged: guideChanged, recapture: recapture, readWindows: readWindows,
+                readTitle: readTitle, captureWindowsKey: captureWindowsKey);
             if (options.InitialInputPreset is { UseFixedCoordinates: true } preset) session.ApplyInputPreset(preset);
             session.Start();
             return session.Completion;
@@ -80,6 +86,8 @@ internal sealed class SessionController
     private readonly Func<DesktopSnapshot>? currentFrameFactory;
     private readonly Func<bool, bool, DesktopSnapshot>? recapture;
     private readonly Func<Rectangle, IReadOnlyList<Rectangle>>? readWindows;
+    private readonly Func<Point, string?>? readTitle;
+    private readonly bool captureWindowsKey;
     private bool refreshing;
     private CaptureAnchor activeAnchor;
     private SelectionGesture gesture;
@@ -112,6 +120,13 @@ internal sealed class SessionController
     private Rectangle? selectedInputBounds;
     private MouseButtons suppressedButtons;
     private System.Windows.Forms.Timer? snapTimer;
+    private CaptureWindowsKey? windowsKey;
+    private CaptureModifiers activeModifiers;
+    private bool highlightWindow;
+    internal string? ModifierHint { get; private set; }
+    internal Point Pointer => gesture.RawCurrent;
+    internal bool HighlightWindow => highlightWindow;
+    internal Rectangle HighlightedWindow => highlightWindow ? gesture.WindowAt(Pointer) : Rectangle.Empty;
 
     internal CaptureMode Mode { get; private set; }
     internal bool Grid20 => gesture.Grid20;
@@ -135,10 +150,12 @@ internal sealed class SessionController
         IReadOnlyList<Rectangle> windows, Func<DesktopSnapshot>? currentFrameFactory = null,
         Point? initialPointer = null, Func<Rectangle, IDisposable>? confineCursor = null, Action<bool>? gridChanged = null, Action<bool>? guideChanged = null,
         Func<IReadOnlyList<Services.DisplayLayout>>? readPresetDisplays = null,
-        Func<bool, bool, DesktopSnapshot>? recapture = null, Func<Rectangle, IReadOnlyList<Rectangle>>? readWindows = null)
+        Func<bool, bool, DesktopSnapshot>? recapture = null, Func<Rectangle, IReadOnlyList<Rectangle>>? readWindows = null,
+        Func<Point, string?>? readTitle = null, bool captureWindowsKey = false)
     {
         this.options = options;
         this.recapture = recapture; this.readWindows = readWindows;
+        this.readTitle = readTitle; this.captureWindowsKey = captureWindowsKey;
         activeAnchor = options.FixedAnchor;
         activeFixedSize = options.FixedSize ?? new Size(1280, 720);
         this.readPresetDisplays = readPresetDisplays ?? Services.RegionCoordinates.ReadDisplays;
@@ -482,7 +499,7 @@ internal sealed class SessionController
         CaptureOverlay owner = menuOwner ?? overlays.FirstOrDefault(o => o.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
         guide = new UI.SelectionGuideForm(owner.MonitorBounds, options.Intent, () => { if (!refreshing) Cancel(); },
             Mode == CaptureMode.FixedRegion ? activeFixedSize : null, HandleCommandKey, activeAnchor, AltKeyChanged, Mode,
-            dismiss: () => ChangeGuideVisibility(false));
+            dismiss: () => ChangeGuideVisibility(false), spaceEnabled: OutputSettings.CaptureKeys.SpaceEnabled);
         guide.Show(owner);
         UpdateGuidePointer();
         owner.BeginInvoke((Action)(() =>
@@ -522,7 +539,7 @@ internal sealed class SessionController
     {
         try
         {
-            ignoredModifiers = CaptureNative.Modifiers() & (Keys.Shift | Keys.Control);
+            ignoredModifiers = CaptureNative.Modifiers();
             if (Mode == CaptureMode.FullScreen)
             {
                 CompleteSelection(new CaptureSelection(Snapshot.Bounds, null, Destination));
@@ -530,7 +547,7 @@ internal sealed class SessionController
             }
             foreach (Rectangle bounds in SelectionMonitors) overlays.Add(new CaptureOverlay(this, bounds));
             foreach (CaptureOverlay overlay in overlays) overlay.Show();
-            MoveTo(initialPointer, CaptureNative.AltPressed());
+            MoveTo(initialPointer);
             CaptureOverlay active = overlays.FirstOrDefault(overlay => overlay.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
             active.Activate();
             active.Focus();
@@ -541,6 +558,7 @@ internal sealed class SessionController
             if (selectionBounds is Rectangle monitorBounds) cursorConfinement = confineCursor(monitorBounds);
             if (Mode != CaptureMode.FullScreen)
             {
+                if (captureWindowsKey) windowsKey = new CaptureWindowsKey();
                 // Key messages can be routed to the movable guide or a captured
                 // overlay. Only while selecting, poll Alt to cover either route.
                 snapTimer = new System.Windows.Forms.Timer { Interval = 16 };
@@ -557,14 +575,9 @@ internal sealed class SessionController
         if (completed || refreshing || menuOpen || menuTransition) return;
         try
         {
-            Keys modifiers = ReadModifiers(queuedKeyState);
-            if ((modifiers & (Keys.Alt | Keys.Shift | Keys.Control)) != Keys.None) hasSelectionInput = true;
             Point position = eventPosition ?? CaptureNative.CursorPosition();
-            bool crossing = (modifiers & (Keys.Shift | Keys.Control)) == (Keys.Shift | Keys.Control);
-            UpdateMonitorRestriction(position, crossing);
             // キュー内のDown/Upを現在位置で読み替えると、高速ドラッグがクリックに化ける。
-            MoveTo(position, (modifiers & Keys.Alt) != 0,
-                !crossing && (modifiers & Keys.Shift) != 0, !crossing && (modifiers & Keys.Control) != 0);
+            ApplyPointerInput(position, ReadModifiers(queuedKeyState), windowsKey?.TakeTap() == true, forceMove: true);
         }
         catch (Exception ex) { Fail(ex); }
     }
@@ -615,18 +628,36 @@ internal sealed class SessionController
         try
         {
             if (Control.MouseButtons == MouseButtons.None) suppressedButtons = MouseButtons.None;
-            Keys modifiers = ReadModifiers(queuedKeyState);
-            bool snap = (modifiers & Keys.Alt) != 0, height = (modifiers & Keys.Shift) != 0, width = (modifiers & Keys.Control) != 0;
-            bool crossing = height && width;
-            Point currentPointer = CaptureNative.CursorPosition();
-            UpdateMonitorRestriction(currentPointer, crossing);
-            if (crossing) height = width = false;
-            // キーだけでなくポインタもポーリング。案内上ではoverlayへMouseMoveが来ない。
-            if (currentPointer != lastPointerPosition) MoveTo(currentPointer, snap, height, width);
-            if ((snap != lastSnap || height != lastHeightLock || width != lastWidthLock) && lastPointerPosition is Point point)
-                MoveTo(point, snap, height, width);
+            ApplyPointerInput(CaptureNative.CursorPosition(), ReadModifiers(queuedKeyState), windowsKey?.TakeTap() == true);
         }
         catch (Exception ex) { Fail(ex); }
+    }
+
+    internal void ApplyPointerInput(Point pointer, CaptureModifiers modifiers, bool windowsTap = false, bool forceMove = false)
+    {
+        CaptureKeyAction action = OutputSettings.CaptureKeys.Resolve(modifiers);
+        bool changed = modifiers != activeModifiers;
+        CaptureKeyAction pressedAction = windowsTap ? OutputSettings.CaptureKeys.Win
+            : (modifiers & ~activeModifiers) != 0 && modifiers != CaptureModifiers.Win ? action : CaptureKeyAction.None;
+        if (changed)
+        {
+            activeModifiers = modifiers;
+            if (modifiers != CaptureModifiers.None) hasSelectionInput = true;
+            ModifierHint = modifiers == CaptureModifiers.None ? null : $"{CaptureKeyMap.Label(modifiers)} : {CaptureKeyMap.Describe(action)}";
+        }
+        bool snap = action == CaptureKeyAction.Snap;
+        bool height = action == CaptureKeyAction.LockHeight;
+        bool width = action == CaptureKeyAction.LockWidth;
+        UpdateMonitorRestriction(pointer, action == CaptureKeyAction.CrossMonitor);
+        if (forceMove || pointer != lastPointerPosition || snap != lastSnap || height != lastHeightLock || width != lastWidthLock)
+            MoveTo(pointer, snap, height, width);
+        if (pressedAction == CaptureKeyAction.SwitchAnchor) SwitchSelectionAnchor();
+        if (pressedAction == CaptureKeyAction.HighlightWindow)
+        {
+            highlightWindow = !highlightWindow;
+            hasSelectionInput = true;
+        }
+        if (changed || pressedAction == CaptureKeyAction.HighlightWindow) RefreshOverlays();
     }
 
     internal bool HandleCommandKey(Keys keyData) => HandleCommandKey(keyData, false);
@@ -641,13 +672,8 @@ internal sealed class SessionController
             return true;
         }
         if (completed || menuOpen || menuTransition) return false;
-        if ((keyData & Keys.KeyCode) == Keys.Space && (keyData & Keys.Alt) == 0)
-        {
-            if (repeated) return true;
-            bool handled = gesture.Space();
-            if (handled) { hasSelectionInput = true; activeAnchor = gesture.FixedAnchor; guide?.UpdateAnchor(activeAnchor); UpdateMenu(); RefreshOverlays(); }
-            return handled;
-        }
+        if ((keyData & Keys.KeyCode) == Keys.Space && OutputSettings.CaptureKeys.SpaceEnabled)
+            return repeated || SwitchSelectionAnchor();
         if (Mode != CaptureMode.FixedRegion) return false;
         if (keyData == Keys.Enter)
         {
@@ -660,6 +686,28 @@ internal sealed class SessionController
         hasSelectionInput = true;
         RefreshOverlays();
         return true;
+    }
+
+    private bool SwitchSelectionAnchor()
+    {
+        if (!gesture.Space(captureWindowsKey ? MovePointerToCorner : null)) return false;
+        hasSelectionInput = true;
+        lastPointerPosition = gesture.RawCurrent;
+        activeAnchor = gesture.FixedAnchor;
+        guide?.UpdateAnchor(activeAnchor);
+        UpdateMenu();
+        RefreshOverlays();
+        return true;
+    }
+
+    private Point? MovePointerToCorner(Point corner)
+    {
+        // A rectangle's right/bottom are exclusive. At a desktop edge use the nearest on-screen pixel.
+        Point target = SelectionMonitors.Select(monitor => new Point(
+                Math.Clamp(corner.X, monitor.Left, monitor.Right - 1),
+                Math.Clamp(corner.Y, monitor.Top, monitor.Bottom - 1)))
+            .MinBy(point => Math.Pow((double)point.X - corner.X, 2) + Math.Pow((double)point.Y - corner.Y, 2));
+        return CaptureNative.SetPhysicalCursorPos(target.X, target.Y) ? CaptureNative.CursorPosition() : null;
     }
 
     private void RefreshOverlays()
@@ -704,11 +752,12 @@ internal sealed class SessionController
         else CompleteSelection(selection, entireMonitor: button == MouseButtons.Middle);
     }
 
-    private Keys ReadModifiers(bool queuedKeyState)
+    private CaptureModifiers ReadModifiers(bool queuedKeyState)
     {
         Keys modifiers = CaptureNative.Modifiers(queuedKeyState);
         ignoredModifiers &= modifiers;
-        return modifiers & ~ignoredModifiers;
+        return CaptureKeyMap.FromKeys(modifiers & ~ignoredModifiers) |
+            (windowsKey?.IsHeld == true ? CaptureModifiers.Win : CaptureModifiers.None);
     }
 
     internal void AbortSelection()
@@ -812,6 +861,8 @@ internal sealed class SessionController
             snapTimer?.Stop();
             snapTimer?.Dispose();
             snapTimer = null;
+            windowsKey?.Dispose();
+            windowsKey = null;
             ReleasePointer();
             gesture.Reset();
             SelectionMenu.Dispose();
@@ -829,6 +880,7 @@ internal sealed class SessionController
     internal async void CompleteSelection(CaptureSelection selection, bool entireMonitor = false)
     {
         if (completed || refreshing) return;
+        if (selection.WindowHitPoint is Point hitPoint) selection = selection with { WindowTitle = readTitle?.Invoke(hitPoint) };
         if (selectionBounds is Rectangle bounds && (!bounds.Contains(selection.Bounds)
             || selection.Polygon?.Any(point => !bounds.Contains(point)) == true)) return;
         Size fixedSize = activeFixedSize;

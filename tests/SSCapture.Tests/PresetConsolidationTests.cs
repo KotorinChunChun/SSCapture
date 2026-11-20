@@ -291,9 +291,9 @@ internal static partial class Program
             var duplicate = settings.SavedRegions[0] with { Id = "second" };
             try { (settings with { SavedRegions = [settings.SavedRegions[0], duplicate] }).Validate(); throw new Exception("複数既定を受理した"); } catch (ArgumentException) { }
         });
-        Run("スナップ距離と刻み幅は20既定・独立した物理px", () =>
+        Run("スナップ距離は20px・刻み幅は1pxが既定の独立設定", () =>
         {
-            Equal(20, new AppSettings().SnapDistancePixels); Equal(20, new AppSettings().GridStepPixels);
+            Equal(20, new AppSettings().SnapDistancePixels); Equal(1, new AppSettings().GridStepPixels);
             var snap = new SelectionSnap([], [new(100, 100, 100, 100)], 5);
             Equal(new Point(100, 130), snap.Apply(new(105, 130))); Equal(new Point(106, 130), snap.Apply(new(106, 130)));
             var gesture = new SelectionGesture(CaptureMode.Rectangle, [new(-200, -200, 600, 600)], []) { Grid20 = true };

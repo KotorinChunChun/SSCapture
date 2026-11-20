@@ -7,6 +7,22 @@ internal static partial class Program
 {
     static void NotificationActionTests()
     {
+        Run("通知のサムネイルを左ダブルクリックしたときだけ割り当て済みの編集を実行する", () =>
+        {
+            using var thumbnail = new Bitmap(44, 24);
+            using var form = new CaptureToastForm(_ => new(true, null), _ => { }, () => (new Rectangle(0, 0, 1000, 800), 96));
+            int edits = 0;
+            form.SetActions(new(null, () => edits++, "", thumbnail, (_, _) => Task.CompletedTask));
+            Check(form.TryShow("コピーしました", false, NotificationCorner.BottomRight, out var warning), warning ?? "表示失敗");
+            var host = (ToastActionForm)typeof(CaptureToastForm).GetField("actionHost", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+            var preview = (PictureBox)host.Controls.Find("NotificationDragImage", true).Single();
+            var doubleClick = typeof(Control).GetMethod("OnMouseDoubleClick", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            doubleClick.Invoke(preview, [new MouseEventArgs(MouseButtons.Right, 2, 4, 4, 0)]);
+            Equal(0, edits);
+            doubleClick.Invoke(preview, [new MouseEventArgs(MouseButtons.Left, 2, 4, 4, 0)]);
+            doubleClick.Invoke(preview, [new MouseEventArgs(MouseButtons.Left, 2, 4, 4, 0)]);
+            Equal(1, edits);
+        });
         Run("通知9位置は旧enum値を保ち負座標・DPI・拡張高さで作業領域に収まる", () =>
         {
             Equal(0, (int)NotificationCorner.BottomRight); Equal(1, (int)NotificationCorner.BottomLeft);
