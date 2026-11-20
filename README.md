@@ -121,3 +121,13 @@ Windows 11用の常駐スクリーンショット・領域録画ツールです�
 - [開発者向け資料](docs/DEVELOPERS_GUIDE.md)：ビルド・検証・公開手順
 
 Windows 11 x64が対象です。公開インストーラーには.NET 10 Desktop Runtimeを同梱します。ローカルの`artifacts/app`はランタイムを別途必要とします。設定と作業データは実行ファイル横の `data` に保存します。実行フォルダは書き込み可能な場所を使い、利用済みの `artifacts/app` をそのまま配布しないでください。
+
+## 使用言語とライブラリ
+
+- 使用言語はC#です。
+- .NET 10、Windows Forms。音声入力にはNAudio.Wasapiを使います。録画・動画情報の取得には外部プログラムのFFmpeg・FFprobe、文字認識にはWindowsのOneOCRを使います。
+- 依存定義と資料 [プロジェクトの依存定義](src/SSCapture/SSCapture.csproj)・[第三者コンポーネント](THIRD_PARTY.md)
+
+## ライセンス
+
+SSCaptureの独自コードと文書には[MITライセンス](LICENSE)が適用されます。FFmpegなどの第三者コンポーネントには、それぞれのライセンスが適用されます。詳しくは[第三者コンポーネント](THIRD_PARTY.md)を参照してください。
