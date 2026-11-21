@@ -366,14 +366,17 @@ internal static partial class Program
                 foreach (bool owned in new[] { true, false })
                 await Test(owned ? "WGC左単押しは前面の所有ウィンドウをプレビューと撮影に含める" : "WGC左ドラッグは枠なしで軌跡を描き、通過したウィンドウを合成する", async token =>
                 {
+                    using var independent = owned ? null : new HitFixture(false) { Text = "最初に選ぶ検証用ウィンドウ", Bounds = new(P(55, 155), new Size(240, 155)), BackColor = Color.White };
+                    independent?.Show();
                     using var second = new HitFixture(false) { Text = "合成する検証用ウィンドウ", Bounds = new(P(380, 180), new Size(250, 160)), BackColor = Color.Orange };
                     if (owned) second.Show(host); else second.Show();
                     second.Refresh();
                     await Task.Delay(125, token);
+                    nint firstHandle = independent?.Handle ?? host.Handle;
                     CaptureWindow[] targets = CaptureNative.CaptureWindows(Screen.FromControl(host).Bounds)
-                        .Where(w => w.Handle == host.Handle || w.Handle == second.Handle).ToArray();
+                        .Where(w => w.Handle == firstHandle || w.Handle == second.Handle).ToArray();
                     Equal(2, targets.Length);
-                    CaptureWindow parent = targets.Single(window => window.Handle == host.Handle);
+                    CaptureWindow parent = targets.Single(window => window.Handle == firstHandle);
                     var child = targets.Single(window => window.Handle == second.Handle);
                     Equal(owned, child.Owner == parent.Handle);
                     Check(child.ZOrder < parent.ZOrder, "検証ウィンドウが前面にない");
@@ -399,16 +402,20 @@ internal static partial class Program
                             overlay.DrawToBitmap(rendered, new(Point.Empty, bounds.Size));
                             Equal(Color.FromArgb(55, 195, 255).ToArgb(), rendered.GetPixel(250, 220).ToArgb());
                             Equal(Color.Blue.ToArgb(), rendered.GetPixel(250, 200).ToArgb());
+                            Equal(Color.Blue.ToArgb(), rendered.GetPixel(440, 200).ToArgb());
+                            Check(rendered.GetPixel(330, 200).B < 200, "選択されていない領域まで暗転が解除された");
                             CaptureNative.SynchronizeDesktop();
                             using var screen = InstantCapture.Take(new Rectangle(P(250, 200), new Size(2, 2)));
                             Equal(Color.White.ToArgb(), screen.GetPixel(0, 0).ToArgb());
                         }
                         input.LeftUp();
-                    }, token, windows: targets.Select(window => window.Bounds).ToArray(), showGuide: false,
+                    }, token, windows: targets.Select(window => window.Bounds).ToArray(), showGuide: false, dimBackground: !owned,
                         findWindow: point => targets.FirstOrDefault(window => window.Bounds.Contains(point)),
                         findWindowGroup: window => CaptureWindowGroups.ForegroundGroup(window, targets));
-                    Equal(Color.White.ToArgb(), result.Image!.GetPixel(180, 150).ToArgb());
-                    Equal(Color.Orange.ToArgb(), result.Image.GetPixel(440, 220).ToArgb());
+                    Rectangle resultBounds = result.Selection!.Bounds;
+                    int PixelAt(int x, int y) => result.Image!.GetPixel(P(x, y).X - resultBounds.X, P(x, y).Y - resultBounds.Y).ToArgb();
+                    Equal(Color.White.ToArgb(), PixelAt(180, 200));
+                    Equal(Color.Orange.ToArgb(), PixelAt(440, 220));
                     if (!owned) Equal(2, result.Selection!.Composite!.WindowRoots!.Count);
                 });
             }

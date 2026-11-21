@@ -104,6 +104,7 @@ internal static partial class Program
             int saved = 0, cancelled = 0;
             using var guide = new SelectionGuideForm(new(0, 0, 1000, 700), CaptureIntent.Screenshot,
                 () => cancelled++, dismiss: () => saved++);
+            Equal(664, guide.Bottom);
             _ = guide.Handle;
             guide.Show();
             Point near = guide.Bounds.Location;

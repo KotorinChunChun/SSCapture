@@ -56,12 +56,15 @@ internal static partial class Program
             CaptureWindow thin = new(new(32, 0, 2, 20), "中", 2, 10, 10);
             CaptureWindow last = new(new(40, 0, 40, 20), "右", 3, 20, 20);
             CaptureWindow[] windows = [first, thin, last];
-            var drag = new CaptureTargetDrag();
+            var owned = first with { Bounds = new Rectangle(1, 30, 20, 20), Handle = 4, Owner = first.Handle };
+            var drag = new CaptureTargetDrag(window => window == first ? [owned, window] : [window]);
             CaptureWindow? Find(Point point) => windows.FirstOrDefault(window => window.Bounds.Contains(point));
             drag.Move(new(10, 10), [], Find);
             drag.Move(new(70, 10), [], Find);
             drag.Move(new(10, 10), [], Find);
             Check(drag.Windows.SequenceEqual(windows), "途中の対象が抜けるか重複した");
+            Check(drag.BrightWindows.ToHashSet().SetEquals([first.Bounds, owned.Bounds, thin.Bounds, last.Bounds]),
+                "選択済みのウィンドウまたは前面の所有ウィンドウの暗転が残る");
             Equal(new Rectangle(10, 10, 61, 1), drag.TrailBounds);
         });
     }

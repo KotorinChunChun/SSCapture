@@ -30,7 +30,7 @@ internal sealed class SelectionGuideForm : Form
         MinimizeBox = false;
         ClientSize = new Size(720, 116);
         StartPosition = FormStartPosition.Manual;
-        Location = new Point(Math.Max(monitor.Left, monitor.Right - Width - 16), Math.Max(monitor.Top, monitor.Bottom - Height - 16));
+        Location = new Point(Math.Max(monitor.Left, monitor.Right - Width - 16), Math.Max(monitor.Top, monitor.Bottom - Height - 36));
         Controls.Add(new Label
         {
             Name = "SelectionHelp", Dock = DockStyle.Fill, Padding = new Padding(8, 4, 8, 4),

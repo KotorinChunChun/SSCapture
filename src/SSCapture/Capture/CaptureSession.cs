@@ -147,6 +147,7 @@ internal sealed class SessionController
     private bool HasWindowDrag => pressedButton == MouseButtons.Left && HighlightWindow && gesture.HasDragged && targetDrag is not null;
     internal IReadOnlyList<Point> WindowDragPath => HasWindowDrag ? targetDrag!.Path : [];
     internal Rectangle WindowDragBounds => HasWindowDrag ? targetDrag!.TrailBounds : Rectangle.Empty;
+    internal IReadOnlyList<Rectangle> WindowDragHighlights => DimCaptureBackground && HasWindowDrag ? targetDrag!.BrightWindows : [];
     internal string? PointerHint
     {
         get
@@ -964,7 +965,7 @@ internal sealed class SessionController
         altSnapPress = null;
         if (FreeMiddleDrag || options.Intent == CaptureIntent.Screenshot && HighlightWindow && findWindow is not null)
         {
-            targetDrag = new CaptureTargetDrag();
+            targetDrag = new CaptureTargetDrag(findWindowGroup);
             targetDrag.Move(gesture.RawCurrent, Snapshot.Monitors, FreeMiddleDrag ? null : findWindow);
         }
         if (FreeMiddleDrag)

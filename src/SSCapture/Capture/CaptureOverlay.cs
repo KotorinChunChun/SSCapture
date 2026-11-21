@@ -13,7 +13,7 @@ internal sealed class CaptureOverlay : Form
 
     private sealed record VisualState(DesktopSnapshot Snapshot, CaptureMode Mode, bool Dim, bool Highlight,
         Rectangle Selection, Rectangle Target, WindowCaptureFrame? Preview, bool Valid, int Points, Rectangle Dimensions, Rectangle Hint, string? HintText,
-        string? Error, int TrailPoints, Rectangle TrailBounds);
+        string? Error, int TrailPoints, Rectangle TrailBounds, IReadOnlyList<Rectangle> DragHighlights);
 
     internal CaptureOverlay(SessionController session, Rectangle monitorBounds)
     {
@@ -137,6 +137,8 @@ internal sealed class CaptureOverlay : Form
             graphics.DrawImage(frame.Image, bright, source, GraphicsUnit.Pixel);
         }
         else if (session.DimCaptureBackground) DrawSnapshot(graphics, bright);
+        foreach (Rectangle window in session.WindowDragHighlights)
+            DrawSnapshot(graphics, Rectangle.Intersect(Local(window), dirty));
         Rectangle selection = session.DisplaySelection;
         selection.Offset(-MonitorBounds.X, -MonitorBounds.Y);
         DrawSelection(graphics, selection, dirty);
@@ -192,6 +194,11 @@ internal sealed class CaptureOverlay : Form
             if (old.Preview is not null) dirty.Union(Local(old.Target));
             if (next.Preview is not null) dirty.Union(Local(next.Target));
         }
+        if (old.DragHighlights != next.DragHighlights)
+        {
+            foreach (Rectangle window in old.DragHighlights.Except(next.DragHighlights)) dirty.Union(Local(window));
+            foreach (Rectangle window in next.DragHighlights.Except(old.DragHighlights)) dirty.Union(Local(window));
+        }
         if (old.TrailPoints > next.TrailPoints) dirty.Union(Inflate(old.TrailBounds));
         else if (old.TrailPoints < next.TrailPoints)
         {
@@ -238,7 +245,7 @@ internal sealed class CaptureOverlay : Form
             target, session.PreviewFrame, session.FixedSelectionValid, session.Points.Count,
             dimensions is null ? Rectangle.Empty : PointerLabelBounds(dimensions, session.Current, 24, reserveHint: true),
             hint is null ? Rectangle.Empty : PointerLabelBounds(hint, session.Pointer, HintOffset(selection), reserveHint: false),
-            hint, session.SelectionError, session.WindowDragPath.Count, session.WindowDragBounds);
+            hint, session.SelectionError, session.WindowDragPath.Count, session.WindowDragBounds, session.WindowDragHighlights);
     }
 
     private static Rectangle SegmentBounds(Point start, Point end) => Rectangle.FromLTRB(
