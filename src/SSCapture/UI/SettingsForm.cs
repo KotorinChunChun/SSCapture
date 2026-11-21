@@ -508,6 +508,13 @@ internal sealed class SettingsForm : Form
     }
     internal void UpdateLastOutputSettings(AppSettings? value) => presetEditor.PreviousOutput = value;
 
+    internal void UpdateCapturePreferences(AppSettings latest)
+    {
+        if (gridEnabled.Checked == committed.Grid20) gridEnabled.Checked = latest.Grid20;
+        if (guideEnabled.Checked == committed.ShowSelectionGuide) guideEnabled.Checked = latest.ShowSelectionGuide;
+        committed = committed with { Grid20 = latest.Grid20, ShowSelectionGuide = latest.ShowSelectionGuide };
+    }
+
     private static HotkeyEditor KeyField(TableLayoutPanel table, string label, string name, string value, int row)
     { var control = new HotkeyEditor(name, value); Add(table, label, control, row); control.Margin = new Padding(3, 0, 0, 0); return control; }
 

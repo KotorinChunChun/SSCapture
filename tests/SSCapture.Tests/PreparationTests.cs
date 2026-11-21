@@ -48,10 +48,27 @@ internal static partial class Program
             Check(pointer.Checked && !screen.Checked, "ガイドが同じ設定を参照している");
             pointer.Checked = false; screen.Checked = true;
             nint originalHandle = settings.Handle;
-            CaptureUiPreparation.Prepare([settings], () => { }, disableTransitions: _ => { }, synchronize: () => { });
-            Check(!settings.Visible, "撮影準備で設定画面が隠れない");
-            CaptureUiPreparation.Restore(settings);
+            using var previous = new Form(); previous.Show();
+            using var hidden = new Form();
+            Form[] visible = [settings, previous];
+            CaptureUiPreparation.Prepare(visible, () => { }, disableTransitions: _ => { }, synchronize: () => { });
+            Check(!settings.Visible && !previous.Visible, "撮影準備で表示中のウィンドウが隠れない");
+            CaptureUiPreparation.RestoreAll(visible);
+            Check(previous.Visible && !hidden.Visible, "撮影前の表示状態を復元できない");
             Check(settings.Visible && settings.Handle == originalHandle && !pointer.Checked && screen.Checked, "同じ設定画面を復元できない");
+        });
+        Run("撮影中に変えた設定を同期し、設定画面の編集中の値を残す", () =>
+        {
+            AppSettings? saved = null;
+            var original = new AppSettings { Grid20 = false, ShowSelectionGuide = true };
+            using var form = new SettingsForm(original, next => { saved = next; return null; }, () => { });
+            var grid = (CheckBox)form.Controls.Find("GridEnabled", true).Single();
+            var pointer = (CheckBox)form.Controls.Find("ShowPointerGuide", true).Single();
+            pointer.Checked = false;
+            form.UpdateCapturePreferences(original with { Grid20 = true, ShowSelectionGuide = false });
+            Check(grid.Checked && !pointer.Checked, "撮影中の変更または編集中の値が欠落した");
+            SaveConsolidation(form);
+            Check(saved is { Grid20: true, ShowSelectionGuide: false, ShowPointerGuide: false }, "古い値で撮影中の変更を上書きした");
         });
     }
 

@@ -71,15 +71,15 @@ internal static partial class Program
             Equal(captured.ImageEditors[0], NotificationPresentation.ResolveApplication(shot, captured with { NotificationApplicationId = "見つからない登録" }));
         });
 
-        Run("通知の再撮影案内は実キーか未設定を表示し録画再開とは区別する", () =>
+        Run("通知は割当済みの再撮影キーだけを表示し録画再開とは区別する", () =>
         {
             foreach (string key in new[] { "", " \t ", "Ctrl+F11" })
             {
                 var settings = new AppSettings { LastRecipeShortcut = key };
-                string expectedKey = string.IsNullOrWhiteSpace(key) ? "未設定" : key;
+                bool assigned = !string.IsNullOrWhiteSpace(key);
                 var shot = new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None);
-                Equal($"直前の設定で再撮影するキー: {expectedKey}", NotificationPresentation.Create(shot, settings, true).RepeatHint);
-                Equal($"直前の静止画設定で再撮影するキー: {expectedKey}",
+                Equal(assigned ? $"直前の設定で再撮影するキー: {key}" : "", NotificationPresentation.Create(shot, settings, true).RepeatHint);
+                Equal(assigned ? $"直前の静止画設定で再撮影するキー: {key}" : "",
                     NotificationPresentation.Create(shot with { Intent = CaptureIntent.Recording }, settings, true).RepeatHint);
             }
         });

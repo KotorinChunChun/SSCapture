@@ -118,6 +118,13 @@ internal static partial class Program
             guide.UpdatePointer(near, false); Check(guide.Visible, "ドラッグ終了で復帰しない");
             Equal(0, saved); Equal(0, cancelled);
         });
+        Run("操作ガイドは負座標モニターのタスクバーを除いた作業領域に収まる", () =>
+        {
+            Rectangle monitor = new(-1440, -900, 1440, 900), work = new(-1440, -900, 1440, 852);
+            using var guide = new SelectionGuideForm(monitor, CaptureIntent.Screenshot, () => { }, workingArea: work);
+            Check(work.Contains(guide.Bounds), "操作ガイドが作業領域外にある");
+            Equal(work.Bottom - 16, guide.Bottom);
+        });
         Run("案内の表示設定保存が失敗しても撮影を終了しない", () =>
         {
             var session = GuideTestSession(true, _ => throw new IOException("保存拒否"));

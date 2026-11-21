@@ -8,16 +8,21 @@ internal sealed class SelectionGuideForm : Form
     private readonly Func<Keys, bool>? handleKey;
     private readonly Action? modifiersChanged;
     private readonly Action? dismiss;
+    private readonly Rectangle monitor;
+    private readonly Rectangle workArea;
     private bool hiddenForPointer;
     private CaptureAnchor currentAnchor;
     internal SelectionGuideForm(Rectangle monitor, CaptureIntent intent, Action cancel, Size? fixedSize = null,
         Func<Keys, bool>? handleKey = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft, Action? modifiersChanged = null,
-        CaptureMode mode = CaptureMode.Rectangle, Action? dismiss = null, bool spaceEnabled = true)
+        CaptureMode mode = CaptureMode.Rectangle, Action? dismiss = null, bool spaceEnabled = true, Rectangle? workingArea = null)
     {
         this.cancel = cancel;
         this.handleKey = handleKey;
         this.modifiersChanged = modifiersChanged;
         this.dismiss = dismiss;
+        this.monitor = monitor;
+        Rectangle available = Rectangle.Intersect(monitor, workingArea ?? monitor);
+        workArea = available.Width > 0 && available.Height > 0 ? available : monitor;
         currentAnchor = fixedAnchor;
         Name = "SelectionGuide";
         Text = WindowTitle.Create(intent == CaptureIntent.Recording ? "録画範囲の選択" : "撮影範囲の選択");
@@ -30,7 +35,7 @@ internal sealed class SelectionGuideForm : Form
         MinimizeBox = false;
         ClientSize = new Size(720, 116);
         StartPosition = FormStartPosition.Manual;
-        Location = new Point(Math.Max(monitor.Left, monitor.Right - Width - 16), Math.Max(monitor.Top, monitor.Bottom - Height - 36));
+        PositionGuide();
         Controls.Add(new Label
         {
             Name = "SelectionHelp", Dock = DockStyle.Fill, Padding = new Padding(8, 4, 8, 4),
@@ -41,6 +46,15 @@ internal sealed class SelectionGuideForm : Form
                     : $"左クリック: ウィンドウ　中央クリック: 画面全体\n{(mode == CaptureMode.Freeform ? "左ドラッグ: 輪郭を囲む" : intent == CaptureIntent.Screenshot ? "左ドラッグ: 複数ウィンドウを合成" : "ウィンドウを選んで左クリックで確定")}\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
         });
     }
+
+    protected override void OnShown(EventArgs e)
+    {
+        PositionGuide();
+        base.OnShown(e);
+    }
+
+    private void PositionGuide() => Location = new Point(Math.Max(workArea.Left, workArea.Right - Width - 16),
+        Math.Max(workArea.Top, Math.Min(monitor.Bottom - 36, workArea.Bottom - 16) - Height));
 
     protected override void OnHandleCreated(EventArgs e)
     {

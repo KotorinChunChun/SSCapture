@@ -7,6 +7,17 @@ internal static partial class Program
 {
     private static void CaptureCompositeTests()
     {
+        Run("WGCの付随ダイアログが閉じても明示選択した親の画像を保持する", () =>
+        {
+            CaptureWindow parent = new(new(10, 10, 80, 80), "親", 1, 10, 10);
+            CaptureWindow child = new(new(20, 20, 40, 40), "子", 2, 10, 10, parent.Handle);
+            Task<WindowCaptureFrame> Read(CaptureWindow window, bool _, CancellationToken __) => window == child
+                ? Task.FromException<WindowCaptureFrame>(new InvalidOperationException("閉じたウィンドウ"))
+                : Task.FromResult(new WindowCaptureFrame(new Bitmap(80, 80), parent.Bounds, default));
+            var captured = IsolatedWindowCapture.TakeGroupAsync([child, parent], false, required: new HashSet<nint> { parent.Handle }, takeFrame: Read).GetAwaiter().GetResult();
+            using var bitmap = captured.Image;
+            Equal(parent.Bounds, captured.Bounds);
+        });
         Run("モニター合成は負座標・隙間・通らなかったモニターを区別し、再撮影にも対象を引き継ぐ", () =>
         {
             Rectangle left = new(-200, -80, 120, 110), right = new(0, -40, 170, 80), skipped = new(-80, -80, 80, 25);

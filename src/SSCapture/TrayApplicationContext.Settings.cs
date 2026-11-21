@@ -70,6 +70,7 @@ internal sealed partial class TrayApplicationContext
         AppSettings next = settings with { Grid20 = enabled };
         store.Save(next);
         settings = next;
+        form?.UpdateCapturePreferences(next);
     }
 
     private void SaveGuideVisibility(bool enabled)
@@ -77,6 +78,7 @@ internal sealed partial class TrayApplicationContext
         AppSettings next = settings with { ShowSelectionGuide = enabled };
         store.Save(next);
         settings = next;
+        form?.UpdateCapturePreferences(next);
     }
 
     private void ToggleShortcut()

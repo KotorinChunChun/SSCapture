@@ -583,7 +583,8 @@ internal sealed class SessionController
         CaptureOverlay owner = preferredOwner ?? menuOwner ?? overlays.FirstOrDefault(o => o.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
         guide = new UI.SelectionGuideForm(owner.MonitorBounds, options.Intent, () => { if (!refreshing) Cancel(); },
             Mode == CaptureMode.FixedRegion ? activeFixedSize : null, HandleCommandKey, activeAnchor, AltKeyChanged, Mode,
-            dismiss: () => ChangeGuideVisibility(false), spaceEnabled: OutputSettings.CaptureKeys.SpaceEnabled);
+            dismiss: () => ChangeGuideVisibility(false), spaceEnabled: OutputSettings.CaptureKeys.SpaceEnabled,
+            workingArea: Screen.GetWorkingArea(owner.MonitorBounds));
         guide.Show(owner);
         UpdateGuidePointer();
         owner.BeginInvoke((Action)(() =>
@@ -1190,7 +1191,7 @@ internal sealed class SessionController
                 {
                     if (target is null) throw new InvalidOperationException("WGCで撮影するウィンドウを選択してください。");
                     var capture = await IsolatedWindowCapture.TakeAsync(target, OutputSettings with { DefaultDestination = Destination },
-                        Snapshot.Context?.FocusedElement, confirmedPreview, group);
+                        Snapshot.Context?.FocusedElement, confirmedPreview, group, roots);
                     result = capture.Image;
                     metadata = capture.Metadata;
                     selection = selection with { Bounds = capture.Bounds, IsolatedWindow = roots is null ? target : null };

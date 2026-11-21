@@ -9,6 +9,11 @@ internal static class CaptureUiPreparation
         if (previouslyVisible is { IsDisposed: false, Visible: false }) previouslyVisible.Show();
     }
 
+    internal static void RestoreAll(IEnumerable<Form> previouslyVisible)
+    {
+        foreach (Form window in previouslyVisible) Restore(window);
+    }
+
     internal static void Prepare(IEnumerable<Form?> windows, Action hideExtras, bool syncRequired = false,
         Action<Form>? disableTransitions = null, Action? synchronize = null)
     {

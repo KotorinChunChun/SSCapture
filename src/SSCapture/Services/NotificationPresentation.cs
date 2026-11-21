@@ -11,8 +11,8 @@ internal sealed record NotificationPresentation(string Message, bool HasFailure,
         bool canEdit = result.HasSuccess && app is not null
             && (result.SavedPath is not null || result.NotificationPath is not null || hasPendingImage);
 
-        string key = string.IsNullOrWhiteSpace(current.LastRecipeShortcut) ? "未設定" : current.LastRecipeShortcut;
-        string repeatHint = result.Intent == CaptureIntent.Recording
+        string key = current.LastRecipeShortcut;
+        string repeatHint = string.IsNullOrWhiteSpace(key) ? "" : result.Intent == CaptureIntent.Recording
             ? $"直前の静止画設定で再撮影するキー: {key}"
             : $"直前の設定で再撮影するキー: {key}";
 

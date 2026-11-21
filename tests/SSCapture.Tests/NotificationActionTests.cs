@@ -150,7 +150,7 @@ internal static partial class Program
             Check(toast.Actions!.RepeatHint.Contains("Ctrl+F11"), "再実行キーがない");
             feedback.Notify(new(CaptureIntent.Recording, OutputDestination.File, OutputDestination.None, SavedPath: "video.mp4", CaptureSettings: settings), settings with { LastRecipeShortcut = "" });
             Check(toast.Actions!.OpenFolder is not null && toast.Actions.Edit is null, "画像アプリを動画の既定として流用");
-            Check(toast.Actions.RepeatHint.Contains("未設定") && toast.Actions.RepeatHint.Contains("静止画設定"), "録画で誤案内");
+            Equal("", toast.Actions.RepeatHint);
             Equal<ExternalApplication?>(null, NotificationPresentation.ResolveApplication(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, CaptureSettings: settings), settings with { ImageEditors = [] }));
         }));
         Run("通知の設定画面は9候補と編集アプリだけを表示し旧クリック選択を除去", () =>
