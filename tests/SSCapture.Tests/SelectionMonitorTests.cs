@@ -196,10 +196,10 @@ internal static partial class Program
     // 明示指定のみ。単色画面で実ポインタの制限と全終了経路の復元を確認する。
     private static int RunSelectionMonitorSmoke()
     {
-        using var input = new NativeSmokeInput();
-        Rectangle originalClip = CursorConfinement.ReadBounds();
         try
         {
+            using var input = new NativeSmokeInput();
+            Rectangle originalClip = CursorConfinement.ReadBounds();
             var monitors = CaptureNative.MonitorBounds();
             foreach (bool limited in new[] { true, false })
             foreach (Rectangle target in monitors)

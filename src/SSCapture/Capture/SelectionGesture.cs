@@ -181,7 +181,7 @@ internal sealed class SelectionGesture
         if (!Enum.IsDefined(anchor)) throw new ArgumentOutOfRangeException(nameof(anchor));
         FixedAnchor = anchor;
         anchorOffset = OffsetFor(anchor);
-        if (mode == CaptureMode.FixedRegion && FixedPosition is null) PositionFixed(RawCurrent);
+        if (mode == CaptureMode.FixedRegion && FixedPosition is null) PositionFixed(Resolve(RawCurrent, previousSnap));
     }
 
     internal void ResumeFixedPointer()

@@ -4,10 +4,17 @@ namespace SSCapture.Services;
 
 internal static class CaptureTarget
 {
-    internal static string? Describe(Rectangle capture, IEnumerable<DisplayTarget> displays)
+    internal static string? Describe(Rectangle capture, IEnumerable<DisplayTarget> displays, IReadOnlyList<Rectangle>? capturedMonitors = null)
     {
         if (capture.Width <= 0 || capture.Height <= 0) return null;
         var ordered = InstantCapture.OrderDisplays(displays);
+        if (capturedMonitors is { Count: > 0 })
+        {
+            var numbers = ordered.Select((display, index) => (display.Bounds, Number: index + 1))
+                .Where(display => capturedMonitors.Contains(display.Bounds)).Select(display => display.Number).ToArray();
+            return numbers.Length == capturedMonitors.Count ? DesktopName(numbers) + "全体"
+                : $"デスクトップ（全体座標 {DescribeRange(capture, Point.Empty)}）";
+        }
         for (int i = 0; i < ordered.Count; i++)
         {
             Rectangle monitor = ordered[i].Bounds;

@@ -11,11 +11,6 @@ internal sealed partial class TrayApplicationContext
 {
     private async Task TakeRegionAsync(string id)
     {
-        if (id == AppSettings.LastRegionKeyId && recipes.Current?.HasTrackedTarget == true)
-        {
-            await TakeSameSettingsAsync(useCurrentOutputs: true);
-            return;
-        }
         var requested = settings.SavedRegions.FirstOrDefault(r => r.Id == id);
         if (requested is { UseFixedCoordinates: false })
         {
@@ -32,6 +27,18 @@ internal sealed partial class TrayApplicationContext
 
         if (busy)
             return;
+        if (id == AppSettings.LastRegionKeyId)
+        {
+            switch (recipes.LastRange)
+            {
+                case LastRangeReplay.TrackedTarget:
+                    await TakeSameSettingsAsync(useCurrentOutputs: true);
+                    return;
+                case LastRangeReplay.Reselect:
+                    Report("前回の撮影対象を特定できません。撮影範囲を選び直してください。", true);
+                    return;
+            }
+        }
         busy = true;
         RefreshMenu();
         try

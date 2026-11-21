@@ -63,6 +63,8 @@ internal static partial class Program
             Equal(CaptureKeyAction.FromCenterWithAspectRatio, bundled.CtrlShift);
             Equal(CaptureKeyAction.LockWidth, bundled.CtrlAlt);
             Equal(CaptureKeyAction.LockHeight, bundled.ShiftAlt);
+            Equal(CaptureKeyAction.Grid, bundled.Resolve(CaptureModifiers.Win | CaptureModifiers.Alt));
+            Equal(CaptureKeyAction.None, CaptureKeyDefaults.Current.Before.Resolve(CaptureModifiers.Win | CaptureModifiers.Alt));
             string data = Directory.CreateDirectory(Path.Combine(directory, "data")).FullName;
             File.WriteAllText(Path.Combine(data, CaptureKeyDefaults.FileName), """{"Drag":{"Win":"Snap"},"Before":{"Win":"HighlightWindow"}}""");
             Equal(CaptureKeyAction.Snap, CaptureKeyDefaults.Load(directory).Drag.Win);
@@ -206,6 +208,19 @@ internal static partial class Program
                 Check(guide.Controls["SelectionHelp"]!.Text.Contains("基点: 右下"), "ガイドが古い基点");
             }
             finally { session.Cancel(); }
+        });
+        Run("固定Spaceは中心へ切り替えてもポインタが静止したままウィンドウスナップを維持", () =>
+        {
+            var gesture = new SelectionGesture(CaptureMode.FixedRegion, [new(0, 0, 1000, 1000)],
+                [new(100, 100, 220, 160)], new(81, 61), CaptureAnchor.BottomLeft);
+            Point pointer = new(312, 251);
+            gesture.Move(pointer, snap: true);
+            Equal(new Point(320, 260), gesture.Current);
+            Check(gesture.Space(), "固定枠のSpaceが無効");
+            Equal(CaptureAnchor.Center, gesture.FixedAnchor);
+            Equal(new Rectangle(280, 230, 81, 61), gesture.FixedSelection(OutputDestination.Clipboard)!.Bounds);
+            gesture.Move(pointer, snap: false);
+            Equal(new Rectangle(272, 221, 81, 61), gesture.FixedSelection(OutputDestination.Clipboard)!.Bounds);
         });
         Run("矩形縦横比は正負4方向とも正確な整数比", () =>
         {

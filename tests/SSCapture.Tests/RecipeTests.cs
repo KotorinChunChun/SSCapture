@@ -114,9 +114,33 @@ internal static partial class Program
         {
             var book = new CaptureRecipeBook(); var first = LastCaptureRecipe.Create(1, new(1, 1, 2, 2), null, new(), RegionLayout);
             var second = LastCaptureRecipe.Create(2, new(3, 3, 2, 2), null, new(), RegionLayout);
+            Equal(LastRangeReplay.SavedRectangle, book.LastRange);
             book.Remember(2, second); book.Remember(1, first); Equal(second, book.Current);
-            book.Remember(3, null); Check(book.Current is null, "古い範囲へ誤復帰");
+            book.Remember(3, null); book.Remember(2, second);
+            Check(book.Current is null, "古い範囲へ誤復帰");
+            Equal(LastRangeReplay.Reselect, book.LastRange);
         });
+        Run("モニター撮影成功後に識別できなかった場合は前回矩形の代わりに選び直す", () => WithOutputDirectory(directory => RunOutputTask(async () =>
+        {
+            var book = new CaptureRecipeBook();
+            bool lookupFailure = false;
+            int copied = 0;
+            using var router = new OutputRouter(Path.Combine(directory, "work"), _ => { copied++; return Task.CompletedTask; },
+                captureSucceeded: book.Remember, readCaptureLayout: () => lookupFailure ? throw new IOException("識別失敗") : RegionLayout);
+            using var image = OutputImage();
+            var settings = OutputSettings(directory);
+            Rectangle monitor = RegionLayout[0].Bounds;
+            var source = new CaptureReplaySource.Monitors([monitor]);
+            await router.ScreenshotAsync(image, OutputDestination.Clipboard, settings, captureBounds: new(1, 1, 2, 2));
+            Equal(LastRangeReplay.SavedRectangle, book.LastRange);
+            lookupFailure = true;
+            await router.ScreenshotAsync(image, OutputDestination.Clipboard, settings, captureBounds: monitor, replaySource: source);
+            Equal(2, copied);
+            Equal(LastRangeReplay.Reselect, book.LastRange);
+            lookupFailure = false;
+            await router.ScreenshotAsync(image, OutputDestination.Clipboard, settings, captureBounds: monitor, replaySource: source);
+            Equal(LastRangeReplay.TrackedTarget, book.LastRange);
+        })));
         Run("出力全失敗は直前設定を変更せず部分成功は履歴OFFでも記録", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {
             var book = new CaptureRecipeBook(); int remembered = 0;

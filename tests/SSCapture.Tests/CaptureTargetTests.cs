@@ -74,6 +74,21 @@ internal static partial class Program
             await router.ScreenshotAsync(bitmap, OutputDestination.Clipboard, OutputSettings(directory), captureBounds: new(0, 0, 100, 100));
             Equal("コピーが完了しました", delivery!.Message);
         })));
+        Run("合成通知は外接矩形に含まれる未撮影モニターを載せない", () => WithOutputDirectory(directory => RunOutputTask(async () =>
+        {
+            Rectangle primary = new(0, 0, 400, 400), top = new(-400, -400, 400, 400), left = new(-400, 0, 400, 400);
+            Rectangle bounds = Rectangle.Union(primary, top);
+            DisplayTarget[] displays = [new("top", top), new("left", left), new("primary", primary, true)];
+            CaptureDelivery? delivery = null;
+            using var router = new OutputRouter(Path.Combine(directory, "work"), _ => Task.CompletedTask,
+                delivered: value => delivery = value, readDisplays: () => displays);
+            using var image = OutputImage();
+            await router.ScreenshotAsync(image, OutputDestination.Clipboard, OutputSettings(directory), captureBounds: bounds,
+                replaySource: new CaptureReplaySource.Monitors([top, primary]));
+            Equal("デスクトップ【1・2】全体をコピーしました", delivery!.Message);
+            Equal("デスクトップ（全体座標 【-400,-400】 800 × 800 px）",
+                CaptureTarget.Describe(bounds, [displays[1], displays[2]], [top, primary]));
+        })));
         Run("具体的な通知は長い座標と複数出力でも折返しをDPI別に収める", () =>
         {
             var delivery = new CaptureDelivery(CaptureIntent.Screenshot, (OutputDestination)7, OutputDestination.None,

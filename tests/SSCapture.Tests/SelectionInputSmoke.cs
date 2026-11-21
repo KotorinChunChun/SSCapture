@@ -13,9 +13,9 @@ internal static partial class Program
         using var host = new HitFixture(false) { Text = "選択操作の検証", Bounds = new(100, 100, 800, 540), BackColor = Color.White };
         host.Shown += async (_, _) =>
         {
-            using var input = new NativeSmokeInput();
             try
             {
+                using var input = new NativeSmokeInput();
                 NativeSmokeInput.FocusFixture(host.Handle);
                 await Task.Delay(150);
                 Rectangle bounds = host.RectangleToScreen(host.ClientRectangle);
@@ -159,6 +159,23 @@ internal static partial class Program
                         await Down(overlay); await Move(overlay, 108, 109); input.LeftUp();
                     }, token, windows: [target], showGuide: false);
                     Equal(new Size(28, 29), result.Image!.Size);
+                });
+                await Test("実入力のWin＋Altは矩形ドラッグ中だけグリッドを適用する", async token =>
+                {
+                    using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, _) =>
+                    {
+                        var session = OverlaySession(overlay);
+                        await Down(overlay); await Move(overlay, 153, 137);
+                        Equal(new Size(73, 57), session.Selection.Size);
+                        await Key(overlay, 0xA4, true); await Key(overlay, 0x5B, true);
+                        Equal(new Size(80, 60), session.Selection.Size);
+                        Check(session.ModifierHint?.Contains("一時グリッドスナップ", StringComparison.Ordinal) == true, "グリッドの案内が出ない");
+                        await Key(overlay, 0xA4, false); await Key(overlay, 0x5B, false);
+                        Equal(new Size(73, 57), session.Selection.Size);
+                        Check(!session.Grid20, "常時グリッド設定へ反映された");
+                        input.LeftUp();
+                    }, token, settings: new() { GridStepPixels = 20 }, captureWindowsKey: true, showGuide: false);
+                    Equal(new Size(73, 57), result.Image!.Size);
                 });
                 await Test("Spaceで実ポインタを対角へ移動して同じ範囲を確定", async token =>
                 {
@@ -488,7 +505,7 @@ internal static partial class Program
                 });
             }
             catch (Exception ex) { failures++; Console.WriteLine("FAIL INPUT setup: " + ex.Message); }
-            finally { input.ReleaseInjectedInput(); CloseSmokeOverlays(); host.Close(); }
+            finally { CloseSmokeOverlays(); host.Close(); }
         };
         Application.Run(host);
         Console.WriteLine($"SELECTION INPUT RESULT: {successes} passed, {failures} failed");

@@ -87,7 +87,8 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                     if (!retry.IsRetry && !fileCancelled) captureSucceeded?.Invoke(sequence, recipe);
                     onDelivered?.Invoke();
                 }
-            }, captureBounds, retry.PrepareFile, string.IsNullOrWhiteSpace(windowTitle) ? DescribeCapture(captureBounds) : $"ウィンドウ「{windowTitle}」", retry,
+            }, captureBounds, retry.PrepareFile, string.IsNullOrWhiteSpace(windowTitle)
+                ? DescribeCapture(captureBounds, (replaySource as CaptureReplaySource.Monitors)?.Bounds) : $"ウィンドウ「{windowTitle}」", retry,
             sidecar is null ? null : async path => { if (beforeMetadataSave is not null) await beforeMetadataSave(path); await Task.Run(() => sidecar.Write(path)); },
             settings.ShowCaptureNotification
                 ? () => new NotificationImage(owned, Path.Combine(workRoot, "notification-images")) : null,
@@ -227,10 +228,10 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         return result;
     }
 
-    private string? DescribeCapture(Rectangle? bounds)
+    private string? DescribeCapture(Rectangle? bounds, IReadOnlyList<Rectangle>? capturedMonitors = null)
     {
         if (bounds is not Rectangle capture) return null;
-        try { return CaptureTarget.Describe(capture, readDisplays()); }
+        try { return CaptureTarget.Describe(capture, readDisplays(), capturedMonitors); }
         catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException) { return null; }
     }
 
