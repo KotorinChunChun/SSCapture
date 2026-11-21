@@ -35,7 +35,7 @@ internal sealed class SettingsForm : Form
     private readonly RegionManagerForm inputPresetEditor;
     private readonly ListBox categories;
     private readonly NumericUpDown snapDistance, gridStep;
-    private readonly CheckBox gridEnabled, guideEnabled;
+    private readonly CheckBox gridEnabled, guideEnabled, pointerGuideEnabled;
 
     public SettingsForm(AppSettings settings, Func<AppSettings, string?> onSave, Action openFolder,
         Func<IReadOnlyList<MicrophoneInfo>>? listMicrophones = null, Action? openRegions = null, Action? openHistory = null,
@@ -266,15 +266,16 @@ internal sealed class SettingsForm : Form
         gridEnabled = Toggle(basic, "グリッド", "GridEnabled", "グリッドを常時使用", settings.Grid20, 2);
         snapDistance = PixelField(basic, "スナップ距離 (px)", "SnapDistancePixels", settings.SnapDistancePixels, 3);
         gridStep = PixelField(basic, "グリッド間隔 (px)", "GridStepPixels", settings.GridStepPixels, 4);
-        guideEnabled = Toggle(basic, "操作ガイド", "ShowSelectionGuide", "撮影中に表示する", settings.ShowSelectionGuide, 5);
+        guideEnabled = Toggle(basic, "画面右下の操作ガイド", "ShowSelectionGuide", "撮影中に表示する", settings.ShowSelectionGuide, 5);
+        pointerGuideEnabled = Toggle(basic, "ポインタ右下の操作ガイド", "ShowPointerGuide", "撮影中に表示する", settings.ShowPointerGuide, 6);
         var inputSummary = MakeButton("", "DefaultInputSummary", ButtonRole.Secondary); inputSummary.AutoSize = false; inputSummary.Height = 76;
         var outputSummary = MakeButton("", "DefaultOutputSummary", ButtonRole.Secondary); outputSummary.AutoSize = false; outputSummary.Height = 76;
-        Add(basic, "既定の入力", inputSummary, 6); Add(basic, "既定の出力", outputSummary, 7);
-        basic.RowStyles.Clear(); basic.RowCount = 10;
-        for (int row = 0; row < 8; row++) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, row >= 6 ? 84 : 40));
+        Add(basic, "既定の入力", inputSummary, 7); Add(basic, "既定の出力", outputSummary, 8);
+        basic.RowStyles.Clear(); basic.RowCount = 11;
+        for (int row = 0; row < 9; row++) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, row >= 7 ? 84 : 40));
         basic.RowStyles.Add(new RowStyle(SizeType.Absolute, 96)); basic.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration());
-        Add(basic, "自動起動", startupSettings, 8);
+        Add(basic, "自動起動", startupSettings, 9);
         Shown += async (_, _) => await startupSettings.RefreshAsync();
         inputSummary.Click += (_, _) => { if (inputPresetEditor.SelectDefault()) SelectCategory("入力プリセット"); else SetStatus("入力プリセットを切り替えられません。入力内容と入力プリセット内のメッセージを確認してください。", true); };
         outputSummary.Click += (_, _) => { if (presetEditor.SelectDefault()) SelectCategory("出力プリセット"); else SetStatus(presetEditor.Error ?? "出力プリセットの入力内容を確認してください。", true); };
@@ -418,7 +419,7 @@ internal sealed class SettingsForm : Form
             {
                 OneOcrDirectory = Expand(oneOcrDirectory.Text),
                 DimCaptureBackground = dimCaptureBackground.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
-                Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked,
+                Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked, ShowPointerGuide = pointerGuideEnabled.Checked,
                 SnapDistancePixels = (int)snapDistance.Value, GridStepPixels = (int)gridStep.Value,
                 CapturePresets = presetEditor.Presets,
                 SavedRegions = inputPresetEditor.Regions,
@@ -450,7 +451,7 @@ internal sealed class SettingsForm : Form
     private AppSettings CurrentSelectionSettings() => committed with
     {
         LimitToStartingMonitor = limitToStartingMonitor.Checked, DimCaptureBackground = dimCaptureBackground.Checked,
-        Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked,
+        Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked, ShowPointerGuide = pointerGuideEnabled.Checked,
         SnapDistancePixels = (int)snapDistance.Value, GridStepPixels = (int)gridStep.Value
     };
     internal static string InputSummary(SavedRegion preset)

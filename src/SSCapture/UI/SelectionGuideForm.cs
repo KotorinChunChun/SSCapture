@@ -1,3 +1,5 @@
+using SSCapture.Capture;
+
 namespace SSCapture.UI;
 
 internal sealed class SelectionGuideForm : Form
@@ -38,6 +40,12 @@ internal sealed class SelectionGuideForm : Form
                     ? $"左クリック: ウィンドウ　中央クリック: 画面全体　左ドラッグ: 範囲選択\n{(spaceEnabled ? "Space: 対角の起点に切り替え　" : "")}右クリック: メニュー・縦横比\nEsc: 撮影終了　ドラッグ中の右クリック / Esc: 選択だけ中断"
                     : $"左クリック: ウィンドウ　中央クリック: 画面全体\n{(mode == CaptureMode.Freeform ? "左ドラッグ: 輪郭を囲む" : "ウィンドウを選んで左クリックで確定")}\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
         });
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        _ = CaptureNative.SetWindowDisplayAffinity(Handle, CaptureNative.ExcludeFromCapture);
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)

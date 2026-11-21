@@ -94,6 +94,7 @@ internal static class SettingsHelp
         if (name == "GridStepPixels") return $"グリッドが有効なとき、矩形の幅・高さをこの間隔で揃えます。1～32768物理px、既定{AppSettings.DefaultGridStepPixels}px。";
         if (name == "GridEnabled") return "グリッドを常時使用します。OFFの場合も、ショートカットで一時的に使用できます。";
         if (name == "ShowSelectionGuide") return "撮影中の操作ガイドを表示します。ドラッグ中にポインタが近づくと一時的に隠れます。";
+        if (name == "ShowPointerGuide") return "撮影中にポインタ右下へ、押したボタンや修飾キーの操作と取り消し方法を表示します。";
         if (name == "DefaultInputSummary") return "既定の入力プリセットの概要です。クリックすると、そのプリセットを選択した編集ページへ移動します。";
         if (name == "DefaultOutputSummary") return "既定の出力プリセットの概要です。クリックすると、そのプリセットを選択した編集ページへ移動します。";
         if (name == "InputFixedCoordinates") return "ONは登録した位置へ固定枠を表示します。OFFは撮影モードに従い位置や範囲を選びます。再撮影キーはONなら即時撮影、OFFなら選択開始です。";

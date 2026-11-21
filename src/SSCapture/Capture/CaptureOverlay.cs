@@ -50,6 +50,7 @@ internal sealed class CaptureOverlay : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
+        _ = CaptureNative.SetWindowDisplayAffinity(Handle, CaptureNative.ExcludeFromCapture);
         sessionNotifications = CaptureNative.WTSRegisterSessionNotification(Handle, 0);
     }
 
@@ -124,7 +125,7 @@ internal sealed class CaptureOverlay : Form
         Rectangle dirty = Rectangle.Intersect(ClientRectangle, e.ClipRectangle);
         DrawSnapshot(graphics, dirty);
         Rectangle target = session.HighlightedWindow;
-        if (IsDimmed(target))
+        if (session.DimCaptureBackground)
             using (SolidBrush dim = new(Color.FromArgb(115, Color.Black))) graphics.FillRectangle(dim, dirty);
         Rectangle bright = Rectangle.Intersect(Local(target), dirty);
         if (session.PreviewFrame is { } frame && bright.Width > 0 && bright.Height > 0)
@@ -135,7 +136,7 @@ internal sealed class CaptureOverlay : Form
             source.Offset(MonitorBounds.X - frame.Bounds.X, MonitorBounds.Y - frame.Bounds.Y);
             graphics.DrawImage(frame.Image, bright, source, GraphicsUnit.Pixel);
         }
-        else DrawSnapshot(graphics, bright);
+        else if (session.DimCaptureBackground) DrawSnapshot(graphics, bright);
         Rectangle selection = session.DisplaySelection;
         selection.Offset(-MonitorBounds.X, -MonitorBounds.Y);
         DrawSelection(graphics, selection, dirty);
@@ -225,14 +226,12 @@ internal sealed class CaptureOverlay : Form
         string? dimensions = DimensionsText(selection);
         string? hint = MonitorBounds.Contains(session.Pointer) ? session.PointerHint : null;
         Rectangle target = session.HighlightedWindow;
-        return new(session.Snapshot, session.Mode, IsDimmed(target), session.HighlightWindow, selection,
+        return new(session.Snapshot, session.Mode, session.DimCaptureBackground, session.HighlightWindow, selection,
             target, session.PreviewFrame, session.FixedSelectionValid, session.Points.Count,
             dimensions is null ? Rectangle.Empty : PointerLabelBounds(dimensions, session.Current, 24, reserveHint: true),
             hint is null ? Rectangle.Empty : PointerLabelBounds(hint, session.Pointer, HintOffset(selection), reserveHint: false),
             hint, session.SelectionError);
     }
-
-    private bool IsDimmed(Rectangle target) => session.DimCaptureBackground || session.HighlightWindow || !target.IsEmpty;
 
     private Rectangle Local(Rectangle screen)
     {
@@ -293,11 +292,11 @@ internal sealed class CaptureOverlay : Form
 
     private Rectangle PointerLabelBounds(string text, Point pointer, int offset, bool reserveHint)
     {
-        Size size = TextRenderer.MeasureText(text, dimensionsFont);
-        int height = size.Height + 4;
-        int width = Math.Min(ClientSize.Width, size.Width + 8);
+        string[] lines = text.Split('\n');
+        int height = TextRenderer.MeasureText("国", dimensionsFont).Height * lines.Length + 4;
+        int width = Math.Min(ClientSize.Width, lines.Max(line => TextRenderer.MeasureText(line, dimensionsFont).Width) + 8);
         int x = Math.Clamp(pointer.X - MonitorBounds.X + 18, 0, Math.Max(0, ClientSize.Width - width));
-        int reserved = reserveHint && session.PointerHint is not null ? height : 0;
+        int reserved = reserveHint && session.PointerHint is string hint ? (1 + hint.Count(c => c == '\n')) * height : 0;
         int y = Math.Clamp(pointer.Y - MonitorBounds.Y + offset, 0, Math.Max(0, ClientSize.Height - height - reserved));
         return new(x, y, width, height);
     }
@@ -306,9 +305,17 @@ internal sealed class CaptureOverlay : Form
     {
         Rectangle label = PointerLabelBounds(text, pointer, offset, reserveHint);
         graphics.FillRectangle(Brushes.Black, label);
-        TextRenderer.DrawText(graphics, text, dimensionsFont, label, Color.White,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
-            TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.PreserveGraphicsTranslateTransform);
+        string[] lines = text.Split('\n');
+        int lineHeight = (label.Height - 4) / lines.Length;
+        label.Offset(0, 2);
+        label.Height = lineHeight;
+        foreach (string line in lines)
+        {
+            TextRenderer.DrawText(graphics, line, dimensionsFont, label, Color.White,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
+                TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.PreserveGraphicsTranslateTransform);
+            label.Offset(0, lineHeight);
+        }
     }
 
     private void DrawSnapshot(Graphics graphics, Rectangle dirty)

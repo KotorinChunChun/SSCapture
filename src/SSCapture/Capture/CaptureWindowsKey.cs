@@ -17,6 +17,7 @@ internal sealed class CaptureWindowsKey : IDisposable
     private long pressedTime;
 
     internal bool IsHeld => held != 0;
+    internal bool CanTap => IsHeld && !combined && Environment.TickCount64 - pressedTime <= TapMilliseconds;
     internal void ObservePointer(Point pointer)
     {
         if (IsHeld && pointer != pressedAt) combined = true;

@@ -9,9 +9,23 @@ namespace SSCapture;
 
 internal sealed partial class TrayApplicationContext
 {
-    private void PrepareCaptureUi() => CaptureUiPreparation.Prepare(
-        Application.OpenForms.Cast<Form>().Where(f => f != namingForm && f != recordingForm).ToArray(),
-        () => { feedback.HideForCapture(); menu.Close(); }, menu.Visible);
+    private SettingsForm? settingsToRestore;
+
+    private void PrepareCaptureUi()
+    {
+        if (form is { Visible: true, IsDisposed: false }) settingsToRestore = form;
+        CaptureUiPreparation.Prepare(
+            Application.OpenForms.Cast<Form>().Where(f => f != namingForm && f != recordingForm).ToArray(),
+            () => { feedback.HideForCapture(); menu.Close(); }, menu.Visible);
+    }
+
+    private void RestoreCaptureSettings()
+    {
+        if (pendingRecording is not null || recorder is not null) return;
+        SettingsForm? previous = settingsToRestore;
+        settingsToRestore = null;
+        if (!exiting) CaptureUiPreparation.Restore(previous);
+    }
 
     private async Task TakeInstantAsync(int number)
     {
@@ -45,6 +59,7 @@ internal sealed partial class TrayApplicationContext
         finally
         {
             busy = false;
+            RestoreCaptureSettings();
             if (!exiting)
             {
                 RefreshMenu();
@@ -170,6 +185,7 @@ internal sealed partial class TrayApplicationContext
         finally
         {
             busy = false;
+            RestoreCaptureSettings();
             if (!exiting)
             {
                 RefreshMenu();

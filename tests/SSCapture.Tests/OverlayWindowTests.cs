@@ -8,7 +8,7 @@ internal static partial class Program
 {
     private static void OverlayWindowTests()
     {
-        Run("暗転OFFでも左押下からドラッグ開始までは押したウィンドウだけを明るく表示する", () =>
+        Run("暗転OFFでは左押下中もドラッグ中も暗転しない", () =>
         {
             Rectangle bounds = new(0, 0, 320, 240);
             Rectangle first = new(35, 45, 96, 108), second = new(10, 20, 200, 180);
@@ -27,12 +27,29 @@ internal static partial class Program
             Equal(first, session.HighlightedWindow);
             overlay.DrawToBitmap(rendered, bounds);
             Equal(Color.White.ToArgb(), rendered.GetPixel(45, 56).ToArgb());
-            Check(rendered.GetPixel(15, 10).R < 200, "押したウィンドウの外側が暗くならない");
+            Equal(Color.White.ToArgb(), rendered.GetPixel(15, 10).ToArgb());
 
             gesture.Move(new(200, 180));
             Equal(Rectangle.Empty, session.HighlightedWindow);
             overlay.DrawToBitmap(rendered, bounds);
             Equal(Color.White.ToArgb(), rendered.GetPixel(15, 10).ToArgb());
+        });
+        Run("ポインタガイドは画面端のガイドと独立し、Win解放の操作を改行して案内する", () =>
+        {
+            Rectangle bounds = new(0, 0, 320, 240);
+            foreach (bool showPointerGuide in new[] { false, true })
+            {
+                var snapshot = new DesktopSnapshot(new Bitmap(bounds.Width, bounds.Height), bounds, [bounds]);
+                var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.None,
+                    ShowSelectionGuide: false, OutputSettings: new() { ShowPointerGuide = showPointerGuide }), snapshot, []);
+                try
+                {
+                    session.ApplyPointerInput(new(100, 80), CaptureModifiers.Win);
+                    Equal(showPointerGuide ? "Win : ウィンドウ撮影に切り替え\nWin離す：ウィンドウ撮影モードに変更" : null, session.PointerHint);
+                    Check(!session.ShowSelectionGuide, "ポインタガイドが画面端の設定に影響した");
+                }
+                finally { session.Cancel(); }
+            }
         });
         Run("範囲選択の実HWNDは初回・再作成後ともツールウィンドウでキー入力を妨げない", () =>
         {

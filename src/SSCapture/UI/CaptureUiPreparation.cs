@@ -4,6 +4,11 @@ namespace SSCapture.UI;
 
 internal static class CaptureUiPreparation
 {
+    internal static void Restore(Form? previouslyVisible)
+    {
+        if (previouslyVisible is { IsDisposed: false, Visible: false }) previouslyVisible.Show();
+    }
+
     internal static void Prepare(IEnumerable<Form?> windows, Action hideExtras, bool syncRequired = false,
         Action<Form>? disableTransitions = null, Action? synchronize = null)
     {

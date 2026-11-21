@@ -37,6 +37,7 @@ internal sealed partial class TrayApplicationContext
         finally
         {
             busy = false;
+            RestoreCaptureSettings();
             if (!exiting) { RefreshMenu(); FlushFeedback(); }
         }
     }

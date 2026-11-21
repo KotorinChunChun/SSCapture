@@ -216,6 +216,7 @@ internal sealed partial class TrayApplicationContext
         recordingForm = null;
         pendingRecording = null;
         recordingSettings = null;
+        RestoreCaptureSettings();
         StoreStatus("録画準備をキャンセルしました。");
         RefreshMenu();
         FlushFeedback();
@@ -261,6 +262,7 @@ internal sealed partial class TrayApplicationContext
             recordingForm = null;
             pendingRecording = null;
             recordingSettings = null;
+            RestoreCaptureSettings();
         }
     }
 }

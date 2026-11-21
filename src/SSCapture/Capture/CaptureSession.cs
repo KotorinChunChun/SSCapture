@@ -139,12 +139,13 @@ internal sealed class SessionController
     {
         get
         {
-            if (!HasPointerPress) return windowPreview?.Frame switch
+            if (!OutputSettings.ShowPointerGuide) return null;
+            if (!HasPointerPress) return ModifierHint ?? (windowPreview?.Frame switch
             {
                 { IsFaulted: true } => windowPreview.Frame.Exception?.GetBaseException().Message,
                 { IsCompleted: false } => "WGCプレビューを取得中",
-                _ => ModifierHint
-            };
+                _ => null
+            });
             string operation = pressedButton == MouseButtons.Middle ? "モニター全体を撮影"
                 : Mode == CaptureMode.FixedRegion ? "固定範囲を撮影"
                 : !gesture.HasDragged || Mode == CaptureMode.Window ? "ウィンドウを撮影" : "選択範囲を撮影";
@@ -741,6 +742,14 @@ internal sealed class SessionController
         bool movingWhileIdle = !HasPointerPress && !dragging && selectionBounds is not null && Snapshot.Monitors.Count > 1
             && modifiers == CaptureModifiers.Win && action is (CaptureKeyAction.HighlightWindow or CaptureKeyAction.CrossMonitor);
         bool changed = modifiers != activeModifiers || dragging != activeDrag || idleWindowsMove != movingWhileIdle;
+        var effect = movingWhileIdle ? CaptureKeyAction.CrossMonitor : action;
+        string? hint = modifiers == CaptureModifiers.None ? altSnapEnabled ? "ウィンドウ枠スナップ ON" : null
+            : $"{CaptureKeyMap.Label(modifiers)} : {CaptureKeyMap.Describe(effect)}";
+        if (!HasPointerPress && modifiers == CaptureModifiers.Win && action == CaptureKeyAction.HighlightWindow
+            && (windowsKey?.CanTap ?? true))
+            hint += HighlightWindow ? "\nWin離す：元の撮影モードに戻る" : "\nWin離す：ウィンドウ撮影モードに変更";
+        bool hintChanged = ModifierHint != hint;
+        ModifierHint = hint;
         CaptureKeyAction pressedAction = windowsTap && !HasPointerPress && !dragging ? bindings.Win
             : (modifiers & ~activeModifiers) != 0 && modifiers != CaptureModifiers.Win ? action : CaptureKeyAction.None;
         if (changed)
@@ -748,9 +757,6 @@ internal sealed class SessionController
             activeModifiers = modifiers;
             activeDrag = dragging;
             if (modifiers != CaptureModifiers.None) hasSelectionInput = true;
-            var effect = movingWhileIdle ? CaptureKeyAction.CrossMonitor : action;
-            ModifierHint = modifiers == CaptureModifiers.None ? altSnapEnabled ? "ウィンドウ枠スナップ ON" : null
-                : $"{CaptureKeyMap.Label(modifiers)} : {CaptureKeyMap.Describe(effect)}";
         }
         bool snap = altSnapEnabled || action == CaptureKeyAction.Snap;
         bool height = action == CaptureKeyAction.LockHeight;
@@ -775,7 +781,7 @@ internal sealed class SessionController
             ToggleWindowCaptureMode(preferWgc: windowsTap);
             hasSelectionInput = true;
         }
-        if (changed || pressedAction == CaptureKeyAction.HighlightWindow) RefreshOverlays();
+        if (changed || hintChanged || pressedAction == CaptureKeyAction.HighlightWindow) RefreshOverlays();
     }
 
     private void UpdateAltSnapTap(Point pointer, CaptureModifiers modifiers)

@@ -39,6 +39,20 @@ internal static partial class Program
             CaptureUiPreparation.Prepare([], () => { }, syncRequired: true, synchronize: () => synchronized++);
             Equal(1, synchronized);
         });
+        Run("撮影後は設定の同じ画面と編集中の値を再表示する", () =>
+        {
+            using var settings = new SettingsForm(new AppSettings { ShowSelectionGuide = false, ShowPointerGuide = true }, _ => null, () => { });
+            settings.Show(); settings.SelectCategory("基本");
+            var pointer = (CheckBox)settings.Controls.Find("ShowPointerGuide", true).Single();
+            var screen = (CheckBox)settings.Controls.Find("ShowSelectionGuide", true).Single();
+            Check(pointer.Checked && !screen.Checked, "ガイドが同じ設定を参照している");
+            pointer.Checked = false; screen.Checked = true;
+            nint originalHandle = settings.Handle;
+            CaptureUiPreparation.Prepare([settings], () => { }, disableTransitions: _ => { }, synchronize: () => { });
+            Check(!settings.Visible, "撮影準備で設定画面が隠れない");
+            CaptureUiPreparation.Restore(settings);
+            Check(settings.Visible && settings.Handle == originalHandle && !pointer.Checked && screen.Checked, "同じ設定画面を復元できない");
+        });
     }
 
     // 明示実行専用。自作画面の範囲だけを取得し、隠した設定画面の残像を検査する。

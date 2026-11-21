@@ -52,6 +52,7 @@ internal sealed record AppSettings
     public Capture.CaptureKeyMap CaptureBeforeKeys { get; init; } = Capture.CaptureKeyMap.BeforeDefaults;
     public Capture.CaptureMouseMap CaptureMouse { get; init; } = new();
     public bool ShowSelectionGuide { get; init; } = true;
+    public bool ShowPointerGuide { get; init; } = true;
     public OutputDestination DefaultDestination { get; init; } = OutputDestination.Clipboard;
     public bool RecordSystemAudio { get; init; }
     public bool RecordMicrophone { get; init; }
