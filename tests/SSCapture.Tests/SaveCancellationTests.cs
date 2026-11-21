@@ -88,7 +88,7 @@ internal static partial class Program
                 Equal(expected, probe.History.Entries.Single().SavedPath);
                 Equal<Rectangle?>(bounds, probe.History.Entries.Single().CaptureBounds);
                 Equal(new CaptureDelivery(CaptureIntent.Screenshot, (OutputDestination)7, OutputDestination.None, SavedPath: expected,
-                    CaptureBounds: bounds, CaptureDescription: "デスクトップ【1】の 【10,20】 ～ 【13,22】"), probe.Notifications.Single() with { CaptureSettings = null, NotificationImage = null });
+                    CaptureBounds: bounds, CaptureDescription: "デスクトップ【1】の 【10,20】 3 × 2 px"), probe.Notifications.Single() with { CaptureSettings = null, NotificationImage = null });
                 Check(result.Contains(expected, StringComparison.Ordinal), "確定した保存先が結果にない");
                 Check(File.ReadAllBytes(first).SequenceEqual(new byte[] { 3, 7, 11 }), "既存ファイルを上書きしている");
                 Check(!Directory.Exists(Path.Combine(directory, "work")), "外部アプリ用に別画像を作っている");

@@ -100,7 +100,7 @@ internal static partial class Program
                 Equal(json, File.ReadAllText(path));
             }
         }));
-        Run("固定サイズ基点4隅を保存し旧設定の左上既定値と不正値拒否を維持", () => WithServiceDirectory(directory =>
+        Run("固定サイズの四隅・中心の基点を保存し旧設定の左上既定値と不正値拒否を維持", () => WithServiceDirectory(directory =>
         {
             string path = Path.Combine(directory, "settings.json");
             var store = new SettingsStore(path);

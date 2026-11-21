@@ -147,7 +147,7 @@ internal static partial class Program
             Equal("手動名", automatic.Controls.Find("RegionName", true).Single().Text);
         });
 
-        Run("固定位置選択と囲み直しは選択した4隅の基点を渡す", () =>
+        Run("固定位置選択と囲み直しは選択した四隅・中心の基点を渡す", () =>
         {
             var requested = new List<(Size? Size, CaptureAnchor Anchor)>();
             using var form = new RegionManagerForm([initial], initial,

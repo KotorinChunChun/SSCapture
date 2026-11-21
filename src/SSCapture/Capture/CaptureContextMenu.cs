@@ -92,7 +92,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             if (editing.ResetInput is not null) Item("選択した入力プリセットに戻す", "ResetInputPreset", editing.ResetInput, range.DropDownItems);
             if (editing.ResetOutput is not null) Item("選択した出力プリセットに戻す", "ResetOutputPreset", editing.ResetOutput, output.DropDownItems);
             var parent = Menu("固定サイズの基点", "FixedAnchorMenu", range.DropDownItems);
-            foreach (var value in Enum.GetValues<CaptureAnchor>()) anchors[value] = Item(AnchorName(value), "Anchor" + value, () => editing.ChangeAnchor(value), parent.DropDownItems);
+            foreach (var value in Enum.GetValues<CaptureAnchor>()) anchors[value] = Item(value.Label(), "Anchor" + value, () => editing.ChangeAnchor(value), parent.DropDownItems);
             Toggle("開始したモニター内で選択する", "LimitToStartingMonitor", editing.Limited, editing.ChangeLimit, operation.DropDownItems,
                 "今回だけモニター制限を切り替えます。ONに戻すとメニューを開いた位置のモニター内で選択します。");
         }
@@ -162,7 +162,6 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     { ToolStripMenuItem? item = null; item = Item(text, name, () => change(!item!.Checked), owner); item.Checked = initial; item.ToolTipText = help; return item; }
     private static void EmptyHint(ToolStripMenuItem parent)
     { if (parent.DropDownItems.Count == 0) parent.DropDownItems.Add(new ToolStripMenuItem("設定画面で登録してください") { Enabled = false }); }
-    private static string AnchorName(CaptureAnchor value) => value switch { CaptureAnchor.TopLeft => "左上", CaptureAnchor.TopRight => "右上", CaptureAnchor.BottomRight => "右下", _ => "左下" };
     internal void SetMode(CaptureMode mode)
     { foreach (var pair in modes) pair.Value.Checked = pair.Key == mode; if (AllCommands.Any(i => i.Name == "AspectRatioMenu")) Command("AspectRatioMenu").Enabled = mode == CaptureMode.Rectangle; }
     internal void SetWindowSource(CaptureMode mode, bool isolated)

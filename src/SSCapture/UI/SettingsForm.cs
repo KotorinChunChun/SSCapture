@@ -587,11 +587,7 @@ internal sealed class SettingsForm : Form
     }
     private sealed record CaptureAnchorItem(CaptureAnchor Value)
     {
-        public override string ToString() => Value switch
-        {
-            CaptureAnchor.TopLeft => "左上", CaptureAnchor.TopRight => "右上",
-            CaptureAnchor.BottomRight => "右下", CaptureAnchor.BottomLeft => "左下", _ => "左上"
-        };
+        public override string ToString() => Value.Label();
     }
     private sealed record NotificationDisplayItem(NotificationDisplay Value)
     {

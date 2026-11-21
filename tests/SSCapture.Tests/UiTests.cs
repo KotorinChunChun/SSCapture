@@ -170,7 +170,7 @@ internal static partial class Program
             ((NumericUpDown)form.Controls.Find("FixedHeight", true).Single()).Value = 123;
             var anchor = (ComboBox)form.Controls.Find("FixedCaptureAnchor", true).Single();
             Equal((int)CaptureAnchor.TopRight, anchor.SelectedIndex);
-            Check(anchor.Items.Cast<object>().Select(item => item.ToString()).SequenceEqual(new[] { "左上", "右上", "右下", "左下" }), "基点4隅の選択肢");
+            Check(anchor.Items.Cast<object>().Select(item => item.ToString()).SequenceEqual(new[] { "左上", "右上", "右下", "左下", "中心" }), "四隅・中心の選択肢");
             anchor.SelectedIndex = (int)CaptureAnchor.BottomRight;
             ((CheckBox)form.Controls.Find("IncludeCursor", true).Single()).Checked = true;
             ((CheckBox)form.Controls.Find("KeepHistory", true).Single()).Checked = false;

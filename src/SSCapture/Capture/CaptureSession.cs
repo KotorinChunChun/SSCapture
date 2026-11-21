@@ -368,6 +368,7 @@ internal sealed class SessionController
     private async Task RefreshSnapshotAsync(Services.AppSettings next)
     {
         if (completed || refreshing) return;
+        bool resumeAfterMenu = menuOpen || menuTransition;
         refreshing = true;
         DesktopSnapshot? replacement = null;
         try
@@ -393,13 +394,12 @@ internal sealed class SessionController
             if (!completed)
             {
                 menuOpen = menuTransition = false;
-                // サブメニュー内で移動したポインタを新しい追従基準にし、固定枠を飛ばさない。
-                RebaseFixedPointer();
                 foreach (var overlay in overlays.Where(o => !o.IsDisposed && SelectionMonitors.Contains(o.MonitorBounds))) overlay.Show();
                 var owner = overlays.FirstOrDefault(o => o.Visible && o.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays.FirstOrDefault(o => o.Visible);
                 owner?.Activate(); owner?.Focus();
                 UpdateMenu(); if (ShowSelectionGuide && owner is not null) { guide?.Show(owner); UpdateGuidePointer(); }
                 refreshing = false;
+                if (resumeAfterMenu) ResumePointerAfterMenu();
                 RefreshOverlays(); snapTimer?.Start();
             }
             refreshing = false;
@@ -1077,13 +1077,12 @@ internal sealed class SessionController
         // Keep the closing menu's mouse message from becoming a selection gesture.
         owner.BeginInvoke((Action)(() =>
         {
-            if (completed || owner.IsDisposed) return;
+            if (completed || refreshing || !menuTransition || owner.IsDisposed) return;
             if (e.CloseReason != ToolStripDropDownCloseReason.ItemClicked && !CaptureNative.OwnsForegroundWindow()) { Cancel(); return; }
             menuTransition = false;
             owner.Activate();
             owner.Focus();
-            RebaseFixedPointer();
-            Move();
+            ResumePointerAfterMenu();
         }));
     }
 
@@ -1108,13 +1107,14 @@ internal sealed class SessionController
         if (!starting && !refreshing && !menuOpen && !menuTransition) Cancel();
     }
 
-    private void RebaseFixedPointer()
+    private void ResumePointerAfterMenu()
     {
-        if (starting || Mode != CaptureMode.FixedRegion) return;
-        Point pointer = CaptureNative.CursorPosition();
-        if (selectionBounds is Rectangle limit)
-            pointer = new(Math.Clamp(pointer.X, limit.Left, limit.Right - 1), Math.Clamp(pointer.Y, limit.Top, limit.Bottom - 1));
-        gesture.PlaceFixed(gesture.Selection, pointer); lastPointerPosition = pointer;
+        if (Mode == CaptureMode.FixedRegion)
+        {
+            gesture.ResumeFixedPointer();
+            lastPointerPosition = null;
+        }
+        Move();
     }
 
     internal void Cancel() => FinishCommand(false);

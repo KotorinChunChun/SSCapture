@@ -17,7 +17,7 @@ internal static partial class Program
         if (args.FirstOrDefault() == "--recording-desktop-smoke") return RunRecordingDesktopSmoke(args);
         if (args.SequenceEqual(["--notification-tests"]))
         {
-            NotificationUpgradeTests(); NotificationActionTests(); NotificationPresentationTests(); NotificationDragTests(); FeedbackTests();
+            NotificationUpgradeTests(); NotificationActionTests(); NotificationPresentationTests(); NotificationDragTests(); FeedbackTests(); CaptureTargetTests();
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }
         if (args.SequenceEqual(["--recipe-tests"]))

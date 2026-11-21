@@ -53,8 +53,7 @@ internal sealed class SelectionGesture
         snapEdges = new SelectionSnap(this.monitors, this.windows);
         fixedDimensions = mode == CaptureMode.FixedRegion ? CaptureGeometry.ValidateFixedSize(fixedSize) : Size.Empty;
         FixedAnchor = fixedAnchor;
-        anchorOffset = new Size(fixedAnchor is CaptureAnchor.TopRight or CaptureAnchor.BottomRight ? fixedDimensions.Width : 0,
-            fixedAnchor is CaptureAnchor.BottomLeft or CaptureAnchor.BottomRight ? fixedDimensions.Height : 0);
+        anchorOffset = OffsetFor(fixedAnchor);
     }
 
     internal void Begin(Point point, Size dragThreshold, bool snap = false, bool lockHeight = false, bool lockWidth = false,
@@ -181,20 +180,38 @@ internal sealed class SelectionGesture
     {
         if (!Enum.IsDefined(anchor)) throw new ArgumentOutOfRangeException(nameof(anchor));
         FixedAnchor = anchor;
-        anchorOffset = new Size(anchor is CaptureAnchor.TopRight or CaptureAnchor.BottomRight ? fixedDimensions.Width : 0,
-            anchor is CaptureAnchor.BottomLeft or CaptureAnchor.BottomRight ? fixedDimensions.Height : 0);
+        anchorOffset = OffsetFor(anchor);
         if (mode == CaptureMode.FixedRegion && FixedPosition is null) PositionFixed(RawCurrent);
     }
+
+    internal void ResumeFixedPointer()
+    {
+        anchorOffset = OffsetFor(FixedAnchor);
+        pointerInitialized = false;
+    }
+
+    private Size OffsetFor(CaptureAnchor anchor) => anchor switch
+    {
+        CaptureAnchor.TopRight => new(fixedDimensions.Width, 0),
+        CaptureAnchor.BottomRight => fixedDimensions,
+        CaptureAnchor.BottomLeft => new(0, fixedDimensions.Height),
+        CaptureAnchor.Center => new(fixedDimensions.Width / 2, fixedDimensions.Height / 2),
+        _ => Size.Empty
+    };
 
     internal bool Space(Func<Point, Point?>? movePointer = null)
     {
         if (FixedPosition is not null) return true;
         if (mode == CaptureMode.FixedRegion)
         {
-            FixedAnchor = (CaptureAnchor)(((int)FixedAnchor + 1) % 4);
-            anchorOffset = new Size(FixedAnchor is CaptureAnchor.TopRight or CaptureAnchor.BottomRight ? fixedDimensions.Width : 0,
-                FixedAnchor is CaptureAnchor.BottomLeft or CaptureAnchor.BottomRight ? fixedDimensions.Height : 0);
-            PositionFixed(RawCurrent);
+            ChangeAnchor(FixedAnchor switch
+            {
+                CaptureAnchor.TopLeft => CaptureAnchor.TopRight,
+                CaptureAnchor.TopRight => CaptureAnchor.BottomRight,
+                CaptureAnchor.BottomRight => CaptureAnchor.BottomLeft,
+                CaptureAnchor.BottomLeft => CaptureAnchor.Center,
+                _ => CaptureAnchor.TopLeft
+            });
             return true;
         }
         if (mode != CaptureMode.Rectangle || !IsPressed || !HasDragged || !CaptureGeometry.IsUsable(Selection)) return false;

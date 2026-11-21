@@ -31,6 +31,6 @@ internal static class CaptureTarget
     private static string DescribeRange(Rectangle capture, Point origin)
     {
         long x = (long)capture.X - origin.X, y = (long)capture.Y - origin.Y;
-        return $"【{x},{y}】 ～ 【{x + capture.Width},{y + capture.Height}】";
+        return $"【{x},{y}】 {capture.Width} × {capture.Height} px";
     }
 }

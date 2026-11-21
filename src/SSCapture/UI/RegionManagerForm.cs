@@ -559,10 +559,6 @@ internal sealed class RegionManagerForm : Form
 
     private sealed record AnchorItem(CaptureAnchor Value)
     {
-        public override string ToString() => Value switch
-        {
-            CaptureAnchor.TopLeft => "左上", CaptureAnchor.TopRight => "右上",
-            CaptureAnchor.BottomRight => "右下", CaptureAnchor.BottomLeft => "左下", _ => "左上"
-        };
+        public override string ToString() => Value.Label();
     }
 }

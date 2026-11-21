@@ -130,8 +130,8 @@ internal static partial class Program
             {
                 Size size = new(320, 180);
                 Point pointer = new(-600, -200);
-                int dx = anchor is CaptureAnchor.TopRight or CaptureAnchor.BottomRight ? size.Width : 0;
-                int dy = anchor is CaptureAnchor.BottomLeft or CaptureAnchor.BottomRight ? size.Height : 0;
+                int dx = anchor == CaptureAnchor.Center ? size.Width / 2 : anchor is CaptureAnchor.TopRight or CaptureAnchor.BottomRight ? size.Width : 0;
+                int dy = anchor == CaptureAnchor.Center ? size.Height / 2 : anchor is CaptureAnchor.BottomLeft or CaptureAnchor.BottomRight ? size.Height : 0;
                 var gesture = new SelectionGesture(CaptureMode.FixedRegion, [new(-2000, -1000, 4000, 2000)], [], size, anchor);
                 gesture.Move(pointer);
                 Rectangle expected = new(pointer.X - dx, pointer.Y - dy, size.Width, size.Height);
@@ -150,8 +150,8 @@ internal static partial class Program
             Run($"固定{anchor}基点はAltで静止切替できサイズを変更しない", () =>
             {
                 Size size = new(80, 60); Point raw = new(312, 251), snapped = new(320, 260);
-                int dx = anchor is CaptureAnchor.TopRight or CaptureAnchor.BottomRight ? size.Width : 0;
-                int dy = anchor is CaptureAnchor.BottomLeft or CaptureAnchor.BottomRight ? size.Height : 0;
+                int dx = anchor == CaptureAnchor.Center ? size.Width / 2 : anchor is CaptureAnchor.TopRight or CaptureAnchor.BottomRight ? size.Width : 0;
+                int dy = anchor == CaptureAnchor.Center ? size.Height / 2 : anchor is CaptureAnchor.BottomLeft or CaptureAnchor.BottomRight ? size.Height : 0;
                 var gesture = new SelectionGesture(CaptureMode.FixedRegion, [new(0, 0, 1000, 1000)], [new(100, 100, 220, 160)], size, anchor);
                 gesture.Move(raw, true);
                 Equal(new Rectangle(snapped.X - dx, snapped.Y - dy, size.Width, size.Height), gesture.Selection);
@@ -191,10 +191,10 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("選択ガイドは4隅基点とSpace操作を表示領域内に収める", () =>
+        Run("選択ガイドは四隅・中心の基点とSpace操作を表示領域内に収める", () =>
         {
             foreach ((CaptureAnchor anchor, string label) in new[] { (CaptureAnchor.TopLeft, "左上"), (CaptureAnchor.TopRight, "右上"),
-                (CaptureAnchor.BottomRight, "右下"), (CaptureAnchor.BottomLeft, "左下") })
+                (CaptureAnchor.BottomRight, "右下"), (CaptureAnchor.BottomLeft, "左下"), (CaptureAnchor.Center, "中心") })
             {
                 using var guide = new SelectionGuideForm(new(0, 0, 1920, 1080), CaptureIntent.Screenshot, () => { },
                     new Size(1280, 720), fixedAnchor: anchor);
