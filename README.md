@@ -125,12 +125,12 @@ Windows 11用の常駐スクリーンショット・領域録画ツールです�
 
 ## おすすめ連携ツール
 
-- **OperationRecorder**は、PCを操作しながら各手順のスクリーンショットを記録できます。手順書用に一連の操作を記録し、必要なカットをSSCaptureで撮り足せます。[OperationRecorder](https://github.com/KotorinChunChun/OperationRecorder)
-- **PPPaint**は、撮影画像に文字や図形を書き込んだり、レイヤーを使って編集したりできます。SSCaptureの外部アプリに登録して通知の編集先に指定すると、通知の小画像をダブルクリックして開けます。[PPPaint](https://github.com/KotorinChunChun/PPPaint)
-- **MdVisualizer**は、SSCaptureで撮った画像を添えて、Markdown（.md）で手順書を執筆できます。プレビューで文章と画像の配置を確認しながら編集できます。[MdVisualizer](https://github.com/KotorinChunChun/MdVisualizer)
-- **ChunapTool**は、撮影前に指定ウィンドウの幅・高さをピクセル単位で微調整できます。同じ寸法のウィンドウを並べて比較したり、複数の撮影で画像サイズを揃えたりする用途に使えます。[ChunapTool](https://github.com/KotorinChunChun/ChunapTool)
-- **SmartPaste**を起動しておくと、SSCaptureでコピーした画像をエクスプローラーのフォルダー内で **Ctrl＋V** してPNGに保存できます。保存画面の「OCR」で読み取った文字をファイル名の候補にできます。[SmartPaste](https://github.com/KotorinChunChun/SmartPaste)
-- **OfficeAssist**を起動しておくと、SSCaptureの撮影通知にある小画像をデスクトップ版Excelのシートへドラッグ＆ドロップして、画像を直接配置できます。[OfficeAssist](https://github.com/KotorinChunChun/OfficeAssist)
+- **[OperationRecorder](https://github.com/KotorinChunChun/OperationRecorder)**は、PCを操作しながら各手順のスクリーンショットを記録できます。手順書用に一連の操作を記録し、必要なカットをSSCaptureで撮り足せます。
+- **[PPPaint](https://github.com/KotorinChunChun/PPPaint)**は、撮影画像に文字や図形を書き込んだり、レイヤーを使って編集したりできます。SSCaptureの外部アプリに登録して通知の編集先に指定すると、通知の小画像をダブルクリックして開けます。
+- **[MdVisualizer](https://github.com/KotorinChunChun/MdVisualizer)**は、SSCaptureで撮った画像を添えて、Markdown（.md）で手順書を執筆できます。プレビューで文章と画像の配置を確認しながら編集できます。
+- **[ChunapTool](https://github.com/KotorinChunChun/ChunapTool)**は、撮影前に指定ウィンドウの幅・高さをピクセル単位で微調整できます。同じ寸法のウィンドウを並べて比較したり、複数の撮影で画像サイズを揃えたりする用途に使えます。
+- **[SmartPaste](https://github.com/KotorinChunChun/SmartPaste)**を起動しておくと、SSCaptureでコピーした画像をエクスプローラーのフォルダー内で **Ctrl＋V** してPNGに保存できます。保存画面の「OCR」で読み取った文字をファイル名の候補にできます。
+- **[OfficeAssist](https://github.com/KotorinChunChun/OfficeAssist)**を起動しておくと、SSCaptureの撮影通知にある小画像をデスクトップ版Excelのシートへドラッグ＆ドロップして、画像を直接配置できます。
 
 ## 案内
 
