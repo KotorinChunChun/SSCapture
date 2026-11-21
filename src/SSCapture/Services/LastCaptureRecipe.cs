@@ -17,6 +17,8 @@ internal sealed class LastCaptureRecipe
     internal bool TracksMonitors => monitors is not null;
     internal bool HasTrackedTarget => TracksWindows || TracksMonitors;
     internal bool UseIsolatedWindow { get; }
+    internal bool TracksControl { get; }
+    internal ControlIdentity? ControlIdentity { get; }
     internal bool IncludeOwnedWindows { get; }
     internal IReadOnlyList<Point>? Polygon { get; }
     internal AppSettings Settings => CaptureSettingsSnapshot.Copy(settings);
@@ -38,6 +40,13 @@ internal sealed class LastCaptureRecipe
         {
             monitors = selectedMonitors.Bounds.Select(member => FindDisplay(displays, display => display.Bounds == member).Identity).ToArray();
             if (monitors.Length == 0) throw new InvalidOperationException("再撮影するモニターが選ばれていません。");
+        }
+        if (source is CaptureReplaySource.Control control)
+        {
+            windows = [new CaptureWindowIdentity(control.Window, processStart(control.Window.ProcessId))];
+            UseIsolatedWindow = control.Isolated;
+            TracksControl = true;
+            ControlIdentity = control.Identity;
         }
         Polygon = polygon is null ? null : Array.AsReadOnly(polygon.ToArray());
         this.settings = CaptureSettingsSnapshot.Copy(settings);

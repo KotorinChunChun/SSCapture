@@ -11,10 +11,12 @@ internal sealed class SelectionGuideForm : Form
     private readonly Rectangle monitor;
     private readonly Rectangle workArea;
     private bool hiddenForPointer;
+    private bool shared;
     private CaptureAnchor currentAnchor;
     internal SelectionGuideForm(Rectangle monitor, CaptureIntent intent, Action cancel, Size? fixedSize = null,
         Func<Keys, bool>? handleKey = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft, Action? modifiersChanged = null,
-        CaptureMode mode = CaptureMode.Rectangle, Action? dismiss = null, bool spaceEnabled = true, Rectangle? workingArea = null)
+        CaptureMode mode = CaptureMode.Rectangle, Action? dismiss = null, bool spaceEnabled = true, Rectangle? workingArea = null,
+        CaptureSelectionMethod selectionMethod = CaptureSelectionMethod.Drag)
     {
         this.cancel = cancel;
         this.handleKey = handleKey;
@@ -42,7 +44,9 @@ internal sealed class SelectionGuideForm : Form
             Text = fixedSize is Size dimensions
                 ? $"固定サイズ {dimensions.Width} × {dimensions.Height} px　基点: {fixedAnchor.Label()}　左クリック / Enter: 確定\n{(spaceEnabled ? "Space: 基点切替（四隅・中心）　" : "")}矢印: 1px　Shift＋矢印: 10px\n中央クリック: 画面全体　右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断　画面外の枠は確定不可"
                 : mode == CaptureMode.Rectangle
-                    ? $"左クリック: ウィンドウ　中央クリック: 画面全体　左ドラッグ: 範囲選択\n{(spaceEnabled ? "Space: 対角の起点に切り替え　" : "")}右クリック: メニュー・縦横比\nEsc: 撮影終了　ドラッグ中の右クリック / Esc: 選択だけ中断"
+                    ? selectionMethod == CaptureSelectionMethod.TwoClicks
+                        ? "左クリック2回で始点と終点を指定　中クリックで画面全体を撮影\n2点目の待機中はEscまたは右クリックで選択を取り消し\n選択を始める前の右クリックでメニューを開く"
+                        : $"左クリック: ウィンドウ　中央クリック: 画面全体　左ドラッグ: 範囲選択\n{(spaceEnabled ? "Space: 対角の起点に切り替え　" : "")}右クリック: メニュー・縦横比\nEsc: 撮影終了　ドラッグ中の右クリック / Esc: 選択だけ中断"
                     : $"左クリック: ウィンドウ　中央クリック: 画面全体\n{(mode == CaptureMode.Freeform ? "左ドラッグ: 輪郭を囲む" : intent == CaptureIntent.Screenshot ? "左ドラッグ: 複数ウィンドウを合成" : "ウィンドウを選んで左クリックで確定")}\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
         });
     }
@@ -59,8 +63,17 @@ internal sealed class SelectionGuideForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        _ = CaptureNative.SetWindowDisplayAffinity(Handle, CaptureNative.ExcludeFromCapture);
+        ApplyDisplayAffinity();
     }
+
+    internal void SetShared(bool value)
+    {
+        shared = value;
+        if (IsHandleCreated) ApplyDisplayAffinity();
+    }
+
+    private void ApplyDisplayAffinity() =>
+        _ = CaptureNative.SetWindowDisplayAffinity(Handle, shared ? 0 : CaptureNative.ExcludeFromCapture);
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {

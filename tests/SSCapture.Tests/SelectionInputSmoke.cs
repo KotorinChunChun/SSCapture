@@ -412,7 +412,7 @@ internal static partial class Program
                                 new CaptureReplaySource.Windows([original], isolated, IncludeOwned: isolated));
                             var frame = await InstantCapture.TakeReplayWindowsAsync(recipe, new());
                             using var image = frame.Image;
-                            Equal(original.ProcessId, frame.Source.Targets.Single().ProcessId);
+                            Equal(original.ProcessId, ((CaptureReplaySource.Windows)frame.Source).Targets.Single().ProcessId);
                             Equal(host.Bounds.Location, frame.Bounds.Location);
                             Equal(host.Size, frame.Bounds.Size);
                             Equal(Color.Cyan.ToArgb(), image.GetPixel(image.Width / 2, image.Height / 2).ToArgb());

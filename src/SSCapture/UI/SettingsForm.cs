@@ -36,6 +36,7 @@ internal sealed class SettingsForm : Form
     private readonly ListBox categories;
     private readonly NumericUpDown snapDistance, gridStep;
     private readonly CheckBox gridEnabled, guideEnabled, pointerGuideEnabled;
+    private readonly CheckBox magnifierEnabled, shareCapturePresentation;
 
     public SettingsForm(AppSettings settings, Func<AppSettings, string?> onSave, Action openFolder,
         Func<IReadOnlyList<MicrophoneInfo>>? listMicrophones = null, Action? openRegions = null, Action? openHistory = null,
@@ -262,14 +263,16 @@ internal sealed class SettingsForm : Form
         // 旧単独ページを廃止し、プリセットの編集欄だけを公開する。
         basic.Controls.Clear();
         basic.RowStyles.Clear(); basic.RowCount = 6;
-        foreach (int height in new[] { 76, 120, 44, 168, 96 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        foreach (int height in new[] { 108, 120, 72, 168, 96 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
         basic.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        var selectionOptions = BasicFields(34, 34);
+        var selectionOptions = BasicFields(34, 34, 34);
         limitToStartingMonitor = BasicCheckBox("LimitToStartingMonitor", "開始したモニター内で選択する", settings.LimitToStartingMonitor);
         dimCaptureBackground = BasicCheckBox("DimCaptureBackground", "選択中モニタの背景を暗くする", settings.DimCaptureBackground);
         AddFullRow(selectionOptions, limitToStartingMonitor, 0);
         AddFullRow(selectionOptions, dimCaptureBackground, 1);
+        shareCapturePresentation = BasicCheckBox("ShareCapturePresentation", "撮影操作を画面共有・配信に表示する", settings.ShareCapturePresentation);
+        AddFullRow(selectionOptions, shareCapturePresentation, 2);
         Add(basic, "選択範囲", selectionOptions, 0);
 
         var precisionOptions = BasicFields(33, 40, 40);
@@ -279,10 +282,11 @@ internal sealed class SettingsForm : Form
         snapDistance = PixelField(precisionOptions, "ウィンドウスナップ距離（px）", "SnapDistancePixels", settings.SnapDistancePixels, 2);
         Add(basic, "位置・寸法の補正", precisionOptions, 1);
 
-        var guideOptions = new FlowLayoutPanel { WrapContents = false };
+        var guideOptions = new FlowLayoutPanel { WrapContents = true };
         guideEnabled = BasicCheckBox("ShowSelectionGuide", "画面右下に操作ガイドを表示する", settings.ShowSelectionGuide);
         pointerGuideEnabled = BasicCheckBox("ShowPointerGuide", "ポインタ横に操作ガイドを表示する", settings.ShowPointerGuide);
-        guideOptions.Controls.AddRange([guideEnabled, pointerGuideEnabled]);
+        magnifierEnabled = BasicCheckBox("ShowMagnifier", "拡大鏡を表示する", settings.ShowMagnifier);
+        guideOptions.Controls.AddRange([guideEnabled, pointerGuideEnabled, magnifierEnabled]);
         Add(basic, "操作ガイド", guideOptions, 2);
 
         var presetSummaries = BasicFields(80, 80);
@@ -434,6 +438,7 @@ internal sealed class SettingsForm : Form
                 OneOcrDirectory = Expand(oneOcrDirectory.Text),
                 DimCaptureBackground = dimCaptureBackground.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
                 Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked, ShowPointerGuide = pointerGuideEnabled.Checked,
+                ShowMagnifier = magnifierEnabled.Checked, ShareCapturePresentation = shareCapturePresentation.Checked,
                 SnapDistancePixels = (int)snapDistance.Value, GridStepPixels = (int)gridStep.Value,
                 CapturePresets = presetEditor.Presets,
                 SavedRegions = inputPresetEditor.Regions,
@@ -466,6 +471,7 @@ internal sealed class SettingsForm : Form
     {
         LimitToStartingMonitor = limitToStartingMonitor.Checked, DimCaptureBackground = dimCaptureBackground.Checked,
         Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked, ShowPointerGuide = pointerGuideEnabled.Checked,
+        ShowMagnifier = magnifierEnabled.Checked, ShareCapturePresentation = shareCapturePresentation.Checked,
         SnapDistancePixels = (int)snapDistance.Value, GridStepPixels = (int)gridStep.Value
     };
     internal static string InputSummary(SavedRegion preset)

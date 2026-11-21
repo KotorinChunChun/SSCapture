@@ -14,6 +14,7 @@ internal sealed record SavedRegion
     public CaptureAnchor FixedAnchor { get; init; } = CaptureAnchor.TopLeft;
     public bool FreezeFrame { get; init; } = true;
     public bool IncludeCursor { get; init; }
+    public Capture.CaptureSelectionMethod SelectionMethod { get; init; }
     public int PaddingPixels { get; init; }
     public bool RecordSystemAudio { get; init; }
     public bool RecordMicrophone { get; init; }
@@ -25,7 +26,8 @@ internal sealed record SavedRegion
 
     internal void Validate()
     {
-        if (!Enum.IsDefined(Mode) || !Enum.IsDefined(FixedAnchor) || PaddingPixels is < 0 or > ScreenshotPadding.MaximumPixels)
+        if (!Enum.IsDefined(Mode) || !Enum.IsDefined(FixedAnchor) || !Enum.IsDefined(SelectionMethod)
+            || PaddingPixels is < 0 or > ScreenshotPadding.MaximumPixels)
             throw new ArgumentException("入力プリセットの取得条件が正しくありません。");
         if (MicrophoneDeviceId is null || MicrophoneDeviceId.Length > 4096 || MicrophoneDeviceId.Any(char.IsControl))
             throw new ArgumentException("入力プリセットのマイク識別子が正しくありません。");
@@ -40,11 +42,11 @@ internal sealed record SavedRegion
     }
     internal AppSettings Apply(AppSettings settings) => settings with
     { DefaultMode = UseFixedCoordinates ? CaptureMode.FixedRegion : Mode, FixedWidth = Bounds.Width, FixedHeight = Bounds.Height,
-        FixedCaptureAnchor = FixedAnchor, FreezeFrame = FreezeFrame, IncludeCursor = IncludeCursor, ScreenshotPaddingPixels = PaddingPixels,
+        FixedCaptureAnchor = FixedAnchor, FreezeFrame = FreezeFrame, IncludeCursor = IncludeCursor, SelectionMethod = SelectionMethod, ScreenshotPaddingPixels = PaddingPixels,
         RecordSystemAudio = RecordSystemAudio, RecordMicrophone = RecordMicrophone, MicrophoneDeviceId = MicrophoneDeviceId };
     internal static SavedRegion FromSettings(string name, AppSettings settings) => new()
     { Name = name, ProfileVersion = 2, UseFixedCoordinates = false, Mode = settings.DefaultMode,
         Bounds = new(0, 0, settings.FixedWidth, settings.FixedHeight), FixedAnchor = settings.FixedCaptureAnchor,
-        FreezeFrame = settings.FreezeFrame, IncludeCursor = settings.IncludeCursor, PaddingPixels = settings.ScreenshotPaddingPixels,
+        FreezeFrame = settings.FreezeFrame, IncludeCursor = settings.IncludeCursor, SelectionMethod = settings.SelectionMethod, PaddingPixels = settings.ScreenshotPaddingPixels,
         RecordSystemAudio = settings.RecordSystemAudio, RecordMicrophone = settings.RecordMicrophone, MicrophoneDeviceId = settings.MicrophoneDeviceId };
 }

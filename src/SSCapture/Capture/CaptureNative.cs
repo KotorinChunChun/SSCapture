@@ -78,11 +78,15 @@ internal static class CaptureNative
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int size);
     [DllImport("user32.dll")]
-    private static extern nint GetForegroundWindow();
+    internal static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetForegroundWindow(nint window);
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetWindowDisplayAffinity(nint window, uint affinity);
     internal const uint ExcludeFromCapture = 0x11;
+    internal static void RaiseWithoutActivation(nint window) => _ = SetWindowPos(window, -1, 0, 0, 0, 0, 0x0013);
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(nint window, out uint processId);
     [DllImport("wtsapi32.dll", SetLastError = true)]

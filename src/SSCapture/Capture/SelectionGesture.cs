@@ -74,7 +74,7 @@ internal sealed class SelectionGesture
     }
 
     internal void Move(Point point, bool snap = false, bool lockHeight = false, bool lockWidth = false,
-        CaptureKeyAction action = CaptureKeyAction.None)
+        CaptureKeyAction action = CaptureKeyAction.None, bool precise = false)
     {
         bool unchanged = pointerInitialized && RawCurrent == point && previousSnap == snap;
         RawCurrent = point;
@@ -111,7 +111,7 @@ internal sealed class SelectionGesture
                 y = Math.Clamp(y, desktop.Top, desktop.Bottom);
             }
             Point adjusted = new(x, y);
-            bool grid = Grid20 || action == CaptureKeyAction.Grid;
+            bool grid = !precise && (Grid20 || action == CaptureKeyAction.Grid);
             Point quantized = grid ? new(Quantize(x, start.X, true), Quantize(y, start.Y, false)) : adjusted;
             var snapped = grid || snap ? snapEdges.Evaluate(adjusted, includeWindows: snap) : new SelectionSnap.SnapResult(adjusted, false, false);
             Current = new Point(horizontal.IsLocked ? horizontal.Value : snapped.X ? snapped.Point.X : quantized.X,
@@ -135,10 +135,10 @@ internal sealed class SelectionGesture
     }
 
     internal CaptureSelection? End(Point point, OutputDestination destination, bool snap = false, bool lockHeight = false, bool lockWidth = false,
-        CaptureKeyAction action = CaptureKeyAction.None)
+        CaptureKeyAction action = CaptureKeyAction.None, bool precise = false)
     {
         if (!IsPressed) return null;
-        Move(point, snap, lockHeight, lockWidth, action);
+        Move(point, snap, lockHeight, lockWidth, action, precise);
         IsPressed = false;
         if (mode == CaptureMode.FixedRegion) return FixedSelection(destination);
         if (mode == CaptureMode.Window) return WindowSelection(HasDragged ? point : rawStart, destination);
@@ -149,6 +149,10 @@ internal sealed class SelectionGesture
             ? new CaptureSelection(Selection, Array.AsReadOnly(Points.ToArray()), destination)
             : null;
     }
+
+    // The second click can be retried until the displayed rectangle is large enough.
+    internal CaptureSelection? ConfirmTwoPoint(OutputDestination destination) =>
+        IsPressed && CaptureGeometry.IsUsable(Selection) ? new(Selection, null, destination) : null;
 
     internal Rectangle WindowAt(Point point)
     {

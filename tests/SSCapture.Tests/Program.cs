@@ -62,6 +62,8 @@ internal static partial class Program
         if (args.Contains("--padding-ui-preview")) return PaddingUiPreview(args[1]);
         if (args.Contains("--selection-guide-preview")) return SelectionGuidePreview(args[1]);
         if (args.Contains("--overlay-placement-smoke")) return RunOverlayPlacementSmoke();
+        if (args.Contains("--presentation-smoke")) return RunPresentationSmoke();
+        if (args.Contains("--control-capture-smoke")) return RunControlCaptureSmoke();
         if (args.Contains("--selection-monitor-smoke")) return RunSelectionMonitorSmoke();
         if (args.Contains("--window-hit-smoke")) return RunWindowHitSmoke();
         if (args.Contains("--selection-input-smoke")) return RunSelectionInputSmoke();

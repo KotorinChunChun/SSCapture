@@ -764,6 +764,11 @@ internal static partial class Program
         internal static void RequireTarget(nint window, Point point)
         {
             RequireForeground(window);
+            RequirePointTarget(window, point);
+        }
+
+        internal static void RequirePointTarget(nint window, Point point)
+        {
             if (WindowFromPoint(point) != window) throw new InvalidOperationException("クリック位置がテスト対象ではないため入力を中止します。");
         }
 

@@ -28,6 +28,7 @@ internal sealed record AppSettings
     public int FixedHeight { get; init; } = 720;
     public CaptureAnchor FixedCaptureAnchor { get; init; } = CaptureAnchor.TopLeft;
     public bool IncludeCursor { get; init; }
+    public Capture.CaptureSelectionMethod SelectionMethod { get; init; }
     public bool KeepHistory { get; init; } = true;
     public NotificationDisplay NotificationDisplay { get; init; } = Services.NotificationDisplay.Captured;
     public int NotificationDurationSeconds { get; init; } = 1;
@@ -53,6 +54,8 @@ internal sealed record AppSettings
     public Capture.CaptureMouseMap CaptureMouse { get; init; } = new();
     public bool ShowSelectionGuide { get; init; } = true;
     public bool ShowPointerGuide { get; init; } = true;
+    public bool ShowMagnifier { get; init; }
+    public bool ShareCapturePresentation { get; init; }
     public OutputDestination DefaultDestination { get; init; } = OutputDestination.Clipboard;
     public bool RecordSystemAudio { get; init; }
     public bool RecordMicrophone { get; init; }
@@ -85,6 +88,8 @@ internal sealed record AppSettings
 
     internal void Validate()
     {
+        if (!Enum.IsDefined(SelectionMethod))
+            throw new ArgumentException("矩形の選択方法が無効です。");
         if (CaptureKeys is null || Capture.CaptureKeyMap.Combinations.Any(keys => !Enum.IsDefined(CaptureKeys.Resolve(keys))))
             throw new ArgumentException("撮影中のキー割り当てが正しくありません。");
         if (CaptureBeforeKeys is null || Capture.CaptureKeyMap.Combinations.Any(keys => !Capture.CaptureKeyMap.IsBeforeAction(CaptureBeforeKeys.Resolve(keys))))

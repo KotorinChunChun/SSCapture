@@ -3,7 +3,7 @@ namespace SSCapture.Capture;
 [Flags]
 internal enum CaptureModifiers { None = 0, Ctrl = 1, Shift = 2, Alt = 4, Win = 8 }
 
-internal enum CaptureKeyAction { None, LockWidth, LockHeight, Snap, CrossMonitor, HighlightWindow, SwitchAnchor, LockAspectRatio, FromCenter, FromCenterWithAspectRatio, Grid }
+internal enum CaptureKeyAction { None, LockWidth, LockHeight, Snap, CrossMonitor, HighlightWindow, SwitchAnchor, LockAspectRatio, FromCenter, FromCenterWithAspectRatio, Grid, SelectControl }
 
 internal sealed record CaptureKeyMap(
     CaptureKeyAction Ctrl = CaptureKeyAction.None,
@@ -21,7 +21,7 @@ internal sealed record CaptureKeyMap(
     internal static CaptureKeyMap BeforeDefaults => CaptureKeyDefaults.Current.Before;
 
     internal static bool IsBeforeAction(CaptureKeyAction action) => action is CaptureKeyAction.None or CaptureKeyAction.Snap
-        or CaptureKeyAction.CrossMonitor or CaptureKeyAction.SwitchAnchor or CaptureKeyAction.HighlightWindow;
+        or CaptureKeyAction.CrossMonitor or CaptureKeyAction.SwitchAnchor or CaptureKeyAction.HighlightWindow or CaptureKeyAction.SelectControl;
 
     internal static IEnumerable<CaptureModifiers> Combinations =>
     [
@@ -58,6 +58,7 @@ internal sealed record CaptureKeyMap(
         CaptureKeyAction.LockAspectRatio => "縦横比を固定",
         CaptureKeyAction.FromCenter => "起点を中心にする",
         CaptureKeyAction.FromCenterWithAspectRatio => "中心基準＋比率固定",
+        CaptureKeyAction.SelectControl => "押している間だけポインタ下の部品を選択",
         _ => "なし"
     };
 

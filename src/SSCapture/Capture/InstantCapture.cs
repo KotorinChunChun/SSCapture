@@ -4,7 +4,7 @@ using SSCapture.Services;
 namespace SSCapture.Capture;
 
 internal sealed record DisplayTarget(string DeviceName, Rectangle Bounds, bool IsPrimary = false);
-internal sealed record WindowReplayFrame(Bitmap Image, Rectangle Bounds, CaptureMetadata? Metadata, string Title, CaptureReplaySource.Windows Source);
+internal sealed record WindowReplayFrame(Bitmap Image, Rectangle Bounds, CaptureMetadata? Metadata, string? Title, CaptureReplaySource Source);
 
 internal static class InstantCapture
 {
@@ -79,6 +79,27 @@ internal static class InstantCapture
         var windows = CaptureNative.CaptureWindows(monitors.Aggregate(Rectangle.Union));
         CaptureWindow[] roots = recipe.ResolveWindows(windows);
         CaptureWindow target = roots[0];
+        if (recipe.TracksControl)
+        {
+            const string unavailable = "再撮影する部品を特定できません。選び直してください。";
+            if (recipe.ControlIdentity is not { } identity) throw new InvalidOperationException(unavailable);
+            var hit = await CaptureContextClient.Shared.FindControlAsync(new(target.Handle.ToInt64(), target.ProcessId,
+                PixelBounds.From(target.Bounds), null, identity));
+            if (hit is not { Bounds: var pixels }) throw new InvalidOperationException(unavailable);
+            Rectangle controlBounds = new(pixels.X, pixels.Y, pixels.Width, pixels.Height);
+            if (!CaptureGeometry.IsFullyCovered(controlBounds, monitors) || CaptureNative.RequireCaptureWindow(target) != target.Bounds)
+                throw new InvalidOperationException(unavailable);
+            var controlSource = new CaptureReplaySource.Control(target, identity, recipe.UseIsolatedWindow);
+            if (!recipe.UseIsolatedWindow)
+            {
+                var controlCapture = await TakeWithContextAsync(controlBounds, settings);
+                return new(controlCapture.Image, controlBounds, controlCapture.Metadata, null, controlSource);
+            }
+            var isolated = await IsolatedWindowCapture.TakeAsync(target, settings);
+            using var image = isolated.Image;
+            Bitmap cropped = CaptureGeometry.Crop(image, isolated.Bounds, controlBounds, 1) ?? throw new InvalidOperationException(unavailable);
+            return new(cropped, controlBounds, isolated.Metadata?.WithCrop(controlBounds).WithPadding(settings.ScreenshotPaddingPixels), null, controlSource);
+        }
         var group = recipe.IncludeOwnedWindows
             ? roots.SelectMany(root => CaptureWindowGroups.ForegroundGroup(root, windows))
                 .DistinctBy(window => window.Handle).OrderBy(window => window.ZOrder).ToArray()

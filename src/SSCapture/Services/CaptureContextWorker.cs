@@ -6,8 +6,9 @@ using System.Text.Json;
 namespace SSCapture.Services;
 
 // UIAプロバイダーは停止することがあるため、主プロセスのSTAやmutexより前の専用MTAでのみ呼ぶ。
-internal static class CaptureContextWorker
+internal static partial class CaptureContextWorker
 {
+    private static readonly JsonSerializerOptions JsonLineOptions = new(CaptureMetadata.JsonOptions) { WriteIndented = false };
     internal static CaptureContext Unavailable(string reason) => new(DateTimeOffset.Now,
         new("unavailable", reason), new("unavailable", reason), new("unavailable", reason), new("unavailable", reason));
 
@@ -29,7 +30,12 @@ internal static class CaptureContextWorker
                     while ((line = Console.ReadLine()) is not null && line.Length < 1024)
                     {
                         ContextRequest request = JsonSerializer.Deserialize<ContextRequest>(line)!;
-                        PixelPoint point = request.Point;
+                        if (request.Control is ControlLookup lookup)
+                        {
+                            Console.WriteLine(JsonSerializer.Serialize(LookupControl(automation, lookup), JsonLineOptions));
+                            continue;
+                        }
+                        PixelPoint point = request.Point ?? throw new InvalidDataException("UIA座標がありません。");
                         DateTimeOffset observed = DateTimeOffset.Now;
                         nint before = GetForegroundWindow(); GetWindowThreadProcessId(before, out uint beforePid);
                         ElementMetadata focused = ReadElement(() => automation.Focused());
@@ -42,7 +48,7 @@ internal static class CaptureContextWorker
                         if (changed) foreground = foreground with { Status = "partial", Reason = "foregroundChangedDuringObservation" };
                         var context = new CaptureContext(observed, focused with { ObservedAt = observed }, under with { ObservedAt = DateTimeOffset.Now }, foreground,
                             ReadApplication(GetAncestor(WindowFromPoint(new NativePoint(point.X, point.Y)), 2)), ForegroundChanged: changed, CompletedAt: DateTimeOffset.Now);
-                        Console.WriteLine(JsonSerializer.Serialize(context, new JsonSerializerOptions(CaptureMetadata.JsonOptions) { WriteIndented = false }));
+                        Console.WriteLine(JsonSerializer.Serialize(context, JsonLineOptions));
                     }
                     result = 0;
                 }
@@ -108,6 +114,10 @@ internal static class CaptureContextWorker
         void CompareElements(nint a, nint b, out int same);
         void CompareRuntimeIds(nint a, nint b, out int same);
         IElement Root(); IElement FromHandle(nint handle); IElement FromPoint(NativePoint point); IElement Focused();
+        nint RootWithCache(nint cache); nint FromHandleWithCache(nint handle, nint cache);
+        nint FromPointWithCache(NativePoint point, nint cache); nint FocusedWithCache(nint cache);
+        nint CreateTreeWalker(nint condition);
+        ITreeWalker ControlViewWalker();
     }
     [ComImport, Guid("d22108aa-8ac5-49a5-837b-37bbb3d7591e"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IElement
@@ -128,7 +138,7 @@ internal static class CaptureContextWorker
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetWindowRect(nint window, out NativeRect rect);
 }
 
-internal sealed record ContextRequest(PixelPoint Point, int ParentProcessId);
+internal sealed record ContextRequest(PixelPoint? Point, int ParentProcessId, ControlLookup? Control = null);
 
 internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory = null, int? originatingProcessId = null) : IDisposable
 {
@@ -139,7 +149,19 @@ internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory 
     internal async Task<CaptureContext> ObserveAsync(Point point, bool enabled = true, int timeoutMilliseconds = 250)
     {
         if (!enabled) return CaptureContextWorker.Unavailable("disabled");
-        if (!await gate.WaitAsync(0)) return CaptureContextWorker.Unavailable("workerBusy");
+        var response = await RequestAsync<CaptureContext>(new(PixelPoint.From(point), originatingProcessId ?? Environment.ProcessId), timeoutMilliseconds);
+        return response.Value ?? CaptureContextWorker.Unavailable(response.Error ?? "emptyResponse");
+    }
+
+    internal async Task<ControlHit?> FindControlAsync(ControlLookup lookup)
+    {
+        var response = await RequestAsync<ControlHit>(new(default, originatingProcessId ?? Environment.ProcessId, lookup), 250);
+        return response.Value;
+    }
+
+    private async Task<(T? Value, string? Error)> RequestAsync<T>(ContextRequest request, int timeoutMilliseconds) where T : class
+    {
+        if (!await gate.WaitAsync(0)) return (null, "workerBusy");
         try
         {
             // 初回はCLR/COM起動分を含む500ms、継続時は250ms。プロバイダー単体は200ms。
@@ -147,23 +169,26 @@ internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory 
             if (process is null || process.HasExited)
             {
                 DisposeProcess();
+                string? executable = Environment.ProcessPath;
+                bool appHost = executable is not null && Path.GetFileName(executable).Equals("SSCapture.exe", StringComparison.OrdinalIgnoreCase);
                 string dotnet = Path.GetFullPath(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), "..", "..", "..", "dotnet.exe"));
-                var start = new ProcessStartInfo(dotnet) { UseShellExecute = false, CreateNoWindow = true,
+                var start = new ProcessStartInfo(appHost ? executable! : dotnet) { UseShellExecute = false, CreateNoWindow = true,
                     RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
                     StandardInputEncoding = new UTF8Encoding(false), StandardOutputEncoding = new UTF8Encoding(false) };
-                start.ArgumentList.Add(typeof(CaptureContextWorker).Assembly.Location); start.ArgumentList.Add("--capture-context-worker");
+                if (!appHost) start.ArgumentList.Add(typeof(CaptureContextWorker).Assembly.Location);
+                start.ArgumentList.Add("--capture-context-worker");
                 process = Process.Start(startFactory?.Invoke() ?? start) ?? throw new IOException("UIA workerを開始できません。");
                 _ = process.StandardError.BaseStream.CopyToAsync(Stream.Null);
                 if (await ReadBoundedAsync(process.StandardOutput, 64, timeout.Token) != "ready") throw new IOException("UIA workerが応答しません。");
             }
-            await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new ContextRequest(PixelPoint.From(point), originatingProcessId ?? Environment.ProcessId)).AsMemory(), timeout.Token);
+            await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(request).AsMemory(), timeout.Token);
             await process.StandardInput.FlushAsync(timeout.Token);
             string line = await ReadBoundedAsync(process.StandardOutput, 65536, timeout.Token);
-            return JsonSerializer.Deserialize<CaptureContext>(line, CaptureMetadata.JsonOptions) ?? CaptureContextWorker.Unavailable("emptyResponse");
+            return (JsonSerializer.Deserialize<T>(line, CaptureMetadata.JsonOptions), null);
         }
-        catch (OperationCanceledException) { DisposeProcess(); return CaptureContextWorker.Unavailable("timeout"); }
+        catch (OperationCanceledException) { DisposeProcess(); return (null, "timeout"); }
         catch (Exception e) when (e is IOException or InvalidOperationException or JsonException or System.ComponentModel.Win32Exception)
-        { DisposeProcess(); return CaptureContextWorker.Unavailable(e.GetType().Name); }
+        { DisposeProcess(); return (null, e.GetType().Name); }
         finally { gate.Release(); }
     }
     private static async Task<string> ReadBoundedAsync(StreamReader reader, int limit, CancellationToken token)

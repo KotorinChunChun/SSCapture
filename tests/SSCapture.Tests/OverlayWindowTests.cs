@@ -8,6 +8,23 @@ internal static partial class Program
 {
     private static void OverlayWindowTests()
     {
+        Run("拡大鏡は負座標の画面でポインタ下の物理1pxを中心に表示する", () =>
+        {
+            Rectangle frameBounds = new(-400, -200, 320, 240);
+            var viewport = new Rectangle(Point.Empty, frameBounds.Size);
+            Point pointer = new(frameBounds.Right - 1, frameBounds.Top);
+            Rectangle lens = CaptureMagnifier.Place(viewport, new(pointer.X - frameBounds.X, pointer.Y - frameBounds.Y));
+            Check(viewport.Contains(lens), "拡大鏡が画面からはみ出した");
+            using var source = new Bitmap(frameBounds.Width, frameBounds.Height);
+            using var destination = new Bitmap(viewport.Width, viewport.Height);
+            source.SetPixel(319, 0, Color.Lime);
+            source.SetPixel(318, 0, Color.Red);
+            using (Graphics graphics = Graphics.FromImage(destination))
+                CaptureMagnifier.Draw(graphics, lens, source, frameBounds, pointer);
+            Equal(Color.Lime.ToArgb(), destination.GetPixel(lens.Left + 45, lens.Top + 45).ToArgb());
+            Equal(Color.Red.ToArgb(), destination.GetPixel(lens.Left + 35, lens.Top + 45).ToArgb());
+            Equal(Color.DimGray.ToArgb(), destination.GetPixel(lens.Left + 45, lens.Top + 35).ToArgb());
+        });
         Run("暗転OFFでは左押下中もドラッグ中も暗転しない", () =>
         {
             Rectangle bounds = new(0, 0, 320, 240);

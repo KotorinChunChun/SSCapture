@@ -58,6 +58,17 @@ internal sealed record CaptureMetadata(string CaptureId, int SchemaVersion, stri
             context.FocusAtSelectionStart is null ? null : Relative(context.FocusAtSelectionStart, bounds, padding, context.ObservedAt), selectedWindow,
             missing.Length == 0 && !context.ForegroundChanged ? "success" : "partial", missing, context.CompletedAt, context.ForegroundChanged);
     }
+    internal CaptureMetadata WithCrop(Rectangle bounds)
+    {
+        int x = checked(Pointer.Screen.X - bounds.X), y = checked(Pointer.Screen.Y - bounds.Y);
+        bool inside = bounds.Contains(Pointer.Screen.X, Pointer.Screen.Y);
+        return (this with
+        {
+            CaptureBounds = PixelBounds.From(bounds), SourceSize = new(bounds.Width, bounds.Height),
+            Pointer = Pointer with { RelativeCapture = new(x, y), InsideCapture = inside, Drawn = Pointer.Drawn && inside }
+        }).WithPadding(0);
+    }
+
     internal CaptureMetadata WithPadding(int padding) => this with { PaddingPixels = padding,
         OutputSize = new(checked(SourceSize.Width + padding * 2), checked(SourceSize.Height + padding * 2)),
         Pointer = Pointer with { RelativeOutput = new(checked(Pointer.RelativeCapture.X + padding), checked(Pointer.RelativeCapture.Y + padding)) },

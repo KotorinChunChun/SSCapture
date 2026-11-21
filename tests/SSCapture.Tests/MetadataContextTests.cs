@@ -97,6 +97,11 @@ internal static partial class Program
                 Equal("ok", context.FocusedElement.Status); Equal("フォーカス確認", context.FocusedElement.Name);
                 Equal("ポインタ確認", context.PointerElement.Name); Equal(Environment.ProcessId, context.ForegroundApplication.ProcessId);
                 Equal("ok", second.FocusedElement.Status);
+                Rectangle buttonBounds = pointer.RectangleToScreen(pointer.ClientRectangle);
+                var component = await client.FindControlAsync(new(form.Handle.ToInt64(), (uint)Environment.ProcessId,
+                    PixelBounds.From(form.Bounds), PixelPoint.From(point)));
+                Equal(PixelBounds.From(buttonBounds), component?.Bounds);
+                Check(focus.Focused, "部品の取得で入力欄のフォーカスが変わった");
                 focus.UseSystemPasswordChar = true; focus.AccessibleName = "除外する秘密の名前"; focus.Focus(); form.Update();
                 var password = await client.ObserveAsync(point);
                 Equal("partial", password.FocusedElement.Status); Equal<string?>(null, password.FocusedElement.Name);

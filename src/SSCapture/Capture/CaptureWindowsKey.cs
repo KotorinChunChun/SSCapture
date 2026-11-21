@@ -2,12 +2,14 @@ using System.Runtime.InteropServices;
 
 namespace SSCapture.Capture;
 
-// Only active in an interactive capture session. All keys other than Win pass through.
+// Only active in an interactive capture session.
 internal sealed class CaptureWindowsKey : IDisposable
 {
     private const int TapMilliseconds = 350;
     private readonly HookProcedure callback;
     private readonly Func<bool> ignoreTap;
+    private readonly Func<bool>? ownsSelectionInput;
+    private bool escapeHeld, escapeRequested;
     private nint hook;
     private int held;
     private int previouslyHeld;
@@ -23,6 +25,13 @@ internal sealed class CaptureWindowsKey : IDisposable
         if (IsHeld && pointer != pressedAt) combined = true;
     }
 
+    internal bool TakeEscape()
+    {
+        bool value = escapeRequested;
+        escapeRequested = false;
+        return value;
+    }
+
     internal static bool IsStationaryTap(Point start, Point end, long elapsed, bool pointerMovedOrCombined) =>
         !pointerMovedOrCombined && start == end && elapsed is >= 0 and <= TapMilliseconds;
 
@@ -33,9 +42,10 @@ internal sealed class CaptureWindowsKey : IDisposable
         return value;
     }
 
-    internal CaptureWindowsKey(Func<bool> ignoreTap)
+    internal CaptureWindowsKey(Func<bool> ignoreTap, Func<bool>? ownsSelectionInput = null)
     {
         this.ignoreTap = ignoreTap;
+        this.ownsSelectionInput = ownsSelectionInput;
         previouslyHeld = (CaptureNative.IsKeyDown(0x5b) ? 1 : 0) | (CaptureNative.IsKeyDown(0x5c) ? 2 : 0);
         callback = OnKey;
         hook = SetWindowsHookEx(13 /* WH_KEYBOARD_LL */, callback, GetModuleHandle(null), 0);
@@ -49,6 +59,12 @@ internal sealed class CaptureWindowsKey : IDisposable
             int key = Marshal.ReadInt32(data);
             int side = key == 0x5b ? 1 : key == 0x5c ? 2 : 0;
             bool down = message.ToInt32() is 0x100 or 0x104;
+            if (key == 0x1b && (escapeHeld || ownsSelectionInput?.Invoke() == true))
+            {
+                if (down && !escapeHeld) escapeRequested = true;
+                escapeHeld = down;
+                return 1;
+            }
             if ((previouslyHeld & side) != 0)
             {
                 if (!down) previouslyHeld &= ~side;
@@ -61,7 +77,7 @@ internal sealed class CaptureWindowsKey : IDisposable
                     && IsStationaryTap(pressedAt, releasedAt, Environment.TickCount64 - pressedTime, combined)) tapped = true;
                 return 1;
             }
-            if (side != 0 && down && CaptureNative.OwnsForegroundWindow())
+            if (side != 0 && down && (CaptureNative.OwnsForegroundWindow() || ownsSelectionInput?.Invoke() == true))
             {
                 if (held == 0)
                 {

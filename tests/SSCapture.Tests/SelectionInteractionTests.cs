@@ -6,6 +6,66 @@ internal static partial class Program
 {
     private static void SelectionInteractionTests()
     {
+        Run("矩形の2点クリックは1点目で確定せず終点まで同じ始点を使う", () =>
+        {
+            var session = OutputSession(new Services.AppSettings { SelectionMethod = CaptureSelectionMethod.TwoClicks });
+            using var overlay = new CaptureOverlay(session, new(0, 0, 400, 300));
+            try
+            {
+                _ = overlay.Handle;
+                Click(new(240, 180));
+                Check(!session.Completion.IsCompleted && session.Dragging, "1点目で選択を終えた");
+                Click(new(240, 180));
+                Check(!session.Completion.IsCompleted, "ゼロ寸法を確定した");
+                session.MoveTo(new(40, 50));
+                Equal(new Rectangle(40, 50, 200, 130), session.DisplaySelection);
+                Click(new(40, 50));
+                using var result = session.Completion.GetAwaiter().GetResult();
+                Equal(new Rectangle(40, 50, 200, 130), result.Selection!.Bounds);
+                Equal(new Size(200, 130), result.Image!.Size);
+            }
+            finally { session.Cancel(); }
+            void Click(Point point)
+            {
+                session.MouseDown(overlay, MouseButtons.Left, point);
+                session.MouseUp(MouseButtons.Left, point);
+            }
+        });
+        Run("2点目の待機をEscで取り消すと次の左クリックが新しい始点になる", () =>
+        {
+            var session = OutputSession(new Services.AppSettings { SelectionMethod = CaptureSelectionMethod.TwoClicks });
+            using var overlay = new CaptureOverlay(session, new(0, 0, 400, 300));
+            try
+            {
+                _ = overlay.Handle;
+                session.MouseDown(overlay, MouseButtons.Left, new(40, 50));
+                session.MouseUp(MouseButtons.Left, new(40, 50));
+                Check(session.HandleCommandKey(Keys.Escape), "Escが処理されなかった");
+                Check(!session.Dragging && !session.Completion.IsCompleted, "始点を取り消せなかった");
+                session.MouseDown(overlay, MouseButtons.Left, new(100, 100));
+                session.MouseUp(MouseButtons.Left, new(100, 100));
+                session.MoveTo(new(160, 140));
+                Equal(new Rectangle(100, 100, 60, 40), session.DisplaySelection);
+            }
+            finally { session.Cancel(); }
+        });
+        Run("矢印の1ドット調整はグリッドを一時的に使わず元の始点を維持する", () =>
+        {
+            var session = OutputSession(new Services.AppSettings { SelectionMethod = CaptureSelectionMethod.TwoClicks, GridStepPixels = 20 });
+            using var overlay = new CaptureOverlay(session, new(0, 0, 400, 300));
+            try
+            {
+                _ = overlay.Handle;
+                session.ChangeGrid20(true);
+                session.MouseDown(overlay, MouseButtons.Left, new(40, 50));
+                session.MouseUp(MouseButtons.Left, new(40, 50));
+                session.MoveTo(new(90, 100));
+                Check(session.HandleCommandKey(Keys.Right), "矢印が処理されなかった");
+                Equal(new Point(91, 100), session.Pointer);
+                Equal(new Rectangle(40, 50, 51, 50), session.DisplaySelection);
+            }
+            finally { session.Cancel(); }
+        });
         Run("高速ドラッグのDown/Upは現在カーソル位置ではなくイベント座標で確定", () =>
         {
             var session = OutputSession(new Services.AppSettings());

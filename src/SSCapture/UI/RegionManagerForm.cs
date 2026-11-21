@@ -18,6 +18,7 @@ internal sealed class RegionManagerForm : Form
     private readonly Label displayInfo, status;
     private readonly Button delete, addLast, previewBounds;
     private readonly ComboBox captureMode;
+    private readonly ComboBox selectionMethod;
     private readonly CheckBox coordinates, freezeFrame, includeCursor;
     private readonly NumericUpDown padding;
     private readonly AppSettings? profileSettings;
@@ -185,9 +186,9 @@ internal sealed class RegionManagerForm : Form
         right.Controls.Add(header, 0, 0);
         var sections = new TabControl { Name = "InputPresetSections", Dock = DockStyle.Fill }; right.Controls.Add(sections, 0, 1);
         var conditionPage = new TabPage("取得条件"); var boundsPage = new TabPage("座標・寸法"); sections.TabPages.AddRange([conditionPage, boundsPage]); boundsPage.Controls.Add(editor);
-        var conditions = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 7 };
+        var conditions = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 8 };
         conditions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 184)); conditions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (int row = 0; row < 6; row++) conditions.RowStyles.Add(new RowStyle(SizeType.Absolute, row == 5 ? 52 : 38)); conditions.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); conditionPage.Controls.Add(conditions);
+        for (int row = 0; row < 7; row++) conditions.RowStyles.Add(new RowStyle(SizeType.Absolute, row == 6 ? 52 : 38)); conditions.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); conditionPage.Controls.Add(conditions);
         captureMode = new ComboBox { Name = "CaptureMode", Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
         foreach (var mode in Enum.GetValues<CaptureMode>()) captureMode.Items.Add(SettingsForm.ModeName(mode)); captureMode.SelectedIndex = 0; AddField(conditions, "撮影モード", captureMode, 0);
         if (profileSettings is not null) captureMode.Items.Add("固定位置とサイズ");
@@ -195,15 +196,26 @@ internal sealed class RegionManagerForm : Form
         freezeFrame = new CheckBox { Name = "FreezeFrame", Text = "撮影開始時の画面を固定", AutoSize = true, Dock = DockStyle.Fill }; AddField(conditions, "撮影タイミング", freezeFrame, 2);
         includeCursor = new CheckBox { Name = "IncludeCursor", Text = "画像・動画に含める", AutoSize = true, Dock = DockStyle.Fill }; AddField(conditions, "カーソル", includeCursor, 3);
         padding = Number("ScreenshotPaddingPixels", 0, ScreenshotPadding.MaximumPixels); AddField(conditions, "画像の余白 (px)", padding, 4);
-        var profileButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false }; conditions.Controls.Add(profileButtons, 0, 5); conditions.SetColumnSpan(profileButtons, 2);
+        selectionMethod = new ComboBox { Name = "SelectionMethod", Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+        selectionMethod.Items.AddRange(["ドラッグ", "2点クリック"]);
+        selectionMethod.SelectedIndex = 0;
+        AddField(conditions, "選択方法", selectionMethod, 5);
+        var profileButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false }; conditions.Controls.Add(profileButtons, 0, 6); conditions.SetColumnSpan(profileButtons, 2);
         var duplicate = Button("複製", "DuplicateInputPreset", ButtonRole.Secondary); duplicate.Width = 120; duplicate.Dock = DockStyle.None;
         duplicate.Click += (_, _) => { string copiedName = name.Text; list.ClearSelected(); editing = null; automaticName = false; name.Text = copiedName + "のコピー"; }; profileButtons.Controls.Add(duplicate);
         var makeDefault = Button("既定にする", "DefaultInputPreset", ButtonRole.Secondary); makeDefault.Width = 144; makeDefault.Dock = DockStyle.None;
         foreach (var button in new[] { duplicate, makeDefault })
         { button.AutoSize = true; button.MinimumSize = new Size(button.Width, 36); button.Height = Math.Max(36, button.GetPreferredSize(Size.Empty).Height); }
         makeDefault.Click += (_, _) => MakeDefault(); profileButtons.Controls.Add(makeDefault);
-        void UpdateCoordinates() { x.Enabled = y.Enabled = previewBounds.Enabled = coordinates.Checked; captureMode.Enabled = profileSettings is not null || !coordinates.Checked; }
+        void UpdateCoordinates()
+        {
+            x.Enabled = y.Enabled = previewBounds.Enabled = coordinates.Checked;
+            captureMode.Enabled = profileSettings is not null || !coordinates.Checked;
+            selectionMethod.Enabled = !coordinates.Checked && captureMode.SelectedIndex == (int)CaptureMode.Rectangle;
+        }
         coordinates.CheckedChanged += (_, _) => UpdateCoordinates();
+        captureMode.SelectedIndexChanged += (_, _) => UpdateCoordinates();
+        UpdateCoordinates();
         list.SelectedIndexChanged += (_, _) =>
         {
             if (reloading || list.SelectedItem is not SavedRegion region) return;
@@ -350,6 +362,7 @@ internal sealed class RegionManagerForm : Form
             name.Text = ""; shortcut.Value = "";
             captureMode.SelectedIndex = (int)(profileSettings?.DefaultMode ?? CaptureMode.FixedRegion);
             coordinates.Checked = profileSettings is null; freezeFrame.Checked = profileSettings?.FreezeFrame ?? true; includeCursor.Checked = profileSettings?.IncludeCursor ?? false; padding.Value = profileSettings?.ScreenshotPaddingPixels ?? 0;
+            selectionMethod.SelectedIndex = (int)(profileSettings?.SelectionMethod ?? SSCapture.Capture.CaptureSelectionMethod.Drag);
             if (systemAudio is not null && profileSettings is not null) LoadAudio(SavedRegion.FromSettings("新規", profileSettings));
             var connected = displays();
             Rectangle screen = connected.Count > 0 ? connected[0].Bounds : new Rectangle(0, 0, 640, 480);
@@ -392,6 +405,7 @@ internal sealed class RegionManagerForm : Form
         automaticName = region.Name == RegionAutoName.Create(region.Shortcut, region.Bounds);
         name.Text = region.Name; shortcut.Value = region.Shortcut;
         captureMode.SelectedIndex = profileSettings is not null && region.UseFixedCoordinates ? 5 : (int)region.Mode; coordinates.Checked = region.UseFixedCoordinates; freezeFrame.Checked = region.FreezeFrame; includeCursor.Checked = region.IncludeCursor; padding.Value = region.PaddingPixels; anchor.SelectedIndex = (int)region.FixedAnchor;
+        selectionMethod.SelectedIndex = (int)region.SelectionMethod;
         LoadAudio(region);
         try
         {
@@ -439,6 +453,7 @@ internal sealed class RegionManagerForm : Form
         next = next with { Name = name.Text.Trim(), Shortcut = shortcut.Value, ProfileVersion = 2, UseFixedCoordinates = coordinates.Checked,
             Mode = captureMode.SelectedIndex == 5 ? CaptureMode.FixedRegion : (CaptureMode)captureMode.SelectedIndex, FixedAnchor = ((AnchorItem)anchor.SelectedItem!).Value,
             FreezeFrame = freezeFrame.Checked, IncludeCursor = includeCursor.Checked, PaddingPixels = (int)padding.Value,
+            SelectionMethod = (Capture.CaptureSelectionMethod)selectionMethod.SelectedIndex,
             IsDefault = editing?.IsDefault == true || (profileSettings is not null && regions.Count == 0),
             RecordSystemAudio = systemAudio?.Checked ?? editing?.RecordSystemAudio ?? profileSettings?.RecordSystemAudio ?? false,
             RecordMicrophone = micAudio?.Checked ?? editing?.RecordMicrophone ?? profileSettings?.RecordMicrophone ?? false,

@@ -1,5 +1,7 @@
 namespace SSCapture.Capture;
 
+internal enum CaptureSelectionMethod { Drag, TwoClicks }
+
 internal sealed record CaptureOptions(
     CaptureMode Mode,
     CaptureIntent Intent,
@@ -30,7 +32,8 @@ internal sealed record CaptureSelection(
     Point? WindowHitPoint = null,
     string? WindowTitle = null,
     CaptureComposite? Composite = null,
-    CaptureReplaySource? ReplaySource = null);
+    CaptureReplaySource? ReplaySource = null,
+    CaptureReplaySource.Control? ControlSource = null);
 
 internal sealed class CaptureOutcome(Bitmap? image, CaptureSelection? selection, bool openSettings = false,
     SSCapture.Services.AppSettings? outputSettings = null, SSCapture.Services.CaptureMetadata? metadata = null,
