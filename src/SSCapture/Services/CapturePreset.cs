@@ -10,6 +10,7 @@ internal sealed record CapturePreset
     public string OcrSeparator { get; init; } = "_";
     public OutputDestination Destination { get; init; } = OutputDestination.Clipboard;
     public int PaddingPixels { get; init; }
+    public WindowCrop WindowCrop { get; init; }
     public string SaveDirectory { get; init; } = new AppSettings().SaveDirectory;
     public string FileNamePattern { get; init; } = Services.FileNamePattern.Default;
     public string? ImageEditorId { get; init; }
@@ -20,7 +21,7 @@ internal sealed record CapturePreset
     {
         if (string.IsNullOrWhiteSpace(Id) || string.IsNullOrWhiteSpace(Name) || Name.Length > 80)
             throw new ArgumentException("出力プリセット名は1～80文字で指定してください。");
-        new AppSettings { DefaultDestination = Destination, ScreenshotPaddingPixels = PaddingPixels,
+        new AppSettings { DefaultDestination = Destination, ScreenshotPaddingPixels = PaddingPixels, WindowCrop = WindowCrop,
             SaveDirectory = SaveDirectory, FileNamePattern = FileNamePattern, MetadataMode = MetadataMode,
             ScreenshotColorDepth = ColorDepth, OcrSeparator = OcrSeparator }.Validate();
     }
@@ -30,7 +31,7 @@ internal sealed record CapturePreset
         Validate();
         return settings with { DefaultDestination = Destination,
             SaveDirectory = SaveDirectory, FileNamePattern = FileNamePattern,
-            ScreenshotColorDepth = ColorDepth, OpenFolderAfterSave = OpenFolderAfterSave, OcrSeparator = OcrSeparator,
+            WindowCrop = WindowCrop, ScreenshotColorDepth = ColorDepth, OpenFolderAfterSave = OpenFolderAfterSave, OcrSeparator = OcrSeparator,
             SelectedImageEditorId = ImageEditorId ?? "",
             SelectedVideoEditorId = VideoEditorId ?? "", MetadataMode = MetadataMode };
     }
@@ -38,7 +39,7 @@ internal sealed record CapturePreset
     internal static CapturePreset FromSettings(string name, AppSettings settings) => new()
     {
         Name = name.Trim(), Destination = settings.DefaultDestination,
-        ColorDepth = settings.ScreenshotColorDepth, OpenFolderAfterSave = settings.OpenFolderAfterSave, OcrSeparator = settings.OcrSeparator,
+        WindowCrop = settings.WindowCrop, ColorDepth = settings.ScreenshotColorDepth, OpenFolderAfterSave = settings.OpenFolderAfterSave, OcrSeparator = settings.OcrSeparator,
         SaveDirectory = settings.SaveDirectory, FileNamePattern = settings.FileNamePattern,
         ImageEditorId = settings.SelectedImageEditorId, VideoEditorId = settings.SelectedVideoEditorId, MetadataMode = settings.MetadataMode
     };

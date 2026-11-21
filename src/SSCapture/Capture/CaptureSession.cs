@@ -288,7 +288,7 @@ internal sealed partial class SessionController
     internal bool OutputPresetModified => Destination != selectedOutput.Destination || OutputSettings.SaveDirectory != selectedOutput.SaveDirectory
         || OutputSettings.FileNamePattern != selectedOutput.FileNamePattern || OutputSettings.OcrSeparator != selectedOutput.OcrSeparator
         || OutputSettings.ScreenshotColorDepth != selectedOutput.ColorDepth || OutputSettings.OpenFolderAfterSave != selectedOutput.OpenFolderAfterSave
-        || OutputSettings.MetadataMode != selectedOutput.MetadataMode
+        || OutputSettings.WindowCrop != selectedOutput.WindowCrop || OutputSettings.MetadataMode != selectedOutput.MetadataMode
         || OutputSettings.SelectedImageEditorId != (selectedOutput.ImageEditorId ?? "")
         || OutputSettings.SelectedVideoEditorId != (selectedOutput.VideoEditorId ?? "");
     private void UpdateMenu()
@@ -1204,7 +1204,9 @@ internal sealed partial class SessionController
         CaptureWindow? target = control?.Window ?? roots?.FirstOrDefault() ?? (selection.WindowHitPoint is Point hit ? findWindow?.Invoke(hit) : null);
         if (selection.WindowHitPoint is Point hitPoint) selection = selection with { WindowTitle = target?.Title ?? readTitle?.Invoke(hitPoint) };
         bool useWindowSource = UsesWindowSource && !entireMonitor;
-        bool groupWindows = control is null && target is not null && HighlightWindow && !entireMonitor && options.Intent == CaptureIntent.Screenshot;
+        bool singleWindow = roots is null && selection.WindowHitPoint is not null && (Mode == CaptureMode.Rectangle || HighlightWindow);
+        bool groupWindows = control is null && target is not null && HighlightWindow && !entireMonitor && options.Intent == CaptureIntent.Screenshot
+            && (useWindowSource || !singleWindow);
         CaptureWindow[] group = groupWindows ? [.. (roots ?? [target!]).SelectMany(findWindowGroup)
             .DistinctBy(window => window.Handle).OrderBy(window => window.ZOrder)] : [];
         if (roots is not null)
@@ -1232,7 +1234,7 @@ internal sealed partial class SessionController
             else if (control is not null)
                 selection = selection with { ReplaySource = control };
             else if (target is not null)
-                selection = selection with { ReplaySource = new CaptureReplaySource.Windows(roots ?? [target], useWindowSource, groupWindows) };
+                selection = selection with { ReplaySource = new CaptureReplaySource.Windows(roots ?? [target], useWindowSource, groupWindows, singleWindow) };
         }
         completed = true;
         using WindowCapturePreview? confirmedPreview = useWindowSource && roots is null && target is not null && windowPreview?.Target == target

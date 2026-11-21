@@ -25,12 +25,13 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         DateTimeOffset? capturedAt = null, Action? onDelivered = null, Rectangle? captureBounds = null,
         Func<Task<ScreenshotFileName?>>? requestFileName = null,
         Func<Bitmap, Task<ScreenshotFileName?>>? requestFileNameForImage = null, CaptureMetadata? metadata = null,
-        IReadOnlyList<Point>? capturePolygon = null, string? windowTitle = null, CaptureReplaySource? replaySource = null)
+        IReadOnlyList<Point>? capturePolygon = null, string? windowTitle = null, CaptureReplaySource? replaySource = null,
+        bool useSourceForNaming = false)
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(settings);
         settings = settings.ResolveEditors();
-        Rectangle pinBounds = captureBounds ?? new Rectangle(Point.Empty, image.Size);
+        Rectangle imageBounds = captureBounds ?? new Rectangle(Point.Empty, image.Size);
         long sequence = Interlocked.Increment(ref captureSequence);
         LastCaptureRecipe? recipe = null;
         if (captureSucceeded is not null && captureBounds is Rectangle recordedBounds)
@@ -42,7 +43,17 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         ValidateDestination(destination);
         if (destination.HasFlag(OutputDestination.File) && settings.MetadataMode != CaptureMetadataMode.None && metadata is null)
             throw new ArgumentException("撮影情報がありません。情報を取得した撮影結果を指定してください。", nameof(metadata));
-        var owned = ScreenshotPadding.Apply(image, settings.ScreenshotPaddingPixels);
+        WindowCrop crop = replaySource is CaptureReplaySource.Windows { IsSingleWindowSelection: true }
+            ? settings.WindowCrop : default;
+        Rectangle outputBounds = imageBounds;
+        using var cropped = crop.IsEmpty ? null : crop.Apply(image);
+        if (cropped is not null)
+        {
+            outputBounds = new(checked(imageBounds.X + crop.Left), checked(imageBounds.Y + crop.Top), cropped.Width, cropped.Height);
+            captureBounds = outputBounds;
+            metadata = metadata?.WithCrop(outputBounds);
+        }
+        var owned = ScreenshotPadding.Apply(cropped ?? image, settings.ScreenshotPaddingPixels);
         if (settings.ScreenshotColorDepth != ScreenshotColorDepth.Original)
         {
             var padded = owned;
@@ -50,6 +61,9 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
             finally { padded.Dispose(); }
         }
         var retry = NewRetry(owned);
+        if (requestFileNameForImage is not null && (cropped is not null ||
+            useSourceForNaming && (settings.ScreenshotPaddingPixels != 0 || settings.ScreenshotColorDepth != ScreenshotColorDepth.Original)))
+            retry.NamingImage = (Bitmap)(cropped ?? image).Clone();
         metadata = metadata?.WithPadding(settings.ScreenshotPaddingPixels);
         CaptureMetadataMode metadataMode = destination.HasFlag(OutputDestination.File) ? settings.MetadataMode : CaptureMetadataMode.None;
         MetadataSidecar? sidecar = metadata is not null && metadataMode.HasFlag(CaptureMetadataMode.Json) ? new(metadata) : null;
@@ -58,7 +72,8 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         if (destination.HasFlag(OutputDestination.File) && fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, captureTime, CaptureIntent.Screenshot);
         Func<Task<bool?>>? prepareFile = requestFileName is null && requestFileNameForImage is null ? null : async () =>
         {
-            var requested = requestFileNameForImage is not null ? await requestFileNameForImage(owned) : await requestFileName!();
+            var requested = requestFileNameForImage is not null ? await requestFileNameForImage(retry.NamingImage ?? owned) : await requestFileName!();
+            retry.ReleaseNamingImage();
             if (requested is null) { fileCancelled = true; return null; }
             fileName = requested.FileName;
             namePlan = requested.NamePlan;
@@ -88,7 +103,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                     onDelivered?.Invoke();
                 }
             }, captureBounds, retry.PrepareFile, string.IsNullOrWhiteSpace(windowTitle)
-                ? DescribeCapture(captureBounds, (replaySource as CaptureReplaySource.Monitors)?.Bounds) : $"ウィンドウ「{windowTitle}」", retry,
+                ? DescribeCapture(captureBounds, (replaySource as CaptureReplaySource.Monitors)?.Bounds) : $"ウィンドウ「{windowTitle}」" + (crop.IsEmpty ? "" : $"【{outputBounds.X},{outputBounds.Y} / {outputBounds.Width}×{outputBounds.Height}px】"), retry,
             sidecar is null ? null : async path => { if (beforeMetadataSave is not null) await beforeMetadataSave(path); await Task.Run(() => sidecar.Write(path)); },
             settings.ShowCaptureNotification
                 ? () => new NotificationImage(owned, Path.Combine(workRoot, "notification-images")) : null,
@@ -96,7 +111,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
             pin: () =>
             {
                 if (pinImage is null) throw new InvalidOperationException("ピン留め表示を開始できません。");
-                pinImage(owned, pinBounds, settings);
+                pinImage(owned, outputBounds, settings);
             });
         return await ExecuteRetryJobAsync(retry);
     }

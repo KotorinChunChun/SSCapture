@@ -20,6 +20,7 @@ internal sealed class LastCaptureRecipe
     internal bool TracksControl { get; }
     internal ControlIdentity? ControlIdentity { get; }
     internal bool IncludeOwnedWindows { get; }
+    internal bool IsSingleWindowSelection { get; }
     internal IReadOnlyList<Point>? Polygon { get; }
     internal AppSettings Settings => CaptureSettingsSnapshot.Copy(settings);
 
@@ -35,6 +36,7 @@ internal sealed class LastCaptureRecipe
             if (windows.Length == 0) throw new InvalidOperationException("再撮影するウィンドウが選ばれていません。");
             UseIsolatedWindow = selected.Isolated;
             IncludeOwnedWindows = selected.IncludeOwned;
+            IsSingleWindowSelection = selected.IsSingleWindowSelection;
         }
         if (source is CaptureReplaySource.Monitors selectedMonitors)
         {

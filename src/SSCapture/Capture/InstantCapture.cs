@@ -105,7 +105,7 @@ internal static class InstantCapture
                 .DistinctBy(window => window.Handle).OrderBy(window => window.ZOrder).ToArray()
             : roots;
         string title = roots.Length == 1 ? target.Title : $"ウィンドウ {roots.Length} 件";
-        var source = new CaptureReplaySource.Windows(roots, recipe.UseIsolatedWindow, recipe.IncludeOwnedWindows);
+        var source = new CaptureReplaySource.Windows(roots, recipe.UseIsolatedWindow, recipe.IncludeOwnedWindows, recipe.IsSingleWindowSelection);
         if (recipe.UseIsolatedWindow)
         {
             var window = await IsolatedWindowCapture.TakeAsync(target, settings, foregroundFirst: group, requiredWindows: roots);
@@ -129,21 +129,30 @@ internal static class InstantCapture
     {
         OutputDestination destination = preserveOutputs ? settings.DefaultDestination : settings.DefaultDestination & (OutputDestination.Clipboard | OutputDestination.File);
         if (destination == OutputDestination.None) return "即時撮影の出力先がOFFです。クリップボードまたはファイル保存を有効にしてください。";
-        string ocr = "", warning = "";
+        string warning = "";
+        var plan = new FileNamePlan(settings.FileNamePattern, capturedAt, CaptureIntent.Screenshot, Region: regionName);
+        bool openFolder = preserveOutputs && settings.OpenFolderAfterSave;
+        Func<Bitmap, Task<ScreenshotFileName?>>? requestName = null;
         if (destination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(settings.FileNamePattern))
         {
-            OcrResult result;
-            try { result = await Task.Run(() => (recognize ?? OneOcr.RecognizeAsync)(image, settings.OneOcrDirectory, CancellationToken.None)); }
-            catch (Exception ex) { result = new OcrResult([], ex.Message); }
-            ocr = FileNamePattern.CleanOcr(result.Lines.FirstOrDefault() ?? "");
-            if (string.IsNullOrWhiteSpace(ocr) || result.Error is not null)
+            requestName = async namingImage =>
             {
-                ocr = "OCRなし";
-                warning = "OCRを取得できなかったためファイル名に「OCRなし」を使用しました。" + result.Error + Environment.NewLine;
-            }
+                OcrResult result;
+                try { result = await Task.Run(() => (recognize ?? OneOcr.RecognizeAsync)(namingImage, settings.OneOcrDirectory, CancellationToken.None)); }
+                catch (Exception ex) { result = new OcrResult([], ex.Message); }
+                string ocr = FileNamePattern.CleanOcr(result.Lines.FirstOrDefault() ?? "");
+                if (string.IsNullOrWhiteSpace(ocr) || result.Error is not null)
+                {
+                    ocr = "OCRなし";
+                    warning = "OCRを取得できなかったためファイル名に「OCRなし」を使用しました。" + result.Error + Environment.NewLine;
+                }
+                return new(null, plan with { Ocr = ocr }, openFolder);
+            };
         }
-        var plan = destination.HasFlag(OutputDestination.File) ? new FileNamePlan(settings.FileNamePattern, capturedAt, CaptureIntent.Screenshot, ocr, Region: regionName) : null;
-        return warning + await output.ScreenshotAsync(image, destination, settings with { OpenFolderAfterSave = preserveOutputs && settings.OpenFolderAfterSave }, namePlan: plan, captureBounds: captureBounds, metadata: metadata,
-            onDelivered: onDelivered, capturePolygon: capturePolygon, capturedAt: capturedAt, windowTitle: windowTitle, replaySource: replaySource);
+        string message = await output.ScreenshotAsync(image, destination, settings with { OpenFolderAfterSave = openFolder },
+            namePlan: plan, captureBounds: captureBounds, metadata: metadata, onDelivered: onDelivered,
+            capturePolygon: capturePolygon, capturedAt: capturedAt, windowTitle: windowTitle,
+            replaySource: replaySource, requestFileNameForImage: requestName, useSourceForNaming: true);
+        return warning + message;
     }
 }

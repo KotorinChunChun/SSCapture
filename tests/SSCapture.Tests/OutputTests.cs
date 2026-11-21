@@ -8,6 +8,7 @@ internal static partial class Program
 {
     static partial void OutputTests()
     {
+        WindowCropTests();
         Run("履歴は取得時刻を保持し命名時刻や完了順に左右されない", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {
             using var history = new CaptureHistory(); using var image = OutputImage();

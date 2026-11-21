@@ -19,7 +19,9 @@ internal sealed partial class OutputRouter
         internal Func<Task<bool?>>? PrepareFile;
         internal Func<Task<string>> Execute { get; set; } = null!;
         internal bool Failed => Pending != OutputDestination.None || FolderPending || MetadataPending;
-        public void Dispose() => Image.Dispose();
+        internal Bitmap? NamingImage;
+        internal void ReleaseNamingImage() { NamingImage?.Dispose(); NamingImage = null; }
+        public void Dispose() { ReleaseNamingImage(); Image.Dispose(); }
     }
 
     private RetryJob NewRetry(Bitmap image)
@@ -68,7 +70,8 @@ internal sealed partial class OutputRouter
             {
                 if (!retryDisposed && job.Serial == retrySerial && job.Failed)
                 {
-                    long bytes = (long)job.Image.Width * job.Image.Height * 4;
+                    long bytes = (long)job.Image.Width * job.Image.Height * 4 +
+                        (job.NamingImage is { } naming ? (long)naming.Width * naming.Height * 4 : 0);
                     if (bytes <= retryByteLimit)
                     {
                         pendingRetry?.Dispose(); pendingRetry = job; retained = true;

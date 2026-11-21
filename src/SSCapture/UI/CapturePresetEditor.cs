@@ -8,6 +8,7 @@ internal sealed class CapturePresetEditor : UserControl
     private readonly TextBox presetName, directory, pattern, separator;
     private readonly CheckBox clipboard, file, external, pinned, openFolder;
     private readonly ComboBox imageApp, videoApp, metadataMode, color;
+    private readonly NumericUpDown cropTop, cropBottom, cropLeft, cropRight;
     private readonly Label status;
     private readonly Func<AppSettings> readSettings;
     private readonly AppSettings initialSettings;
@@ -62,6 +63,23 @@ internal sealed class CapturePresetEditor : UserControl
         color = new ComboBox { Name = "ScreenshotColorDepth", DropDownStyle = ComboBoxStyle.DropDownList }; color.Items.AddRange(["原色を維持（減色なし）", "256色（8ビット）", "16色（4ビット）"]); Add(output, "静止画の減色", color, 1);
         imageApp = new ComboBox { Name = "PresetImageEditor", DropDownStyle = ComboBoxStyle.DropDownList }; Add(output, "画像の外部アプリ", imageApp, 2);
         videoApp = new ComboBox { Name = "PresetVideoEditor", DropDownStyle = ComboBoxStyle.DropDownList }; Add(output, "動画の外部アプリ", videoApp, 3);
+        var cropFields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2, Margin = Padding.Empty };
+        for (int i = 0; i < 4; i++) cropFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        cropTop = AddCrop("上", nameof(WindowCrop.Top), 0);
+        cropBottom = AddCrop("下", nameof(WindowCrop.Bottom), 1);
+        cropLeft = AddCrop("左", nameof(WindowCrop.Left), 2);
+        cropRight = AddCrop("右", nameof(WindowCrop.Right), 3);
+        output.Controls.Add(new Label { Text = "選択したウィンドウの内側を切り抜く（px）", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 4);
+        output.SetColumnSpan(output.Controls[output.Controls.Count - 1], 2);
+        output.Controls.Add(cropFields, 0, 5); output.SetColumnSpan(cropFields, 2);
+        output.RowStyles[5].Height = 62;
+        NumericUpDown AddCrop(string title, string edge, int column)
+        {
+            cropFields.Controls.Add(new Label { Text = title, Anchor = AnchorStyles.Left, AutoSize = true }, column, 0);
+            var input = new NumericUpDown { Name = "WindowCrop" + edge, AccessibleName = title, Maximum = int.MaxValue, Dock = DockStyle.Fill };
+            cropFields.Controls.Add(input, column, 1);
+            return input;
+        }
         directory = new TextBox { Name = "SaveDirectory" }; Add(naming, "保存フォルダー", directory, 0);
         pattern = new TextBox { Name = "FileNamePattern" }; Add(naming, "命名パターン", pattern, 1);
         separator = new TextBox { Name = "OcrSeparator" }; Add(naming, "OCR区切り", separator, 2);
@@ -118,6 +136,8 @@ internal sealed class CapturePresetEditor : UserControl
         try
         {
         RefreshApps(imageApp, CurrentSettings().ImageEditors, p.ImageEditorId); RefreshApps(videoApp, CurrentSettings().VideoEditors, p.VideoEditorId);
+        cropTop.Value = p.WindowCrop.Top; cropBottom.Value = p.WindowCrop.Bottom;
+        cropLeft.Value = p.WindowCrop.Left; cropRight.Value = p.WindowCrop.Right;
         presetName.Text = p.Name; directory.Text = p.SaveDirectory; pattern.Text = p.FileNamePattern; separator.Text = p.OcrSeparator; color.SelectedIndex = (int)p.ColorDepth; openFolder.Checked = p.OpenFolderAfterSave; metadataMode.SelectedIndex = (int)p.MetadataMode;
         clipboard.Checked = p.Destination.HasFlag(OutputDestination.Clipboard); file.Checked = p.Destination.HasFlag(OutputDestination.File); external.Checked = p.Destination.HasFlag(OutputDestination.ExternalApp); pinned.Checked = p.Destination.HasFlag(OutputDestination.Pinned); Error = null;
         }
@@ -134,6 +154,7 @@ internal sealed class CapturePresetEditor : UserControl
         Id = editing?.Id ?? Guid.NewGuid().ToString("N"), IsDefault = editing?.IsDefault == true, Name = presetName.Text.Trim(),
         SaveDirectory = Environment.ExpandEnvironmentVariables(directory.Text.Trim().Trim('"')), FileNamePattern = pattern.Text, ColorDepth = (ScreenshotColorDepth)color.SelectedIndex, OpenFolderAfterSave = openFolder.Checked, OcrSeparator = separator.Text,
         ImageEditorId = (imageApp.SelectedItem as ExternalApplication)?.Id, VideoEditorId = (videoApp.SelectedItem as ExternalApplication)?.Id, MetadataMode = (CaptureMetadataMode)metadataMode.SelectedIndex,
+        WindowCrop = new((int)cropTop.Value, (int)cropBottom.Value, (int)cropLeft.Value, (int)cropRight.Value),
         Destination = (clipboard.Checked ? OutputDestination.Clipboard : 0) | (file.Checked ? OutputDestination.File : 0) | (external.Checked ? OutputDestination.ExternalApp : 0) | (pinned.Checked ? OutputDestination.Pinned : 0)
     };
     internal void StoreCurrent()

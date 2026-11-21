@@ -45,6 +45,7 @@ internal sealed record AppSettings
     public bool LimitToStartingMonitor { get; init; } = true;
     public int ScreenshotPaddingPixels { get; init; }
     public ScreenshotColorDepth ScreenshotColorDepth { get; init; }
+    public WindowCrop WindowCrop { get; init; }
     public bool Grid20 { get; init; }
     public int SnapDistancePixels { get; init; } = Capture.SelectionSnap.Distance;
     internal const int DefaultGridStepPixels = 1;
@@ -101,6 +102,7 @@ internal sealed record AppSettings
         ExternalApplication.ValidateList(VideoEditors, SelectedVideoEditorId);
         if (!Enum.IsDefined(NotificationClickAction)) throw new ArgumentException("通知クリックの動作が正しくありません。");
         ExternalApplication.ValidateReference(ImageEditors.Concat(VideoEditors).ToArray(), NotificationApplicationId);
+        WindowCrop.Validate();
         if (!Enum.IsDefined(MetadataMode)) throw new ArgumentException("撮影情報の保存形式が正しくありません。");
         if (CapturePresets is null || CapturePresets.Length > 100 || CapturePresets.Any(p => p is null))
             throw new ArgumentException("プリセットは100件以内で指定してください。");
