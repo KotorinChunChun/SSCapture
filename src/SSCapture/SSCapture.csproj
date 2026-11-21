@@ -19,9 +19,13 @@
     <AppHostDotNetSearch Condition="'$(SelfContained)' == 'true'">AppLocal</AppHostDotNetSearch>
   </PropertyGroup>
   <ItemGroup><InternalsVisibleTo Include="SSCapture.Tests" /></ItemGroup>
+  <ItemGroup>
+    <None Update="capture-key-defaults.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <EmbeddedResource Include="capture-key-defaults.json" LogicalName="capture-key-defaults.json" />
+  </ItemGroup>
   <ItemGroup><PackageReference Include="NAudio.Wasapi" Version="3.1.0" /></ItemGroup>
   <ItemGroup>
-    <FrameworkReference Update="Microsoft.NETCore.App;Microsoft.WindowsDesktop.App.WindowsForms" RuntimeFrameworkVersion="10.0.14" Condition="'$(SelfContained)' == 'true'" />
-    <KnownFrameworkReference Update="Microsoft.WindowsDesktop.App;Microsoft.WindowsDesktop.App.WindowsForms" DefaultRuntimeFrameworkVersion="10.0.14" LatestRuntimeFrameworkVersion="10.0.14" Condition="'$(SelfContained)' == 'true'" />
+    <FrameworkReference Update="Microsoft.NETCore.App;Microsoft.WindowsDesktop.App.WindowsForms" RuntimeFrameworkVersion="10.0.15" Condition="'$(SelfContained)' == 'true'" />
+    <KnownFrameworkReference Update="Microsoft.WindowsDesktop.App;Microsoft.WindowsDesktop.App.WindowsForms" DefaultRuntimeFrameworkVersion="10.0.15" LatestRuntimeFrameworkVersion="10.0.15" Condition="'$(SelfContained)' == 'true'" />
   </ItemGroup>
 </Project>

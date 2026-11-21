@@ -1,0 +1,15 @@
+{
+  "Drag": {
+    "Ctrl": "FromCenter",
+    "Shift": "LockAspectRatio",
+    "Alt": "Snap",
+    "Win": "CrossMonitor",
+    "CtrlShift": "FromCenterWithAspectRatio",
+    "CtrlAlt": "LockWidth",
+    "ShiftAlt": "LockHeight",
+    "SpaceEnabled": true
+  },
+  "Before": {
+    "Win": "HighlightWindow"
+  }
+}

@@ -3,24 +3,22 @@ namespace SSCapture.Capture;
 [Flags]
 internal enum CaptureModifiers { None = 0, Ctrl = 1, Shift = 2, Alt = 4, Win = 8 }
 
-internal enum CaptureKeyAction { None, LockWidth, LockHeight, Snap, CrossMonitor, HighlightWindow, SwitchAnchor }
+internal enum CaptureKeyAction { None, LockWidth, LockHeight, Snap, CrossMonitor, HighlightWindow, SwitchAnchor, LockAspectRatio, FromCenter, FromCenterWithAspectRatio }
 
 internal sealed record CaptureKeyMap(
-    CaptureKeyAction Ctrl = CaptureKeyAction.LockWidth,
-    CaptureKeyAction Shift = CaptureKeyAction.LockHeight,
-    CaptureKeyAction Alt = CaptureKeyAction.Snap,
+    CaptureKeyAction Ctrl = CaptureKeyAction.None,
+    CaptureKeyAction Shift = CaptureKeyAction.None,
+    CaptureKeyAction Alt = CaptureKeyAction.None,
     CaptureKeyAction Win = CaptureKeyAction.None,
-    CaptureKeyAction CtrlShift = CaptureKeyAction.CrossMonitor,
+    CaptureKeyAction CtrlShift = CaptureKeyAction.None,
     CaptureKeyAction CtrlAlt = CaptureKeyAction.None,
     CaptureKeyAction CtrlWin = CaptureKeyAction.None,
     CaptureKeyAction ShiftAlt = CaptureKeyAction.None,
     CaptureKeyAction ShiftWin = CaptureKeyAction.None,
     CaptureKeyAction AltWin = CaptureKeyAction.None,
-    bool SpaceEnabled = true)
+    bool SpaceEnabled = false)
 {
-    internal static CaptureKeyMap BeforeDefaults { get; } = new(
-        Ctrl: CaptureKeyAction.None, Shift: CaptureKeyAction.None, Alt: CaptureKeyAction.None,
-        Win: CaptureKeyAction.HighlightWindow, CtrlShift: CaptureKeyAction.None, SpaceEnabled: false);
+    internal static CaptureKeyMap BeforeDefaults => CaptureKeyDefaults.Current.Before;
 
     internal static bool IsBeforeAction(CaptureKeyAction action) => action is CaptureKeyAction.None or CaptureKeyAction.Snap
         or CaptureKeyAction.CrossMonitor or CaptureKeyAction.SwitchAnchor or CaptureKeyAction.HighlightWindow;
@@ -56,6 +54,9 @@ internal sealed record CaptureKeyMap(
         CaptureKeyAction.CrossMonitor => "別モニタへの移動を許可",
         CaptureKeyAction.HighlightWindow => "ウィンドウ撮影に切り替え",
         CaptureKeyAction.SwitchAnchor => "基点を切り替える",
+        CaptureKeyAction.LockAspectRatio => "縦横比を固定",
+        CaptureKeyAction.FromCenter => "起点を中心にする",
+        CaptureKeyAction.FromCenterWithAspectRatio => "中心基準＋比率固定",
         _ => "なし"
     };
 

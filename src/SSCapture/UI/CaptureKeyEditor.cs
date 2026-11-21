@@ -46,12 +46,10 @@ internal sealed class CaptureKeyEditor : UserControl
             for (int column = row; column < Modifiers.Length; column++)
             {
                 CaptureModifiers keys = Modifiers[row] | Modifiers[column];
-                bool enabled = beforeSelection || keys != CaptureModifiers.Win;
-                int selected = enabled ? Array.FindIndex(choices, choice => choice.Action == map.Resolve(keys)) : 0;
+                int selected = Array.FindIndex(choices, choice => choice.Action == map.Resolve(keys));
                 string name = prefix + (int)keys;
                 string label = CaptureKeyMap.Label(keys);
-                var primary = AddChoice(table, column + 1, row + 1, name, label,
-                    enabled ? choices : [choices[0]], Math.Max(0, selected), enabled);
+                var primary = AddChoice(table, column + 1, row + 1, name, label, choices, Math.Max(0, selected));
                 commands.Add(keys, primary);
                 if (column == row) continue;
 

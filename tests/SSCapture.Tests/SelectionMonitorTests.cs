@@ -53,7 +53,7 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("CtrlShiftの別モニタ移動だけが撮影単位の制限を解除する", () =>
+        Run("割り当てたキーで実在する別モニタに移動した時だけ制限を解除する", () =>
         {
             var session = MonitorSession(true);
             try

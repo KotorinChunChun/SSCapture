@@ -43,7 +43,7 @@ internal static partial class Program
             Check(warning is null, warning ?? "");
             Equal(CaptureKeyAction.HighlightWindow, loaded.CaptureKeys.Win);
             Equal(CaptureKeyAction.HighlightWindow, loaded.CaptureKeys.CtrlShift);
-            Equal(CaptureKeyAction.None, new AppSettings().CaptureKeys.Win);
+            Equal(CaptureKeyAction.CrossMonitor, new AppSettings().CaptureKeys.Win);
             foreach (var keys in CaptureKeyMap.Combinations)
                 Equal(keys == CaptureModifiers.Win ? CaptureKeyAction.HighlightWindow : CaptureKeyAction.None, loaded.CaptureBeforeKeys.Resolve(keys));
             Check(!loaded.CaptureBeforeKeys.SpaceEnabled, "撮影範囲設定前にSpaceが有効");
@@ -54,6 +54,40 @@ internal static partial class Program
             store.Save(loaded with { CaptureKeys = editor.Value });
             Equal(expected, store.Load(out _).CaptureKeys);
         }));
+        Run("既定の撮影キーを外部ファイルから読み、保存済み割り当てを保持する", () => WithServiceDirectory(directory =>
+        {
+            var bundled = CaptureKeyDefaults.Current.Drag;
+            Equal(CaptureKeyAction.FromCenter, bundled.Ctrl);
+            Equal(CaptureKeyAction.LockAspectRatio, bundled.Shift);
+            Equal(CaptureKeyAction.FromCenterWithAspectRatio, bundled.CtrlShift);
+            Equal(CaptureKeyAction.LockWidth, bundled.CtrlAlt);
+            Equal(CaptureKeyAction.LockHeight, bundled.ShiftAlt);
+            string data = Directory.CreateDirectory(Path.Combine(directory, "data")).FullName;
+            File.WriteAllText(Path.Combine(data, CaptureKeyDefaults.FileName), """{"Drag":{"Win":"Snap"},"Before":{"Win":"HighlightWindow"}}""");
+            Equal(CaptureKeyAction.Snap, CaptureKeyDefaults.Load(directory).Drag.Win);
+            File.WriteAllText(Path.Combine(data, CaptureKeyDefaults.FileName), """{"Drag":{"Win":"Invalid"},"Before":{}}""");
+            Equal(bundled, CaptureKeyDefaults.Load(directory).Drag);
+            var saved = new SettingsStore(Path.Combine(directory, "settings.json"));
+            saved.Save(new AppSettings { CaptureKeys = bundled with { Win = CaptureKeyAction.None } });
+            Equal(CaptureKeyAction.None, saved.Load(out _).CaptureKeys.Win);
+        }));
+        Run("Shiftは直前の縦横比、Ctrlは起点を中心、複合と離した後も正しい", () =>
+        {
+            Rectangle desktop = new(-300, -200, 600, 400);
+            var gesture = new SelectionGesture(CaptureMode.Rectangle, [desktop], []);
+            gesture.Begin(new(-100, -80), new(8, 8));
+            gesture.Move(new(0, -30));
+            gesture.Move(new(20, 40), action: CaptureKeyAction.LockAspectRatio);
+            Equal(new Rectangle(-100, -80, 240, 120), gesture.Selection);
+            gesture.Move(new(20, 40), action: CaptureKeyAction.FromCenterWithAspectRatio);
+            Equal(new Rectangle(-300, -180, 400, 200), gesture.Selection);
+            gesture.Move(new(20, 40), action: CaptureKeyAction.FromCenter);
+            Equal(new Rectangle(-220, -200, 240, 240), gesture.Selection);
+            Equal(new Rectangle(-100, -80, 120, 120), gesture.End(new(20, 40), OutputDestination.File)!.Bounds);
+            gesture.Begin(new(0, 0), new(8, 8), action: CaptureKeyAction.FromCenterWithAspectRatio);
+            gesture.Move(new(-40, -25), action: CaptureKeyAction.FromCenterWithAspectRatio);
+            Equal(new Rectangle(-40, -40, 80, 80), gesture.Selection);
+        });
         Run("撮影前のWin単押しでウィンドウ撮影に切り替え、再度押すと元のモードに戻る", () =>
         {
             Rectangle monitor = new(0, 0, 600, 400);

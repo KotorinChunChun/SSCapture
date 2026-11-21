@@ -19,6 +19,8 @@ internal sealed class SelectionGesture
     private Size threshold;
     private bool pointerInitialized;
     private bool previousSnap;
+    private CaptureKeyAction rectangleAction;
+    private double? dragAspect;
     private readonly DragAxis horizontal = new();
     private readonly DragAxis vertical = new();
     internal bool Grid20 { get; set; }
@@ -53,7 +55,8 @@ internal sealed class SelectionGesture
             fixedAnchor is CaptureAnchor.BottomLeft or CaptureAnchor.BottomRight ? fixedDimensions.Height : 0);
     }
 
-    internal void Begin(Point point, Size dragThreshold, bool snap = false, bool lockHeight = false, bool lockWidth = false)
+    internal void Begin(Point point, Size dragThreshold, bool snap = false, bool lockHeight = false, bool lockWidth = false,
+        CaptureKeyAction action = CaptureKeyAction.None)
     {
         rawStart = point;
         start = Resolve(point, snap);
@@ -61,20 +64,24 @@ internal sealed class SelectionGesture
         IsPressed = true;
         HasDragged = false;
         swappedPointer = null;
+        dragAspect = null;
+        if (mode == CaptureMode.Rectangle) Selection = Rectangle.Empty;
         horizontal.Reset();
         vertical.Reset();
         Points.Clear();
-        Move(point, snap, lockHeight, lockWidth);
+        Move(point, snap, lockHeight, lockWidth, action);
     }
 
-    internal void Move(Point point, bool snap = false, bool lockHeight = false, bool lockWidth = false)
+    internal void Move(Point point, bool snap = false, bool lockHeight = false, bool lockWidth = false,
+        CaptureKeyAction action = CaptureKeyAction.None)
     {
         bool unchanged = pointerInitialized && RawCurrent == point && previousSnap == snap;
         RawCurrent = point;
         previousSnap = snap;
         pointerInitialized = true;
-        if (swappedPointer == point) return;
+        if (swappedPointer == point && rectangleAction == action) return;
         swappedPointer = null;
+        rectangleAction = action;
         if (mode == CaptureMode.FixedRegion)
         {
             if (FixedPosition is Rectangle fixedPosition) { Selection = fixedPosition; return; }
@@ -106,18 +113,29 @@ internal sealed class SelectionGesture
             var snapped = Grid20 || snap ? snapEdges.Evaluate(adjusted, includeWindows: snap) : new SelectionSnap.SnapResult(adjusted, false, false);
             Current = new Point(horizontal.IsLocked ? horizontal.Value : snapped.X ? snapped.Point.X : quantized.X,
                 vertical.IsLocked ? vertical.Value : snapped.Y ? snapped.Point.Y : quantized.Y);
-            Current = AspectRatios.Constrain(start, Current, AspectRatio, desktopBounds, horizontal.IsLocked, vertical.IsLocked);
+            bool lockAspect = action is CaptureKeyAction.LockAspectRatio or CaptureKeyAction.FromCenterWithAspectRatio;
+            if (lockAspect)
+                dragAspect ??= Selection.Width > 0 && Selection.Height > 0 ? (double)Selection.Width / Selection.Height : 1;
+            else dragAspect = null;
+            Rectangle? limits = IsCentered ? CenteredLimits() : desktopBounds;
+            if (limits is Rectangle boundary)
+                Current = new(Math.Clamp(Current.X, boundary.Left, boundary.Right), Math.Clamp(Current.Y, boundary.Top, boundary.Bottom));
+            Current = dragAspect is double ratio && AspectRatio == CaptureAspectRatio.Free
+                ? AspectRatios.ConstrainDrag(start, Current, ratio, limits)
+                : AspectRatios.Constrain(start, Current, AspectRatio, limits, horizontal.IsLocked, vertical.IsLocked);
         }
         if (Points.Count == 0 || Points[^1] != point) Points.Add(point);
         Selection = HasDragged
-            ? mode == CaptureMode.Freeform ? CaptureGeometry.PolygonBounds(Points) : CaptureGeometry.FromDrag(start, Current)
+            ? mode == CaptureMode.Freeform ? CaptureGeometry.PolygonBounds(Points)
+                : CaptureGeometry.FromDrag(IsCentered ? Reflect(Current) : start, Current)
             : Rectangle.Empty;
     }
 
-    internal CaptureSelection? End(Point point, OutputDestination destination, bool snap = false, bool lockHeight = false, bool lockWidth = false)
+    internal CaptureSelection? End(Point point, OutputDestination destination, bool snap = false, bool lockHeight = false, bool lockWidth = false,
+        CaptureKeyAction action = CaptureKeyAction.None)
     {
         if (!IsPressed) return null;
-        Move(point, snap, lockHeight, lockWidth);
+        Move(point, snap, lockHeight, lockWidth, action);
         IsPressed = false;
         if (mode == CaptureMode.FixedRegion) return FixedSelection(destination);
         if (mode == CaptureMode.Window) return WindowSelection(point, destination);
@@ -176,11 +194,11 @@ internal sealed class SelectionGesture
             return true;
         }
         if (mode != CaptureMode.Rectangle || !IsPressed || !HasDragged || !CaptureGeometry.IsUsable(Selection)) return false;
-        Point previousStart = start;
-        Point? pointer = movePointer is null ? previousStart : movePointer(previousStart);
+        Point opposite = IsCentered ? Reflect(Current) : start;
+        Point? pointer = movePointer is null ? opposite : movePointer(opposite);
         if (pointer is null) return false;
-        start = Current;
-        Current = previousStart;
+        if (!IsCentered) start = Current;
+        Current = opposite;
         RawCurrent = pointer.Value;
         swappedPointer = pointer;
         horizontal.Reset();
@@ -216,6 +234,7 @@ internal sealed class SelectionGesture
         IsPressed = false;
         HasDragged = false;
         swappedPointer = null;
+        dragAspect = null;
         horizontal.Reset();
         vertical.Reset();
         if (mode != CaptureMode.FixedRegion) Selection = Rectangle.Empty;
@@ -228,6 +247,19 @@ internal sealed class SelectionGesture
 
     private Point Resolve(Point point, bool snap) => snap && (mode is CaptureMode.Rectangle or CaptureMode.FixedRegion)
         ? snapEdges.Apply(point) : point;
+
+    private bool IsCentered => rectangleAction is CaptureKeyAction.FromCenter or CaptureKeyAction.FromCenterWithAspectRatio;
+
+    private Point Reflect(Point corner) => new((int)(2L * start.X - corner.X), (int)(2L * start.Y - corner.Y));
+
+    private Rectangle CenteredLimits()
+    {
+        long left = desktopBounds?.Left ?? int.MinValue, right = desktopBounds?.Right ?? int.MaxValue;
+        long top = desktopBounds?.Top ?? int.MinValue, bottom = desktopBounds?.Bottom ?? int.MaxValue;
+        int x = (int)Math.Clamp(Math.Min(start.X - left, right - start.X), 0, int.MaxValue / 2);
+        int y = (int)Math.Clamp(Math.Min(start.Y - top, bottom - start.Y), 0, int.MaxValue / 2);
+        return new Rectangle(start.X - x, start.Y - y, 2 * x, 2 * y);
+    }
 
     private int Quantize(int coordinate, int origin, bool horizontalAxis)
     {

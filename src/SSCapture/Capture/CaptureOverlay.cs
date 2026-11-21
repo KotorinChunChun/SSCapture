@@ -79,8 +79,8 @@ internal sealed class CaptureOverlay : Form
     protected override void WndProc(ref Message m)
     {
         // WinFormsは別ボタンのUpでもマウスキャプチャを解放するため、未割当の操作は渡さない。
-        if (session.Dragging && (m.Msg is >= 0x0207 and <= 0x0209
-            || (m.Msg is >= 0x0204 and <= 0x0206 && !session.OutputSettings.CaptureMouse.DragRight))) return;
+        if ((session.Dragging && m.Msg is >= 0x0207 and <= 0x0209)
+            || (session.HasPointerPress && m.Msg is >= 0x0204 and <= 0x0206 && !session.OutputSettings.CaptureMouse.DragRight)) return;
         if (CaptureNative.IsModifierTransition(m.Msg, m.WParam))
         {
             session.AltKeyChanged();
@@ -135,7 +135,7 @@ internal sealed class CaptureOverlay : Form
         selection.Offset(-MonitorBounds.X, -MonitorBounds.Y);
         DrawSelection(graphics, selection, dirty);
         DrawDimensions(graphics, selection);
-        DrawModifierHint(graphics, selection);
+        DrawPointerHint(graphics, selection);
         if (session.SelectionError is string error)
         {
             var box = new Rectangle(16, 16, Math.Max(1, ClientSize.Width - 32), 100);
@@ -213,7 +213,7 @@ internal sealed class CaptureOverlay : Form
     {
         Rectangle selection = session.Selection;
         string? dimensions = DimensionsText(selection);
-        string? hint = MonitorBounds.Contains(session.Pointer) ? session.ModifierHint : null;
+        string? hint = MonitorBounds.Contains(session.Pointer) ? session.PointerHint : null;
         return new(session.Snapshot, session.Mode, session.DimCaptureBackground, session.HighlightWindow, selection,
             session.HighlightedWindow, session.FixedSelectionValid, session.Points.Count,
             dimensions is null ? Rectangle.Empty : PointerLabelBounds(dimensions, session.Current, 24, reserveHint: true),
@@ -269,9 +269,9 @@ internal sealed class CaptureOverlay : Form
         selection.Width > 0 && selection.Height > 0 && MonitorBounds.Contains(session.Current)
             ? $"{selection.Width} × {selection.Height}" + (session.FixedSelectionValid ? "" : " 画面外") : null;
 
-    private void DrawModifierHint(Graphics graphics, Rectangle selection)
+    private void DrawPointerHint(Graphics graphics, Rectangle selection)
     {
-        if (session.ModifierHint is not string hint || !MonitorBounds.Contains(session.Pointer)) return;
+        if (session.PointerHint is not string hint || !MonitorBounds.Contains(session.Pointer)) return;
         DrawPointerLabel(graphics, hint, session.Pointer, HintOffset(selection), reserveHint: false);
     }
 
@@ -284,7 +284,7 @@ internal sealed class CaptureOverlay : Form
         int height = size.Height + 4;
         int width = Math.Min(ClientSize.Width, size.Width + 8);
         int x = Math.Clamp(pointer.X - MonitorBounds.X + 18, 0, Math.Max(0, ClientSize.Width - width));
-        int reserved = reserveHint && session.ModifierHint is not null ? height : 0;
+        int reserved = reserveHint && session.PointerHint is not null ? height : 0;
         int y = Math.Clamp(pointer.Y - MonitorBounds.Y + offset, 0, Math.Max(0, ClientSize.Height - height - reserved));
         return new(x, y, width, height);
     }

@@ -43,7 +43,7 @@ function Assert-ManagedPayload {
         [Parameter(Mandatory)][string]$RuntimeVersion,
         [scriptblock]$ReadVersion = { param($Path) [Diagnostics.FileVersionInfo]::GetVersionInfo($Path) }
     )
-    $required = @('SSCapture.exe','SSCapture.dll','SSCapture.deps.json','SSCapture.runtimeconfig.json','tool.json','README.md',
+    $required = @('SSCapture.exe','SSCapture.dll','SSCapture.deps.json','SSCapture.runtimeconfig.json','tool.json','README.md','capture-key-defaults.json',
         'coreclr.dll','hostfxr.dll','hostpolicy.dll','System.Private.CoreLib.dll','System.Windows.Forms.dll',
         'maintenance/KotorinToys.Maintenance.exe','maintenance/KotorinToys.Maintenance.dll',
         'maintenance/KotorinToys.Maintenance.deps.json','maintenance/KotorinToys.Maintenance.runtimeconfig.json',

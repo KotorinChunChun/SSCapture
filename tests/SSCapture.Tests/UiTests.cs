@@ -167,7 +167,7 @@ internal static partial class Program
             AppSettings? saved = null;
             using var form = new SettingsForm(new AppSettings
             {
-                CaptureKeys = new CaptureKeyMap(Win: CaptureKeyAction.HighlightWindow, ShiftWin: CaptureKeyAction.Snap),
+                CaptureKeys = new CaptureKeyMap(Win: CaptureKeyAction.CrossMonitor, ShiftWin: CaptureKeyAction.Snap),
                 CaptureMouse = new CaptureMouseMap(BeforeMiddle: false)
             }, value => { saved = value; return null; }, () => { }, () => []);
             var groups = (TabControl)form.Controls.Find("ShortcutGroups", true).Single();
@@ -194,7 +194,7 @@ internal static partial class Program
                         var combo = (ComboBox)grid.GetControlFromPosition(column + 1, row + 1)!;
                         var keys = modifiers[row] | modifiers[column];
                         Equal(CaptureKeyMap.Label(keys), combo.AccessibleName);
-                        Equal(group == 1 || keys != CaptureModifiers.Win, combo.Enabled);
+                        Check(combo.Enabled, "撮影キーの割り当て欄が無効です。");
                     }
                 }
                 Equal(group == 2, page.Controls.Find("CaptureKeysSpace", true).Length == 1);
@@ -203,7 +203,7 @@ internal static partial class Program
 
             ComboBox Choice(string name) => (ComboBox)groups.Controls.Find(name, true).Single();
             Equal("ウィンドウ撮影に切り替え", Choice("CaptureBeforeKeys8").Text);
-            Equal("なし", Choice("CaptureKeys8").Text);
+            Equal("別モニタへの移動を許可", Choice("CaptureKeys8").Text);
             Check(!Choice("CaptureKeys9").Items.Cast<object>().Any(item => item.ToString() == "ウィンドウ撮影に切り替え"),
                 "ドラッグ中にウィンドウ撮影の選択肢がある");
             Check(!Choice("CaptureBeforeKeys9").Items.Cast<object>().Any(item => item.ToString() is "上下に変更" or "左右に変更"),
@@ -232,7 +232,7 @@ internal static partial class Program
             typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, null);
             Check(saved is not null, "ショートカット設定が保存されない");
             Equal(CaptureKeyMap.BeforeDefaults with { CtrlAlt = CaptureKeyAction.SwitchAnchor }, saved!.CaptureBeforeKeys);
-            Equal(new CaptureKeyMap(ShiftWin: CaptureKeyAction.Snap, SpaceEnabled: false), saved.CaptureKeys);
+            Equal(new CaptureKeyMap(Win: CaptureKeyAction.CrossMonitor, ShiftWin: CaptureKeyAction.Snap), saved.CaptureKeys);
             Equal(new CaptureMouseMap(false, false, true, false), saved.CaptureMouse);
         });
         Run("設定10タブの入力欄とボタンが表示領域に収まる", () =>

@@ -48,7 +48,7 @@ internal sealed record AppSettings
     public int SnapDistancePixels { get; init; } = 20;
     internal const int DefaultGridStepPixels = 1;
     public int GridStepPixels { get; init; } = DefaultGridStepPixels;
-    public Capture.CaptureKeyMap CaptureKeys { get; init; } = new();
+    public Capture.CaptureKeyMap CaptureKeys { get; init; } = Capture.CaptureKeyDefaults.Current.Drag;
     public Capture.CaptureKeyMap CaptureBeforeKeys { get; init; } = Capture.CaptureKeyMap.BeforeDefaults;
     public Capture.CaptureMouseMap CaptureMouse { get; init; } = new();
     public bool ShowSelectionGuide { get; init; } = true;

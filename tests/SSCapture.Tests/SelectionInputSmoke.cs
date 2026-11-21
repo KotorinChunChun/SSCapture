@@ -69,17 +69,18 @@ internal static partial class Program
                     {
                         var session = OverlaySession(overlay);
                         await Down(overlay); await Move(overlay, 180, 140);
-                        await Key(overlay, 0xA0, true); await Move(overlay, 230, 200);
+                        await Key(overlay, 0xA4, true); await Key(overlay, 0xA0, true); await Move(overlay, 230, 200);
                         Equal(new Size(150, 60), session.Selection.Size);
                         await Key(overlay, 0xA0, false);
                         Equal(new Size(150, 120), session.Selection.Size);
                         await Key(overlay, 0xA2, true); await Move(overlay, 260, 220);
                         Equal(new Size(150, 140), session.Selection.Size);
                         await Key(overlay, 0xA2, false);
+                        await Key(overlay, 0xA4, false);
                         Equal(new Size(180, 140), session.Selection.Size);
                         await Move(overlay, 270, 230); Equal(new Size(190, 150), session.Selection.Size);
                         input.LeftUp();
-                    }, token, showGuide: false);
+                    }, token, showGuide: false, settings: new() { CaptureKeys = CaptureKeyDefaults.Current.Drag with { Alt = CaptureKeyAction.None } });
                     Equal(new Size(190, 150), result.Image!.Size);
                 });
                 foreach (bool escape in new[] { false, true })
@@ -94,6 +95,32 @@ internal static partial class Program
                             Check(!overlay.IsDisposed && !overlay.SelectionMenu.Visible, "撮影終了またはメニュー表示");
                             Check(!OverlaySession(overlay).Dragging && OverlaySession(overlay).Selection.IsEmpty, "選択が残る");
                             await Down(overlay, 100, 80); await Move(overlay, 220, 160); input.LeftUp();
+                        }, token, showGuide: false);
+                        Equal(new Size(120, 80), result.Image!.Size);
+                    });
+                foreach (bool middle in new[] { false, true })
+                foreach (bool escape in new[] { false, true })
+                    await Test((middle ? "中押下" : "左単押下") + (escape ? "をEscで取り消す" : "を右クリックで取り消す"), async token =>
+                    {
+                        using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, _) =>
+                        {
+                            var session = OverlaySession(overlay);
+                            if (middle)
+                            {
+                                await Move(overlay, 80, 80);
+                                NativeSmokeInput.RequireTarget(overlay.Handle, P(80, 80));
+                                input.MiddleDown(); await Task.Delay(100);
+                            }
+                            else await Down(overlay);
+                            string expected = middle ? "モニター全体を撮影" : "ウィンドウを撮影";
+                            Equal(expected + "　ESC / 右クリックで取り消し", session.PointerHint);
+                            if (escape) { await Key(overlay, 0x1B, true); await Key(overlay, 0x1B, false); }
+                            else { input.RightDown(); await Task.Delay(60); input.RightUp(); }
+                            if (middle) input.MiddleUp(); else input.LeftUp();
+                            await Task.Delay(100);
+                            Check(session.PointerHint is null && !session.HasPointerPress && !session.Completion.IsCompleted,
+                                "取り消し後も表示が残るか、取り消した撮影が出力された");
+                            await Down(overlay); await Move(overlay, 200, 160); input.LeftUp();
                         }, token, showGuide: false);
                         Equal(new Size(120, 80), result.Image!.Size);
                     });
@@ -261,7 +288,7 @@ internal static partial class Program
         };
         Application.Run(host);
         Console.WriteLine($"SELECTION INPUT RESULT: {successes} passed, {failures} failed");
-        return failures == 0 && successes == 13 ? 0 : 1;
+        return failures == 0 && successes == 17 ? 0 : 1;
     }
 
     private static SessionController OverlaySession(CaptureOverlay overlay) => (SessionController)typeof(CaptureOverlay)

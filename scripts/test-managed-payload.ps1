@@ -25,7 +25,7 @@ function Write-Json([string]$Relative, $Value) {
     $Value | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $root $Relative) -Encoding utf8NoBOM
 }
 $files = @('SSCapture.exe','SSCapture.dll','SSCapture.deps.json','coreclr.dll','hostfxr.dll','hostpolicy.dll',
-    'System.Private.CoreLib.dll','System.Windows.Forms.dll','README.md',
+    'System.Private.CoreLib.dll','System.Windows.Forms.dll','README.md','capture-key-defaults.json',
     'maintenance/KotorinToys.Maintenance.exe','maintenance/KotorinToys.Maintenance.dll',
     'maintenance/KotorinToys.Maintenance.deps.json','maintenance/coreclr.dll',
     'maintenance/hostfxr.dll','maintenance/hostpolicy.dll','maintenance/System.Private.CoreLib.dll')

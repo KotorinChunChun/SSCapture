@@ -4,6 +4,18 @@ internal enum CaptureAspectRatio { Free, Wide, Standard, Square }
 
 internal static class AspectRatios
 {
+    internal static Point ConstrainDrag(Point start, Point target, double ratio, Rectangle? bounds)
+    {
+        long dx = (long)target.X - start.X, dy = (long)target.Y - start.Y;
+        int signX = dx < 0 ? -1 : 1, signY = dy < 0 ? -1 : 1;
+        long maxX = signX > 0 ? (long)(bounds?.Right ?? int.MaxValue) - start.X : (long)start.X - (bounds?.Left ?? int.MinValue);
+        long maxY = signY > 0 ? (long)(bounds?.Bottom ?? int.MaxValue) - start.Y : (long)start.Y - (bounds?.Top ?? int.MinValue);
+        double height = Math.Max(Math.Abs(dx) / ratio, Math.Abs(dy));
+        height = Math.Max(0, Math.Min(height, Math.Min(maxX / ratio, maxY)));
+        return new((int)(start.X + signX * (long)Math.Round(height * ratio, MidpointRounding.AwayFromZero)),
+            (int)(start.Y + signY * (long)Math.Round(height, MidpointRounding.AwayFromZero)));
+    }
+
     internal static string Label(CaptureAspectRatio ratio) => ratio switch
     {
         CaptureAspectRatio.Free => "自由", CaptureAspectRatio.Wide => "16:9",
