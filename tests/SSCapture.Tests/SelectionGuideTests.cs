@@ -125,6 +125,34 @@ internal static partial class Program
             Check(work.Contains(guide.Bounds), "操作ガイドが作業領域外にある");
             Equal(work.Bottom - 16, guide.Bottom);
         });
+        Run("キーの表示を日本語化しても保存識別子は変わらない", () =>
+        {
+            Equal("Windows キー＋Shift＋S", KeyDisplay.Binding("Win+Shift+S"));
+            Equal("←（左）", KeyDisplay.Binding("Left"));
+            Equal("テンキー 1", KeyDisplay.Binding("NumPad1"));
+            Equal("無変換", KeyDisplay.Binding("IMENonconvert"));
+            Equal("Win+Shift+S", HotkeyBinding.Parse("Win+Shift+S")!.Value.ToString());
+        });
+        Run("右下ガイドは操作段階と実際の割り当て・クリック無効を反映", () =>
+        {
+            using var guide = new SelectionGuideForm(new(0, 0, 1280, 720), CaptureIntent.Screenshot, () => { },
+                mouse: new(BeforeRight: false, DragRight: false), canCrossMonitors: true);
+            string Read() => guide.Controls["SelectionHelp"]!.Text;
+            Check(Read().Contains("Windows キーを短押し") && Read().Contains("Windows キーを押しながら"), "Windowsキーの短押しと長押しがない");
+            Check(!Read().Contains("右クリック") && !Read().Contains("Ctrl"), "無効または別段階の操作を案内");
+            _ = guide.Handle;
+            guide.Location = new Point(-900, 100);
+            Point moved = guide.Location;
+            guide.UpdateOperations(true, true);
+            Equal(moved, guide.Location);
+            foreach (string match in new[] { "Shift　縦横比を固定", "Ctrl　起点を中心にする", "Ctrl＋Shift　両方を適用",
+                "Windows キー＋Alt　一時グリッドスナップ", "Esc　選択だけ中断" })
+                Check(Read().Contains(match), "ドラッグ中の操作がない: " + match);
+            Check(!Read().Contains("右クリック") && !Read().Contains("短押し"), "ドラッグ中に別段階の操作を案内");
+            string custom = SelectionGuideText.Create(CaptureMode.Rectangle, CaptureIntent.Screenshot, null, CaptureAnchor.TopLeft,
+                new(Alt: CaptureKeyAction.LockAspectRatio), new(), true, false, false);
+            Check(custom.Contains("Alt　縦横比を固定") && !custom.Contains("Shift") && !custom.Contains("Ctrl"), "変更した割り当てを反映しない");
+        });
         Run("案内の表示設定保存が失敗しても撮影を終了しない", () =>
         {
             var session = GuideTestSession(true, _ => throw new IOException("保存拒否"));

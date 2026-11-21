@@ -22,6 +22,8 @@ internal sealed record AppSettings
     public string LastRegionShortcut { get; init; } = "Win+Ctrl+Shift+S";
     internal const string LastRecipeKeyId = "$last-recipe";
     public string LastRecipeShortcut { get; init; } = "";
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public PresetCaptureShortcut[]? PresetCaptureShortcuts { get; init; }
     public SavedRegion[] SavedRegions { get; init; } = [];
     public CapturePreset[] CapturePresets { get; init; } = [];
     public int FixedWidth { get; init; } = 1280;
@@ -132,7 +134,8 @@ internal sealed record AppSettings
             || CapturePresets.Select(p => p.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != CapturePresets.Length)
             throw new ArgumentException("プリセットのIDまたは名前が重複しています。");
         if (SavedRegions is null || SavedRegions.Any(r => r is null)) throw new ArgumentException("登録範囲の設定が不正です。");
-        foreach (var region in SavedRegions) region.Validate();
+        foreach (var region in SavedRegions)
+            (PresetCaptureShortcuts is null || region.Shortcut == "" ? region : region with { Shortcut = "" }).Validate();
         if (PresetSchemaVersion >= 1 && (SavedRegions.Count(p => p.IsDefault) != 1 || CapturePresets.Count(p => p.IsDefault) != 1))
             throw new ArgumentException("入力・出力それぞれ1件の既定プリセットを指定してください。");
         if (SavedRegions.Any(r => r.Id is LastRegionKeyId or LastRecipeKeyId)) throw new ArgumentException("登録範囲のIDが予約値です。");

@@ -55,7 +55,7 @@ internal sealed class CapturePresetEditor : UserControl
         return true;
     }
     internal string? Error { get; private set; }
-    internal CapturePresetEditor(AppSettings initial, Func<AppSettings> readSettings)
+    internal CapturePresetEditor(AppSettings initial, Func<AppSettings> readSettings, Action<string>? openPresetShortcuts = null)
     {
         this.readSettings = readSettings; initialSettings = initial;
         Name = "CapturePresetEditor"; Dock = DockStyle.Fill;
@@ -66,6 +66,18 @@ internal sealed class CapturePresetEditor : UserControl
         list.Format += (_, e) => { if (e.ListItem is CapturePreset p) e.Value = (p.IsDefault ? "★ " : "") + p.Name; }; root.Controls.Add(list, 0, 0);
         var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 }; right.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); right.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.Controls.Add(right, 1, 0);
         var header = Fields(); header.RowCount = 1; presetName = new TextBox { Name = "CapturePresetName", MaxLength = 80 }; Add(header, "名前", presetName, 0); right.Controls.Add(header, 0, 0);
+        if (openPresetShortcuts is not null)
+        {
+            right.RowStyles[0].Height = 80;
+            header.RowCount = 2;
+            var open = SettingsForm.MakeButton("プリセット撮影を設定", "OpenOutputPresetShortcuts");
+            open.Click += (_, _) =>
+            {
+                StoreCurrent();
+                if (Error is null && editing is { } preset) openPresetShortcuts(preset.Id);
+            };
+            Add(header, "ショートカットキー", open, 1);
+        }
         var tabs = new TabControl { Name = "OutputPresetSections", Dock = DockStyle.Fill }; right.Controls.Add(tabs, 0, 1);
         var output = Page("出力・画像"); naming = Page("保存・OCR"); var metadata = Page("撮影情報");
         var outputs = new FlowLayoutPanel { WrapContents = true, AutoSize = true, Dock = DockStyle.Fill };
@@ -112,7 +124,7 @@ internal sealed class CapturePresetEditor : UserControl
         add.Click += (_, _) => { choices.Items[1].Enabled = PreviousOutput is not null; choices.Items[2].Enabled = editing is not null; choices.Show(add, new Point(0, add.Height)); }; add.Dock = DockStyle.Fill; add.Margin = new Padding(3); buttons.Controls.Add(add, 0, 0);
         Disposed += (_, _) => choices.Dispose();
         Button("削除", "DeleteCapturePreset", () => { if (editing is CapturePreset p) { if (p.IsDefault) { ShowError("別のプリセットを既定にしてから削除してください。"); return; } ApplyCandidates(Presets.Where(x => x.Id != p.Id).ToArray(), null); } });
-        Button("既定にする", "DefaultCapturePreset", () => { StoreCurrent(); if (Error is not null || editing is not CapturePreset p) return; ApplyCandidates(Presets.Select(x => x with { IsDefault = x.Id == p.Id }).ToArray(), p.Id); });
+        Button("★既定にする", "DefaultCapturePreset", () => { StoreCurrent(); if (Error is not null || editing is not CapturePreset p) return; ApplyCandidates(Presets.Select(x => x with { IsDefault = x.Id == p.Id }).ToArray(), p.Id); });
         status = new Label { Name = "PresetEditorStatus", Dock = DockStyle.Fill, Text = "編集内容は設定画面の「保存」で確定します。" }; root.Controls.Add(status, 0, 2); root.SetColumnSpan(status, 2);
         list.SelectedIndexChanged += (_, _) =>
         {

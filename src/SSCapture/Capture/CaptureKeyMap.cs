@@ -63,7 +63,8 @@ internal sealed record CaptureKeyMap(
     };
 
     internal static string Label(CaptureModifiers keys) => string.Join("＋",
-        Enum.GetValues<CaptureModifiers>().Where(key => key != CaptureModifiers.None && keys.HasFlag(key)));
+        new[] { CaptureModifiers.Win, CaptureModifiers.Ctrl, CaptureModifiers.Alt, CaptureModifiers.Shift }
+            .Where(key => keys.HasFlag(key)).Select(key => key == CaptureModifiers.Win ? Services.KeyDisplay.Key(Keys.LWin) : key.ToString()));
 
     internal static CaptureModifiers FromKeys(Keys keys) =>
         ((keys & Keys.Control) != 0 ? CaptureModifiers.Ctrl : CaptureModifiers.None)

@@ -23,7 +23,7 @@ internal static partial class Program
             Equal("input", parsed.InputPresetId); Equal("出力 '$()", parsed.OutputPresetId);
             Equal<Rectangle?>(null, CaptureCommandLine.Parse(["--capture-select"]).Region);
         });
-        string[][] invalid = [[], ["--capture-select", "--capture-select"], ["--capture-select", "--capture-region", "0", "0", "1", "1"],
+        string[][] invalid = [[], ["--capture-preset", "--capture-select"], ["--capture-region", "0", "0", "8", "6", "--capture-preset"], ["--capture-select", "--capture-select"], ["--capture-select", "--capture-region", "0", "0", "1", "1"],
             ["--capture-region", "0", "0", "1"], ["--capture-region", "0", "a", "1", "1"],
             ["--capture-region", "0", "0", "0", "1"], ["--capture-region", "0", "0", "1", "-1"],
             ["--capture-region", "0", "0", "32769", "1"], ["--capture-region", "0", "0", "20000", "20000"],
@@ -56,6 +56,34 @@ internal static partial class Program
             Equal(OutputDestination.Clipboard, original.DefaultDestination); Check(!original.IncludeCursor, "既定入力を書き換えた");
             Check(!ReferenceEquals(original.SavedRegions, resolved.Settings.SavedRegions), "設定配列を共有した");
         });
+        Run("プリセット方式のCLIは固定位置を現在のモニター配置で直接撮り、固定サイズと全画面も維持", () => WithOutputDirectory(directory => RunOutputTask(async () =>
+        {
+            var original = CaptureCommandSettings();
+            var display = new DisplayLayout("test-display", "試験画面", new(-500, 0, 500, 400), 96, 96);
+            var fixedInput = RegionCoordinates.FromBounds("固定位置", new(-450, 20, 8, 6), [display]);
+            var full = SavedRegion.FromSettings("全画面", original with { DefaultMode = CaptureMode.FullScreen });
+            var settings = original with { SavedRegions = [.. original.SavedRegions, fixedInput, full] };
+            var request = CaptureCommandLine.Parse(["--capture-preset", "--input-preset", fixedInput.Id]);
+            Check(request.UsePresetMode && request.Region is null, "プリセット方式を明示座標と混同");
+            Check(CaptureCommandLine.Generate(@"C:\SSCapture.exe", request).Contains("'--capture-preset'"), "コマンド生成で方式を失った");
+            var command = CaptureCommandLine.Resolve(request, settings);
+            var moved = display with { Bounds = new(200, 10, 500, 400) };
+            int reads = 0, copies = 0;
+            using var output = new OutputRouter(directory, _ => { copies++; return Task.CompletedTask; }, readDisplays: () => []);
+            int result = await CaptureCommandRunner.ExecuteAsync(command, output, (bounds, _) =>
+            {
+                reads++;
+                Equal(new Rectangle(250, 30, 8, 6), bounds);
+                return Task.FromResult<(Bitmap, CaptureMetadata?)>((new Bitmap(8, 6), null));
+            }, _ => throw new InvalidOperationException("固定位置で選択画面を呼んだ"), readPresetDisplays: () => [moved]);
+            Equal(0, result); Equal(1, reads); Equal(1, copies);
+            var size = settings.SavedRegions.First(p => !p.UseFixedCoordinates && p.Mode == CaptureMode.FixedRegion);
+            var sizeOptions = CaptureCommandLine.Resolve(request with { InputPresetId = size.Id }, settings).SelectionOptions();
+            Equal(CaptureMode.FixedRegion, sizeOptions.Mode); Equal<Size?>(size.Bounds.Size, sizeOptions.FixedSize);
+            var fullOptions = CaptureCommandLine.Resolve(request with { InputPresetId = full.Id }, settings).SelectionOptions();
+            Equal(CaptureMode.FullScreen, fullOptions.Mode);
+            Equal(settings.CapturePresets.Single(p => p.IsDefault).Id, fullOptions.InitialOutputPreset!.Id);
+        })));
         Run("CLI設定解決は不明IDと出力なしを撮影前に拒否", () =>
         {
             AppSettings settings = CaptureCommandSettings();

@@ -13,9 +13,10 @@ internal static partial class Program
         {
             var old = new AppSettings().EnsurePresets();
             var edited = old.SavedRegions[0] with { Id = "standard-input", Name = "標準", PaddingPixels = 23, ProfileVersion = 1, Shortcut = "Ctrl+F9" };
-            var migrated = (old with { PresetSchemaVersion = 2, SavedRegions = [edited], RecordSystemAudio = true, RecordMicrophone = true, MicrophoneDeviceId = "missing-device" }).EnsurePresets();
+            var migrated = (old with { PresetSchemaVersion = 2, SavedRegions = [edited], PresetCaptureShortcuts = null, RecordSystemAudio = true, RecordMicrophone = true, MicrophoneDeviceId = "missing-device" }).EnsurePresets();
             var preserved = migrated.SavedRegions.Single(p => p.Id == edited.Id);
-            Equal("標準", preserved.Name); Equal(23, preserved.PaddingPixels); Equal(edited.Shortcut, preserved.Shortcut);
+            Equal("標準", preserved.Name); Equal(23, preserved.PaddingPixels); Equal("", preserved.Shortcut);
+            Equal(edited.Shortcut, migrated.PresetCaptureShortcuts!.Single().Key);
             Check(preserved.IsDefault && preserved.RecordSystemAudio && preserved.RecordMicrophone, "既定または旧音声を失った");
             Equal("missing-device", preserved.MicrophoneDeviceId);
             Check(migrated.SavedRegions.Where(p => p.Id != edited.Id).All(p => !p.RecordSystemAudio && !p.RecordMicrophone), "新規候補の音声を有効にした");

@@ -34,7 +34,7 @@ internal sealed class KeyboardHook : IDisposable
 
     public KeyboardHook(Action<CaptureIntent> onCapture, AppSettings settings) : this(onCapture, settings, true) { }
 
-    public KeyboardHook(Action<CaptureIntent> onCapture, AppSettings settings, bool initiallyEnabled, Action<int>? onInstantCapture = null, Action<string>? onRegionCapture = null)
+    public KeyboardHook(Action<CaptureIntent> onCapture, AppSettings settings, bool initiallyEnabled, Action<int>? onInstantCapture = null, Action<string>? onRegionCapture = null, Action<string>? onPresetCapture = null)
     {
         ArgumentNullException.ThrowIfNull(onCapture);
         ArgumentNullException.ThrowIfNull(settings);
@@ -49,7 +49,8 @@ internal sealed class KeyboardHook : IDisposable
             try
             {
                 var decision = (HotkeyDecision)intent!;
-                if (decision.RegionId is { } id) onRegionCapture?.Invoke(id);
+                if (decision.PresetKey is { } key) onPresetCapture?.Invoke(key);
+                else if (decision.RegionId is { } id) onRegionCapture?.Invoke(id);
                 else if (decision.DisplayNumber > 0) onInstantCapture?.Invoke(decision.DisplayNumber);
                 else onCapture(decision.Intent);
             }

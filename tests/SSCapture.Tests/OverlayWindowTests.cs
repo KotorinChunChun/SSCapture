@@ -62,7 +62,7 @@ internal static partial class Program
                 try
                 {
                     session.ApplyPointerInput(new(100, 80), CaptureModifiers.Win);
-                    Equal(showPointerGuide ? "Win : ウィンドウ撮影に切り替え\nWin離す：ウィンドウ撮影モードに変更" : null, session.PointerHint);
+                    Equal(showPointerGuide ? "Windows キー : ウィンドウ撮影に切り替え\nWindows キーを離すとウィンドウ撮影モードに変更　Escで取り消し" : null, session.PointerHint);
                     Check(!session.ShowSelectionGuide, "ポインタガイドが画面端の設定に影響した");
                 }
                 finally { session.Cancel(); }

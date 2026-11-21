@@ -15,7 +15,7 @@ internal sealed class HotkeyEditor : UserControl
         Name = name;
         AutoScaleMode = AutoScaleMode.Dpi;
         Margin = Padding.Empty;
-        win = Modifier("Win"); ctrl = Modifier("Ctrl"); alt = Modifier("Alt"); shift = Modifier("Shift");
+        win = Modifier("Win", Keys.LWin); ctrl = Modifier("Ctrl", Keys.ControlKey); alt = Modifier("Alt", Keys.Menu); shift = Modifier("Shift", Keys.ShiftKey);
         key = new ComboBox { Name = name + "Key", DropDownStyle = ComboBoxStyle.DropDownList,
             Anchor = AnchorStyles.Top | AnchorStyles.Left, MinimumSize = new Size(120, 0), Margin = Padding.Empty };
         key.Items.Add(new KeyItem(null, "なし"));
@@ -26,7 +26,7 @@ internal sealed class HotkeyEditor : UserControl
             {
                 var binding = HotkeyBinding.Parse(code.ToString());
                 if (binding is { } valid && valid.Modifiers == HotkeyModifiers.None && seen.Add(valid.VirtualKey))
-                    key.Items.Add(new KeyItem(valid.VirtualKey, valid.ToString()));
+                    key.Items.Add(new KeyItem(valid.VirtualKey, KeyDisplay.Key((Keys)valid.VirtualKey)));
             }
             catch (ArgumentException) { }
         }
@@ -76,9 +76,9 @@ internal sealed class HotkeyEditor : UserControl
             NotifyValueChanged();
         }
     }
-    private static CheckBox Modifier(string text)
+    private static CheckBox Modifier(string name, Keys key)
     {
-        return new CheckBox { Text = text, Name = text, AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Left,
+        return new CheckBox { Text = KeyDisplay.Key(key), Name = name, AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Left,
             Margin = new Padding(0, 0, 10, 0), TextAlign = ContentAlignment.MiddleLeft, CheckAlign = ContentAlignment.MiddleLeft };
     }
 

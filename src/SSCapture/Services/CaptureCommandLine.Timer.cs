@@ -11,6 +11,8 @@ internal static partial class CaptureCommandRunner
         CaptureTimerShot? shot;
         if (command.Request.Region is Rectangle bounds)
             shot = CaptureTimerShot.Fixed(bounds, command, take);
+        else if (command.Request.UsePresetMode && command.InputPreset.UseFixedCoordinates)
+            shot = CaptureTimerShot.Registered(command.InputPreset, command.Settings);
         else
             shot = await SelectTimerTargetAsync(command, select);
         if (shot is null) return 2;

@@ -10,7 +10,7 @@ internal enum KeyboardModifiers
     LeftAlt = 256, RightAlt = 512, Alt = 1024
 }
 
-internal readonly record struct HotkeyDecision(bool Suppress, bool Capture, CaptureIntent Intent = CaptureIntent.Screenshot, int DisplayNumber = 0, string? RegionId = null);
+internal readonly record struct HotkeyDecision(bool Suppress, bool Capture, CaptureIntent Intent = CaptureIntent.Screenshot, int DisplayNumber = 0, string? RegionId = null, string? PresetKey = null);
 
 // One state machine per hook. No native input or UI dependencies.
 internal sealed class HotkeyState
@@ -62,23 +62,23 @@ internal sealed class HotkeyState
             HotkeyAssignment? suppressed = suppressedIntent[virtualKey];
             down[virtualKey] = false;
             suppressedIntent[virtualKey] = null;
-            if (suppressed is HotkeyAssignment intent) return new(true, false, intent.Intent, intent.DisplayNumber, intent.RegionId);
+            if (suppressed is HotkeyAssignment intent) return new(true, false, intent.Intent, intent.DisplayNumber, intent.RegionId, intent.PresetKey);
             // Some PrintScreen paths deliver only a release. A matched down/up pair
             // has already been handled above; never turn an unmatched chord's known
             // release into a bare PrintScreen action when its modifiers were released.
             if (virtualKey == 0x2C && !wasDown && enabled)
             {
                 HotkeyAssignment? releaseIntent = Match(candidates);
-                if (releaseIntent is HotkeyAssignment release) return new(true, true, release.Intent, release.DisplayNumber, release.RegionId);
+                if (releaseIntent is HotkeyAssignment release) return new(true, true, release.Intent, release.DisplayNumber, release.RegionId, release.PresetKey);
             }
             return default;
         }
         if (down[virtualKey])
-            return suppressedIntent[virtualKey] is HotkeyAssignment repeated ? new(true, false, repeated.Intent, repeated.DisplayNumber, repeated.RegionId) : default;
+            return suppressedIntent[virtualKey] is HotkeyAssignment repeated ? new(true, false, repeated.Intent, repeated.DisplayNumber, repeated.RegionId, repeated.PresetKey) : default;
         down[virtualKey] = true;
         HotkeyAssignment? matched = enabled ? Match(candidates) : null;
         suppressedIntent[virtualKey] = matched;
-        return matched is HotkeyAssignment capture ? new(true, true, capture.Intent, capture.DisplayNumber, capture.RegionId) : default;
+        return matched is HotkeyAssignment capture ? new(true, true, capture.Intent, capture.DisplayNumber, capture.RegionId, capture.PresetKey) : default;
     }
 
     private HotkeyAssignment? Match(HotkeyAssignment[] candidates)

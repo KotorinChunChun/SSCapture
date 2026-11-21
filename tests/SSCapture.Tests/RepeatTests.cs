@@ -15,7 +15,8 @@ internal static partial class Program
             Equal(region.Bounds, RegionCoordinates.Resolve(restored.SavedRegions.Single(p => p.Id == region.Id), RegionLayout));
             Equal(333, restored.FixedWidth); Equal(222, restored.FixedHeight); Check(restored.IncludeCursor, "カーソル設定が消失");
             var state = new HotkeyState(HotkeyBinding.ReadAssignments(restored), KeyboardModifiers.LeftWindows | KeyboardModifiers.LeftControl);
-            Equal(region.Id, state.Process((int)Keys.F8, true, true).RegionId);
+            Equal(region.Id, restored.PresetCaptureShortcuts!.Single().InputPresetId);
+            Equal("Win+Ctrl+F8", state.Process((int)Keys.F8, true, true).PresetKey);
             bool rejected = false;
             try { (restored with { ScreenshotShortcut1 = "Win+Ctrl+F8" }).Validate(); } catch (ArgumentException) { rejected = true; }
             Check(rejected, "登録範囲と通常キーの衝突を拒否しない");

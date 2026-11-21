@@ -31,6 +31,9 @@ internal sealed class SettingsForm : Form
     private StatusMessage? statusMessage;
     private readonly Func<AppSettings, string?> save;
     private readonly CapturePresetEditor presetEditor;
+    private readonly PresetCaptureShortcutEditor presetShortcutEditor;
+    private readonly TabControl shortcutTabs;
+    private readonly TabPage presetShortcutPage;
     private readonly ExternalApplicationsEditor imageApps, videoApps;
     private readonly RegionManagerForm inputPresetEditor;
     private readonly ListBox categories;
@@ -112,7 +115,7 @@ internal sealed class SettingsForm : Form
         var namingHelp = new Label { Dock = DockStyle.Fill, Text = "{yyyymmdd} 年月日　{hhmmss} 時分秒　{ocr} 文字列\n{region} 範囲名　{#} 1,2…　{##} 01,02…　動画は.mp4" };
         naming.Controls.Add(namingHelp, 0, 3); naming.SetColumnSpan(namingHelp, 2); naming.SetRowSpan(namingHelp, 2);
         var shortcutPage = new TabPage("ショートカット") { BackColor = BackColor, Padding = new Padding(8) };
-        var shortcutTabs = new TabControl { Name = "ShortcutGroups", Dock = DockStyle.Fill };
+        shortcutTabs = new TabControl { Name = "ShortcutGroups", Dock = DockStyle.Fill };
         shortcutPage.Controls.Add(shortcutTabs);
         tabs.TabPages.Add(shortcutPage);
         var keys = Page(shortcutTabs, "PC作業中のショートカットキー");
@@ -132,13 +135,17 @@ internal sealed class SettingsForm : Form
         beforePage.Controls.Add(captureBeforeKeys);
         dragPage.Controls.Add(captureKeys);
         shortcutTabs.TabPages.AddRange([beforePage, dragPage]);
+        presetShortcutPage = new TabPage("プリセット撮影") { BackColor = BackColor, Padding = new Padding(8) };
+        presetShortcutEditor = new PresetCaptureShortcutEditor(settings.PresetCaptureShortcuts ?? []);
+        presetShortcutPage.Controls.Add(presetShortcutEditor);
+        shortcutTabs.TabPages.Insert(1, presetShortcutPage);
         var regions = inputs;
         fixedWidth = PixelField(regions, "固定幅 (px)", "FixedWidth", settings.FixedWidth, 1);
         fixedHeight = PixelField(regions, "固定高さ (px)", "FixedHeight", settings.FixedHeight, 2);
         fixedCaptureAnchor = Combo(regions, "固定サイズの基点", "FixedCaptureAnchor", 3);
         foreach (var anchor in Enum.GetValues<CaptureAnchor>()) fixedCaptureAnchor.Items.Add(new CaptureAnchorItem(anchor));
         fixedCaptureAnchor.SelectedIndex = (int)settings.FixedCaptureAnchor;
-        includeCursor = Toggle(regions, "カーソル", "IncludeCursor", "画像・動画に含める", settings.IncludeCursor, 4);
+        includeCursor = Toggle(regions, "マウスカーソル", "IncludeCursor", "画像・動画に含める", settings.IncludeCursor, 4);
         var historyPage = Page(tabs, "履歴");
         keepHistory = Toggle(historyPage, "撮影履歴", "KeepHistory", "メモリーに保持する", settings.KeepHistory, 0);
         var historyButton = MakeButton("撮影履歴", "OpenHistory", ButtonRole.Secondary);
@@ -240,7 +247,7 @@ internal sealed class SettingsForm : Form
             Text = "通知本文はクリックを透過し、ボタンと小画像だけ操作できます。保存成功時はフォルダを開けます。\n編集アプリは個別指定、または撮影時の出力プリセットを使います。\n画面共有への映り込みを抑えますが、共有アプリによっては除外できません。\n効果音はPC音声の録音・共有に含まれる場合があります。" };
         notifications.Controls.Add(notificationInfo, 0, 6); notifications.SetColumnSpan(notificationInfo, 2); notifications.SetRowSpan(notificationInfo, 2);
         var presetPage = new TabPage("出力プリセット") { BackColor = BackColor, Padding = new Padding(8) };
-        presetEditor = new CapturePresetEditor(settings, () => committed with { ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications });
+        presetEditor = new CapturePresetEditor(settings, () => committed with { ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications }, id => ShowPresetShortcuts(outputId: id));
         presetEditor.PreviousOutput = lastOutputSettings;
         imageApps.SelectedChanged += id => presetEditor.SetDefaultApplication(true, id);
         videoApps.SelectedChanged += id => presetEditor.SetDefaultApplication(false, id);
@@ -252,9 +259,14 @@ internal sealed class SettingsForm : Form
         var inputPresetPage = new TabPage("入力プリセット") { BackColor = BackColor, Padding = new Padding(4) };
         inputPresetEditor = new RegionManagerForm(settings.SavedRegions, lastRegion,
             size => PickInputRegion(size, settings.FixedCaptureAnchor), CommitInputs, regionDisplays,
-            selectAnchoredRegion: PickInputRegion, embedded: true, profileSettings: settings);
+            selectAnchoredRegion: PickInputRegion, embedded: true, profileSettings: settings, openPresetShortcuts: id => ShowPresetShortcuts(inputId: id));
         inputPresetPage.Controls.Add(inputPresetEditor); tabs.TabPages.Add(inputPresetPage); inputPresetEditor.Show();
         inputPresetEditor.AttachRecordingSettings(systemAudio, micAudio, microphone);
+        presetShortcutPage.VisibleChanged += (_, _) =>
+        {
+            if (presetShortcutPage.Visible) RefreshPresetShortcutChoices();
+        };
+        RefreshPresetShortcutChoices();
         async Task<Rectangle?> PickInputRegion(Size? size, CaptureAnchor anchor)
         {
             if (selectInputRegion is not null) return await selectInputRegion(size, anchor);
@@ -423,6 +435,16 @@ internal sealed class SettingsForm : Form
         }
     }
 
+    internal void ShowPresetShortcuts(string? inputId = null, string? outputId = null)
+    {
+        RefreshPresetShortcutChoices();
+        SelectCategory("ショートカット");
+        shortcutTabs.SelectedTab = presetShortcutPage;
+        presetShortcutEditor.OpenForPreset(inputId, outputId);
+    }
+
+    private void RefreshPresetShortcutChoices() => presetShortcutEditor.RefreshPresets(inputPresetEditor.Regions, presetEditor.Presets);
+
     public void SetStatus(StatusMessage? message)
     {
         statusTimer.Stop();
@@ -460,6 +482,7 @@ internal sealed class SettingsForm : Form
             presetEditor.StoreCurrent();
             if (presetEditor.Error is string presetError) throw new ArgumentException(presetError);
             var next = ReadSettings();
+            next.Validate();
             string? error = save(next);
             if (error is null) committed = next;
             SetStatus(error ?? "設定を保存しました。", error is not null);
@@ -468,8 +491,23 @@ internal sealed class SettingsForm : Form
         { SetStatus("保存できませんでした: " + ex.Message, true); }
         finally { manualSave = false; }
     }
-    private string? CommitInputs(SavedRegion[] regions) => CommitPresetChanges(committed with { SavedRegions = regions });
-    private string? CommitOutputs(CapturePreset[] presets) => CommitPresetChanges(committed with { CapturePresets = presets });
+    private string? CommitInputs(SavedRegion[] regions)
+    {
+        foreach (var removed in committed.SavedRegions.Where(old => regions.All(p => p.Id != old.Id)))
+            if (PresetRemovalError(removed.Id, input: true) is { } error) return error;
+        return CommitPresetChanges(committed with { SavedRegions = regions });
+    }
+
+    private string? CommitOutputs(CapturePreset[] presets)
+    {
+        foreach (var removed in committed.CapturePresets.Where(old => presets.All(p => p.Id != old.Id)))
+            if (PresetRemovalError(removed.Id, input: false) is { } error) return error;
+        return CommitPresetChanges(committed with { CapturePresets = presets });
+    }
+
+    private string? PresetRemovalError(string id, bool input) =>
+        PresetCaptureShortcut.ReferenceError(presetShortcutEditor.Rows, id, input)
+        ?? PresetCaptureShortcut.ReferenceError(committed.PresetCaptureShortcuts ?? [], id, input);
     private string? CommitPresetChanges(AppSettings next)
     {
         if (manualSave) return null;
@@ -490,6 +528,7 @@ internal sealed class SettingsForm : Form
                 SnapDistancePixels = (int)snapDistance.Value, GridStepPixels = (int)gridStep.Value,
                 CapturePresets = presetEditor.Presets,
                 SavedRegions = inputPresetEditor.Regions,
+                PresetCaptureShortcuts = presetShortcutEditor.Rows,
                 ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
                 RecordingShortcut1 = recording1.Value, RecordingShortcut2 = recording2.Value,
                 LastRegionShortcut = lastRegionKey.Value, LastRecipeShortcut = lastRecipeKey.Value, KeepHistory = keepHistory.Checked,
@@ -526,7 +565,7 @@ internal sealed class SettingsForm : Form
     {
         string size = preset.UseFixedCoordinates || preset.Mode == CaptureMode.FixedRegion ? $" / {preset.Bounds.Width}×{preset.Bounds.Height}px" : "";
         string mode = preset.UseFixedCoordinates ? $"固定位置とサイズ（{preset.Bounds.X}, {preset.Bounds.Y}）" : ModeName(preset.Mode);
-        return $"{preset.Name} / {mode}{size}\n画面固定={(preset.FreezeFrame ? "ON" : "OFF")} / カーソル={(preset.IncludeCursor ? "含む" : "含めない")} / 余白={preset.PaddingPixels}px　［編集］";
+        return $"{preset.Name} / {mode}{size}\n画面固定={(preset.FreezeFrame ? "ON" : "OFF")} / マウスカーソル={(preset.IncludeCursor ? "含む" : "含めない")} / 余白={preset.PaddingPixels}px　［編集］";
     }
     internal static string OutputSummary(CapturePreset preset)
     {

@@ -10,11 +10,12 @@ internal static partial class Program
     {
         expected = expected.UpdateDefaultProjections();
         Check(expected.InstantShortcuts.SequenceEqual(actual.InstantShortcuts), "即時キー設定の往復不一致" );
+        Equal(System.Text.Json.JsonSerializer.Serialize(expected.PresetCaptureShortcuts), System.Text.Json.JsonSerializer.Serialize(actual.PresetCaptureShortcuts));
         Equal(System.Text.Json.JsonSerializer.Serialize(expected.SavedRegions), System.Text.Json.JsonSerializer.Serialize(actual.SavedRegions));
         Equal(System.Text.Json.JsonSerializer.Serialize(expected.CapturePresets), System.Text.Json.JsonSerializer.Serialize(actual.CapturePresets));
         Equal(System.Text.Json.JsonSerializer.Serialize(expected.ImageEditors), System.Text.Json.JsonSerializer.Serialize(actual.ImageEditors));
         Equal(System.Text.Json.JsonSerializer.Serialize(expected.VideoEditors), System.Text.Json.JsonSerializer.Serialize(actual.VideoEditors));
-        Equal(expected, actual with { InstantShortcuts = expected.InstantShortcuts, SavedRegions = expected.SavedRegions, CapturePresets = expected.CapturePresets,
+        Equal(expected, actual with { InstantShortcuts = expected.InstantShortcuts, PresetCaptureShortcuts = expected.PresetCaptureShortcuts, SavedRegions = expected.SavedRegions, CapturePresets = expected.CapturePresets,
             ImageEditors = expected.ImageEditors, VideoEditors = expected.VideoEditors });
     }
     static partial void ServiceTests()

@@ -66,10 +66,19 @@ internal sealed partial class TrayApplicationContext
     private KeyboardHook NewHook(AppSettings value, bool enabled = true)
     {
         KeyboardHook? source = null;
-        source = new KeyboardHook(intent => PostCurrent(() => OnCaptureKey(intent)), value, enabled,
-            number => PostCurrent(() => _ = TakeInstantAsync(number)),
-            id => PostCurrent(() => _ = id == AppSettings.LastRecipeKeyId ? TakeSameSettingsAsync() : TakeRegionAsync(id)));
-        return source;
+        try
+        {
+            source = new(intent => PostCurrent(() => OnCaptureKey(intent)), value, enabled,
+                number => PostCurrent(() => _ = TakeInstantAsync(number)),
+                id => PostCurrent(() => _ = id == AppSettings.LastRecipeKeyId ? TakeSameSettingsAsync() : TakeRegionAsync(id)),
+                key => PostCurrent(() => _ = TakePresetShortcutAsync(key)));
+            return source;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException && value.PresetCaptureShortcuts is { Length: > 0 })
+        {
+            string rows = string.Join("、", value.PresetCaptureShortcuts!.Select((row, index) => row.Label(index)));
+            throw new InvalidOperationException($"{ex.Message} 監視対象の割り当て: {rows}", ex);
+        }
 
         void PostCurrent(Action action) => Post(() =>
         {

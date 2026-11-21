@@ -14,7 +14,15 @@ internal static class SettingsHelp
         ["ImportSettings"] = "書き出したJSONや旧版の設定を確認します。「適用」で現在の設定を置き換えます。",
         ["SaveDirectory"] = "ファイル保存とピン留め窓のCtrl+Sで使う保存先です。フォルダの完全パスを指定してください。存在しない場合は保存時に作成します。",
         ["PinnedOutput"] = "静止画を撮影位置へ枠なし・常に最前面の窓として残します。複数枚を並べられます。Ctrlで描画、Shiftでコピー範囲、通常ドラッグで移動します。録画には適用しません。",
-        ["CaptureCommandMethod"] = "範囲選択は実行時に囲んで撮影、固定範囲は指定した物理座標で即時撮影します。生成だけでは撮影しません。",
+        ["CaptureCommandMethod"] = "範囲選択は実行時に範囲を選びます。固定範囲では座標を指定し、入力プリセットに従う場合は登録した撮影方式を使います。",
+        ["PresetCaptureShortcuts"] = "設定済みの組み合わせです。一覧で行を選ぶと下の項目で編集できます。",
+        ["PresetCaptureShortcut"] = "選んだ組み合わせで静止画撮影を開始するキーです。Windows キー・Ctrl・Alt・Shiftと最後のキーを選びます。",
+        ["ShortcutInputPreset"] = "このキーで撮影するときの入力です。「既定を使う」は撮影時点の既定入力を参照します。",
+        ["ShortcutOutputPreset"] = "このキーで撮影するときの出力です。「既定を使う」は撮影時点の既定出力を参照します。",
+        ["AddPresetCaptureShortcut"] = "組み合わせの行を追加します。キーと入出力を選び、設定の「保存」で確定します。",
+        ["DeletePresetCaptureShortcut"] = "選んだ行を削除します。設定の「保存」でキーの登録解除が確定します。",
+        ["OpenInputPresetShortcuts"] = "この入力を使うプリセット撮影の割り当てを開きます。",
+        ["OpenOutputPresetShortcuts"] = "この出力を使うプリセット撮影の割り当てを開きます。",
         ["CaptureCommandInput"] = "撮影条件を使う入力プリセット。既定を選ぶとコマンド実行時の既定入力を使います。",
         ["CaptureCommandOutput"] = "コピー・保存・外部アプリ・ピン留めに使う出力プリセット。既定は実行時の既定出力を使います。",
         ["CaptureCommandX"] = "固定範囲の物理X座標。左側のモニタなどの負座標も指定できます。",
@@ -81,6 +89,7 @@ internal static class SettingsHelp
             {
                 var position = table.GetPositionFromControl(child);
                 if (position.Column != 1 || table.GetControlFromPosition(0, position.Row) is not Label label) continue;
+                if (label.Name.StartsWith("PresetCaptureFieldLabel", StringComparison.Ordinal)) continue;
                 string description = string.Join("\n", All(child).Select(c => tips.GetToolTip(c)).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct());
                 if (description.Length > 0) tips.SetToolTip(label, description);
             }
@@ -97,6 +106,8 @@ internal static class SettingsHelp
 
     private static string? Description(string name)
     {
+        if (name.StartsWith("PresetCaptureFieldLabel", StringComparison.Ordinal))
+            return Descriptions[name[^1] switch { '0' => "PresetCaptureShortcut", '1' => "ShortcutInputPreset", _ => "ShortcutOutputPreset" }];
         if (name == "PreviewRegion") return "登録した位置と寸法の枠だけを表示します。位置が未指定の場合は利用できません。先に座標を指定するか範囲を選んでください。撮影や設定保存は行いません。";
         if (name == "ScreenshotPaddingPixels") return "選択範囲の外側へ上下左右同じ幅の白い余白を追加します。元画像の縮小や周囲の画面の撮り足しはしません。0～4096物理px、0は余白なし。静止画だけに適用し録画には適用しません。";
         if (name == "FileNamePattern") return "{yyyymmdd} 年月日 / {hhmmss} 時分秒 / {ext} 静止画png・録画mp4 / {ocr} OCR文字列 / {region} 範囲名 / {#}・{##} 連番。例: {yyyymmdd}_{hhmmss}.{ext}";
@@ -122,12 +133,12 @@ internal static class SettingsHelp
         if (name == "LastRegionShortcut") return "直前に確定した範囲を選択画面なしで再撮影するキーです。前回範囲がない場合は撮影できません。" + ShortcutHelp;
         if (name == "LastRecipeShortcut") return "成功した直前の静止画と同じ範囲・入出力設定（一時変更を含む）で新しく撮影します。画像履歴とは別で、終了時に記録を破棄します。初期値は未割当です。" + ShortcutHelp;
         if (name.StartsWith("Region", StringComparison.Ordinal) || name is "SavedRegions" or "NewNumericRegion" or "AddLastRegion" or "DrawRegion" or "PickFixedRegion" or "PreviewRegion" or "SaveRegion" or "DeleteRegion" or "CloseRegions")
-            return "入力プリセットの名前・物理pxの位置と寸法・再撮影キーを編集します。設定画面では変更確定時に自動保存します。固定サイズは撮影時に位置を選び、固定位置とサイズは保存した場所を動かさず使用します。";
+            return "入力プリセットの名前・物理pxの位置と寸法を編集します。設定画面では変更確定時に自動保存します。固定サイズは撮影時に位置を選び、固定位置とサイズは保存した場所を動かさず使用します。";
         if (name is "ImageEditorPreset" or "VideoEditorPreset") return "外部編集アプリの実行ファイルとパラメータの入力例です。選ぶと入力欄へ反映します。実際のインストール先に合わせて変更し、保存してください。";
         if (name is "ImageEditorPath" or "VideoEditorPath") return "撮影結果を渡す編集アプリの.exeファイルの完全パスです。外部アプリへの出力がONのときに使用します。登録したSnipping ToolとScreenpressoはWindowsのPNG関連付けで開きます。";
         if (name is "ImageEditorArguments" or "VideoEditorArguments") return "外部アプリへ渡す起動引数です。{file}は完全パス、{directory}はフォルダ、{filename}はファイル名に置換します。空白を含むパスを渡せるよう、\"{file}\"のように引用符で囲んでください。";
         return null;
     }
 
-    private const string ShortcutHelp = " Ctrl・Alt・Shift・Winと最後のキーを選びます。最後のキーを「なし」にすると割当なしです。重複や利用できない組合せは保存時に通知します。Windowsや他のアプリが同じキーを使っている場合は動作が競合することがあります。";
+    private const string ShortcutHelp = " Ctrl・Alt・Shift・Windows キーと最後のキーを選びます。最後のキーを「なし」にすると割当なしです。重複や利用できない組合せは保存時に通知します。Windowsや他のアプリが同じキーを使っている場合は動作が競合することがあります。";
 }

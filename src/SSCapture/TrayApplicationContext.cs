@@ -86,6 +86,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         menu.Items.Add(CreateTimerMenu());
         savedRegionMenu = new ToolStripMenuItem("範囲を再撮影");
         menu.Items.Add(savedRegionMenu);
+        menu.Items.Add(presetCaptureMenu);
         sameSettingsItem = new ToolStripMenuItem("直前と同じ設定で再撮影", null, (_, _) => _ = TakeSameSettingsAsync());
         menu.Items.Add(sameSettingsItem);
         menu.Items.Add("入力プリセット", null, (_, _) => ShowRegions());

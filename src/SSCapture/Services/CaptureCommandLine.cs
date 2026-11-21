@@ -7,14 +7,19 @@ namespace SSCapture.Services;
 internal sealed record CaptureCommandRequest(Rectangle? Region = null, string? InputPresetId = null, string? OutputPresetId = null)
 {
     internal CaptureSchedule? Schedule { get; init; }
+    internal bool UsePresetMode { get; init; }
 }
 
-internal sealed record ResolvedCaptureCommand(CaptureCommandRequest Request, AppSettings Settings, SavedRegion InputPreset)
+internal sealed record ResolvedCaptureCommand(CaptureCommandRequest Request, AppSettings Settings, SavedRegion InputPreset, CapturePreset? OutputPreset = null)
 {
+    internal Rectangle? DirectBounds(Func<IReadOnlyList<DisplayLayout>>? readDisplays = null) => Request.Region ??
+        (Request.UsePresetMode && InputPreset.UseFixedCoordinates
+            ? RegionCoordinates.Resolve(InputPreset, (readDisplays ?? RegionCoordinates.ReadDisplays)()) : null);
+
     internal CaptureOptions SelectionOptions()
     {
         // 選択方式では登録座標や全画面設定を即時撮影へ読み替えない。
-        SavedRegion input = InputPreset with
+        SavedRegion input = Request.UsePresetMode ? InputPreset : InputPreset with
         {
             UseFixedCoordinates = false,
             Mode = InputPreset.UseFixedCoordinates || InputPreset.Mode == CaptureMode.FullScreen ? CaptureMode.Rectangle : InputPreset.Mode
@@ -23,7 +28,7 @@ internal sealed record ResolvedCaptureCommand(CaptureCommandRequest Request, App
             IncludeCursor: Settings.IncludeCursor, FixedSize: new(Settings.FixedWidth, Settings.FixedHeight),
             FixedAnchor: Settings.FixedCaptureAnchor, LimitToStartingMonitor: Settings.LimitToStartingMonitor,
             Grid20: Settings.Grid20, ShowSelectionGuide: Settings.ShowSelectionGuide, OutputSettings: Settings,
-            DimCaptureBackground: Settings.DimCaptureBackground, InitialInputPreset: input);
+            DimCaptureBackground: Settings.DimCaptureBackground, InitialInputPreset: input, InitialOutputPreset: OutputPreset);
     }
 }
 
@@ -36,6 +41,7 @@ internal static class CaptureCommandLine
     internal static CaptureCommandRequest Parse(IReadOnlyList<string> args)
     {
         bool mode = false;
+        bool usePresetMode = false;
         Rectangle? region = null;
         string? input = null, output = null;
         Dictionary<string, string> scheduleOptions = new(StringComparer.Ordinal);
@@ -44,9 +50,11 @@ internal static class CaptureCommandLine
             string option = args[index];
             switch (option)
             {
+                case "--capture-preset":
                 case "--capture-select":
                     if (mode) throw new ArgumentException("撮影方式は1つだけ指定してください。");
                     mode = true;
+                    usePresetMode = option == "--capture-preset";
                     break;
                 case "--capture-region":
                     if (mode) throw new ArgumentException("撮影方式は1つだけ指定してください。");
@@ -82,8 +90,8 @@ internal static class CaptureCommandLine
                 default: throw new ArgumentException("不明な撮影引数です: " + option);
             }
         }
-        if (!mode) throw new ArgumentException("--capture-selectまたは--capture-regionを指定してください。");
-        return new(region, input, output) { Schedule = CaptureTimerArguments.Build(scheduleOptions) };
+        if (!mode) throw new ArgumentException("--capture-select、--capture-region、--capture-presetのいずれかを指定してください。");
+        return new(region, input, output) { UsePresetMode = usePresetMode, Schedule = CaptureTimerArguments.Build(scheduleOptions) };
     }
 
     internal static void ValidateRegion(Rectangle region)
@@ -96,22 +104,22 @@ internal static class CaptureCommandLine
 
     internal static ResolvedCaptureCommand Resolve(CaptureCommandRequest request, AppSettings settings)
     {
-        if (request.Region is Rectangle bounds) ValidateRegion(bounds);
+        if (request.Region is Rectangle bounds)
+        {
+            if (request.UsePresetMode) throw new ArgumentException("撮影方式は1つだけ指定してください。");
+            ValidateRegion(bounds);
+        }
         settings = CaptureSettingsSnapshot.Copy(settings);
         settings.Validate();
         settings = settings.EnsurePresets();
-        SavedRegion input = request.InputPresetId is null ? settings.SavedRegions.Single(p => p.IsDefault)
-            : settings.SavedRegions.SingleOrDefault(p => p.Id == request.InputPresetId)
-                ?? throw new ArgumentException("入力プリセットが見つかりません: " + request.InputPresetId);
-        CapturePreset output = request.OutputPresetId is null
-            ? request.Schedule is CaptureSchedule.Periodic ? CaptureTimerOutput.InitialPeriodic(settings) : settings.CapturePresets.Single(p => p.IsDefault)
-            : settings.CapturePresets.SingleOrDefault(p => p.Id == request.OutputPresetId)
-                ?? throw new ArgumentException("出力プリセットが見つかりません: " + request.OutputPresetId);
-        settings = output.Apply(input.Apply(settings)).ResolveEditors();
+        var preset = ResolvedPresetCapture.Resolve(settings, request.InputPresetId, request.OutputPresetId);
+        var output = request.OutputPresetId is null && request.Schedule is CaptureSchedule.Periodic
+            ? CaptureTimerOutput.InitialPeriodic(settings) : preset.Output;
+        settings = output == preset.Output ? preset.Settings : output.Apply(preset.Input.Apply(settings)).ResolveEditors();
         settings.Validate();
         if (settings.DefaultDestination == OutputDestination.None)
             throw new ArgumentException("出力先がすべてOFFです。出力プリセットを確認してください。");
-        return new(request, settings, input);
+        return new(request, settings, preset.Input, output);
     }
 
     internal static string Generate(string executable, CaptureCommandRequest request)
@@ -122,11 +130,12 @@ internal static class CaptureCommandLine
         List<string> args = [];
         if (request.Region is Rectangle bounds)
         {
+            if (request.UsePresetMode) throw new ArgumentException("撮影方式は1つだけ指定してください。");
             ValidateRegion(bounds);
             args.AddRange(["--capture-region", bounds.X.ToString(CultureInfo.InvariantCulture), bounds.Y.ToString(CultureInfo.InvariantCulture),
                 bounds.Width.ToString(CultureInfo.InvariantCulture), bounds.Height.ToString(CultureInfo.InvariantCulture)]);
         }
-        else args.Add("--capture-select");
+        else args.Add(request.UsePresetMode ? "--capture-preset" : "--capture-select");
         if (request.InputPresetId is not null) args.AddRange(["--input-preset", request.InputPresetId]);
         if (request.OutputPresetId is not null) args.AddRange(["--output-preset", request.OutputPresetId]);
         CaptureTimerArguments.Append(args, request.Schedule);
@@ -140,7 +149,8 @@ internal static partial class CaptureCommandRunner
 {
     internal static async Task<int> ExecuteAsync(ResolvedCaptureCommand command, OutputRouter output,
         Func<Rectangle, AppSettings, Task<(Bitmap Image, CaptureMetadata? Metadata)>>? take = null,
-        Func<CaptureOptions, Task<CaptureOutcome>>? select = null, Action<string, bool>? report = null)
+        Func<CaptureOptions, Task<CaptureOutcome>>? select = null, Action<string, bool>? report = null,
+        Func<IReadOnlyList<DisplayLayout>>? readPresetDisplays = null)
     {
         try
         {
@@ -150,7 +160,7 @@ internal static partial class CaptureCommandRunner
             if (settings.DefaultDestination == OutputDestination.None) throw new ArgumentException("出力先がすべてOFFです。");
             DateTimeOffset capturedAt = DateTimeOffset.Now;
             bool delivered = false;
-            if (command.Request.Region is Rectangle bounds)
+            if (command.DirectBounds(readPresetDisplays) is Rectangle bounds)
             {
                 CaptureCommandLine.ValidateRegion(bounds);
                 var capture = await (take ?? InstantCapture.TakeWithContextAsync)(bounds, settings);

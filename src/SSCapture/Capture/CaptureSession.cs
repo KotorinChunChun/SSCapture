@@ -156,21 +156,27 @@ internal sealed partial class SessionController
         {
             if (!OutputSettings.ShowPointerGuide) return null;
             if (SelectingControl)
-                return $"{ModifierHint}\n{(ControlBounds.IsEmpty ? "対象のコントロールが見つかりません" : "左ボタンを離して部品を撮影")}　{(OutputSettings.CaptureMouse.DragRight ? "ESC / 右クリックで取り消し" : "ESCで取り消し")}";
-            if (TwoPointSelection)
-                return ModifierHint ?? (waitingForSecondPoint
-                    ? "終点をクリック　" + (OutputSettings.CaptureMouse.DragRight ? "ESC / 右クリックで取り消し" : "ESCで取り消し")
-                    : "始点をクリック");
-            if (!HasPointerPress) return ModifierHint ?? (windowPreview?.Frame switch
+                return $"{ModifierHint}\n{(ControlBounds.IsEmpty ? "対象のコントロールが見つかりません" : "左ボタンを離して部品を撮影")}　{SelectionGuideText.CancelHint(OutputSettings.CaptureMouse.DragRight)}";
+            if (TwoPointSelection && pressedButton != MouseButtons.Middle)
             {
-                { IsFaulted: true } => windowPreview.Frame.Exception?.GetBaseException().Message,
-                { IsCompleted: false } => "WGCプレビューを取得中",
-                _ => null
-            });
+                string step = waitingForSecondPoint ? "終点をクリック" : "始点をクリック";
+                string hint = ModifierHint is null ? step : $"{ModifierHint}\n{step}";
+                return $"{hint}　{SelectionGuideText.CancelHint(waitingForSecondPoint && OutputSettings.CaptureMouse.DragRight)}";
+            }
+            if (!HasPointerPress)
+            {
+                string? idleHint = ModifierHint ?? (windowPreview?.Frame switch
+                {
+                    { IsFaulted: true } => windowPreview.Frame.Exception?.GetBaseException().Message,
+                    { IsCompleted: false } => "WGCプレビューを取得中",
+                    _ => null
+                });
+                return idleHint is null ? null : $"{idleHint}　{SelectionGuideText.CancelHint(false)}";
+            }
             string operation = pressedButton == MouseButtons.Middle ? "モニター全体を撮影"
                 : Mode == CaptureMode.FixedRegion ? "固定範囲を撮影"
                 : !gesture.HasDragged || Mode == CaptureMode.Window ? "ウィンドウを撮影" : "選択範囲を撮影";
-            string cancel = OutputSettings.CaptureMouse.DragRight ? "ESC / 右クリックで取り消し" : "ESCで取り消し";
+            string cancel = SelectionGuideText.CancelHint(OutputSettings.CaptureMouse.DragRight);
             if (FreeMiddleDrag) return $"{operation}　{cancel}\nドラッグ：複数デスクトップを合成";
             if (HighlightWindow && options.Intent == CaptureIntent.Screenshot && pressedButton == MouseButtons.Left)
                 return $"{operation}　{cancel}\nドラッグ：複数ウィンドウを合成";
@@ -245,7 +251,7 @@ internal sealed partial class SessionController
         this.windows = windows.ToArray();
         gesture = CreateGesture(Mode, options.Grid20);
         selectedInput = options.InitialInputPreset ?? OutputSettings.SavedRegions.FirstOrDefault(p => p.IsDefault) ?? Services.SavedRegion.FromSettings("撮影開始時", OutputSettings with { DefaultMode = Mode, FixedWidth = activeFixedSize.Width, FixedHeight = activeFixedSize.Height, FixedCaptureAnchor = activeAnchor });
-        selectedOutput = OutputSettings.CapturePresets.FirstOrDefault(p => p.IsDefault) ?? Services.CapturePreset.FromSettings("撮影開始時", OutputSettings with { DefaultDestination = Destination });
+        selectedOutput = options.InitialOutputPreset ?? OutputSettings.CapturePresets.FirstOrDefault(p => p.IsDefault) ?? Services.CapturePreset.FromSettings("撮影開始時", OutputSettings with { DefaultDestination = Destination });
         SelectionMenu = new CaptureContextMenu(Destination, ChangeDestination,
             () => FinishCommand(true), Cancel, Mode, options.Grid20, ChangeMode, ChangeGrid20, () => CaptureDesktop(menuPointer),
             showGuide: ShowSelectionGuide, changeGuide: ChangeGuideVisibility, changeRatio: ChangeAspectRatio,
@@ -635,7 +641,9 @@ internal sealed partial class SessionController
         guide = new UI.SelectionGuideForm(owner.MonitorBounds, options.Intent, () => { if (!refreshing) ApplicationDeactivated(); },
             Mode == CaptureMode.FixedRegion ? activeFixedSize : null, HandleCommandKey, activeAnchor, AltKeyChanged, Mode,
             dismiss: () => ChangeGuideVisibility(false), spaceEnabled: OutputSettings.CaptureKeys.SpaceEnabled,
-            workingArea: Screen.GetWorkingArea(owner.MonitorBounds), selectionMethod: OutputSettings.SelectionMethod);
+            workingArea: Screen.GetWorkingArea(owner.MonitorBounds), beforeKeys: OutputSettings.CaptureBeforeKeys,
+            dragKeys: OutputSettings.CaptureKeys, mouse: OutputSettings.CaptureMouse, canCrossMonitors: CanGuideCrossMonitors,
+            selectionMethod: OutputSettings.SelectionMethod);
         guide.SetShared(OutputSettings.ShareCapturePresentation);
         guide.Show(owner);
         UpdateGuidePointer();
@@ -661,9 +669,13 @@ internal sealed partial class SessionController
         if (enabled) ReplaceGuide(); else guide?.Hide();
     }
 
+    private bool CanGuideCrossMonitors => OutputSettings.LimitToStartingMonitor && Snapshot.Monitors.Count > 1;
+
     private void UpdateGuidePointer()
     {
-        if (ShowSelectionGuide) guide?.UpdatePointer(gesture.RawCurrent, gesture.IsPressed && gesture.HasDragged
+        if (!ShowSelectionGuide || guide is null) return;
+        guide.UpdateOperations(gesture.IsPressed, CanGuideCrossMonitors);
+        guide.UpdatePointer(gesture.RawCurrent, gesture.IsPressed && gesture.HasDragged
             || FreeMiddleDrag && targetDrag?.Path.Count > 1);
     }
 
@@ -830,11 +842,13 @@ internal sealed partial class SessionController
             && modifiers == CaptureModifiers.Win && action is (CaptureKeyAction.HighlightWindow or CaptureKeyAction.CrossMonitor);
         bool changed = modifiers != activeModifiers || dragging != activeDrag || idleWindowsMove != movingWhileIdle;
         var effect = movingWhileIdle ? CaptureKeyAction.CrossMonitor : action;
-        string? hint = modifiers == CaptureModifiers.None ? altSnapEnabled ? "ウィンドウスナップ ON" : null
-            : $"{CaptureKeyMap.Label(modifiers)} : {CaptureKeyMap.Describe(effect)}";
+        string? hint = altSnapEnabled ? "ウィンドウスナップ ON" : null;
+        if (SelectionGuideText.Applies(effect, Mode, dragging, CanGuideCrossMonitors))
+            hint = $"{CaptureKeyMap.Label(modifiers)} : {CaptureKeyMap.Describe(effect)}";
         if (!HasPointerPress && modifiers == CaptureModifiers.Win && action == CaptureKeyAction.HighlightWindow
             && (windowsKey?.CanTap ?? true))
-            hint += HighlightWindow ? "\nWin離す：元の撮影モードに戻る" : "\nWin離す：ウィンドウ撮影モードに変更";
+            hint += "\n" + CaptureKeyMap.Label(CaptureModifiers.Win) + (HighlightWindow
+                ? "を離すと元の撮影モードに戻る" : "を離すとウィンドウ撮影モードに変更");
         bool hintChanged = ModifierHint != hint;
         ModifierHint = hint;
         CaptureKeyAction pressedAction = windowsTap && !HasPointerPress && !dragging ? bindings.Win

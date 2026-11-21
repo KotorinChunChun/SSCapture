@@ -37,6 +37,8 @@ internal sealed class SettingsStore(string path)
     {
         if (root.ValueKind != JsonValueKind.Object) throw new JsonException("設定はJSONオブジェクトで指定してください。");
         AppSettings settings = root.Deserialize<AppSettings>(strict ? StrictReadOptions : Options) ?? throw new JsonException("設定が空です。");
+        if (root.TryGetProperty(nameof(AppSettings.PresetCaptureShortcuts), out _) && settings.PresetCaptureShortcuts is null)
+            throw new JsonException("プリセット撮影の一覧を指定してください。");
         // 旧設定で省略されていた暗転は、当時の初期値OFFを維持する。
         if (!root.TryGetProperty(nameof(AppSettings.DimCaptureBackground), out _))
             settings = settings with { DimCaptureBackground = false };
@@ -72,7 +74,9 @@ internal sealed class SettingsStore(string path)
         if (!root.TryGetProperty("SchemaVersion", out var editorVersion) || editorVersion.GetInt32() < 3)
             settings = settings.MigrateEditors();
         settings.Validate();
-        return settings.ApplyDefaults();
+        settings = settings.ApplyDefaults();
+        settings.Validate();
+        return settings;
     }
 
     public void Save(AppSettings settings) => Save(settings, import: false);

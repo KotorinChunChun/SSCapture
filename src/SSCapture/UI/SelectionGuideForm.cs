@@ -13,10 +13,20 @@ internal sealed class SelectionGuideForm : Form
     private bool hiddenForPointer;
     private bool shared;
     private CaptureAnchor currentAnchor;
+    private readonly CaptureMode mode;
+    private readonly CaptureIntent intent;
+    private readonly Size? fixedSize;
+    private readonly CaptureKeyMap beforeKeys, dragKeys;
+    private readonly CaptureMouseMap mouse;
+    private readonly bool spaceEnabled;
+    private readonly CaptureSelectionMethod selectionMethod;
+    private bool dragging, canCrossMonitors;
+    private readonly Label help;
     internal SelectionGuideForm(Rectangle monitor, CaptureIntent intent, Action cancel, Size? fixedSize = null,
         Func<Keys, bool>? handleKey = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft, Action? modifiersChanged = null,
         CaptureMode mode = CaptureMode.Rectangle, Action? dismiss = null, bool spaceEnabled = true, Rectangle? workingArea = null,
-        CaptureSelectionMethod selectionMethod = CaptureSelectionMethod.Drag)
+        CaptureKeyMap? beforeKeys = null, CaptureKeyMap? dragKeys = null, CaptureMouseMap? mouse = null,
+        bool canCrossMonitors = false, CaptureSelectionMethod selectionMethod = CaptureSelectionMethod.Drag)
     {
         this.cancel = cancel;
         this.handleKey = handleKey;
@@ -26,6 +36,15 @@ internal sealed class SelectionGuideForm : Form
         Rectangle available = Rectangle.Intersect(monitor, workingArea ?? monitor);
         workArea = available.Width > 0 && available.Height > 0 ? available : monitor;
         currentAnchor = fixedAnchor;
+        this.mode = fixedSize.HasValue ? CaptureMode.FixedRegion : mode;
+        this.intent = intent;
+        this.fixedSize = fixedSize;
+        this.beforeKeys = beforeKeys ?? CaptureKeyMap.BeforeDefaults;
+        this.dragKeys = dragKeys ?? CaptureKeyDefaults.Current.Drag;
+        this.mouse = mouse ?? new CaptureMouseMap();
+        this.spaceEnabled = spaceEnabled;
+        this.selectionMethod = selectionMethod;
+        this.canCrossMonitors = canCrossMonitors;
         Name = "SelectionGuide";
         Text = WindowTitle.Create(intent == CaptureIntent.Recording ? "録画範囲の選択" : "撮影範囲の選択");
         Font = new Font("Yu Gothic UI", 11F);
@@ -35,24 +54,16 @@ internal sealed class SelectionGuideForm : Form
         TopMost = true;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(720, 116);
         StartPosition = FormStartPosition.Manual;
+        help = new Label { Name = "SelectionHelp", Dock = DockStyle.Fill, Padding = new Padding(8, 4, 8, 4) };
+        Controls.Add(help);
+        UpdateText();
         PositionGuide();
-        Controls.Add(new Label
-        {
-            Name = "SelectionHelp", Dock = DockStyle.Fill, Padding = new Padding(8, 4, 8, 4),
-            Text = fixedSize is Size dimensions
-                ? $"固定サイズ {dimensions.Width} × {dimensions.Height} px　基点: {fixedAnchor.Label()}　左クリック / Enter: 確定\n{(spaceEnabled ? "Space: 基点切替（四隅・中心）　" : "")}矢印: 1px　Shift＋矢印: 10px\n中央クリック: 画面全体　右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断　画面外の枠は確定不可"
-                : mode == CaptureMode.Rectangle
-                    ? selectionMethod == CaptureSelectionMethod.TwoClicks
-                        ? "左クリック2回で始点と終点を指定　中クリックで画面全体を撮影\n2点目の待機中はEscまたは右クリックで選択を取り消し\n選択を始める前の右クリックでメニューを開く"
-                        : $"左クリック: ウィンドウ　中央クリック: 画面全体　左ドラッグ: 範囲選択\n{(spaceEnabled ? "Space: 対角の起点に切り替え　" : "")}右クリック: メニュー・縦横比\nEsc: 撮影終了　ドラッグ中の右クリック / Esc: 選択だけ中断"
-                    : $"左クリック: ウィンドウ　中央クリック: 画面全体\n{(mode == CaptureMode.Freeform ? "左ドラッグ: 輪郭を囲む" : intent == CaptureIntent.Screenshot ? "左ドラッグ: 複数ウィンドウを合成" : "ウィンドウを選んで左クリックで確定")}\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
-        });
     }
 
     protected override void OnShown(EventArgs e)
     {
+        ResizeToText();
         PositionGuide();
         base.OnShown(e);
     }
@@ -102,12 +113,45 @@ internal sealed class SelectionGuideForm : Form
         if (hide) Hide(); else Show();
     }
 
-    internal void ShowSaveError(string message) => Controls["SelectionHelp"]!.Text =
-        "案内の表示設定を保存できませんでした。撮影は継続できます。\n" + message;
+    internal void ShowSaveError(string message)
+    {
+        help.Text = "案内の表示設定を保存できませんでした。撮影は継続できます。\n" + message;
+        ResizeToText();
+    }
+
+    internal void UpdateOperations(bool dragPhase, bool crossMonitors)
+    {
+        if (dragging == dragPhase && canCrossMonitors == crossMonitors) return;
+        dragging = dragPhase;
+        canCrossMonitors = crossMonitors;
+        UpdateText();
+    }
+
     internal void UpdateAnchor(CaptureAnchor anchor)
     {
-        Controls["SelectionHelp"]!.Text = Controls["SelectionHelp"]!.Text.Replace("基点: " + currentAnchor.Label(), "基点: " + anchor.Label());
         currentAnchor = anchor;
+        UpdateText();
+    }
+
+    private void UpdateText()
+    {
+        help.Text = SelectionGuideText.Create(mode, intent, fixedSize, currentAnchor,
+            dragging ? dragKeys : beforeKeys, mouse, dragging, spaceEnabled, canCrossMonitors, selectionMethod);
+        ResizeToText();
+    }
+
+    private void ResizeToText()
+    {
+        int frameWidth = Width - ClientSize.Width;
+        int frameHeight = Height - ClientSize.Height;
+        int width = Math.Min(LogicalToDeviceUnits(720), Math.Max(1, workArea.Width - frameWidth - 32));
+        var textArea = new Size(Math.Max(1, width - help.Padding.Horizontal), int.MaxValue);
+        int preferredHeight = TextRenderer.MeasureText(help.Text, help.Font, textArea, TextFormatFlags.WordBreak).Height
+            + help.Padding.Vertical + LogicalToDeviceUnits(8);
+        ClientSize = new Size(width, Math.Min(preferredHeight, Math.Max(1, workArea.Height - frameHeight - 52)));
+        if (IsHandleCreated && workArea.Contains(Location))
+            Location = new Point(Math.Clamp(Left, workArea.Left, Math.Max(workArea.Left, workArea.Right - Width)),
+                Math.Clamp(Top, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - Height)));
     }
     protected override bool ShowWithoutActivation => true;
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)

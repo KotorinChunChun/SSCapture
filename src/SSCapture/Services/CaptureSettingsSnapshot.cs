@@ -9,7 +9,8 @@ internal static class CaptureSettingsSnapshot
         CapturePresets = settings.CapturePresets.ToArray(),
         ImageEditors = settings.ImageEditors.ToArray(),
         VideoEditors = settings.VideoEditors.ToArray(),
-        InstantShortcuts = settings.InstantShortcuts.ToArray()
+        InstantShortcuts = settings.InstantShortcuts.ToArray(),
+        PresetCaptureShortcuts = settings.PresetCaptureShortcuts?.ToArray()
     };
 
     // 撮影の入出力条件は当時のまま。履歴・通知等の運用設定だけは現在値を使う。

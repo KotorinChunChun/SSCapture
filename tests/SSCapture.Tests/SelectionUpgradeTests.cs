@@ -108,7 +108,7 @@ internal static partial class Program
                 Check(session.HighlightWindow, "ウィンドウ撮影で対象が強調されない");
                 Equal(Rectangle.Empty, session.HighlightedWindow); // Without a WGC frame the desktop crop stays dimmed.
                 session.ApplyPointerInput(new(20, 20), CaptureModifiers.Ctrl);
-                Equal("Ctrl : なし", session.ModifierHint);
+                Equal<string?>(null, session.ModifierHint);
                 Equal(Rectangle.Empty, session.HighlightedWindow);
                 session.ApplyPointerInput(new(20, 20), CaptureModifiers.None, windowsTap: true);
                 Equal(CaptureMode.Rectangle, session.Mode);
@@ -133,7 +133,7 @@ internal static partial class Program
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(session)!;
                 gesture.Begin(new(100, 100), new(8, 8));
                 session.ApplyPointerInput(new(160, 150), CaptureModifiers.Win);
-                Equal("Win : なし", session.ModifierHint);
+                Equal<string?>(null, session.ModifierHint);
                 session.ApplyPointerInput(new(180, 170), CaptureModifiers.None, windowsTap: true);
                 Equal(CaptureMode.Rectangle, session.Mode);
                 Check(gesture.IsPressed && gesture.HasDragged && !session.HighlightWindow, "Win単押しでドラッグ状態が変わった");

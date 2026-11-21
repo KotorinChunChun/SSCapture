@@ -175,7 +175,7 @@ internal static partial class Program
             feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None,
                 NotificationImage: new(bitmap, directory), CaptureSettings: settings), settings);
             Check(toast.Activate is null && toast.Actions!.OpenFolder is null && toast.Actions.Edit is not null, "Clipboard通知の可否が不正");
-            Check(toast.Actions!.RepeatHint.Contains("Ctrl+F11"), "再実行キーがない");
+            Check(toast.Actions!.RepeatHint.Contains("Ctrl＋F11"), "再実行キーがない");
             feedback.Notify(new(CaptureIntent.Recording, OutputDestination.File, OutputDestination.None, SavedPath: "video.mp4", CaptureSettings: settings), settings with { LastRecipeShortcut = "" });
             Check(toast.Actions!.OpenFolder is not null && toast.Actions.Edit is null, "画像アプリを動画の既定として流用");
             Equal("", toast.Actions.RepeatHint);

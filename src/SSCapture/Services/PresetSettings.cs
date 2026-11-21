@@ -5,7 +5,7 @@ internal static class PresetSettings
     internal static AppSettings EnsurePresets(this AppSettings settings)
     {
         settings = EnsureExternalApplications(settings);
-        if (settings.PresetSchemaVersion >= 2) return UpgradePresets(settings);
+        if (settings.PresetSchemaVersion >= 2) return PresetCaptureShortcut.Migrate(UpgradePresets(settings));
         settings = EnsureLegacyPresets(settings);
         var inputs = settings.SavedRegions.ToList();
         var outputs = settings.CapturePresets.ToList();
@@ -35,7 +35,7 @@ internal static class PresetSettings
                 with { Id = UniqueId(id, outputs.Select(p => p.Id)) });
         }
         // 削除した初期候補を次の起動で復活させない。既定や既存の登録内容には触れない。
-        return UpgradePresets(settings with { PresetSchemaVersion = 2, SavedRegions = inputs.ToArray(), CapturePresets = outputs.ToArray() });
+        return PresetCaptureShortcut.Migrate(UpgradePresets(settings with { PresetSchemaVersion = 2, SavedRegions = inputs.ToArray(), CapturePresets = outputs.ToArray() }));
     }
     private static AppSettings UpgradePresets(AppSettings settings)
     {

@@ -113,7 +113,7 @@ internal static partial class Program
                             }
                             else await Down(overlay);
                             string expected = middle ? "モニター全体を撮影" : "ウィンドウを撮影";
-                            Equal(expected + "　ESC / 右クリックで取り消し" + (middle ? "\nドラッグ：複数デスクトップを合成" : ""), session.PointerHint);
+                            Equal(expected + "　Esc / 右クリックで取り消し" + (middle ? "\nドラッグ：複数デスクトップを合成" : ""), session.PointerHint);
                             if (escape) { await Key(overlay, 0x1B, true); await Key(overlay, 0x1B, false); }
                             else { input.RightDown(); await Task.Delay(60); input.RightUp(); }
                             if (middle) input.MiddleUp(); else input.LeftUp();

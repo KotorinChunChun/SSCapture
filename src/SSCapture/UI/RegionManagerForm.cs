@@ -54,7 +54,8 @@ internal sealed class RegionManagerForm : Form
     public RegionManagerForm(SavedRegion[] regions, SavedRegion? lastRegion,
         Func<Size?, Task<Rectangle?>> selectRegion, Func<SavedRegion[], string?> saveRegions,
         Func<IReadOnlyList<DisplayLayout>>? displays = null,
-        Func<Size?, CaptureAnchor, Task<Rectangle?>>? selectAnchoredRegion = null, bool embedded = false, AppSettings? profileSettings = null)
+        Func<Size?, CaptureAnchor, Task<Rectangle?>>? selectAnchoredRegion = null, bool embedded = false, AppSettings? profileSettings = null,
+        Action<string>? openPresetShortcuts = null)
     {
         this.profileSettings = profileSettings;
         this.regions = regions.Select(Clone).ToList();
@@ -102,7 +103,7 @@ internal sealed class RegionManagerForm : Form
         list.Format += (_, e) =>
         {
             if (e.ListItem is SavedRegion region)
-                e.Value = $"{(region.IsDefault ? "★ " : "")}{region.Name} / {(string.IsNullOrWhiteSpace(region.Shortcut) ? "なし" : region.Shortcut)} / {(region.UseFixedCoordinates ? $"({region.Bounds.X}, {region.Bounds.Y}) {region.Bounds.Width}×{region.Bounds.Height}" : SettingsForm.ModeName(region.Mode))}";
+                e.Value = $"{(region.IsDefault ? "★ " : "")}{region.Name}{(openPresetShortcuts is null ? " / " + KeyDisplay.Binding(region.Shortcut) : "")} / {(region.UseFixedCoordinates ? $"({region.Bounds.X}, {region.Bounds.Y}) {region.Bounds.Width}×{region.Bounds.Height}" : SettingsForm.ModeName(region.Mode))}";
         };
         left.Controls.Add(list, 0, 0);
         var addNumeric = Button("新規（数値入力）", "NewNumericRegion", ButtonRole.Secondary);
@@ -123,7 +124,15 @@ internal sealed class RegionManagerForm : Form
         name = new TextBox { Name = "RegionName", Dock = DockStyle.Fill, MaxLength = 120 };
         AddField(editor, "名前", name, 0);
         shortcut = new HotkeyEditor("RegionShortcut", "") { Dock = DockStyle.Fill };
-        AddField(editor, "再撮影ショートカット", shortcut, 1);
+        Control shortcutField = shortcut;
+        if (openPresetShortcuts is not null)
+        {
+            var open = Button("プリセット撮影を設定", "OpenInputPresetShortcuts", ButtonRole.Secondary);
+            open.Click += (_, _) => { if (StoreCurrent() && editing is { } preset) openPresetShortcuts(preset.Id); };
+            shortcutField = open;
+            Disposed += (_, _) => shortcut.Dispose();
+        }
+        AddField(editor, "ショートカットキー", shortcutField, 1);
         var dimensions = new TableLayoutPanel { Name = "RegionDimensions", Dock = DockStyle.Fill,
             ColumnCount = 4, RowCount = 2, Margin = Padding.Empty };
         dimensions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));
@@ -187,7 +196,7 @@ internal sealed class RegionManagerForm : Form
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2 };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 184)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         header.RowStyles.Add(new RowStyle(SizeType.Percent, 50)); header.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        foreach (var control in new Control[] { name, shortcut })
+        foreach (var control in new Control[] { name, shortcutField })
         {
             int row = editor.GetRow(control); var label = editor.GetControlFromPosition(0, row)!;
             editor.Controls.Remove(label); editor.Controls.Remove(control); header.Controls.Add(label, 0, row); header.Controls.Add(control, 1, row); editor.RowStyles[row].Height = 0;
@@ -203,7 +212,7 @@ internal sealed class RegionManagerForm : Form
         if (profileSettings is not null) captureMode.Items.Add("固定位置とサイズ");
         coordinates = new CheckBox { Name = "InputFixedCoordinates", Text = "登録した座標を使用する", AutoSize = true, Dock = DockStyle.Fill }; AddField(conditions, "位置", coordinates, 1);
         freezeFrame = new CheckBox { Name = "FreezeFrame", Text = "撮影開始時の画面を固定", AutoSize = true, Dock = DockStyle.Fill }; AddField(conditions, "撮影タイミング", freezeFrame, 2);
-        includeCursor = new CheckBox { Name = "IncludeCursor", Text = "画像・動画に含める", AutoSize = true, Dock = DockStyle.Fill }; AddField(conditions, "カーソル", includeCursor, 3);
+        includeCursor = new CheckBox { Name = "IncludeCursor", Text = "画像・動画に含める", AutoSize = true, Dock = DockStyle.Fill }; AddField(conditions, "マウスカーソル", includeCursor, 3);
         padding = Number("ScreenshotPaddingPixels", 0, ScreenshotPadding.MaximumPixels); AddField(conditions, "画像の余白 (px)", padding, 4);
         selectionMethod = new ComboBox { Name = "SelectionMethod", Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
         selectionMethod.Items.AddRange(["ドラッグ", "2点クリック"]);
@@ -212,7 +221,7 @@ internal sealed class RegionManagerForm : Form
         var profileButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false }; conditions.Controls.Add(profileButtons, 0, 6); conditions.SetColumnSpan(profileButtons, 2);
         var duplicate = Button("複製", "DuplicateInputPreset", ButtonRole.Secondary); duplicate.Width = 120; duplicate.Dock = DockStyle.None;
         duplicate.Click += (_, _) => { string copiedName = name.Text; list.ClearSelected(); editing = null; automaticName = false; name.Text = copiedName + "のコピー"; }; profileButtons.Controls.Add(duplicate);
-        var makeDefault = Button("既定にする", "DefaultInputPreset", ButtonRole.Secondary); makeDefault.Width = 144; makeDefault.Dock = DockStyle.None;
+        var makeDefault = Button("★既定にする", "DefaultInputPreset", ButtonRole.Secondary); makeDefault.Width = 144; makeDefault.Dock = DockStyle.None;
         foreach (var button in new[] { duplicate, makeDefault })
         { button.AutoSize = true; button.MinimumSize = new Size(button.Width, 36); button.Height = Math.Max(36, button.GetPreferredSize(Size.Empty).Height); }
         makeDefault.Click += (_, _) => MakeDefault(); profileButtons.Controls.Add(makeDefault);
@@ -255,7 +264,7 @@ internal sealed class RegionManagerForm : Form
         if (profileSettings is null)
         {
             body.Controls.Remove(right); boundsPage.Controls.Remove(editor); body.Controls.Add(editor, 1, 0);
-            foreach (var control in new Control[] { name, shortcut })
+            foreach (var control in new Control[] { name, shortcutField })
             {
                 int row = header.GetRow(control); var label = header.GetControlFromPosition(0, row)!;
                 header.Controls.Remove(label); header.Controls.Remove(control); editor.Controls.Add(label, 0, row); editor.Controls.Add(control, 1, row); editor.RowStyles[row].Height = 44;

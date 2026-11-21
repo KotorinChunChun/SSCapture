@@ -138,6 +138,7 @@ internal sealed partial class TrayApplicationContext
         RefreshTimerAvailability();
         retryOutputItem.Enabled = output.HasPendingRetry && !busy && pendingRecording is null && recorder is null;
         sameSettingsItem.Enabled = recipes.Current is not null && !busy && pendingRecording is null && recorder is null;
+        RefreshPresetCaptureMenu();
         pause.Enabled = settings.HasShortcuts;
         pause.Checked = hook is null || !hook.Enabled;
         foreach (var (mode, item) in modeItems)
@@ -155,6 +156,8 @@ internal sealed partial class TrayApplicationContext
         {
             Enabled = lastRegion is not null || recipes.LastRange != LastRangeReplay.SavedRectangle
         };
+        lastItem.ShortcutKeyDisplayString = HotkeyBinding.Parse(settings.LastRegionShortcut) is { } last ? KeyDisplay.Binding(last) : "";
+        sameSettingsItem.ShortcutKeyDisplayString = HotkeyBinding.Parse(settings.LastRecipeShortcut) is { } repeat ? KeyDisplay.Binding(repeat) : "";
         savedRegionMenu.DropDownItems.Add(lastItem);
         foreach (var region in settings.SavedRegions)
             savedRegionMenu.DropDownItems.Add(new ToolStripMenuItem(region.Name, null, (_, _) => _ = TakeRegionAsync(region.Id)));

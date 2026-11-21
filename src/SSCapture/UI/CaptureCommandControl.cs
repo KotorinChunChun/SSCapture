@@ -39,7 +39,7 @@ internal sealed class CaptureCommandControl : UserControl
         AccessibleName = "撮影コマンド";
         Dock = DockStyle.Fill;
         AutoScroll = true;
-        method.Items.AddRange(["範囲選択", "固定範囲"]);
+        method.Items.AddRange(["範囲選択", "固定範囲", "入力プリセットに従う"]);
         method.SelectedIndex = 0;
         var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, RowCount = 11, Padding = new(8) };
         layout.ColumnStyles.Add(new(SizeType.AutoSize));
@@ -138,8 +138,12 @@ internal sealed class CaptureCommandControl : UserControl
     {
         if (input.SelectedItem is not PresetChoice selectedInput || output.SelectedItem is not PresetChoice selectedOutput)
             throw new ArgumentException("入力・出力プリセットを選び直してください。");
-        return new(method.SelectedIndex == 1 ? new Rectangle((int)x.Value, (int)y.Value, (int)width.Value, (int)height.Value) : null,
-            selectedInput.Id, selectedOutput.Id) { Schedule = includeSchedule ? schedule.ReadSchedule() : null };
+        return new CaptureCommandRequest(method.SelectedIndex == 1 ? new Rectangle((int)x.Value, (int)y.Value, (int)width.Value, (int)height.Value) : null,
+            selectedInput.Id, selectedOutput.Id)
+        {
+            UsePresetMode = method.SelectedIndex == 2,
+            Schedule = includeSchedule ? schedule.ReadSchedule() : null
+        };
     }
 
     private void ImportRegion()

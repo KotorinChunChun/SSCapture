@@ -242,7 +242,7 @@ internal static partial class Program
             }, value => { saved = value; return null; }, () => { }, () => []);
             var groups = (TabControl)form.Controls.Find("ShortcutGroups", true).Single();
             Check(groups.TabPages.Cast<TabPage>().Select(page => page.Text).SequenceEqual(
-                ["PC作業中のショートカットキー", "撮影範囲設定前の操作", "撮影ドラッグ中の操作"]), "ショートカットの分類が不正");
+                ["PC作業中のショートカットキー", "プリセット撮影", "撮影範囲設定前の操作", "撮影ドラッグ中の操作"]), "ショートカットの分類が不正");
             var pc = groups.TabPages[0];
             Check(Descendants(pc).OfType<HotkeyEditor>().Select(editor => editor.Name).ToHashSet().SetEquals(
                 ["ScreenshotShortcut1", "ScreenshotShortcut2", "RecordingShortcut1", "RecordingShortcut2", "LastRegionShortcut", "LastRecipeShortcut"]),
@@ -250,10 +250,10 @@ internal static partial class Program
             Check(!Descendants(pc).Any(control => control.Name.StartsWith("CaptureMouse", StringComparison.Ordinal)), "PC作業中にクリック欄がある");
 
             CaptureModifiers[] modifiers = [CaptureModifiers.Ctrl, CaptureModifiers.Shift, CaptureModifiers.Alt, CaptureModifiers.Win];
-            for (int group = 1; group <= 2; group++)
+            for (int group = 2; group <= 3; group++)
             {
                 var page = groups.TabPages[group];
-                string prefix = group == 1 ? "CaptureBeforeKeys" : "CaptureKeys";
+                string prefix = group == 2 ? "CaptureBeforeKeys" : "CaptureKeys";
                 var grid = (TableLayoutPanel)page.Controls.Find(prefix + "Grid", true).Single();
                 for (int row = 0; row < modifiers.Length; row++)
                 {
@@ -267,7 +267,7 @@ internal static partial class Program
                         Check(combo.Enabled, "撮影キーの割り当て欄が無効です。");
                     }
                 }
-                Equal(group == 2, page.Controls.Find("CaptureKeysSpace", true).Length == 1);
+                Equal(group == 3, page.Controls.Find("CaptureKeysSpace", true).Length == 1);
                 Equal(3, Descendants(page).OfType<ComboBox>().Count(combo => combo.Name.StartsWith("CaptureMouse", StringComparison.Ordinal)));
             }
 
@@ -342,6 +342,7 @@ internal static partial class Program
                 {
                     bool captureGrid = input.Parent!.Name is "CaptureBeforeKeysGrid" or "CaptureKeysGrid";
                     int minimumWidth = input.Name.EndsWith("EditorPreset", StringComparison.Ordinal) ? 160
+                        : input.Name is "ShortcutInputPreset" or "ShortcutOutputPreset" ? 160
                         : input.Name.EndsWith("Key", StringComparison.Ordinal) ? 200 : page.Text == "入力プリセット" ? 300 : 420;
                     if (captureGrid && input is ComboBox combo)
                         minimumWidth = combo.Items.Cast<object>().Max(item => TextRenderer.MeasureText(item.ToString(), combo.Font).Width)

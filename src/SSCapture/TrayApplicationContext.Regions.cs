@@ -9,12 +9,12 @@ namespace SSCapture;
 
 internal sealed partial class TrayApplicationContext
 {
-    private async Task TakeRegionAsync(string id)
+    private async Task TakeRegionAsync(string id, ResolvedPresetCapture? presetCapture = null)
     {
-        var requested = settings.SavedRegions.FirstOrDefault(r => r.Id == id);
+        var requested = presetCapture?.Input ?? settings.SavedRegions.FirstOrDefault(r => r.Id == id);
         if (requested is { UseFixedCoordinates: false })
         {
-            await TakeCaptureAsync(requested.Mode, CaptureIntent.Screenshot, requested);
+            await TakeCaptureAsync(requested.Mode, CaptureIntent.Screenshot, requested, presetCapture: presetCapture);
             return;
         }
         if (exiting || WindowVisibility.RestorePending(namingForm))
@@ -49,10 +49,10 @@ internal sealed partial class TrayApplicationContext
                 throw new InvalidOperationException("撮影範囲がありません。先に矩形で撮影するか、範囲を登録してください。");
             Rectangle bounds = RegionCoordinates.Resolve(region, RegionCoordinates.ReadDisplays());
             DateTimeOffset capturedAt = DateTimeOffset.Now;
-            var regionSettings = region.ProfileVersion >= 1 && id != AppSettings.LastRegionKeyId ? region.Apply(settings) : settings;
+            var regionSettings = presetCapture?.Settings ?? (region.ProfileVersion >= 1 && id != AppSettings.LastRegionKeyId ? region.Apply(settings) : settings);
             var capture = await InstantCapture.TakeWithContextAsync(bounds, regionSettings);
             using var image = capture.Image;
-            StoreStatus(await InstantCapture.DeliverAsync(image, regionSettings, capturedAt, output, regionName: region.Name, captureBounds: bounds, metadata: capture.Metadata));
+            StoreStatus(await InstantCapture.DeliverAsync(image, regionSettings, capturedAt, output, regionName: region.Name, captureBounds: bounds, metadata: capture.Metadata, preserveOutputs: presetCapture is { LegacyInstantOutput: false }));
         }
         catch (Exception ex)
         {
