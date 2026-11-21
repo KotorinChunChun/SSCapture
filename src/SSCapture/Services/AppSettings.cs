@@ -90,7 +90,7 @@ internal sealed record AppSettings
             throw new ArgumentException("撮影範囲設定前のキー割り当てが正しくありません。");
         if (CaptureMouse is null) throw new ArgumentException("撮影中のマウス割り当てが正しくありません。");
         if (SnapDistancePixels is < 1 or > 32768 || GridStepPixels is < 1 or > 32768)
-            throw new ArgumentException("吸着距離と刻み幅は1～32768pxで指定してください。");
+            throw new ArgumentException("スナップ距離とグリッド間隔は1～32768pxで指定してください。");
         ExternalApplication.ValidateList(ImageEditors, SelectedImageEditorId);
         ExternalApplication.ValidateList(VideoEditors, SelectedVideoEditorId);
         if (!Enum.IsDefined(NotificationClickAction)) throw new ArgumentException("通知クリックの動作が正しくありません。");

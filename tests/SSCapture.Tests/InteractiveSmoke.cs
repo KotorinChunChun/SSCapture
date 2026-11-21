@@ -590,7 +590,7 @@ internal static partial class Program
         IReadOnlyList<Rectangle>? windows = null, Size? fixedSize = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft,
         bool freeze = true, Func<DesktopSnapshot>? currentFrameFactory = null,
         SSCapture.Services.AppSettings? settings = null, bool captureWindowsKey = false,
-        Func<Point, CaptureWindow?>? findWindow = null, bool showGuide = true)
+        Func<Point, CaptureWindow?>? findWindow = null, bool showGuide = true, bool dimBackground = false)
     {
         var pixels = new Bitmap(bounds.Width, bounds.Height);
         using (Graphics graphics = Graphics.FromImage(pixels))
@@ -605,7 +605,7 @@ internal static partial class Program
         var snapshot = new DesktopSnapshot(pixels, bounds, monitors);
         Task<CaptureOutcome> capture = CaptureSession.SelectAsync(
             new CaptureOptions(mode, CaptureIntent.Screenshot, OutputDestination.Clipboard, FreezeFrame: freeze, FixedSize: fixedSize, FixedAnchor: fixedAnchor,
-                LimitToStartingMonitor: false, ShowSelectionGuide: showGuide, OutputSettings: settings), snapshot, windows ?? [bounds], currentFrameFactory,
+                LimitToStartingMonitor: false, ShowSelectionGuide: showGuide, OutputSettings: settings, DimCaptureBackground: dimBackground), snapshot, windows ?? [bounds], currentFrameFactory,
             captureWindowsKey: captureWindowsKey, findWindow: findWindow);
         bool returned = false;
         try

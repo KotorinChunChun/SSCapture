@@ -124,7 +124,7 @@ internal static partial class Program
                         }, token, showGuide: false);
                         Equal(new Size(120, 80), result.Image!.Size);
                     });
-                await Test("Alt一時20pxとメニュー20px・保持", async token =>
+                await Test("割り当てたグリッドを押している間だけ使用し、メニューでは常時使用する", async token =>
                 {
                     using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, ct) =>
                     {
@@ -138,8 +138,27 @@ internal static partial class Program
                         await MenuClick(overlay, (ToolStripMenuItem)overlay.SelectionMenu.Command("Grid20")!);
                         Check(session.Grid20, "メニュー20pxが反映されない");
                         await Down(overlay); await Move(overlay, 153, 137); input.LeftUp();
-                    }, token, settings: new() { GridStepPixels = 20 }, showGuide: false);
+                    }, token, settings: new() { GridStepPixels = 20, CaptureKeys = new(Alt: CaptureKeyAction.Grid) }, showGuide: false);
                     Equal(new Size(80, 60), result.Image!.Size);
+                });
+                await Test("撮影範囲設定前のAlt単押しで枠スナップを切り替える", async token =>
+                {
+                    Rectangle target = new(P(100, 100), new Size(120, 120));
+                    using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, _) =>
+                    {
+                        var session = OverlaySession(overlay);
+                        await Move(overlay, 80, 80);
+                        await Key(overlay, 0xA4, true); await Key(overlay, 0xA4, false);
+                        Equal("ウィンドウ枠スナップ ON", session.ModifierHint);
+                        await Down(overlay); await Move(overlay, 108, 109);
+                        Equal(P(100, 100), session.Current);
+                        await Key(overlay, 0x1B, true); await Key(overlay, 0x1B, false); input.LeftUp(); await Task.Delay(100);
+                        await Move(overlay, 80, 80);
+                        await Key(overlay, 0xA4, true); await Key(overlay, 0xA4, false);
+                        Check(session.ModifierHint is null, "再度のAlt単押しで解除できない");
+                        await Down(overlay); await Move(overlay, 108, 109); input.LeftUp();
+                    }, token, windows: [target], showGuide: false);
+                    Equal(new Size(28, 29), result.Image!.Size);
                 });
                 await Test("Spaceで実ポインタを対角へ移動して同じ範囲を確定", async token =>
                 {
@@ -197,13 +216,21 @@ internal static partial class Program
                     }, token, showGuide: false);
                     Equal(bounds, result.Selection!.Bounds);
                 });
-                await Test("固定サイズ中央クリックでモニタ全体", async token =>
+                await Test("中ボタンを押している間は明るいモニタ全体を撮影する", async token =>
                 {
                     using var result = await CaptureSyntheticOutcome(CaptureMode.FixedRegion, bounds, input, async (overlay, ct) =>
                     {
                         await Move(overlay, 120, 80); NativeSmokeInput.RequireTarget(overlay.Handle, P(120, 80));
-                        input.MiddleDown(); await Task.Delay(60); input.MiddleUp();
-                    }, token, fixedSize: new(200, 120), showGuide: false);
+                        using var rendered = new Bitmap(bounds.Width, bounds.Height);
+                        overlay.DrawToBitmap(rendered, new(Point.Empty, bounds.Size));
+                        Check(rendered.GetPixel(260, 30).B < 200, "押下前の背景が暗転していない");
+                        input.MiddleDown(); await Task.Delay(60);
+                        Equal(bounds, OverlaySession(overlay).HighlightedWindow);
+                        Equal(Rectangle.Empty, OverlaySession(overlay).DisplaySelection);
+                        overlay.DrawToBitmap(rendered, new(Point.Empty, bounds.Size));
+                        Equal(Color.Blue.ToArgb(), rendered.GetPixel(260, 30).ToArgb());
+                        input.MiddleUp();
+                    }, token, fixedSize: new(200, 120), showGuide: false, dimBackground: true);
                     Equal(bounds, result.Selection!.Bounds);
                 });
                 await Test("メニューのデスクトップ全体はメニュー開始位置を使用", async token =>
@@ -235,10 +262,11 @@ internal static partial class Program
                     Equal(Color.Blue.ToArgb(), result.Image!.GetPixel(250, 100).ToArgb());
                 });
                 foreach (bool viaWin in new[] { false, true })
-                await Test((viaWin ? "Win短押しでWGCへ切り替え" : "WGCを実メニューで選択") + "て対象の画素をPNGへ保存", async token =>
+                await Test((viaWin ? "Win短押し" : "右クリックメニュー") + "でWGCプレビューと保存PNGの画素が一致", async token =>
                 {
                     CaptureWindow target = CaptureNative.CaptureWindows(Screen.FromControl(host).Bounds)
                         .Single(window => window.Handle == host.Handle);
+                    Color previewColor = host.BackColor;
                     using var result = await CaptureSyntheticOutcome(viaWin ? CaptureMode.Rectangle : CaptureMode.Window, bounds, input, async (overlay, ct) =>
                     {
                         var item = (ToolStripMenuItem)overlay.SelectionMenu.Command("IsolatedWindowCapture")!;
@@ -254,6 +282,17 @@ internal static partial class Program
                         }
                         Check(item.Checked, "単ウィンドウ撮影の方式がWGCになっていない");
                         Check(!overlay.SelectionMenu.Visible, "WGC選択後にメニューが残る");
+                        await Move(overlay, 120, 80);
+                        var session = OverlaySession(overlay);
+                        for (int i = 0; i < 120 && session.PreviewFrame is null; i++) await Task.Delay(25, ct);
+                        Check(session.PreviewFrame is not null, "WGCプレビューが表示されない: " + session.PointerHint);
+                        Equal(target.Bounds, session.PreviewFrame!.Bounds);
+                        using var rendered = new Bitmap(bounds.Width, bounds.Height);
+                        overlay.DrawToBitmap(rendered, new(Point.Empty, bounds.Size));
+                        Equal(previewColor.ToArgb(), rendered.GetPixel(bounds.Width / 2, bounds.Height / 2).ToArgb());
+                        // The saved image must still match the preview even after the real window redraws.
+                        host.BackColor = Color.Lime;
+                        host.Refresh();
                         await Down(overlay, 120, 80); input.LeftUp();
                     }, token, windows: [target.Bounds], findWindow: point => target.Bounds.Contains(point) ? target : null, showGuide: false);
                     Equal(target, result.Selection!.IsolatedWindow);
@@ -272,11 +311,13 @@ internal static partial class Program
                         Check(savedPath is not null, "WGCのPNGが保存されない");
                         using var saved = new Bitmap(savedPath!);
                         Equal(result.Image!.Size, saved.Size);
-                        Equal(host.BackColor.ToArgb(), saved.GetPixel(saved.Width / 2, saved.Height / 2).ToArgb());
+                        Equal(previewColor.ToArgb(), saved.GetPixel(saved.Width / 2, saved.Height / 2).ToArgb());
                     }
                     finally
                     {
                         if (savedPath is not null) File.Delete(savedPath);
+                        host.BackColor = previewColor;
+                        host.Refresh();
                     }
                 });
                 foreach (bool freeze in new[] { true, false })
@@ -304,7 +345,7 @@ internal static partial class Program
         };
         Application.Run(host);
         Console.WriteLine($"SELECTION INPUT RESULT: {successes} passed, {failures} failed");
-        return failures == 0 && successes == 18 ? 0 : 1;
+        return failures == 0 && successes == 19 ? 0 : 1;
     }
 
     private static SessionController OverlaySession(CaptureOverlay overlay) => (SessionController)typeof(CaptureOverlay)

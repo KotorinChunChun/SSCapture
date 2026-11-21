@@ -263,9 +263,9 @@ internal sealed class SettingsForm : Form
         MoveSetting(limitToStartingMonitor, basic, 0); MoveSetting(dimCaptureBackground, basic, 1);
         basic.Controls.Clear();
         Add(basic, "範囲選択", limitToStartingMonitor, 0); Add(basic, "背景表示", dimCaptureBackground, 1);
-        gridEnabled = Toggle(basic, "刻み調整", "GridEnabled", "指定した刻み幅を常時使用", settings.Grid20, 2);
-        snapDistance = PixelField(basic, "吸着距離 (px)", "SnapDistancePixels", settings.SnapDistancePixels, 3);
-        gridStep = PixelField(basic, "刻み幅 (px)", "GridStepPixels", settings.GridStepPixels, 4);
+        gridEnabled = Toggle(basic, "グリッド", "GridEnabled", "グリッドを常時使用", settings.Grid20, 2);
+        snapDistance = PixelField(basic, "スナップ距離 (px)", "SnapDistancePixels", settings.SnapDistancePixels, 3);
+        gridStep = PixelField(basic, "グリッド間隔 (px)", "GridStepPixels", settings.GridStepPixels, 4);
         guideEnabled = Toggle(basic, "操作ガイド", "ShowSelectionGuide", "撮影中に表示する", settings.ShowSelectionGuide, 5);
         var inputSummary = MakeButton("", "DefaultInputSummary", ButtonRole.Secondary); inputSummary.AutoSize = false; inputSummary.Height = 76;
         var outputSummary = MakeButton("", "DefaultOutputSummary", ButtonRole.Secondary); outputSummary.AutoSize = false; outputSummary.Height = 76;

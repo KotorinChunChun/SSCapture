@@ -144,7 +144,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             Toggle("背景を暗くする", "DimCaptureBackground", editing.Settings.DimCaptureBackground, editing.ChangeDim, operation.DropDownItems);
             if (editing.ChangeOpenFolder is not null) Toggle("保存後にフォルダを開く", "OpenFolderAfterSave", editing.Settings.OpenFolderAfterSave, editing.ChangeOpenFolder, output.DropDownItems);
         }
-        if (changeGrid is not null) Toggle("指定刻み幅を使用", "Grid20", grid20, changeGrid, operation.DropDownItems, "表示設定を次回にも保存します。スナップ操作中も有効です。");
+        if (changeGrid is not null) Toggle("グリッドを使用", "Grid20", grid20, changeGrid, operation.DropDownItems, "グリッドを常時使用し、次回の撮影にも引き継ぎます。");
         if (changeGuide is not null) Toggle("操作ガイドを表示", "ShowSelectionGuide", showGuide, changeGuide, operation.DropDownItems, "表示設定を次回にも保存します。ドラッグ中に近づくと一時的に隠れます。");
         if (inputPresetsMenu.DropDownItems.Count == 0) EmptyHint(inputPresetsMenu);
         if (outputPresetsMenu.DropDownItems.Count == 0) EmptyHint(outputPresetsMenu);
@@ -188,7 +188,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         foreach (var pair in metadata) pair.Value.Checked = pair.Key == settings.MetadataMode;
         foreach (var item in AllCommands) item.Checked = item.Name switch { "FreezeFrame" => settings.FreezeFrame, "IncludeCursor" => settings.IncludeCursor, "DimCaptureBackground" => settings.DimCaptureBackground, "LimitToStartingMonitor" => limited, _ => item.Checked };
         var parent = AllCommands.FirstOrDefault(i => i.Name == "FixedSizeMenu"); if (parent is not null) parent.Text = $"固定寸法（{size.Width}×{size.Height}px）";
-        var precision = AllCommands.FirstOrDefault(i => i.Name == "CapturePrecisionMenu"); if (precision is not null) precision.Text = $"吸着距離 {settings.SnapDistancePixels}px / 刻み幅 {settings.GridStepPixels}px";
+        var precision = AllCommands.FirstOrDefault(i => i.Name == "CapturePrecisionMenu"); if (precision is not null) precision.Text = $"スナップ距離 {settings.SnapDistancePixels}px / グリッド間隔 {settings.GridStepPixels}px";
         var grid = AllCommands.FirstOrDefault(i => i.Name == "Grid20"); if (grid is not null) grid.Text = $"{settings.GridStepPixels}px単位";
         var folder = AllCommands.FirstOrDefault(i => i.Name == "OpenFolderAfterSave"); if (folder is not null) { folder.Checked = settings.OpenFolderAfterSave; folder.Enabled = currentDestination.HasFlag(OutputDestination.File); }
         var details = AllCommands.FirstOrDefault(i => i.Name == "OutputDetailsMenu"); if (details is not null) details.Enabled = currentDestination.HasFlag(OutputDestination.File);

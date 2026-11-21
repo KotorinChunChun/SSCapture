@@ -78,24 +78,26 @@ internal static partial class Program
             g.Move(new(180, 200), lockHeight: true);
             Equal(new Size(80, 60), g.Selection.Size);
         });
-        Run("20px丸めは開始点基準・負方向・Alt一時有効・境界", () =>
+        Run("グリッドは開始点基準で一時使用でき、枠スナップと独立する", () =>
         {
             var g = RectangleGesture();
             g.SetSnapPrecision(20, 20);
             g.Begin(new(103, 107), new(8, 8)); g.Move(new(176, 162));
             Equal(new Size(73, 55), g.Selection.Size);
             g.Move(new(176, 162), true);
+            Equal(new Size(73, 55), g.Selection.Size);
+            g.Move(new(176, 162), action: CaptureKeyAction.Grid);
             Equal(new Size(80, 60), g.Selection.Size);
             g.Move(new(176, 162)); Equal(new Size(73, 55), g.Selection.Size);
             g.Grid20 = true; g.Move(new(46, 34)); Equal(new Rectangle(43, 27, 60, 80), g.Selection);
-            g.Move(new(999, 999)); Equal(new Size(897, 893), g.Selection.Size); // モニタ端1000を刻みより優先。
+            g.Move(new(999, 999)); Equal(new Size(897, 893), g.Selection.Size); // モニタ端1000をグリッドより優先。
         });
-        Run("Alt枠吸着は20px丸めより優先し固定寸法を維持", () =>
+        Run("枠スナップはグリッドより優先し固定寸法を維持", () =>
         {
             var g = RectangleGesture();
             g.SetSnapPrecision(20, 20);
             g.Begin(new(103, 107), new(8, 8)); g.Move(new(183, 167));
-            g.Move(new(990, 990), true, lockHeight: true);
+            g.Move(new(990, 990), true, lockHeight: true, action: CaptureKeyAction.Grid);
             Equal(new Rectangle(103, 107, 897, 60), g.Selection);
         });
         Run("寸法固定解除は画面内の実ポインタ位置へ戻り境界を越えない", () =>

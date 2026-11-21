@@ -111,8 +111,9 @@ internal sealed class SelectionGesture
                 y = Math.Clamp(y, desktop.Top, desktop.Bottom);
             }
             Point adjusted = new(x, y);
-            Point quantized = Grid20 || snap ? new(Quantize(x, start.X, true), Quantize(y, start.Y, false)) : adjusted;
-            var snapped = Grid20 || snap ? snapEdges.Evaluate(adjusted, includeWindows: snap) : new SelectionSnap.SnapResult(adjusted, false, false);
+            bool grid = Grid20 || action == CaptureKeyAction.Grid;
+            Point quantized = grid ? new(Quantize(x, start.X, true), Quantize(y, start.Y, false)) : adjusted;
+            var snapped = grid || snap ? snapEdges.Evaluate(adjusted, includeWindows: snap) : new SelectionSnap.SnapResult(adjusted, false, false);
             Current = new Point(horizontal.IsLocked ? horizontal.Value : snapped.X ? snapped.Point.X : quantized.X,
                 vertical.IsLocked ? vertical.Value : snapped.Y ? snapped.Point.Y : quantized.Y);
             bool lockAspect = action is CaptureKeyAction.LockAspectRatio or CaptureKeyAction.FromCenterWithAspectRatio;
@@ -210,8 +211,8 @@ internal sealed class SelectionGesture
 
     internal CaptureSelection? WindowSelection(Point point, OutputDestination destination) =>
         FromBounds(WindowAt(point), destination) is { } selection ? selection with { WindowHitPoint = point } : null;
-    internal CaptureSelection? MonitorSelection(Point point, OutputDestination destination) =>
-        FromBounds(monitors.FirstOrDefault(monitor => monitor.Contains(point)), destination);
+    internal Rectangle MonitorAt(Point point) => monitors.FirstOrDefault(monitor => monitor.Contains(point));
+    internal CaptureSelection? MonitorSelection(Point point, OutputDestination destination) => FromBounds(MonitorAt(point), destination);
 
     internal CaptureSelection? FixedSelection(OutputDestination destination) =>
         mode == CaptureMode.FixedRegion && CaptureGeometry.IsFullyCovered(Selection, monitors)

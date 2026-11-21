@@ -13,7 +13,7 @@ internal sealed class SelectionSnap
         ArgumentOutOfRangeException.ThrowIfGreaterThan(distance, 32768);
         this.distance = distance;
         List<Edge> collected = [];
-        // モニタ境界はpx刻み・ウィンドウ境界より優先する。
+        // モニタ境界はグリッド・ウィンドウ境界より優先する。
         foreach (var (bounds, monitor) in monitors.Select(b => (b, true)).Concat(windows.Select(b => (b, false))))
         {
             long right = (long)bounds.Left + bounds.Width, bottom = (long)bounds.Top + bounds.Height;

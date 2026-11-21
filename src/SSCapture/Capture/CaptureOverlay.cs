@@ -12,7 +12,7 @@ internal sealed class CaptureOverlay : Form
     internal CaptureContextMenu SelectionMenu => session.SelectionMenu;
 
     private sealed record VisualState(DesktopSnapshot Snapshot, CaptureMode Mode, bool Dim, bool Highlight,
-        Rectangle Selection, Rectangle Target, bool Valid, int Points, Rectangle Dimensions, Rectangle Hint, string? HintText,
+        Rectangle Selection, Rectangle Target, WindowCaptureFrame? Preview, bool Valid, int Points, Rectangle Dimensions, Rectangle Hint, string? HintText,
         string? Error);
 
     internal CaptureOverlay(SessionController session, Rectangle monitorBounds)
@@ -126,8 +126,17 @@ internal sealed class CaptureOverlay : Form
         Rectangle target = session.HighlightedWindow;
         if (IsDimmed(target))
             using (SolidBrush dim = new(Color.FromArgb(115, Color.Black))) graphics.FillRectangle(dim, dirty);
-        DrawSnapshot(graphics, Rectangle.Intersect(Local(target), dirty));
-        Rectangle selection = session.Selection;
+        Rectangle bright = Rectangle.Intersect(Local(target), dirty);
+        if (session.PreviewFrame is { } frame && bright.Width > 0 && bright.Height > 0)
+        {
+            // Transparent parts of the captured window must not reveal other desktop windows.
+            graphics.FillRectangle(Brushes.Black, bright);
+            Rectangle source = bright;
+            source.Offset(MonitorBounds.X - frame.Bounds.X, MonitorBounds.Y - frame.Bounds.Y);
+            graphics.DrawImage(frame.Image, bright, source, GraphicsUnit.Pixel);
+        }
+        else DrawSnapshot(graphics, bright);
+        Rectangle selection = session.DisplaySelection;
         selection.Offset(-MonitorBounds.X, -MonitorBounds.Y);
         DrawSelection(graphics, selection, dirty);
         DrawDimensions(graphics, selection);
@@ -176,6 +185,11 @@ internal sealed class CaptureOverlay : Form
             change.Xor(Local(next.Target));
             dirty.Union(change);
         }
+        if (old.Preview != next.Preview)
+        {
+            if (old.Preview is not null) dirty.Union(Local(old.Target));
+            if (next.Preview is not null) dirty.Union(Local(next.Target));
+        }
         if (old.Dimensions != next.Dimensions || old.Selection.Size != next.Selection.Size || old.Valid != next.Valid)
         {
             dirty.Union(old.Dimensions);
@@ -207,12 +221,12 @@ internal sealed class CaptureOverlay : Form
 
     private VisualState ReadVisualState()
     {
-        Rectangle selection = session.Selection;
+        Rectangle selection = session.DisplaySelection;
         string? dimensions = DimensionsText(selection);
         string? hint = MonitorBounds.Contains(session.Pointer) ? session.PointerHint : null;
         Rectangle target = session.HighlightedWindow;
         return new(session.Snapshot, session.Mode, IsDimmed(target), session.HighlightWindow, selection,
-            target, session.FixedSelectionValid, session.Points.Count,
+            target, session.PreviewFrame, session.FixedSelectionValid, session.Points.Count,
             dimensions is null ? Rectangle.Empty : PointerLabelBounds(dimensions, session.Current, 24, reserveHint: true),
             hint is null ? Rectangle.Empty : PointerLabelBounds(hint, session.Pointer, HintOffset(selection), reserveHint: false),
             hint, session.SelectionError);

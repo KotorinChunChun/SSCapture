@@ -10,6 +10,7 @@
     "SpaceEnabled": true
   },
   "Before": {
+    "Alt": "Snap",
     "Win": "HighlightWindow"
   }
 }

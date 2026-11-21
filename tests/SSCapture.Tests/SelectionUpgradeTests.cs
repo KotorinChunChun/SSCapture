@@ -10,7 +10,7 @@ internal static partial class Program
     {
         Run("撮影前とドラッグ中のキー設定・クリック設定を独立して保存できる", () => WithServiceDirectory(directory =>
         {
-            var map = new CaptureKeyMap(Ctrl: CaptureKeyAction.Snap, CtrlAlt: CaptureKeyAction.LockHeight, SpaceEnabled: false);
+            var map = new CaptureKeyMap(Ctrl: CaptureKeyAction.Snap, Alt: CaptureKeyAction.Grid, CtrlAlt: CaptureKeyAction.LockHeight, SpaceEnabled: false);
             var beforeMap = CaptureKeyMap.BeforeDefaults with { CtrlAlt = CaptureKeyAction.CrossMonitor };
             var mouse = new CaptureMouseMap(BeforeLeft: false, BeforeMiddle: false, DragRight: false);
             using var editor = new CaptureKeyEditor(map, mouse, beforeSelection: false);
@@ -45,7 +45,8 @@ internal static partial class Program
             Equal(CaptureKeyAction.HighlightWindow, loaded.CaptureKeys.CtrlShift);
             Equal(CaptureKeyAction.CrossMonitor, new AppSettings().CaptureKeys.Win);
             foreach (var keys in CaptureKeyMap.Combinations)
-                Equal(keys == CaptureModifiers.Win ? CaptureKeyAction.HighlightWindow : CaptureKeyAction.None, loaded.CaptureBeforeKeys.Resolve(keys));
+                Equal(keys switch { CaptureModifiers.Win => CaptureKeyAction.HighlightWindow, CaptureModifiers.Alt => CaptureKeyAction.Snap,
+                    _ => CaptureKeyAction.None }, loaded.CaptureBeforeKeys.Resolve(keys));
             Check(!loaded.CaptureBeforeKeys.SpaceEnabled, "撮影範囲設定前にSpaceが有効");
             Equal(new CaptureMouseMap(true, true, true, true), loaded.CaptureMouse);
 
@@ -103,16 +104,17 @@ internal static partial class Program
                 Equal(CaptureMode.Window, session.Mode);
                 Check(session.SelectionMenu.Command("IsolatedWindowCapture").Checked, "Winで開始したウィンドウ撮影がWGCにならない");
                 Check(session.HighlightWindow, "ウィンドウ撮影で対象が強調されない");
-                Equal(front, session.HighlightedWindow);
+                Equal(Rectangle.Empty, session.HighlightedWindow); // Without a WGC frame the desktop crop stays dimmed.
                 session.ApplyPointerInput(new(20, 20), CaptureModifiers.Ctrl);
                 Equal("Ctrl : なし", session.ModifierHint);
-                Equal(back, session.HighlightedWindow);
+                Equal(Rectangle.Empty, session.HighlightedWindow);
                 session.ApplyPointerInput(new(20, 20), CaptureModifiers.None, windowsTap: true);
                 Equal(CaptureMode.Rectangle, session.Mode);
                 Equal(Rectangle.Empty, session.HighlightedWindow);
                 Check(session.ModifierHint is null, "修飾キーを離しても効果が表示される");
                 session.ChangeMode(CaptureMode.Window);
                 Check(session.SelectionMenu.Command("VisibleWindowCapture").Checked, "Winでの撮影方式が通常のモード切替に持ち越された");
+                Equal(back, session.HighlightedWindow);
             }
             finally { session.Cancel(); }
         });

@@ -203,6 +203,9 @@ internal static partial class Program
 
             ComboBox Choice(string name) => (ComboBox)groups.Controls.Find(name, true).Single();
             Equal("ウィンドウ撮影に切り替え", Choice("CaptureBeforeKeys8").Text);
+            Equal("ウィンドウ枠スナップ", Choice("CaptureBeforeKeys4").Text);
+            Check(Choice("CaptureKeys4").Items.Cast<object>().Any(item => item.ToString() == "グリッドを一時的に使用"),
+                "撮影ドラッグ中にグリッドを割り当てられない");
             Equal("別モニタへの移動を許可", Choice("CaptureKeys8").Text);
             Check(!Choice("CaptureKeys9").Items.Cast<object>().Any(item => item.ToString() == "ウィンドウ撮影に切り替え"),
                 "ドラッグ中にウィンドウ撮影の選択肢がある");

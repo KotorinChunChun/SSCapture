@@ -90,9 +90,9 @@ internal static class SettingsHelp
         if (name == "ScreenshotPaddingPixels") return "選択範囲の外側へ上下左右同じ幅の白い余白を追加します。元画像の縮小や周囲の画面の撮り足しはしません。0～4096物理px、0は余白なし。静止画だけに適用し録画には適用しません。";
         if (name == "FileNamePattern") return "{yyyymmdd} 年月日 / {hhmmss} 時分秒 / {ext} 静止画png・録画mp4 / {ocr} OCR文字列 / {region} 範囲名 / {#}・{##} 連番。例: {yyyymmdd}_{hhmmss}.{ext}";
         if (Descriptions.TryGetValue(name, out string? description)) return description;
-        if (name == "SnapDistancePixels") return "スナップ操作中、ポインタがウィンドウ枠・モニタ端からこの物理px以内なら吸着します。1～32768px、既定20px。";
-        if (name == "GridStepPixels") return $"範囲の幅・高さを調整する物理pxの刻みです。常時ONまたはスナップ操作中に適用します。1～32768px、既定{AppSettings.DefaultGridStepPixels}px。";
-        if (name == "GridEnabled") return "指定の刻み幅を常時使用します。OFFでもスナップ操作中は使用します。";
+        if (name == "SnapDistancePixels") return "ポインタがウィンドウ枠・モニタ端からこの物理px以内ならスナップします。1～32768px、既定20px。";
+        if (name == "GridStepPixels") return $"グリッドが有効なとき、矩形の幅・高さをこの間隔で揃えます。1～32768物理px、既定{AppSettings.DefaultGridStepPixels}px。";
+        if (name == "GridEnabled") return "グリッドを常時使用します。OFFの場合も、ショートカットで一時的に使用できます。";
         if (name == "ShowSelectionGuide") return "撮影中の操作ガイドを表示します。ドラッグ中にポインタが近づくと一時的に隠れます。";
         if (name == "DefaultInputSummary") return "既定の入力プリセットの概要です。クリックすると、そのプリセットを選択した編集ページへ移動します。";
         if (name == "DefaultOutputSummary") return "既定の出力プリセットの概要です。クリックすると、そのプリセットを選択した編集ページへ移動します。";
