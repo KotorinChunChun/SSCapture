@@ -29,7 +29,8 @@ internal sealed record CaptureSelection(
     OutputDestination Destination,
     Point? WindowHitPoint = null,
     string? WindowTitle = null,
-    CaptureWindow? IsolatedWindow = null);
+    CaptureWindow? IsolatedWindow = null,
+    CaptureComposite? Composite = null);
 
 internal sealed class CaptureOutcome(Bitmap? image, CaptureSelection? selection, bool openSettings = false,
     SSCapture.Services.AppSettings? outputSettings = null, SSCapture.Services.CaptureMetadata? metadata = null,

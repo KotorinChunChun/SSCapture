@@ -277,6 +277,37 @@ internal static partial class Program
                 finally { session.Cancel(); }
                 Equal(originalClip, CursorConfinement.ReadBounds());
                 Console.WriteLine("PASS ドラッグ前のモニター移動・移動先での制限復元・ドラッグ中の再拡張");
+
+                input.Move(start);
+                var composite = new DesktopSnapshot(new Bitmap(desktop.Width, desktop.Height), desktop, monitors);
+                using (Graphics graphics = Graphics.FromImage(composite.Image)) graphics.Clear(Color.DarkSlateBlue);
+                var middle = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.None,
+                    ShowSelectionGuide: false), composite, [], initialPointer: start);
+                try
+                {
+                    middle.Start();
+                    PumpOverlayMessages(TimeSpan.FromMilliseconds(100));
+                    CaptureOverlay owner = Application.OpenForms.OfType<CaptureOverlay>().Single(o => o.Visible);
+                    NativeSmokeInput.FocusFixture(owner.Handle);
+                    NativeSmokeInput.RequireTarget(owner.Handle, start);
+                    input.MiddleDown();
+                    PumpOverlayMessages(TimeSpan.FromMilliseconds(120));
+                    Equal(originalClip, CursorConfinement.ReadBounds());
+                    input.Move(target);
+                    PumpOverlayMessages(TimeSpan.FromMilliseconds(180));
+                    Equal(target, middle.Pointer);
+                    Check(owner.Capture && CaptureNative.OwnsForegroundWindow(), "移動後に中ドラッグを保持できない");
+                    input.MiddleUp();
+                    PumpOverlayMessages(TimeSpan.FromMilliseconds(180));
+                    Check(middle.Completion.IsCompletedSuccessfully, "実モニターをまたいだ中ドラッグが確定しない");
+                    using var outcome = middle.Completion.GetAwaiter().GetResult();
+                    var regions = outcome.Selection!.Composite!.Regions!;
+                    Check(regions.Contains(first) && regions.Contains(destination), "実モニターのどちらかが合成結果にない");
+                    Check(outcome.Image is not null && middle.OutputSettings.LimitToStartingMonitor, "画像がないか、撮影後にモニター制限設定が変わった");
+                    Equal(originalClip, CursorConfinement.ReadBounds());
+                }
+                finally { input.ReleaseInjectedInput(); middle.Cancel(); }
+                Console.WriteLine($"PASS 実モニター間の中ドラッグと合成 {first} → {destination}");
             }
             return 0;
         }

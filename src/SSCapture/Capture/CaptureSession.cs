@@ -27,14 +27,20 @@ internal static class CaptureSession
         {
             windows = CaptureNative.CaptureWindows(bounds);
             return windows.Select(window => window.Bounds).ToArray();
-        }, captureWindowsKey: true, findWindow: point => windows.FirstOrDefault(window => window.Bounds.Contains(point)));
+        }, captureWindowsKey: true, findWindow: point =>
+        {
+            for (int i = 0; i < windows.Count; i++)
+                if (windows[i].Bounds.Contains(point)) return windows[i];
+            return null;
+        }, findWindowGroup: root => CaptureWindowGroups.ForegroundGroup(root, windows));
     }
 
     /// <summary>Consumes snapshot. Never reads desktop pixels or enumerates real windows.</summary>
     internal static Task<CaptureOutcome> SelectAsync(CaptureOptions options, DesktopSnapshot snapshot,
         IReadOnlyList<Rectangle>? windows = null, Func<DesktopSnapshot>? currentFrameFactory = null, Point? initialPointer = null, Action<bool>? gridChanged = null, Action<bool>? guideChanged = null,
         Func<bool, bool, DesktopSnapshot>? recapture = null, Func<Rectangle, IReadOnlyList<Rectangle>>? readWindows = null,
-        Func<Point, string?>? readTitle = null, bool captureWindowsKey = false, Func<Point, CaptureWindow?>? findWindow = null)
+        Func<Point, string?>? readTitle = null, bool captureWindowsKey = false, Func<Point, CaptureWindow?>? findWindow = null,
+        Func<CaptureWindow, IReadOnlyList<CaptureWindow>>? findWindowGroup = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         try
@@ -44,7 +50,7 @@ internal static class CaptureSession
                 throw new ArgumentException("画面固定OFFの合成画像検証には画像取得関数を指定してください。", nameof(currentFrameFactory));
             SessionController session = new(options, snapshot, windows ?? [], currentFrameFactory,
                 initialPointer ?? snapshot.Monitors.FirstOrDefault().Location, gridChanged: gridChanged, guideChanged: guideChanged, recapture: recapture, readWindows: readWindows,
-                readTitle: readTitle, captureWindowsKey: captureWindowsKey, findWindow: findWindow);
+                readTitle: readTitle, captureWindowsKey: captureWindowsKey, findWindow: findWindow, findWindowGroup: findWindowGroup);
             if (options.InitialInputPreset is { UseFixedCoordinates: true } preset) session.ApplyInputPreset(preset);
             session.Start();
             return session.Completion;
@@ -88,9 +94,11 @@ internal sealed class SessionController
     private readonly Func<Rectangle, IReadOnlyList<Rectangle>>? readWindows;
     private readonly Func<Point, string?>? readTitle;
     private readonly Func<Point, CaptureWindow?>? findWindow;
+    private readonly Func<CaptureWindow, IReadOnlyList<CaptureWindow>> findWindowGroup;
     private bool exclusiveWindow;
     private WindowCapturePreview? windowPreview;
-    private readonly HashSet<CaptureOverlay> previewOverlays = [];
+    private readonly HashSet<CaptureOverlay> auxiliaryOverlays = [];
+    private CaptureTargetDrag? targetDrag;
     private readonly bool captureWindowsKey;
     private bool refreshing;
     private CaptureAnchor activeAnchor;
@@ -135,6 +143,10 @@ internal sealed class SessionController
     private CaptureMode? modeBeforeWindowShortcut;
     internal string? ModifierHint { get; private set; }
     internal bool HasPointerPress => pressedButton != MouseButtons.None;
+    private bool FreeMiddleDrag => options.Intent == CaptureIntent.Screenshot && pressedButton == MouseButtons.Middle;
+    private bool HasWindowDrag => pressedButton == MouseButtons.Left && HighlightWindow && gesture.HasDragged && targetDrag is not null;
+    internal IReadOnlyList<Point> WindowDragPath => HasWindowDrag ? targetDrag!.Path : [];
+    internal Rectangle WindowDragBounds => HasWindowDrag ? targetDrag!.TrailBounds : Rectangle.Empty;
     internal string? PointerHint
     {
         get
@@ -150,6 +162,9 @@ internal sealed class SessionController
                 : Mode == CaptureMode.FixedRegion ? "固定範囲を撮影"
                 : !gesture.HasDragged || Mode == CaptureMode.Window ? "ウィンドウを撮影" : "選択範囲を撮影";
             string cancel = OutputSettings.CaptureMouse.DragRight ? "ESC / 右クリックで取り消し" : "ESCで取り消し";
+            if (FreeMiddleDrag) return $"{operation}　{cancel}\nドラッグ：複数デスクトップを合成";
+            if (HighlightWindow && options.Intent == CaptureIntent.Screenshot && pressedButton == MouseButtons.Left)
+                return $"{operation}　{cancel}\nドラッグ：複数ウィンドウを合成";
             string effect = gesture.HasDragged ? ModifierHint ?? operation : operation;
             return $"{effect}　{cancel}";
         }
@@ -158,10 +173,13 @@ internal sealed class SessionController
     internal bool HighlightWindow => Mode == CaptureMode.Window;
     private bool UsesWindowSource => HighlightWindow && exclusiveWindow;
     internal WindowCaptureFrame? PreviewFrame => windowPreview?.Frame is { IsCompletedSuccessfully: true } frame ? frame.Result : null;
-    internal Rectangle HighlightedWindow => pressedButton == MouseButtons.Middle ? gesture.MonitorAt(Pointer)
-        : UsesWindowSource ? PreviewFrame?.Bounds ?? Rectangle.Empty
+    internal Rectangle HighlightedWindow => FreeMiddleDrag ? Snapshot.Monitors.FirstOrDefault(monitor => monitor.Contains(Pointer))
+        : pressedButton == MouseButtons.Middle ? gesture.MonitorAt(Pointer)
+        : HasWindowDrag ? Rectangle.Empty : UsesWindowSource ? PreviewFrame?.Bounds ?? Rectangle.Empty
         : HighlightWindow ? gesture.WindowAt(Pointer) : gesture.PressedWindow;
-    internal Rectangle DisplaySelection => pressedButton == MouseButtons.Middle ? Rectangle.Empty : PreviewFrame?.Bounds ?? Selection;
+    internal Rectangle HighlightForOverlay(Rectangle monitor) => FreeMiddleDrag
+        ? targetDrag?.Monitors.Contains(monitor) == true ? monitor : Rectangle.Empty : HighlightedWindow;
+    internal Rectangle DisplaySelection => pressedButton == MouseButtons.Middle || HasWindowDrag ? Rectangle.Empty : PreviewFrame?.Bounds ?? Selection;
 
     internal CaptureMode Mode { get; private set; }
     internal bool Grid20 => gesture.Grid20;
@@ -186,11 +204,13 @@ internal sealed class SessionController
         Point? initialPointer = null, Func<Rectangle, IDisposable>? confineCursor = null, Action<bool>? gridChanged = null, Action<bool>? guideChanged = null,
         Func<IReadOnlyList<Services.DisplayLayout>>? readPresetDisplays = null,
         Func<bool, bool, DesktopSnapshot>? recapture = null, Func<Rectangle, IReadOnlyList<Rectangle>>? readWindows = null,
-        Func<Point, string?>? readTitle = null, bool captureWindowsKey = false, Func<Point, CaptureWindow?>? findWindow = null)
+        Func<Point, string?>? readTitle = null, bool captureWindowsKey = false, Func<Point, CaptureWindow?>? findWindow = null,
+        Func<CaptureWindow, IReadOnlyList<CaptureWindow>>? findWindowGroup = null)
     {
         this.options = options;
         this.recapture = recapture; this.readWindows = readWindows;
         this.readTitle = readTitle; this.captureWindowsKey = captureWindowsKey; this.findWindow = findWindow;
+        this.findWindowGroup = findWindowGroup ?? (root => [root]);
         activeAnchor = options.FixedAnchor;
         activeFixedSize = options.FixedSize ?? new Size(1280, 720);
         this.readPresetDisplays = readPresetDisplays ?? Services.RegionCoordinates.ReadDisplays;
@@ -589,7 +609,8 @@ internal sealed class SessionController
 
     private void UpdateGuidePointer()
     {
-        if (ShowSelectionGuide) guide?.UpdatePointer(gesture.RawCurrent, gesture.IsPressed && gesture.HasDragged);
+        if (ShowSelectionGuide) guide?.UpdatePointer(gesture.RawCurrent, gesture.IsPressed && gesture.HasDragged
+            || FreeMiddleDrag && targetDrag?.Path.Count > 1);
     }
 
     internal void CaptureDesktop(Point point)
@@ -653,7 +674,7 @@ internal sealed class SessionController
         CaptureKeyAction rectangleAction = CaptureKeyAction.None)
     {
         if (completed || refreshing || menuOpen || menuTransition) return;
-        if (selectionBounds is Rectangle bounds)
+        if (!FreeMiddleDrag && selectionBounds is Rectangle bounds)
             physicalPosition = new Point(Math.Clamp(physicalPosition.X, bounds.Left, bounds.Right - 1),
                 Math.Clamp(physicalPosition.Y, bounds.Top, bounds.Bottom - 1));
         // Keyboard nudges must survive synthetic mouse messages at the unchanged cursor
@@ -665,6 +686,7 @@ internal sealed class SessionController
         lastWidthLock = lockWidth;
         lastRectangleAction = rectangleAction;
         gesture.Move(physicalPosition, snap, lockHeight, lockWidth, rectangleAction);
+        targetDrag?.Move(physicalPosition, Snapshot.Monitors, FreeMiddleDrag ? null : findWindow);
         RefreshOverlays();
     }
 
@@ -769,7 +791,7 @@ internal sealed class SessionController
             cursorConfinement?.Dispose();
             cursorConfinement = null;
         }
-        else UpdateMonitorRestriction(pointer, action == CaptureKeyAction.CrossMonitor);
+        else if (!FreeMiddleDrag) UpdateMonitorRestriction(pointer, action == CaptureKeyAction.CrossMonitor);
         CaptureKeyAction rectangleAction = dragging && action is CaptureKeyAction.LockAspectRatio
             or CaptureKeyAction.FromCenter or CaptureKeyAction.FromCenterWithAspectRatio or CaptureKeyAction.Grid ? action : CaptureKeyAction.None;
         if (forceMove || pointer != lastPointerPosition || snap != lastSnap || height != lastHeightLock || width != lastWidthLock
@@ -868,19 +890,20 @@ internal sealed class SessionController
     private void UpdateOverlays()
     {
         overlayUpdatePending = false;
-        if (!starting && !refreshing && (windowPreview is not null || previewOverlays.Count != 0))
+        if (!starting && !refreshing && (windowPreview is not null || FreeMiddleDrag || auxiliaryOverlays.Count != 0))
         {
             Rectangle previewBounds = PreviewFrame?.Bounds ?? Rectangle.Empty;
-            foreach (CaptureOverlay overlay in previewOverlays.ToArray())
+            bool NeedsAuxiliary(Rectangle monitor) => FreeMiddleDrag ? targetDrag?.Monitors.Contains(monitor) == true
+                : !previewBounds.IsEmpty && previewBounds.IntersectsWith(monitor);
+            foreach (CaptureOverlay overlay in auxiliaryOverlays.ToArray())
             {
-                if (SelectionMonitors.Contains(overlay.MonitorBounds)) previewOverlays.Remove(overlay);
-                else if (!previewBounds.IntersectsWith(overlay.MonitorBounds))
-                { overlay.Hide(); previewOverlays.Remove(overlay); }
+                if (SelectionMonitors.Contains(overlay.MonitorBounds)) auxiliaryOverlays.Remove(overlay);
+                else if (!NeedsAuxiliary(overlay.MonitorBounds))
+                { overlay.Hide(); auxiliaryOverlays.Remove(overlay); }
             }
-            if (!previewBounds.IsEmpty)
-                foreach (Rectangle monitor in Snapshot.Monitors)
-                    if (previewBounds.IntersectsWith(monitor) && !SelectionMonitors.Contains(monitor))
-                        previewOverlays.Add(ShowMonitorOverlay(monitor));
+            foreach (Rectangle monitor in Snapshot.Monitors)
+                if (NeedsAuxiliary(monitor) && !SelectionMonitors.Contains(monitor))
+                    auxiliaryOverlays.Add(ShowMonitorOverlay(monitor));
         }
         var dirty = overlays.Where(overlay => overlay.Visible && !overlay.IsDisposed && overlay.InvalidateChanges()).ToArray();
         // WM_PAINTをウィンドウごとの待ち行列へ任せると、後から追加した画面に偏る。
@@ -891,12 +914,13 @@ internal sealed class SessionController
     private async void UpdateWindowPreview()
     {
         if (completed || refreshing) return;
-        CaptureWindow? target = UsesWindowSource && pressedButton != MouseButtons.Middle ? findWindow?.Invoke(Pointer) : null;
+        CaptureWindow? target = UsesWindowSource && pressedButton != MouseButtons.Middle && !HasWindowDrag
+            ? findWindow?.Invoke(targetDrag is { Path.Count: > 0 } ? targetDrag.Path[0] : Pointer) : null;
         if (target == windowPreview?.Target && (windowPreview is null || windowPreview.IncludeCursor == OutputSettings.IncludeCursor)) return;
         ClearWindowPreview();
         if (target is null) return;
 
-        var pending = windowPreview = new WindowCapturePreview(target, OutputSettings.IncludeCursor);
+        var pending = windowPreview = new WindowCapturePreview(target, OutputSettings.IncludeCursor, findWindowGroup(target));
         try { await pending.Frame; }
         catch (Exception) when (pending.Frame.IsCanceled || pending.Frame.IsFaulted) { }
         if (ReferenceEquals(windowPreview, pending)) RefreshOverlays();
@@ -938,6 +962,16 @@ internal sealed class SessionController
         dragOwner = overlay;
         pressedButton = button;
         altSnapPress = null;
+        if (FreeMiddleDrag || options.Intent == CaptureIntent.Screenshot && HighlightWindow && findWindow is not null)
+        {
+            targetDrag = new CaptureTargetDrag();
+            targetDrag.Move(gesture.RawCurrent, Snapshot.Monitors, FreeMiddleDrag ? null : findWindow);
+        }
+        if (FreeMiddleDrag)
+        {
+            cursorConfinement?.Dispose();
+            cursorConfinement = null;
+        }
         if (button == MouseButtons.Left)
         {
             CaptureModifiers modifiers = ReadModifiers(true);
@@ -957,12 +991,31 @@ internal sealed class SessionController
         if (completed || refreshing || menuOpen || menuTransition || button != pressedButton || pressedButton == MouseButtons.None) return;
         Move(true, eventPosition);
         if (completed) return;
-        CaptureSelection? selection = button == MouseButtons.Middle
-            ? gesture.MonitorSelection(gesture.RawCurrent, Destination)
+        CaptureSelection? selection = button == MouseButtons.Middle ? SelectMiddleMonitors()
+            : HasWindowDrag && targetDrag!.Windows.Count != 0 ? SelectDraggedWindows()
             : gesture.End(gesture.RawCurrent, Destination, lastSnap, lastHeightLock, lastWidthLock, lastRectangleAction);
+        bool restoreConfinement = FreeMiddleDrag;
         ReleasePointer();
-        if (selection is null) { gesture.Reset(); RefreshOverlays(); }
+        if (selection is null)
+        {
+            if (restoreConfinement) UpdateMonitorRestriction(Pointer, false);
+            gesture.Reset(); RefreshOverlays();
+        }
         else CompleteSelection(selection, entireMonitor: button == MouseButtons.Middle);
+    }
+
+    private CaptureSelection? SelectMiddleMonitors()
+    {
+        if (!FreeMiddleDrag || targetDrag is not { Monitors.Count: > 0 }) return gesture.MonitorSelection(Pointer, Destination);
+        Rectangle[] regions = targetDrag.Monitors.ToArray();
+        return new(regions.Aggregate(Rectangle.Union), null, Destination, Composite: regions.Length > 1 ? new(Regions: regions) : null);
+    }
+
+    private CaptureSelection SelectDraggedWindows()
+    {
+        CaptureWindow[] roots = targetDrag!.Windows.ToArray();
+        return new(roots.Select(root => root.Bounds).Aggregate(Rectangle.Union), null, Destination,
+            Composite: new(WindowRoots: roots));
     }
 
     private CaptureModifiers ReadModifiers(bool queuedKeyState)
@@ -978,7 +1031,9 @@ internal sealed class SessionController
         hasSelectionInput = true;
         suppressedButtons |= pressedButton;
         gesture.Reset();
+        bool restoreConfinement = FreeMiddleDrag;
         ReleasePointer();
+        if (restoreConfinement) UpdateMonitorRestriction(Pointer, false);
         RefreshOverlays();
     }
 
@@ -1065,6 +1120,7 @@ internal sealed class SessionController
     private void ReleasePointer()
     {
         pressedButton = MouseButtons.None;
+        targetDrag = null;
         CaptureOverlay? owner = dragOwner;
         dragOwner = null;
         if (owner is not null && !owner.IsDisposed) owner.Capture = false;
@@ -1097,16 +1153,29 @@ internal sealed class SessionController
     internal async void CompleteSelection(CaptureSelection selection, bool entireMonitor = false)
     {
         if (completed || refreshing) return;
-        CaptureWindow? target = selection.WindowHitPoint is Point hit ? findWindow?.Invoke(hit) : null;
+        IReadOnlyList<CaptureWindow>? roots = selection.Composite?.WindowRoots;
+        CaptureWindow? target = roots?.FirstOrDefault() ?? (selection.WindowHitPoint is Point hit ? findWindow?.Invoke(hit) : null);
         if (selection.WindowHitPoint is Point hitPoint) selection = selection with { WindowTitle = target?.Title ?? readTitle?.Invoke(hitPoint) };
         bool useWindowSource = UsesWindowSource && !entireMonitor;
-        if (selectionBounds is Rectangle bounds && (!bounds.Contains(selection.Bounds)
+        bool groupWindows = target is not null && HighlightWindow && !entireMonitor && options.Intent == CaptureIntent.Screenshot;
+        CaptureWindow[] group = groupWindows ? [.. (roots ?? [target!]).SelectMany(findWindowGroup)
+            .DistinctBy(window => window.Handle).OrderBy(window => window.ZOrder)] : [];
+        if (roots is not null)
+            selection = selection with { WindowTitle = roots.Count == 1 ? target?.Title : $"ウィンドウ {roots.Count} 件" };
+        if (!useWindowSource && (group.Length > 1 || roots is not null))
+        {
+            Rectangle[] regions = [.. group.SelectMany(window => Snapshot.Monitors.Select(monitor => Rectangle.Intersect(monitor, window.Bounds)))
+                .Where(CaptureGeometry.IsUsable).Distinct()];
+            if (regions.Length == 0) return;
+            selection = selection with { Bounds = regions.Aggregate(Rectangle.Union), Composite = new(Regions: regions) };
+        }
+        if (!entireMonitor && selection.Composite is null && selectionBounds is Rectangle bounds && (!bounds.Contains(selection.Bounds)
             || selection.Polygon?.Any(point => !bounds.Contains(point)) == true)) return;
         Size fixedSize = activeFixedSize;
         if (Mode == CaptureMode.FixedRegion && !entireMonitor && (selection.Polygon is not null
             || selection.Bounds.Size != fixedSize || !CaptureGeometry.IsFullyCovered(selection.Bounds, SelectionMonitors))) return;
         completed = true;
-        using WindowCapturePreview? confirmedPreview = useWindowSource && target is not null && windowPreview?.Target == target
+        using WindowCapturePreview? confirmedPreview = useWindowSource && roots is null && target is not null && windowPreview?.Target == target
             ? windowPreview : null;
         if (confirmedPreview is not null) windowPreview = null;
         Bitmap? result = null;
@@ -1120,10 +1189,10 @@ internal sealed class SessionController
                 {
                     if (target is null) throw new InvalidOperationException("WGCで撮影するウィンドウを選択してください。");
                     var capture = await IsolatedWindowCapture.TakeAsync(target, OutputSettings with { DefaultDestination = Destination },
-                        Snapshot.Context?.FocusedElement, confirmedPreview);
+                        Snapshot.Context?.FocusedElement, confirmedPreview, group);
                     result = capture.Image;
                     metadata = capture.Metadata;
-                    selection = selection with { Bounds = capture.Bounds, IsolatedWindow = target };
+                    selection = selection with { Bounds = capture.Bounds, IsolatedWindow = roots is null ? target : null };
                 }
                 using DesktopSnapshot? current = useWindowSource || OutputSettings.FreezeFrame || options.Intent == CaptureIntent.Recording ? null : TakeFrame(OutputSettings);
                 DesktopSnapshot frame = current ?? Snapshot;
@@ -1138,9 +1207,11 @@ internal sealed class SessionController
                 // A display-layout change must not silently shift the chosen physical region.
                 if (!useWindowSource && !frame.Bounds.Contains(selection.Bounds))
                     throw new InvalidOperationException("選択中にディスプレイ領域が変わりました。もう一度撮影してください。");
-                if (Mode == CaptureMode.FixedRegion && !CaptureGeometry.IsFullyCovered(selection.Bounds, frame.Monitors))
+                if (Mode == CaptureMode.FixedRegion && !entireMonitor && !CaptureGeometry.IsFullyCovered(selection.Bounds, frame.Monitors))
                     throw new InvalidOperationException("選択中にディスプレイ配置が変わりました。もう一度撮影してください。");
-                result ??= selection.Polygon is { } polygon
+                result ??= selection.Composite?.Regions is { } regions
+                    ? CaptureGeometry.ComposeRegions(frame.Image, frame.Bounds, selection.Bounds, regions)
+                    : selection.Polygon is { } polygon
                     ? CaptureGeometry.Freeform(frame.Image, frame.Bounds, polygon)
                     : CaptureGeometry.Crop(frame.Image, frame.Bounds, selection.Bounds, Mode == CaptureMode.FixedRegion ? 1 : CaptureGeometry.MinimumSize);
                 if (result is null) { completion.TrySetResult(new CaptureOutcome(null, null)); return; }

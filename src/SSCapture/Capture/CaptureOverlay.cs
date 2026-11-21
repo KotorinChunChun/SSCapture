@@ -13,7 +13,7 @@ internal sealed class CaptureOverlay : Form
 
     private sealed record VisualState(DesktopSnapshot Snapshot, CaptureMode Mode, bool Dim, bool Highlight,
         Rectangle Selection, Rectangle Target, WindowCaptureFrame? Preview, bool Valid, int Points, Rectangle Dimensions, Rectangle Hint, string? HintText,
-        string? Error);
+        string? Error, int TrailPoints, Rectangle TrailBounds);
 
     internal CaptureOverlay(SessionController session, Rectangle monitorBounds)
     {
@@ -124,7 +124,7 @@ internal sealed class CaptureOverlay : Form
         Graphics graphics = e.Graphics;
         Rectangle dirty = Rectangle.Intersect(ClientRectangle, e.ClipRectangle);
         DrawSnapshot(graphics, dirty);
-        Rectangle target = session.HighlightedWindow;
+        Rectangle target = session.HighlightForOverlay(MonitorBounds);
         if (session.DimCaptureBackground)
             using (SolidBrush dim = new(Color.FromArgb(115, Color.Black))) graphics.FillRectangle(dim, dirty);
         Rectangle bright = Rectangle.Intersect(Local(target), dirty);
@@ -140,6 +140,7 @@ internal sealed class CaptureOverlay : Form
         Rectangle selection = session.DisplaySelection;
         selection.Offset(-MonitorBounds.X, -MonitorBounds.Y);
         DrawSelection(graphics, selection, dirty);
+        DrawWindowTrail(graphics, dirty);
         DrawDimensions(graphics, selection);
         DrawPointerHint(graphics, selection);
         if (session.SelectionError is string error)
@@ -191,6 +192,13 @@ internal sealed class CaptureOverlay : Form
             if (old.Preview is not null) dirty.Union(Local(old.Target));
             if (next.Preview is not null) dirty.Union(Local(next.Target));
         }
+        if (old.TrailPoints > next.TrailPoints) dirty.Union(Inflate(old.TrailBounds));
+        else if (old.TrailPoints < next.TrailPoints)
+        {
+            var path = session.WindowDragPath;
+            for (int index = Math.Max(1, old.TrailPoints); index < path.Count; index++)
+                dirty.Union(Inflate(SegmentBounds(path[index - 1], path[index])));
+        }
         if (old.Dimensions != next.Dimensions || old.Selection.Size != next.Selection.Size || old.Valid != next.Valid)
         {
             dirty.Union(old.Dimensions);
@@ -225,12 +233,29 @@ internal sealed class CaptureOverlay : Form
         Rectangle selection = session.DisplaySelection;
         string? dimensions = DimensionsText(selection);
         string? hint = MonitorBounds.Contains(session.Pointer) ? session.PointerHint : null;
-        Rectangle target = session.HighlightedWindow;
+        Rectangle target = session.HighlightForOverlay(MonitorBounds);
         return new(session.Snapshot, session.Mode, session.DimCaptureBackground, session.HighlightWindow, selection,
             target, session.PreviewFrame, session.FixedSelectionValid, session.Points.Count,
             dimensions is null ? Rectangle.Empty : PointerLabelBounds(dimensions, session.Current, 24, reserveHint: true),
             hint is null ? Rectangle.Empty : PointerLabelBounds(hint, session.Pointer, HintOffset(selection), reserveHint: false),
-            hint, session.SelectionError);
+            hint, session.SelectionError, session.WindowDragPath.Count, session.WindowDragBounds);
+    }
+
+    private static Rectangle SegmentBounds(Point start, Point end) => Rectangle.FromLTRB(
+        Math.Min(start.X, end.X), Math.Min(start.Y, end.Y), Math.Max(start.X, end.X) + 1, Math.Max(start.Y, end.Y) + 1);
+
+    private void DrawWindowTrail(Graphics graphics, Rectangle dirty)
+    {
+        var path = session.WindowDragPath;
+        if (path.Count < 2) return;
+        Point origin = MonitorBounds.Location;
+        using var border = new Pen(Color.FromArgb(55, 195, 255), 2);
+        for (int index = 1; index < path.Count; index++)
+        {
+            Point start = path[index - 1], end = path[index];
+            if (!Rectangle.Inflate(Local(SegmentBounds(start, end)), 3, 3).IntersectsWith(dirty)) continue;
+            graphics.DrawLine(border, start.X - origin.X, start.Y - origin.Y, end.X - origin.X, end.Y - origin.Y);
+        }
     }
 
     private Rectangle Local(Rectangle screen)

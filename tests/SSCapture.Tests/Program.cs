@@ -27,7 +27,7 @@ internal static partial class Program
         }
         if (args.SequenceEqual(["--snap-tests"]))
         {
-            SnapTests(); SelectionUpgradeTests(); SelectionMonitorTests(); SelectionInteractionTests(); OverlayWindowTests(); PreparationTests();
+            SnapTests(); SelectionUpgradeTests(); SelectionMonitorTests(); SelectionInteractionTests(); OverlayWindowTests(); PreparationTests(); CaptureCompositeTests();
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }
         if (args.SequenceEqual(["--menu-tests"]))
@@ -114,6 +114,7 @@ internal static partial class Program
         RecipeTests();
         SnapshotRefactorTests();
         OverlayWindowTests();
+        CaptureCompositeTests();
         SelectionMonitorTests();
         ServiceTests();
         UiTests();

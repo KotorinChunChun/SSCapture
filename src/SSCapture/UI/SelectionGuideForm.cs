@@ -38,7 +38,7 @@ internal sealed class SelectionGuideForm : Form
                 ? $"固定サイズ {dimensions.Width} × {dimensions.Height} px　基点: {AnchorText(fixedAnchor)}　左クリック / Enter: 確定\n{(spaceEnabled ? "Space: 基点を時計回り　" : "")}矢印: 1px　Shift＋矢印: 10px\n中央クリック: 画面全体　右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断　画面外の枠は確定不可"
                 : mode == CaptureMode.Rectangle
                     ? $"左クリック: ウィンドウ　中央クリック: 画面全体　左ドラッグ: 範囲選択\n{(spaceEnabled ? "Space: 対角の起点に切り替え　" : "")}右クリック: メニュー・縦横比\nEsc: 撮影終了　ドラッグ中の右クリック / Esc: 選択だけ中断"
-                    : $"左クリック: ウィンドウ　中央クリック: 画面全体\n{(mode == CaptureMode.Freeform ? "左ドラッグ: 輪郭を囲む" : "ウィンドウを選んで左クリックで確定")}\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
+                    : $"左クリック: ウィンドウ　中央クリック: 画面全体\n{(mode == CaptureMode.Freeform ? "左ドラッグ: 輪郭を囲む" : intent == CaptureIntent.Screenshot ? "左ドラッグ: 複数ウィンドウを合成" : "ウィンドウを選んで左クリックで確定")}\n右クリック: メニュー　Esc: 撮影終了\nドラッグ中の右クリック / Esc: 選択だけ中断"
         });
     }
 

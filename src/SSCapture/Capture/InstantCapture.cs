@@ -75,7 +75,7 @@ internal static class InstantCapture
     internal static async Task<string> DeliverAsync(Bitmap image, AppSettings settings, DateTimeOffset capturedAt, OutputRouter output,
         Func<Bitmap, string, CancellationToken, Task<OcrResult>>? recognize = null, string regionName = "撮影", Rectangle? captureBounds = null,
         CaptureMetadata? metadata = null, bool preserveOutputs = false, Action? onDelivered = null, IReadOnlyList<Point>? capturePolygon = null,
-        string? windowTitle = null, CaptureWindow? isolatedWindow = null)
+        string? windowTitle = null, CaptureWindow? isolatedWindow = null, CaptureComposite? composite = null)
     {
         OutputDestination destination = preserveOutputs ? settings.DefaultDestination : settings.DefaultDestination & (OutputDestination.Clipboard | OutputDestination.File);
         if (destination == OutputDestination.None) return "即時撮影の出力先がOFFです。クリップボードまたはファイル保存を有効にしてください。";
@@ -94,6 +94,6 @@ internal static class InstantCapture
         }
         var plan = destination.HasFlag(OutputDestination.File) ? new FileNamePlan(settings.FileNamePattern, capturedAt, CaptureIntent.Screenshot, ocr, Region: regionName) : null;
         return warning + await output.ScreenshotAsync(image, destination, settings with { OpenFolderAfterSave = preserveOutputs && settings.OpenFolderAfterSave }, namePlan: plan, captureBounds: captureBounds, metadata: metadata,
-            onDelivered: onDelivered, capturePolygon: capturePolygon, capturedAt: capturedAt, windowTitle: windowTitle, isolatedWindow: isolatedWindow);
+            onDelivered: onDelivered, capturePolygon: capturePolygon, capturedAt: capturedAt, windowTitle: windowTitle, isolatedWindow: isolatedWindow, composite: composite);
     }
 }

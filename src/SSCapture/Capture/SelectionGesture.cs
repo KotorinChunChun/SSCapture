@@ -96,6 +96,7 @@ internal sealed class SelectionGesture
         Current = Resolve(point, snap);
         if (mode == CaptureMode.Window)
         {
+            if (IsPressed) HasDragged |= ExceedsThreshold(rawStart, point, threshold);
             Selection = WindowAt(point);
             return;
         }
@@ -141,7 +142,7 @@ internal sealed class SelectionGesture
         Move(point, snap, lockHeight, lockWidth, action);
         IsPressed = false;
         if (mode == CaptureMode.FixedRegion) return FixedSelection(destination);
-        if (mode == CaptureMode.Window) return WindowSelection(point, destination);
+        if (mode == CaptureMode.Window) return WindowSelection(HasDragged ? point : rawStart, destination);
         if (!HasDragged) return WindowSelection(rawStart, destination);
         if (!CaptureGeometry.IsUsable(Selection)) return null;
         if (mode != CaptureMode.Freeform) return new CaptureSelection(Selection, null, destination);

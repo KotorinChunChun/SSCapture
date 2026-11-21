@@ -79,6 +79,45 @@ internal static class CaptureGeometry
             clipped.Width, clipped.Height), PixelFormat.Format32bppArgb);
     }
 
+    internal static Bitmap ComposeRegions(Bitmap desktopImage, Rectangle desktop, Rectangle bounds, IReadOnlyList<Rectangle> regions)
+        => Compose(bounds, CompositingMode.SourceCopy, graphics =>
+        {
+            foreach (Rectangle region in regions)
+            {
+                Rectangle area = Rectangle.Intersect(desktop, region);
+                if (area.Width > 0 && area.Height > 0)
+                    DrawPiece(graphics, desktopImage, area, desktop.Location, bounds.Location);
+            }
+        });
+
+    internal static Bitmap ComposeWindows(Rectangle bounds, IReadOnlyList<WindowCaptureFrame> foregroundFirst)
+        => Compose(bounds, CompositingMode.SourceOver, graphics =>
+        {
+            for (int index = foregroundFirst.Count - 1; index >= 0; index--)
+            {
+                var frame = foregroundFirst[index];
+                DrawPiece(graphics, frame.Image, frame.Bounds, frame.Bounds.Location, bounds.Location);
+            }
+        });
+
+    private static Bitmap Compose(Rectangle bounds, CompositingMode mode, Action<Graphics> draw)
+    {
+        Bitmap result = new(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
+        try
+        {
+            using Graphics graphics = Graphics.FromImage(result);
+            graphics.Clear(Color.Transparent);
+            graphics.CompositingMode = mode;
+            draw(graphics);
+            return result;
+        }
+        catch { result.Dispose(); throw; }
+    }
+
+    private static void DrawPiece(Graphics graphics, Bitmap image, Rectangle area, Point sourceOrigin, Point canvasOrigin) =>
+        graphics.DrawImage(image, new Rectangle(area.X - canvasOrigin.X, area.Y - canvasOrigin.Y, area.Width, area.Height),
+            new Rectangle(area.X - sourceOrigin.X, area.Y - sourceOrigin.Y, area.Width, area.Height), GraphicsUnit.Pixel);
+
     internal static Bitmap? Freeform(Bitmap desktopImage, Rectangle desktop, IReadOnlyList<Point> points)
     {
         if (!HasPolygonArea(points)) return null;

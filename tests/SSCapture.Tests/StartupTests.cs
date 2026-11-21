@@ -31,7 +31,7 @@ internal static partial class Program
             editor.RefreshAsync().GetAwaiter().GetResult();
             Check(check.Checked && !check.Enabled && !apply.Enabled, "経由起動を重複登録できる");
         });
-        Run("基本の自動起動欄は最小サイズでもチェック・適用・案内が重ならない", () =>
+        Run("基本のガイドと自動起動欄は最小サイズでも表示領域に収まる", () =>
         {
             using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => [], startupRegistration: new FakeStartup());
             form.Size = form.MinimumSize;
@@ -42,6 +42,11 @@ internal static partial class Program
             var check = form.Controls.Find("StartWithWindows", true).Single();
             var apply = form.Controls.Find("ApplyStartup", true).Single();
             var message = form.Controls.Find("StartupState", true).Single();
+            var screenGuide = form.Controls.Find("ShowSelectionGuide", true).Single();
+            var pointerGuide = form.Controls.Find("ShowPointerGuide", true).Single();
+            Check(screenGuide.Parent!.ClientRectangle.Contains(screenGuide.Bounds)
+                && pointerGuide.Parent!.ClientRectangle.Contains(pointerGuide.Bounds) && screenGuide.Right <= pointerGuide.Left,
+                "ガイドのチェック欄が切れるか重なる");
             Check(editor.Parent!.ClientRectangle.Contains(editor.Bounds), "自動起動欄が親領域外");
             Check(check.Parent!.ClientRectangle.Contains(check.Bounds) && apply.Parent!.ClientRectangle.Contains(apply.Bounds), "自動起動ボタンが親領域外");
             Check(check.Right <= apply.Left, "チェックと適用が重なる");

@@ -52,6 +52,8 @@ internal static class CaptureNative
     [DllImport("user32.dll")]
     private static extern nint GetShellWindow();
     [DllImport("user32.dll")]
+    private static extern nint GetWindow(nint window, uint command);
+    [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(nint window, out NativeRect bounds);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -184,7 +186,8 @@ internal static class CaptureNative
                 var title = new StringBuilder(512);
                 GetWindowText(window, title, title.Capacity);
                 uint thread = GetWindowThreadProcessId(window, out uint process);
-                windows.Add(new(clipped, title.ToString().Replace('\r', ' ').Replace('\n', ' ').Trim(), window, process, thread));
+                windows.Add(new(clipped, title.ToString().Replace('\r', ' ').Replace('\n', ' ').Trim(), window, process, thread,
+                    GetWindow(window, 4 /* GW_OWNER */), windows.Count));
             }
             return true;
         }, 0);
@@ -207,4 +210,5 @@ internal static class CaptureNative
     }
 }
 
-internal sealed record CaptureWindow(Rectangle Bounds, string Title, nint Handle, uint ProcessId, uint ThreadId);
+internal sealed record CaptureWindow(Rectangle Bounds, string Title, nint Handle, uint ProcessId, uint ThreadId,
+    nint Owner = 0, int ZOrder = 0);

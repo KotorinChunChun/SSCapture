@@ -590,7 +590,8 @@ internal static partial class Program
         IReadOnlyList<Rectangle>? windows = null, Size? fixedSize = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft,
         bool freeze = true, Func<DesktopSnapshot>? currentFrameFactory = null,
         SSCapture.Services.AppSettings? settings = null, bool captureWindowsKey = false,
-        Func<Point, CaptureWindow?>? findWindow = null, bool showGuide = true, bool dimBackground = false)
+        Func<Point, CaptureWindow?>? findWindow = null, bool showGuide = true, bool dimBackground = false,
+        bool limitToStart = false, Func<CaptureWindow, IReadOnlyList<CaptureWindow>>? findWindowGroup = null)
     {
         var pixels = new Bitmap(bounds.Width, bounds.Height);
         using (Graphics graphics = Graphics.FromImage(pixels))
@@ -605,14 +606,14 @@ internal static partial class Program
         var snapshot = new DesktopSnapshot(pixels, bounds, monitors);
         Task<CaptureOutcome> capture = CaptureSession.SelectAsync(
             new CaptureOptions(mode, CaptureIntent.Screenshot, OutputDestination.Clipboard, FreezeFrame: freeze, FixedSize: fixedSize, FixedAnchor: fixedAnchor,
-                LimitToStartingMonitor: false, ShowSelectionGuide: showGuide, OutputSettings: settings, DimCaptureBackground: dimBackground), snapshot, windows ?? [bounds], currentFrameFactory,
-            captureWindowsKey: captureWindowsKey, findWindow: findWindow);
+                LimitToStartingMonitor: limitToStart, ShowSelectionGuide: showGuide, OutputSettings: settings, DimCaptureBackground: dimBackground), snapshot, windows ?? [bounds], currentFrameFactory,
+            captureWindowsKey: captureWindowsKey, findWindow: findWindow, findWindowGroup: findWindowGroup);
         bool returned = false;
         try
         {
             await Task.Delay(150, token);
             CaptureOverlay[] overlays = Application.OpenForms.OfType<CaptureOverlay>().ToArray();
-            Equal(monitors.Length, overlays.Length);
+            Equal(limitToStart ? 1 : monitors.Length, overlays.Length);
             CaptureOverlay overlay = overlays.Single(candidate => candidate.MonitorBounds == monitors[0]);
             Equal(monitors[0], overlay.Bounds);
             NativeSmokeInput.FocusFixture(overlay.Handle);

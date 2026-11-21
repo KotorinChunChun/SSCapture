@@ -113,7 +113,7 @@ internal static partial class Program
                             }
                             else await Down(overlay);
                             string expected = middle ? "モニター全体を撮影" : "ウィンドウを撮影";
-                            Equal(expected + "　ESC / 右クリックで取り消し", session.PointerHint);
+                            Equal(expected + "　ESC / 右クリックで取り消し" + (middle ? "\nドラッグ：複数デスクトップを合成" : ""), session.PointerHint);
                             if (escape) { await Key(overlay, 0x1B, true); await Key(overlay, 0x1B, false); }
                             else { input.RightDown(); await Task.Delay(60); input.RightUp(); }
                             if (middle) input.MiddleUp(); else input.LeftUp();
@@ -221,6 +221,8 @@ internal static partial class Program
                     using var result = await CaptureSyntheticOutcome(CaptureMode.FixedRegion, bounds, input, async (overlay, ct) =>
                     {
                         await Move(overlay, 120, 80); NativeSmokeInput.RequireTarget(overlay.Handle, P(120, 80));
+                        Check(FeedbackNative.GetWindowDisplayAffinity(overlay.Handle, out uint affinity) && affinity == CaptureNative.ExcludeFromCapture,
+                            "選択画面の録画除外が設定されていない");
                         using var rendered = new Bitmap(bounds.Width, bounds.Height);
                         overlay.DrawToBitmap(rendered, new(Point.Empty, bounds.Size));
                         Check(rendered.GetPixel(260, 30).B < 200, "押下前の背景が暗転していない");
@@ -241,6 +243,28 @@ internal static partial class Program
                         await MenuClick(overlay, (ToolStripMenuItem)overlay.SelectionMenu.Command("CaptureDesktop")!);
                     }, token, fixedSize: new(200, 120), showGuide: false);
                     Equal(bounds, result.Selection!.Bounds);
+                });
+                await Test("開始モニター限定でも中ドラッグを解除し、往復で通過したモニターを合成する", async token =>
+                {
+                    using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, _) =>
+                    {
+                        await Move(overlay, 100, 110);
+                        NativeSmokeInput.RequireTarget(overlay.Handle, P(100, 110));
+                        input.MiddleDown(); await Task.Delay(70);
+                        var session = OverlaySession(overlay);
+                        Check(session.PointerHint?.Contains("ドラッグ：複数デスクトップを合成", StringComparison.Ordinal) == true, "中ドラッグの案内がない");
+                        await Move(overlay, 560, 110);
+                        Equal(P(560, 110), session.Pointer);
+                        CaptureOverlay second = Application.OpenForms.OfType<CaptureOverlay>().Single(form => form.MonitorBounds.Contains(P(560, 110)));
+                        Check(second.Visible && session.HighlightForOverlay(second.MonitorBounds) == second.MonitorBounds, "通過したモニターが明るくならない");
+                        Check(overlay.Capture && CaptureNative.OwnsForegroundWindow(), "別モニターへ移動すると中ボタンを保持できない");
+                        input.Move(P(100, 110)); await Task.Delay(70);
+                        input.MiddleUp();
+                    }, token, splitMonitors: true, limitToStart: true, showGuide: false, dimBackground: true);
+                    Equal(bounds, result.Selection!.Bounds);
+                    Equal(2, result.Selection.Composite!.Regions!.Count);
+                    Equal(Color.Red.ToArgb(), result.Image!.GetPixel(50, 50).ToArgb());
+                    Equal(Color.Blue.ToArgb(), result.Image.GetPixel(560, 50).ToArgb());
                 });
                 await Test("通常の左単押しは対象を強調して見えている画面を切り抜く", async token =>
                 {
@@ -339,13 +363,61 @@ internal static partial class Program
                         Equal(freeze ? 0 : 1, reads);
                         Equal((freeze ? Color.Red : Color.Green).ToArgb(), result.Image!.GetPixel(10, 10).ToArgb());
                     });
+                foreach (bool owned in new[] { true, false })
+                await Test(owned ? "WGC左単押しは前面の所有ウィンドウをプレビューと撮影に含める" : "WGC左ドラッグは枠なしで軌跡を描き、通過したウィンドウを合成する", async token =>
+                {
+                    using var second = new HitFixture(false) { Text = "合成する検証用ウィンドウ", Bounds = new(P(380, 180), new Size(250, 160)), BackColor = Color.Orange };
+                    if (owned) second.Show(host); else second.Show();
+                    second.Refresh();
+                    await Task.Delay(125, token);
+                    CaptureWindow[] targets = CaptureNative.CaptureWindows(Screen.FromControl(host).Bounds)
+                        .Where(w => w.Handle == host.Handle || w.Handle == second.Handle).ToArray();
+                    Equal(2, targets.Length);
+                    CaptureWindow parent = targets.Single(window => window.Handle == host.Handle);
+                    var child = targets.Single(window => window.Handle == second.Handle);
+                    Equal(owned, child.Owner == parent.Handle);
+                    Check(child.ZOrder < parent.ZOrder, "検証ウィンドウが前面にない");
+                    using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, ct) =>
+                    {
+                        await Move(overlay, 80, 220);
+                        var session = OverlaySession(overlay);
+                        session.ApplyPointerInput(P(80, 220), CaptureModifiers.None, windowsTap: true);
+                        if (owned)
+                        {
+                            for (int count = 0; count < 120 && session.PreviewFrame is null; count++) await Task.Delay(25, ct);
+                            Check(session.PreviewFrame is not null, "所有ウィンドウを含むプレビューが取得できない: " + session.PointerHint);
+                            Equal(Color.Orange.ToArgb(), session.PreviewFrame!.Image.GetPixel(440, 220).ToArgb());
+                        }
+                        await Down(overlay, 80, 220);
+                        Check(session.PointerHint?.Contains("ドラッグ：複数ウィンドウを合成", StringComparison.Ordinal) == true, "左ドラッグの案内がない");
+                        if (!owned)
+                        {
+                            await Move(overlay, 450, 220);
+                            Equal(Rectangle.Empty, session.DisplaySelection);
+                            Check(session.WindowDragPath.Count >= 2, "軌跡が記録されていない");
+                            using var rendered = new Bitmap(bounds.Width, bounds.Height);
+                            overlay.DrawToBitmap(rendered, new(Point.Empty, bounds.Size));
+                            Equal(Color.FromArgb(55, 195, 255).ToArgb(), rendered.GetPixel(250, 220).ToArgb());
+                            Equal(Color.Blue.ToArgb(), rendered.GetPixel(250, 200).ToArgb());
+                            CaptureNative.SynchronizeDesktop();
+                            using var screen = InstantCapture.Take(new Rectangle(P(250, 200), new Size(2, 2)));
+                            Equal(Color.White.ToArgb(), screen.GetPixel(0, 0).ToArgb());
+                        }
+                        input.LeftUp();
+                    }, token, windows: targets.Select(window => window.Bounds).ToArray(), showGuide: false,
+                        findWindow: point => targets.FirstOrDefault(window => window.Bounds.Contains(point)),
+                        findWindowGroup: window => CaptureWindowGroups.ForegroundGroup(window, targets));
+                    Equal(Color.White.ToArgb(), result.Image!.GetPixel(180, 150).ToArgb());
+                    Equal(Color.Orange.ToArgb(), result.Image.GetPixel(440, 220).ToArgb());
+                    if (!owned) Equal(2, result.Selection!.Composite!.WindowRoots!.Count);
+                });
             }
             catch (Exception ex) { failures++; Console.WriteLine("FAIL INPUT setup: " + ex.Message); }
             finally { input.ReleaseInjectedInput(); CloseSmokeOverlays(); host.Close(); }
         };
         Application.Run(host);
         Console.WriteLine($"SELECTION INPUT RESULT: {successes} passed, {failures} failed");
-        return failures == 0 && successes == 19 ? 0 : 1;
+        return failures == 0 && successes == 22 ? 0 : 1;
     }
 
     private static SessionController OverlaySession(CaptureOverlay overlay) => (SessionController)typeof(CaptureOverlay)
