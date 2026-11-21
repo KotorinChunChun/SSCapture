@@ -2,6 +2,45 @@
 
 Windows 11用の軽快な常駐スクリーンショット・領域録画ツールです。Windows標準の **Win＋Shift＋S（Snipping Tool）** を置き換え、範囲の決めやすさ、繰り返し撮影、撮影後の出力を重視しています。
 
+## 想定活用フロー
+
+### 貼り付け・保存・再撮影
+
+```mermaid
+flowchart LR
+    area["任意範囲撮影"] --> clipboard["クリップボード"]
+    clipboard --> office["Officeへ貼り付け"]
+    clipboard --> currentFolder["今開いているフォルダーへ貼り付け（SmartPaste）"]
+    area --> file["ファイル保存"]
+    file --> openFolder["通知からフォルダーを開く"]
+    size["固定サイズ撮影"] --> presetFile["ファイル保存"]
+    position["固定位置とサイズで撮影"] --> presetFile
+    presetFile --> presetFolder["決まったフォルダーへ保存"]
+    repeat["直前と同じ範囲を再撮影"] --> currentOutput["現在の出力設定"]
+    currentOutput --> reuse["クリップボードへコピー・ファイル保存"]
+```
+
+フォルダーへ貼り付ける場合は、SmartPasteを起動し、エクスプローラーのファイル一覧で **Ctrl＋V** を押します。固定サイズや固定位置を繰り返し使うときは、入力プリセットで撮影条件を、出力プリセットで保存先を指定します。直前と同じ範囲は **Win＋Ctrl＋Shift＋S** で撮り直せます。
+
+### 編集・資料作成・定期撮影
+
+```mermaid
+flowchart LR
+    area["任意範囲撮影"] --> notification["撮影通知の小画像"]
+    notification -->|ドラッグ＆ドロップ| excel["Excelのシートへ直接配置（OfficeAssist）"]
+    notification -->|ダブルクリック| editor["登録済みの編集アプリで開く"]
+    area --> both["クリップボード＋ファイル"]
+    both --> documents["資料へ貼り付けながらPNGも保管"]
+    area --> pin["ピン留め表示"]
+    pin --> compare["最前面で参照・比較・書き込み"]
+    sameSettings["直前と同じ設定で再撮影"] --> previousOutput["前回の入出力設定"]
+    previousOutput --> latest["同じ処理設定で新しい画像を出力"]
+    cli["固定座標のCLI撮影"] --> file["ファイル保存"]
+    file --> schedule["スクリプトやタスクで定期保存"]
+```
+
+[用途別の操作例](docs/usage.md#用途別の操作例)・[おすすめ連携ツール](#おすすめ連携ツール)・[コマンドラインの撮影サンプル集](docs/cli.md#撮影サンプル集)
+
 ## 本ツールの特徴
 
 1. **解像度が異なる複数ディスプレイに対応。** モニタごとの物理ピクセル座標で範囲を扱い、画面の角で離したときの取りこぼしに対処しています。開始モニタだけでの選択と、複数モニタをまたぐ選択を切り替えられます。
