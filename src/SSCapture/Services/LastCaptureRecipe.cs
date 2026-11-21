@@ -77,12 +77,13 @@ internal sealed class LastCaptureRecipe
     internal IReadOnlyList<Rectangle>? RegionsFor(IReadOnlyList<DisplayLayout> displays) =>
         monitors?.Select(id => FindDisplay(displays, display => StringComparer.OrdinalIgnoreCase.Equals(display.Identity, id)).Bounds).ToArray();
 
-    internal CaptureWindow[] ResolveWindows(IReadOnlyList<CaptureWindow> current, Func<uint, long?>? processStart = null)
+    internal CaptureWindow[] ResolveWindows(IReadOnlyList<CaptureWindow> current, Func<uint, long?>? processStart = null,
+        bool requireOriginalWindow = false)
     {
         if (windows is null) throw new InvalidOperationException("再撮影するウィンドウが記録されていません。");
         var starts = windows.Select(window => window.Original.ProcessId).Distinct()
             .ToDictionary(pid => pid, processStart ?? ReadProcessStart);
-        var resolved = windows.Select(window => window.Resolve(current, starts[window.Original.ProcessId])).ToArray();
+        var resolved = windows.Select(window => window.Resolve(current, starts[window.Original.ProcessId], requireOriginalWindow)).ToArray();
         if (resolved.DistinctBy(window => window.Handle).Count() != resolved.Length)
             throw new InvalidOperationException("再撮影するウィンドウを区別できません。選び直してください。");
         return resolved;
@@ -111,7 +112,7 @@ internal sealed class LastCaptureRecipe
 
     private sealed record CaptureWindowIdentity(CaptureWindow Original, long? ProcessStart)
     {
-        internal CaptureWindow Resolve(IReadOnlyList<CaptureWindow> current, long? processStart)
+        internal CaptureWindow Resolve(IReadOnlyList<CaptureWindow> current, long? processStart, bool requireOriginalWindow)
         {
             if (ProcessStart is null || ProcessStart == processStart)
             {
@@ -119,7 +120,7 @@ internal sealed class LastCaptureRecipe
                     && window.ClassName == Original.ClassName).ToArray();
                 var sameHandle = candidates.FirstOrDefault(window => window.Handle == Original.Handle && window.ThreadId == Original.ThreadId);
                 if (sameHandle is not null) return sameHandle;
-                if (ProcessStart is not null && Original.ClassName.Length != 0 && Original.Title.Length != 0)
+                if (!requireOriginalWindow && ProcessStart is not null && Original.ClassName.Length != 0 && Original.Title.Length != 0)
                 {
                     var matching = candidates.Where(window => window.Title == Original.Title).Take(2).ToArray();
                     if (matching.Length == 1) return matching[0];

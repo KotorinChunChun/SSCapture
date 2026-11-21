@@ -94,6 +94,7 @@ internal sealed partial class TrayApplicationContext
 
     private void RefreshMenu()
     {
+        RefreshTimerAvailability();
         retryOutputItem.Enabled = output.HasPendingRetry && !busy && pendingRecording is null && recorder is null;
         sameSettingsItem.Enabled = recipes.Current is not null && !busy && pendingRecording is null && recorder is null;
         pause.Enabled = settings.HasShortcuts;

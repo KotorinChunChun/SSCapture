@@ -18,6 +18,7 @@ internal sealed record CaptureOptions(
     bool DimCaptureBackground = false,
     SSCapture.Services.SavedRegion? InitialInputPreset = null)
 {
+    internal bool SelectionOnly { get; init; }
     internal static CaptureOptions ForInputSelection(SSCapture.Services.AppSettings settings, Size? size, CaptureAnchor anchor) => new(
         size is null ? CaptureMode.Rectangle : CaptureMode.FixedRegion, CaptureIntent.Recording, OutputDestination.None,
         FixedSize: size, FixedAnchor: anchor, LimitToStartingMonitor: settings.LimitToStartingMonitor,

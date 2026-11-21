@@ -73,11 +73,11 @@ internal static class InstantCapture
         catch { image.Dispose(); throw; }
     }
 
-    internal static async Task<WindowReplayFrame> TakeReplayWindowsAsync(LastCaptureRecipe recipe, AppSettings settings)
+    internal static async Task<WindowReplayFrame> TakeReplayWindowsAsync(LastCaptureRecipe recipe, AppSettings settings, bool requireOriginalWindow = false)
     {
         var monitors = CaptureNative.MonitorBounds();
         var windows = CaptureNative.CaptureWindows(monitors.Aggregate(Rectangle.Union));
-        CaptureWindow[] roots = recipe.ResolveWindows(windows);
+        CaptureWindow[] roots = recipe.ResolveWindows(windows, requireOriginalWindow: requireOriginalWindow);
         CaptureWindow target = roots[0];
         if (recipe.TracksControl)
         {

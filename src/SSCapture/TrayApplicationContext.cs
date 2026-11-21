@@ -82,6 +82,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
 
         recordItem = new ToolStripMenuItem("録画", null, (_, _) => OnCaptureKey(CaptureIntent.Recording));
         menu.Items.Add(recordItem);
+        menu.Items.Add(CreateTimerMenu());
         savedRegionMenu = new ToolStripMenuItem("範囲を再撮影");
         menu.Items.Add(savedRegionMenu);
         sameSettingsItem = new ToolStripMenuItem("直前と同じ設定で再撮影", null, (_, _) => _ = TakeSameSettingsAsync());

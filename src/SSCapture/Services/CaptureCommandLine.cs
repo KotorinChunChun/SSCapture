@@ -4,7 +4,10 @@ using SSCapture.UI;
 
 namespace SSCapture.Services;
 
-internal sealed record CaptureCommandRequest(Rectangle? Region = null, string? InputPresetId = null, string? OutputPresetId = null);
+internal sealed record CaptureCommandRequest(Rectangle? Region = null, string? InputPresetId = null, string? OutputPresetId = null)
+{
+    internal CaptureSchedule? Schedule { get; init; }
+}
 
 internal sealed record ResolvedCaptureCommand(CaptureCommandRequest Request, AppSettings Settings, SavedRegion InputPreset)
 {
@@ -28,13 +31,14 @@ internal static class CaptureCommandLine
 {
     internal static bool Handles(IReadOnlyList<string> args) => args.Any(arg =>
         arg.StartsWith("--capture-", StringComparison.Ordinal) && arg != "--capture-context-worker"
-        || arg is "--input-preset" or "--output-preset");
+        || arg is "--input-preset" or "--output-preset" || CaptureTimerArguments.Handles(arg));
 
     internal static CaptureCommandRequest Parse(IReadOnlyList<string> args)
     {
         bool mode = false;
         Rectangle? region = null;
         string? input = null, output = null;
+        Dictionary<string, string> scheduleOptions = new(StringComparer.Ordinal);
         for (int index = 0; index < args.Count; index++)
         {
             string option = args[index];
@@ -72,11 +76,14 @@ internal static class CaptureCommandLine
                         output = args[index];
                     }
                     break;
+                case var timer when CaptureTimerArguments.Handles(timer):
+                    CaptureTimerArguments.Read(scheduleOptions, option, args, ref index);
+                    break;
                 default: throw new ArgumentException("不明な撮影引数です: " + option);
             }
         }
         if (!mode) throw new ArgumentException("--capture-selectまたは--capture-regionを指定してください。");
-        return new(region, input, output);
+        return new(region, input, output) { Schedule = CaptureTimerArguments.Build(scheduleOptions) };
     }
 
     internal static void ValidateRegion(Rectangle region)
@@ -96,7 +103,8 @@ internal static class CaptureCommandLine
         SavedRegion input = request.InputPresetId is null ? settings.SavedRegions.Single(p => p.IsDefault)
             : settings.SavedRegions.SingleOrDefault(p => p.Id == request.InputPresetId)
                 ?? throw new ArgumentException("入力プリセットが見つかりません: " + request.InputPresetId);
-        CapturePreset output = request.OutputPresetId is null ? settings.CapturePresets.Single(p => p.IsDefault)
+        CapturePreset output = request.OutputPresetId is null
+            ? request.Schedule is CaptureSchedule.Periodic ? CaptureTimerOutput.InitialPeriodic(settings) : settings.CapturePresets.Single(p => p.IsDefault)
             : settings.CapturePresets.SingleOrDefault(p => p.Id == request.OutputPresetId)
                 ?? throw new ArgumentException("出力プリセットが見つかりません: " + request.OutputPresetId);
         settings = output.Apply(input.Apply(settings)).ResolveEditors();
@@ -121,13 +129,14 @@ internal static class CaptureCommandLine
         else args.Add("--capture-select");
         if (request.InputPresetId is not null) args.AddRange(["--input-preset", request.InputPresetId]);
         if (request.OutputPresetId is not null) args.AddRange(["--output-preset", request.OutputPresetId]);
+        CaptureTimerArguments.Append(args, request.Schedule);
         _ = Parse(args);
         static string Quote(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
         return "& " + Quote(executable) + " " + string.Join(" ", args.Select(Quote));
     }
 }
 
-internal static class CaptureCommandRunner
+internal static partial class CaptureCommandRunner
 {
     internal static async Task<int> ExecuteAsync(ResolvedCaptureCommand command, OutputRouter output,
         Func<Rectangle, AppSettings, Task<(Bitmap Image, CaptureMetadata? Metadata)>>? take = null,
@@ -135,6 +144,8 @@ internal static class CaptureCommandRunner
     {
         try
         {
+            if (command.Request.Schedule is not null)
+                return await ExecuteTimerAsync(command, output, take, select, report);
             AppSettings settings = command.Settings;
             if (settings.DefaultDestination == OutputDestination.None) throw new ArgumentException("出力先がすべてOFFです。");
             DateTimeOffset capturedAt = DateTimeOffset.Now;

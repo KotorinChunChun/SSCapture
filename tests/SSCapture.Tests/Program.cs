@@ -90,7 +90,7 @@ internal static partial class Program
         if (args.SequenceEqual(["--pinned-tests"]))
         { PinnedImageTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
         if (args.SequenceEqual(["--command-tests"]))
-        { CaptureCommandTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
+        { CaptureCommandTests(); CaptureTimerTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
         if (args.SequenceEqual(["--output-tests"]))
         {
             OutputTests(); OutputConditionTests(); ScreenshotPaddingTests(); ScreenshotColorTests();
@@ -108,6 +108,7 @@ internal static partial class Program
         Run("5つの撮影モード", () => Equal(5, Enum.GetValues<CaptureMode>().Length));
         PinnedImageTests();
         CaptureCommandTests();
+        CaptureTimerTests();
         CaptureTests();
         CaptureMenuEditingTests();
         PresetConsolidationTests();

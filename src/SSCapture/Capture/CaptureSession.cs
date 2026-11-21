@@ -8,7 +8,7 @@ internal static class CaptureSession
         ValidateCall(options);
         Point initialPointer = CaptureNative.CursorPosition();
         // Freeze before showing any overlay or menu, with no intentional capture delay.
-        bool metadata = options.Intent == CaptureIntent.Screenshot && options.OutputSettings is { } settings && Services.CaptureMetadata.RequiresPreparation(settings);
+        bool metadata = !options.SelectionOnly && options.Intent == CaptureIntent.Screenshot && options.OutputSettings is { } settings && Services.CaptureMetadata.RequiresPreparation(settings);
         DesktopSnapshot snapshot = DesktopSnapshot.Take(options.IncludeCursor, metadata);
         if (metadata)
             snapshot.Context = await Services.CaptureContextClient.Shared.ObserveAsync(new Point(snapshot.Pointer!.Screen.X, snapshot.Pointer.Screen.Y));
@@ -259,6 +259,11 @@ internal sealed partial class SessionController
                 ChangeOpenFolder, () => _ = ResetInputPresetAsync(), ResetOutputPreset),
             changeWindowSource: options.Intent == CaptureIntent.Screenshot && findWindow is not null
                 ? enabled => { exclusiveWindow = enabled; UpdateMenu(); RefreshOverlays(); } : null);
+        if (options.SelectionOnly)
+        {
+            foreach (var item in SelectionMenu.Items.Cast<ToolStripItem>())
+                if (item.Name is "CapturePresetMenu" or "CaptureOutputGroup" or "OpenSettings") item.Available = false;
+        }
         SelectionMenu.SetRatio(AspectRatio);
         SelectionMenu.Closed += MenuClosed;
         UpdateMenu();
@@ -1247,7 +1252,7 @@ internal sealed partial class SessionController
             CloseOverlays();
             if (OutputSettings.ShareCapturePresentation && captureWindowsKey)
                 CaptureNative.SynchronizeDesktop();
-            if (options.Intent == CaptureIntent.Screenshot || options.IncludeRecordingImage)
+            if (!options.SelectionOnly && (options.Intent == CaptureIntent.Screenshot || options.IncludeRecordingImage))
             {
                 if (useWindowSource)
                 {

@@ -21,6 +21,7 @@ internal sealed partial class TrayApplicationContext
 
         CancelRecording();
         exiting = true;
+        timerReservation?.Stop();
         feedback.HideForCapture();
         deferredFeedback?.NotificationImage?.Dispose(); deferredFeedback = null;
         hook?.Dispose();
@@ -37,6 +38,7 @@ internal sealed partial class TrayApplicationContext
         if (disposing)
         {
             exiting = true;
+            timerReservation?.Dispose();
             management.Dispose();
             SystemEvents.SessionSwitch -= OnSessionSwitch;
             signalWait.Unregister(null);

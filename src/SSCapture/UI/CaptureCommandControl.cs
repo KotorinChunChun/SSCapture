@@ -26,6 +26,7 @@ internal sealed class CaptureCommandControl : UserControl
         Name = "CaptureCommandText", ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Both,
         WordWrap = false, Dock = DockStyle.Fill, MinimumSize = new(0, 130), AccessibleName = "PowerShellコマンド"
     };
+    private readonly CaptureScheduleEditor schedule = new(allowImmediate: true, allowUnlimited: false);
     private bool refreshing;
 
     internal CaptureCommandControl(Func<AppSettings> readSettings, Action<string, bool> report, string? executable = null, Func<string, Task>? copyCommand = null)
@@ -40,7 +41,7 @@ internal sealed class CaptureCommandControl : UserControl
         AutoScroll = true;
         method.Items.AddRange(["範囲選択", "固定範囲"]);
         method.SelectedIndex = 0;
-        var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, RowCount = 10, Padding = new(8) };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, RowCount = 11, Padding = new(8) };
         layout.ColumnStyles.Add(new(SizeType.AutoSize));
         layout.ColumnStyles.Add(new(SizeType.Percent, 100));
         void Row(string label, Control value, int row)
@@ -53,10 +54,11 @@ internal sealed class CaptureCommandControl : UserControl
         Row("出力プリセット", output, 2);
         Row("X", x, 3); Row("Y", y, 4); Row("幅", width, 5); Row("高さ", height, 6);
         layout.Controls.Add(import, 1, 7);
+        layout.Controls.Add(schedule, 0, 8); layout.SetColumnSpan(schedule, 2);
         var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Margin = Padding.Empty };
         buttons.Controls.AddRange([generate, copy]);
-        layout.Controls.Add(buttons, 1, 8);
-        layout.Controls.Add(command, 0, 9); layout.SetColumnSpan(command, 2);
+        layout.Controls.Add(buttons, 1, 9);
+        layout.Controls.Add(command, 0, 10); layout.SetColumnSpan(command, 2);
         Controls.Add(layout);
         ButtonTheme.Apply(generate, ButtonRole.Primary);
         ButtonTheme.Apply(copy, ButtonRole.Secondary);
@@ -65,12 +67,23 @@ internal sealed class CaptureCommandControl : UserControl
         input.SelectedIndexChanged += (_, _) => { UpdateCoordinates(); if (!refreshing) ClearCommand(); };
         output.SelectedIndexChanged += (_, _) => { if (!refreshing) ClearCommand(); };
         foreach (var number in new[] { x, y, width, height }) number.ValueChanged += (_, _) => ClearCommand();
+        schedule.ScheduleChanged += (_, _) => { UpdateScheduleOutput(); ClearCommand(); };
         import.Click += (_, _) => ImportRegion();
         generate.Click += (_, _) => Generate();
         copy.Click += async (_, _) => await CopyAsync();
         VisibleChanged += (_, _) => { if (Visible) RefreshCandidates(); };
         RefreshCandidates();
         UpdateCoordinates();
+    }
+
+    private void UpdateScheduleOutput()
+    {
+        if (output.Items.Count == 0) return;
+        string name = schedule.IsPeriodic ? "ファイル保存のみ（予約用）" : "既定";
+        if (output.Items[0] is PresetChoice choice && choice.Name == name) return;
+        int selected = output.SelectedIndex;
+        output.Items[0] = new PresetChoice(null, name);
+        output.SelectedIndex = selected;
     }
 
     private static NumericUpDown Coordinate(string name) => new() { Name = name, Minimum = int.MinValue, Maximum = int.MaxValue, Dock = DockStyle.Fill };
@@ -84,6 +97,7 @@ internal sealed class CaptureCommandControl : UserControl
             refreshing = true;
             RefreshList(input, settings.SavedRegions.Select(p => new PresetChoice(p.Id, p.Name)));
             RefreshList(output, settings.CapturePresets.Select(p => new PresetChoice(p.Id, p.Name)));
+            UpdateScheduleOutput();
             ClearCommand();
         }
         catch (Exception ex)
@@ -120,19 +134,19 @@ internal sealed class CaptureCommandControl : UserControl
 
     private void ClearCommand() { command.Clear(); copy.Enabled = false; }
 
-    private CaptureCommandRequest Request()
+    private CaptureCommandRequest Request(bool includeSchedule = true)
     {
         if (input.SelectedItem is not PresetChoice selectedInput || output.SelectedItem is not PresetChoice selectedOutput)
             throw new ArgumentException("入力・出力プリセットを選び直してください。");
         return new(method.SelectedIndex == 1 ? new Rectangle((int)x.Value, (int)y.Value, (int)width.Value, (int)height.Value) : null,
-            selectedInput.Id, selectedOutput.Id);
+            selectedInput.Id, selectedOutput.Id) { Schedule = includeSchedule ? schedule.ReadSchedule() : null };
     }
 
     private void ImportRegion()
     {
         try
         {
-            var request = Request();
+            var request = Request(includeSchedule: false);
             AppSettings settings = readSettings();
             SavedRegion? preset = request.InputPresetId is null ? settings.SavedRegions.SingleOrDefault(p => p.IsDefault)
                 : settings.SavedRegions.SingleOrDefault(p => p.Id == request.InputPresetId);
