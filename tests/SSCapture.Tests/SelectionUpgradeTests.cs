@@ -94,13 +94,14 @@ internal static partial class Program
             Rectangle front = new(100, 100, 140, 160), back = new(10, 10, 300, 300);
             var snapshot = new DesktopSnapshot(new Bitmap(600, 400), monitor, [monitor]);
             var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
-                LimitToStartingMonitor: false), snapshot, [front, back]);
+                LimitToStartingMonitor: false), snapshot, [front, back], findWindow: _ => null);
             try
             {
                 session.ApplyPointerInput(new(110, 110), CaptureModifiers.Win);
                 Equal(CaptureMode.Rectangle, session.Mode);
                 session.ApplyPointerInput(new(110, 110), CaptureModifiers.None, windowsTap: true);
                 Equal(CaptureMode.Window, session.Mode);
+                Check(session.SelectionMenu.Command("IsolatedWindowCapture").Checked, "Winで開始したウィンドウ撮影がWGCにならない");
                 Check(session.HighlightWindow, "ウィンドウ撮影で対象が強調されない");
                 Equal(front, session.HighlightedWindow);
                 session.ApplyPointerInput(new(20, 20), CaptureModifiers.Ctrl);
@@ -110,6 +111,8 @@ internal static partial class Program
                 Equal(CaptureMode.Rectangle, session.Mode);
                 Equal(Rectangle.Empty, session.HighlightedWindow);
                 Check(session.ModifierHint is null, "修飾キーを離しても効果が表示される");
+                session.ChangeMode(CaptureMode.Window);
+                Check(session.SelectionMenu.Command("VisibleWindowCapture").Checked, "Winでの撮影方式が通常のモード切替に持ち越された");
             }
             finally { session.Cancel(); }
         });

@@ -215,28 +215,44 @@ internal static partial class Program
                     }, token, fixedSize: new(200, 120), showGuide: false);
                     Equal(bounds, result.Selection!.Bounds);
                 });
-                await Test("native列挙の対象ウィンドウを左単押しで確定", async token =>
+                await Test("通常の左単押しは対象を強調して見えている画面を切り抜く", async token =>
                 {
                     NativeSmokeInput.FocusFixture(host.Handle);
                     CaptureNative.SetWindowPos(host.Handle, new(-1), host.Left, host.Top, host.Width, host.Height, 0x40);
                     await Task.Delay(100, token);
-                    var windows = CaptureNative.WindowBounds(bounds);
-                    Equal(bounds, windows.First(r => r.Contains(P(120, 80))));
+                    var windows = CaptureNative.CaptureWindows(bounds);
+                    var target = windows.First(window => window.Bounds.Contains(P(120, 80)));
+                    Equal(bounds, target.Bounds);
                     using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, ct) =>
                     {
-                        await Down(overlay, 120, 80); input.LeftUp();
-                    }, token, windows: windows, showGuide: false);
+                        await Down(overlay, 120, 80);
+                        Equal(bounds, OverlaySession(overlay).HighlightedWindow);
+                        input.LeftUp();
+                    }, token, windows: windows.Select(window => window.Bounds).ToArray(),
+                        findWindow: point => windows.FirstOrDefault(window => window.Bounds.Contains(point)), showGuide: false);
                     Equal(bounds, result.Selection!.Bounds);
+                    Check(result.Selection.IsolatedWindow is null, "通常の左単押しでWGCを使用した");
+                    Equal(Color.Blue.ToArgb(), result.Image!.GetPixel(250, 100).ToArgb());
                 });
-                await Test("WGCを実メニューで選択して対象の画素をPNGへ保存", async token =>
+                foreach (bool viaWin in new[] { false, true })
+                await Test((viaWin ? "Win短押しでWGCへ切り替え" : "WGCを実メニューで選択") + "て対象の画素をPNGへ保存", async token =>
                 {
                     CaptureWindow target = CaptureNative.CaptureWindows(Screen.FromControl(host).Bounds)
                         .Single(window => window.Handle == host.Handle);
-                    using var result = await CaptureSyntheticOutcome(CaptureMode.Window, bounds, input, async (overlay, ct) =>
+                    using var result = await CaptureSyntheticOutcome(viaWin ? CaptureMode.Rectangle : CaptureMode.Window, bounds, input, async (overlay, ct) =>
                     {
-                        await OpenSelectionMenu(overlay, bounds, input, ct);
                         var item = (ToolStripMenuItem)overlay.SelectionMenu.Command("IsolatedWindowCapture")!;
-                        await MenuClick(overlay, item);
+                        if (viaWin)
+                        {
+                            await Move(overlay, 120, 80);
+                            OverlaySession(overlay).ApplyPointerInput(P(120, 80), CaptureModifiers.None, windowsTap: true);
+                        }
+                        else
+                        {
+                            await OpenSelectionMenu(overlay, bounds, input, ct);
+                            await MenuClick(overlay, item);
+                        }
+                        Check(item.Checked, "単ウィンドウ撮影の方式がWGCになっていない");
                         Check(!overlay.SelectionMenu.Visible, "WGC選択後にメニューが残る");
                         await Down(overlay, 120, 80); input.LeftUp();
                     }, token, windows: [target.Bounds], findWindow: point => target.Bounds.Contains(point) ? target : null, showGuide: false);
@@ -288,7 +304,7 @@ internal static partial class Program
         };
         Application.Run(host);
         Console.WriteLine($"SELECTION INPUT RESULT: {successes} passed, {failures} failed");
-        return failures == 0 && successes == 17 ? 0 : 1;
+        return failures == 0 && successes == 18 ? 0 : 1;
     }
 
     private static SessionController OverlaySession(CaptureOverlay overlay) => (SessionController)typeof(CaptureOverlay)

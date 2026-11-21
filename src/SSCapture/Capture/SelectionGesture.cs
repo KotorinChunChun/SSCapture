@@ -38,6 +38,8 @@ internal sealed class SelectionGesture
     internal Point Current { get; private set; }
     internal Point RawCurrent { get; private set; }
     internal Rectangle Selection { get; private set; }
+    internal Rectangle PressedWindow => IsPressed && !HasDragged && mode is (CaptureMode.Rectangle or CaptureMode.Freeform)
+        ? WindowAt(rawStart) : Rectangle.Empty;
     internal List<Point> Points { get; } = [];
 
     internal SelectionGesture(CaptureMode mode, IReadOnlyList<Rectangle> monitors, IReadOnlyList<Rectangle> windows,

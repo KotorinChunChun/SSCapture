@@ -146,7 +146,7 @@ internal sealed class SessionController
     }
     internal Point Pointer => gesture.RawCurrent;
     internal bool HighlightWindow => Mode == CaptureMode.Window;
-    internal Rectangle HighlightedWindow => HighlightWindow ? gesture.WindowAt(Pointer) : Rectangle.Empty;
+    internal Rectangle HighlightedWindow => HighlightWindow ? gesture.WindowAt(Pointer) : gesture.PressedWindow;
 
     internal CaptureMode Mode { get; private set; }
     internal bool Grid20 => gesture.Grid20;
@@ -489,7 +489,9 @@ internal sealed class SessionController
         catch (Exception ex) { Fail(ex); }
     }
 
-    internal void ChangeMode(CaptureMode mode)
+    internal void ChangeMode(CaptureMode mode) => ChangeMode(mode, false);
+
+    private void ChangeMode(CaptureMode mode, bool preferWgc)
     {
         if (completed || mode == Mode) return;
         try
@@ -500,11 +502,13 @@ internal sealed class SessionController
             gesture.Reset();
             ReleasePointer();
             Mode = mode;
+            exclusiveWindow = preferWgc && options.Intent == CaptureIntent.Screenshot && findWindow is not null;
             gesture = CreateGesture(mode, grid20);
             if (mode == CaptureMode.FixedRegion && selectedInputBounds is Rectangle fixedBounds && fixedBounds.Size == activeFixedSize)
                 gesture.FixedPosition = fixedBounds;
             SelectionMenu.SetMode(mode);
             SelectionMenu.SetRatio(AspectRatio);
+            UpdateMenu();
             SelectionMenu.CloseForCapture();
             if (mode == CaptureMode.FullScreen)
             {
@@ -519,7 +523,7 @@ internal sealed class SessionController
         catch (Exception ex) { Fail(ex); }
     }
 
-    private void ToggleWindowCaptureMode()
+    private void ToggleWindowCaptureMode(bool preferWgc)
     {
         if (gesture.IsPressed) return;
         if (Mode == CaptureMode.Window)
@@ -530,7 +534,7 @@ internal sealed class SessionController
         else
         {
             modeBeforeWindowShortcut = Mode;
-            ChangeMode(CaptureMode.Window);
+            ChangeMode(CaptureMode.Window, preferWgc);
         }
     }
 
@@ -751,7 +755,7 @@ internal sealed class SessionController
         if (pressedAction == CaptureKeyAction.SwitchAnchor) SwitchSelectionAnchor();
         if (pressedAction == CaptureKeyAction.HighlightWindow)
         {
-            ToggleWindowCaptureMode();
+            ToggleWindowCaptureMode(preferWgc: windowsTap);
             hasSelectionInput = true;
         }
         if (changed || pressedAction == CaptureKeyAction.HighlightWindow) RefreshOverlays();

@@ -123,14 +123,10 @@ internal sealed class CaptureOverlay : Form
         Graphics graphics = e.Graphics;
         Rectangle dirty = Rectangle.Intersect(ClientRectangle, e.ClipRectangle);
         DrawSnapshot(graphics, dirty);
-        if (session.DimCaptureBackground || session.HighlightWindow)
+        Rectangle target = session.HighlightedWindow;
+        if (IsDimmed(target))
             using (SolidBrush dim = new(Color.FromArgb(115, Color.Black))) graphics.FillRectangle(dim, dirty);
-        if (session.HighlightWindow)
-        {
-            Rectangle target = session.HighlightedWindow;
-            target.Offset(-MonitorBounds.X, -MonitorBounds.Y);
-            DrawSnapshot(graphics, Rectangle.Intersect(target, dirty));
-        }
+        DrawSnapshot(graphics, Rectangle.Intersect(Local(target), dirty));
         Rectangle selection = session.Selection;
         selection.Offset(-MonitorBounds.X, -MonitorBounds.Y);
         DrawSelection(graphics, selection, dirty);
@@ -214,12 +210,15 @@ internal sealed class CaptureOverlay : Form
         Rectangle selection = session.Selection;
         string? dimensions = DimensionsText(selection);
         string? hint = MonitorBounds.Contains(session.Pointer) ? session.PointerHint : null;
-        return new(session.Snapshot, session.Mode, session.DimCaptureBackground, session.HighlightWindow, selection,
-            session.HighlightedWindow, session.FixedSelectionValid, session.Points.Count,
+        Rectangle target = session.HighlightedWindow;
+        return new(session.Snapshot, session.Mode, IsDimmed(target), session.HighlightWindow, selection,
+            target, session.FixedSelectionValid, session.Points.Count,
             dimensions is null ? Rectangle.Empty : PointerLabelBounds(dimensions, session.Current, 24, reserveHint: true),
             hint is null ? Rectangle.Empty : PointerLabelBounds(hint, session.Pointer, HintOffset(selection), reserveHint: false),
             hint, session.SelectionError);
     }
+
+    private bool IsDimmed(Rectangle target) => session.DimCaptureBackground || session.HighlightWindow || !target.IsEmpty;
 
     private Rectangle Local(Rectangle screen)
     {

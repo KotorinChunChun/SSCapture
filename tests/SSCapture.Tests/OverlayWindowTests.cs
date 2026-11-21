@@ -8,6 +8,32 @@ internal static partial class Program
 {
     private static void OverlayWindowTests()
     {
+        Run("暗転OFFでも左押下からドラッグ開始までは押したウィンドウだけを明るく表示する", () =>
+        {
+            Rectangle bounds = new(0, 0, 320, 240);
+            Rectangle first = new(35, 45, 96, 108), second = new(10, 20, 200, 180);
+            using var snapshot = new DesktopSnapshot(new Bitmap(bounds.Width, bounds.Height), bounds, [bounds]);
+            using (Graphics graphics = Graphics.FromImage(snapshot.Image)) graphics.Clear(Color.White);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.None,
+                DimCaptureBackground: false), snapshot, [first, second]);
+            using var menu = session.SelectionMenu;
+            using var overlay = new CaptureOverlay(session, bounds);
+            using var rendered = new Bitmap(bounds.Width, bounds.Height);
+            var gesture = (SelectionGesture)typeof(SessionController).GetField("gesture",
+                BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(session)!;
+            var start = new Point(first.Left + 1, 80);
+            gesture.Begin(start, new(12, 12));
+            gesture.Move(new(first.Left - 1, start.Y));
+            Equal(first, session.HighlightedWindow);
+            overlay.DrawToBitmap(rendered, bounds);
+            Equal(Color.White.ToArgb(), rendered.GetPixel(45, 56).ToArgb());
+            Check(rendered.GetPixel(15, 10).R < 200, "押したウィンドウの外側が暗くならない");
+
+            gesture.Move(new(200, 180));
+            Equal(Rectangle.Empty, session.HighlightedWindow);
+            overlay.DrawToBitmap(rendered, bounds);
+            Equal(Color.White.ToArgb(), rendered.GetPixel(15, 10).ToArgb());
+        });
         Run("範囲選択の実HWNDは初回・再作成後ともツールウィンドウでキー入力を妨げない", () =>
         {
             Rectangle bounds = new(0, 0, 320, 240);
