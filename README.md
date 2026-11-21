@@ -8,8 +8,7 @@ Windows 11用の軽快な常駐スクリーンショット・領域録画ツー�
 
 ```mermaid
 flowchart LR
-    resize["ChunapToolでウィンドウ寸法を調整"] --> area["任意範囲撮影"]
-    area --> output["クリップボード／ファイル保存"]
+    area["任意範囲撮影"] --> output["クリップボード／ファイル保存"]
     size["固定サイズ撮影"] --> output
     position["固定位置とサイズで撮影"] --> output
     repeat["直前と同じ範囲を再撮影"] --> output
@@ -19,12 +18,12 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    clipboard["クリップボード"] --> currentFolder["SmartPasteで開いているフォルダーへ保存"]
-    clipboard --> office["Officeへ貼り付け"]
-    file["ファイル保存"] --> editor["PPPaintで画像を編集"]
-    file --> manual["MdVisualizerで画像付き手順書を作成"]
+    clipboard["クリップボード"] --> document["資料へ貼り付け"]
+    clipboard --> currentFolder["開いているフォルダーへ貼り付け"]
+    file["ファイル保存"] --> editor["画像を編集"]
+    file --> manual["画像付き手順書を作成"]
     file --> openFolder["通知から保存先を開く"]
-    notice["撮影通知"] --> excel["OfficeAssistでExcelへ直接配置"]
+    notice["撮影通知"] --> spreadsheet["表計算シートへ画像を配置"]
 ```
 
 出力方法と保存先は出力プリセットで指定します。[おすすめ連携ツール](#おすすめ連携ツール)・[用途別の操作例](docs/usage.md#用途別の操作例)
@@ -184,6 +183,16 @@ Windows 11用の常駐スクリーンショット・領域録画ツールです�
 - **[ChunapTool](https://github.com/KotorinChunChun/ChunapTool)**は、撮影前に指定ウィンドウの幅・高さをピクセル単位で微調整できます。同じ寸法のウィンドウを並べて比較したり、複数の撮影で画像サイズを揃えたりする用途に使えます。
 - **[SmartPaste](https://github.com/KotorinChunChun/SmartPaste)**を起動しておくと、SSCaptureでコピーした画像をエクスプローラーのフォルダー内で **Ctrl＋V** してPNGに保存できます。保存画面の「OCR」で読み取った文字をファイル名の候補にできます。
 - **[OfficeAssist](https://github.com/KotorinChunChun/OfficeAssist)**を起動しておくと、SSCaptureの撮影通知にある小画像をデスクトップ版Excelのシートへドラッグ＆ドロップして、画像を直接配置できます。
+
+```mermaid
+flowchart LR
+    resize["ChunapToolで寸法を調整"] --> capture["SSCaptureで撮影"]
+    capture --> |画像を開く| edit["PPPaintで編集"]
+    capture --> |保存画像を添える| manual["MdVisualizerで手順書を作成"]
+    capture --> |クリップボード| save["SmartPasteでPNGに保存"]
+    capture --> |撮影通知からドラッグ| sheet["OfficeAssistでExcelへ配置"]
+    record["OperationRecorderで操作を記録"] --> |記録画像を添える| manual
+```
 
 ## 案内
 
