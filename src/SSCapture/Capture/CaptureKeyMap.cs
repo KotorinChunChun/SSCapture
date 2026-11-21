@@ -9,7 +9,7 @@ internal sealed record CaptureKeyMap(
     CaptureKeyAction Ctrl = CaptureKeyAction.LockWidth,
     CaptureKeyAction Shift = CaptureKeyAction.LockHeight,
     CaptureKeyAction Alt = CaptureKeyAction.Snap,
-    CaptureKeyAction Win = CaptureKeyAction.HighlightWindow,
+    CaptureKeyAction Win = CaptureKeyAction.None,
     CaptureKeyAction CtrlShift = CaptureKeyAction.CrossMonitor,
     CaptureKeyAction CtrlAlt = CaptureKeyAction.None,
     CaptureKeyAction CtrlWin = CaptureKeyAction.None,
@@ -18,6 +18,13 @@ internal sealed record CaptureKeyMap(
     CaptureKeyAction AltWin = CaptureKeyAction.None,
     bool SpaceEnabled = true)
 {
+    internal static CaptureKeyMap BeforeDefaults { get; } = new(
+        Ctrl: CaptureKeyAction.None, Shift: CaptureKeyAction.None, Alt: CaptureKeyAction.None,
+        Win: CaptureKeyAction.HighlightWindow, CtrlShift: CaptureKeyAction.None, SpaceEnabled: false);
+
+    internal static bool IsBeforeAction(CaptureKeyAction action) => action is CaptureKeyAction.None or CaptureKeyAction.Snap
+        or CaptureKeyAction.CrossMonitor or CaptureKeyAction.SwitchAnchor or CaptureKeyAction.HighlightWindow;
+
     internal static IEnumerable<CaptureModifiers> Combinations =>
     [
         CaptureModifiers.Ctrl, CaptureModifiers.Shift, CaptureModifiers.Alt, CaptureModifiers.Win,
@@ -47,7 +54,7 @@ internal sealed record CaptureKeyMap(
         CaptureKeyAction.LockHeight => "左右に変更",
         CaptureKeyAction.Snap => "ウィンドウ枠スナップ",
         CaptureKeyAction.CrossMonitor => "別モニタへの移動を許可",
-        CaptureKeyAction.HighlightWindow => "ポインタ下のウィンドウを強調／解除",
+        CaptureKeyAction.HighlightWindow => "ウィンドウ撮影に切り替え",
         CaptureKeyAction.SwitchAnchor => "基点を切り替える",
         _ => "なし"
     };

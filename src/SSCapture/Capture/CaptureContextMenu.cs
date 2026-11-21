@@ -21,6 +21,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     private readonly Dictionary<ScreenshotColorDepth, ToolStripMenuItem> colors = [];
     private readonly Dictionary<CaptureMetadataMode, ToolStripMenuItem> metadata = [];
     private readonly Func<bool> ownsPopupFocus;
+    private readonly ToolStripMenuItem? windowSource, visibleWindow, isolatedWindow;
     private OutputDestination currentDestination;
     private bool closingCommand;
 
@@ -52,13 +53,21 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         Func<bool>? ownsPopupFocus = null, bool showGuide = true, Action<bool>? changeGuide = null, Action<CaptureAspectRatio>? changeRatio = null,
         int defaultPadding = 0, Action<int>? changePadding = null, IReadOnlyList<CapturePreset>? presets = null, Action<CapturePreset>? applyPreset = null,
         IReadOnlyList<ExternalApplication>? applications = null, string selectedApplication = "", Action<string>? changeApplication = null,
-        IReadOnlyList<SavedRegion>? inputPresets = null, Action<SavedRegion>? applyInputPreset = null, CaptureMenuEditing? editing = null)
+        IReadOnlyList<SavedRegion>? inputPresets = null, Action<SavedRegion>? applyInputPreset = null, CaptureMenuEditing? editing = null,
+        Action<bool>? changeWindowSource = null)
     {
         this.cancel = cancel;
         this.ownsPopupFocus = ownsPopupFocus ?? (() => CaptureNative.OwnsForegroundWindow() || CaptureNative.ForegroundTransition);
         Font = menuFont;
         var inputPresetsMenu = Menu("入力プリセット", "InputPresetMenu", Items);
         var outputPresetsMenu = Menu("出力プリセット", "CapturePresetMenu", Items);
+        if (changeWindowSource is not null)
+        {
+            windowSource = Menu("ウィンドウの撮影方式", "WindowCaptureSource", Items);
+            visibleWindow = Item("見えている画面を撮影", "VisibleWindowCapture", () => changeWindowSource(false), windowSource.DropDownItems);
+            isolatedWindow = Item("対象ウィンドウだけ撮影（WGC）", "IsolatedWindowCapture", () => changeWindowSource(true), windowSource.DropDownItems);
+            SetWindowSource(mode, false);
+        }
         Items.Add(new ToolStripSeparator());
         var range = Menu("一時入力カスタマイズ", "CaptureRangeGroup", Items);
         var output = Menu("一時出力カスタマイズ", "CaptureOutputGroup", Items);
@@ -156,6 +165,13 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     private static string AnchorName(CaptureAnchor value) => value switch { CaptureAnchor.TopLeft => "左上", CaptureAnchor.TopRight => "右上", CaptureAnchor.BottomRight => "右下", _ => "左下" };
     internal void SetMode(CaptureMode mode)
     { foreach (var pair in modes) pair.Value.Checked = pair.Key == mode; if (AllCommands.Any(i => i.Name == "AspectRatioMenu")) Command("AspectRatioMenu").Enabled = mode == CaptureMode.Rectangle; }
+    internal void SetWindowSource(CaptureMode mode, bool isolated)
+    {
+        if (windowSource is null) return;
+        windowSource.Available = mode == CaptureMode.Window;
+        visibleWindow!.Checked = !isolated;
+        isolatedWindow!.Checked = isolated;
+    }
     internal void SetApplication(string id)
     { var menu = AllCommands.FirstOrDefault(i => i.Name == "ExternalApplicationMenu"); if (menu is not null) foreach (var item in menu.DropDownItems.OfType<ToolStripMenuItem>()) item.Checked = item.Name == id; }
     internal void SetGrid(bool enabled) { var item = AllCommands.FirstOrDefault(i => i.Name == "Grid20"); if (item is not null) item.Checked = enabled; }

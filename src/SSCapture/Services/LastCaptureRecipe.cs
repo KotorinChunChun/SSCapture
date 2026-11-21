@@ -6,24 +6,32 @@ namespace SSCapture.Services;
 internal sealed class LastCaptureRecipe
 {
     private readonly AppSettings settings;
-    private readonly SavedRegion region;
+    private readonly SavedRegion? region;
     internal long Sequence { get; }
-    internal Rectangle Bounds => region.Bounds;
+    internal Rectangle Bounds { get; }
+    internal CaptureWindow? IsolatedWindow { get; }
     internal IReadOnlyList<Point>? Polygon { get; }
     internal AppSettings Settings => CaptureSettingsSnapshot.Copy(settings);
 
-    private LastCaptureRecipe(long sequence, SavedRegion region, IReadOnlyList<Point>? polygon, AppSettings settings)
+    private LastCaptureRecipe(long sequence, Rectangle bounds, SavedRegion? region, IReadOnlyList<Point>? polygon, AppSettings settings,
+        CaptureWindow? isolatedWindow)
     {
         Sequence = sequence;
         this.region = region;
+        Bounds = bounds;
+        IsolatedWindow = isolatedWindow;
         Polygon = polygon is null ? null : Array.AsReadOnly(polygon.ToArray());
         this.settings = CaptureSettingsSnapshot.Copy(settings);
     }
 
-    internal static LastCaptureRecipe Create(long sequence, Rectangle bounds, IReadOnlyList<Point>? polygon, AppSettings settings, IReadOnlyList<DisplayLayout> displays) =>
-        new(sequence, RegionCoordinates.FromBounds("直前の撮影", bounds, displays), polygon, settings);
+    internal static LastCaptureRecipe Create(long sequence, Rectangle bounds, IReadOnlyList<Point>? polygon, AppSettings settings,
+        IReadOnlyList<DisplayLayout> displays, CaptureWindow? isolatedWindow = null) =>
+        new(sequence, bounds, isolatedWindow is null ? RegionCoordinates.FromBounds("直前の撮影", bounds, displays) : null,
+            polygon, settings, isolatedWindow);
 
-    internal Rectangle Resolve(IReadOnlyList<DisplayLayout> displays) => RegionCoordinates.Resolve(region, displays);
+    internal Rectangle Resolve(IReadOnlyList<DisplayLayout> displays) => region is null
+        ? throw new InvalidOperationException("ウィンドウ単独撮影は選択ウィンドウから再取得してください。")
+        : RegionCoordinates.Resolve(region, displays);
 
     internal AppSettings SettingsForReplay(AppSettings current) => CaptureSettingsSnapshot.ForReplay(settings, current);
 

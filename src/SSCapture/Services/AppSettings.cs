@@ -49,6 +49,8 @@ internal sealed record AppSettings
     internal const int DefaultGridStepPixels = 1;
     public int GridStepPixels { get; init; } = DefaultGridStepPixels;
     public Capture.CaptureKeyMap CaptureKeys { get; init; } = new();
+    public Capture.CaptureKeyMap CaptureBeforeKeys { get; init; } = Capture.CaptureKeyMap.BeforeDefaults;
+    public Capture.CaptureMouseMap CaptureMouse { get; init; } = new();
     public bool ShowSelectionGuide { get; init; } = true;
     public OutputDestination DefaultDestination { get; init; } = OutputDestination.Clipboard;
     public bool RecordSystemAudio { get; init; }
@@ -84,6 +86,9 @@ internal sealed record AppSettings
     {
         if (CaptureKeys is null || Capture.CaptureKeyMap.Combinations.Any(keys => !Enum.IsDefined(CaptureKeys.Resolve(keys))))
             throw new ArgumentException("撮影中のキー割り当てが正しくありません。");
+        if (CaptureBeforeKeys is null || Capture.CaptureKeyMap.Combinations.Any(keys => !Capture.CaptureKeyMap.IsBeforeAction(CaptureBeforeKeys.Resolve(keys))))
+            throw new ArgumentException("撮影範囲設定前のキー割り当てが正しくありません。");
+        if (CaptureMouse is null) throw new ArgumentException("撮影中のマウス割り当てが正しくありません。");
         if (SnapDistancePixels is < 1 or > 32768 || GridStepPixels is < 1 or > 32768)
             throw new ArgumentException("吸着距離と刻み幅は1～32768pxで指定してください。");
         ExternalApplication.ValidateList(ImageEditors, SelectedImageEditorId);

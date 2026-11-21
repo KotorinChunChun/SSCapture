@@ -158,7 +158,8 @@ internal static class CaptureCommandRunner
                 if (settings.DefaultDestination == OutputDestination.None) throw new ArgumentException("出力先がすべてOFFです。");
                 string result = await InstantCapture.DeliverAsync(outcome.Image, settings, capturedAt, output,
                     regionName: command.InputPreset.Name, captureBounds: outcome.Selection.Bounds, metadata: outcome.Metadata,
-                    preserveOutputs: true, capturePolygon: outcome.Selection.Polygon, onDelivered: () => delivered = true);
+                    preserveOutputs: true, capturePolygon: outcome.Selection.Polygon, onDelivered: () => delivered = true,
+                    windowTitle: outcome.Selection.WindowTitle, isolatedWindow: outcome.Selection.IsolatedWindow);
                 report?.Invoke(result, false);
             }
             if (!delivered) throw new InvalidOperationException("撮影画像を出力できませんでした。");

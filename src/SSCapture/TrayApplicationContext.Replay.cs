@@ -14,10 +14,19 @@ internal sealed partial class TrayApplicationContext
         {
             var recipe = recipes.Current ?? throw new InvalidOperationException("成功した静止画の記録がありません。先に撮影してください。");
             recipe.ValidateApplications(settings);
-            Rectangle bounds = recipe.Resolve(RegionCoordinates.ReadDisplays());
             AppSettings captureSettings = recipe.SettingsForReplay(settings);
+            Rectangle bounds = recipe.IsolatedWindow is null ? recipe.Resolve(RegionCoordinates.ReadDisplays()) : Rectangle.Empty;
             PrepareCaptureUi();
             DateTimeOffset capturedAt = DateTimeOffset.Now;
+            if (recipe.IsolatedWindow is CaptureWindow target)
+            {
+                var window = await IsolatedWindowCapture.TakeAsync(target, captureSettings);
+                using var windowImage = window.Image;
+                StoreStatus(await InstantCapture.DeliverAsync(windowImage, captureSettings, capturedAt, output, regionName: "再撮影",
+                    captureBounds: window.Bounds, metadata: window.Metadata, preserveOutputs: true,
+                    windowTitle: target.Title, isolatedWindow: target));
+                return;
+            }
             var capture = await InstantCapture.TakeWithContextAsync(bounds, captureSettings);
             using var raw = capture.Image;
             using var image = recipe.Shape(raw);

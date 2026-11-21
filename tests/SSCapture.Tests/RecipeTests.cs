@@ -6,6 +6,20 @@ internal static partial class Program
 {
     static void RecipeTests()
     {
+        Run("ウィンドウ単独撮影の直前設定は画面座標の撮影へ切り替えない", () =>
+        {
+            var bounds = new Rectangle(-20, 5, 240, 160);
+            var target = new CaptureWindow(bounds, "撮影対象", (nint)8, 2, 3);
+            var recipe = LastCaptureRecipe.Create(1, bounds, null, new AppSettings(), [], target);
+            Equal(bounds, recipe.Bounds);
+            Equal(target, recipe.IsolatedWindow);
+            try
+            {
+                _ = recipe.Resolve([]);
+                throw new Exception("ウィンドウを画面座標へ展開した");
+            }
+            catch (InvalidOperationException) { }
+        });
         Run("OCR命名キャンセルでコピーが成功しても直前の再撮影条件を更新しない", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {
             int remembers = 0, copies = 0;

@@ -6,6 +6,7 @@ namespace SSCapture.Capture;
 internal sealed class CaptureWindowsKey : IDisposable
 {
     private readonly HookProcedure callback;
+    private readonly Func<bool> ignoreTap;
     private nint hook;
     private int held;
     private int previouslyHeld;
@@ -20,8 +21,9 @@ internal sealed class CaptureWindowsKey : IDisposable
         return value;
     }
 
-    internal CaptureWindowsKey()
+    internal CaptureWindowsKey(Func<bool> ignoreTap)
     {
+        this.ignoreTap = ignoreTap;
         previouslyHeld = (CaptureNative.IsKeyDown(0x5b) ? 1 : 0) | (CaptureNative.IsKeyDown(0x5c) ? 2 : 0);
         callback = OnKey;
         hook = SetWindowsHookEx(13 /* WH_KEYBOARD_LL */, callback, GetModuleHandle(null), 0);
@@ -43,12 +45,12 @@ internal sealed class CaptureWindowsKey : IDisposable
             if (side != 0 && (held & side) != 0 && !down)
             {
                 held &= ~side;
-                if (held == 0 && !combined) tapped = true;
+                if (held == 0 && !combined && !ignoreTap()) tapped = true;
                 return 1;
             }
             if (side != 0 && down && CaptureNative.OwnsForegroundWindow())
             {
-                if (held == 0) combined = CaptureNative.Modifiers() != Keys.None;
+                if (held == 0) combined = ignoreTap() || CaptureNative.Modifiers() != Keys.None;
                 else if ((held & side) == 0) combined = true;
                 held |= side;
                 return 1;

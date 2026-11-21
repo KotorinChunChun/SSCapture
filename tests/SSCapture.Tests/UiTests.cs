@@ -1,3 +1,4 @@
+using SSCapture.Capture;
 using SSCapture.Recording;
 using SSCapture.Services;
 using SSCapture.UI;
@@ -161,6 +162,79 @@ internal static partial class Program
             Check(!WindowVisibility.RestorePending(ocr, _ => shown++), "終了済み窓を再表示");
             Check(!WindowVisibility.RestorePending(null), "未処理なしで拒否");
         });
+        Run("ショートカットはPC作業中と撮影の2段階を分けて保存する", () =>
+        {
+            AppSettings? saved = null;
+            using var form = new SettingsForm(new AppSettings
+            {
+                CaptureKeys = new CaptureKeyMap(Win: CaptureKeyAction.HighlightWindow, ShiftWin: CaptureKeyAction.Snap),
+                CaptureMouse = new CaptureMouseMap(BeforeMiddle: false)
+            }, value => { saved = value; return null; }, () => { }, () => []);
+            var groups = (TabControl)form.Controls.Find("ShortcutGroups", true).Single();
+            Check(groups.TabPages.Cast<TabPage>().Select(page => page.Text).SequenceEqual(
+                ["PC作業中のショートカットキー", "撮影範囲設定前の操作", "撮影ドラッグ中の操作"]), "ショートカットの分類が不正");
+            var pc = groups.TabPages[0];
+            Check(Descendants(pc).OfType<HotkeyEditor>().Select(editor => editor.Name).ToHashSet().SetEquals(
+                ["ScreenshotShortcut1", "ScreenshotShortcut2", "RecordingShortcut1", "RecordingShortcut2", "LastRegionShortcut", "LastRecipeShortcut"]),
+                "PC作業中のショートカット欄が不正");
+            Check(!Descendants(pc).Any(control => control.Name.StartsWith("CaptureMouse", StringComparison.Ordinal)), "PC作業中にクリック欄がある");
+
+            CaptureModifiers[] modifiers = [CaptureModifiers.Ctrl, CaptureModifiers.Shift, CaptureModifiers.Alt, CaptureModifiers.Win];
+            for (int group = 1; group <= 2; group++)
+            {
+                var page = groups.TabPages[group];
+                string prefix = group == 1 ? "CaptureBeforeKeys" : "CaptureKeys";
+                var grid = (TableLayoutPanel)page.Controls.Find(prefix + "Grid", true).Single();
+                for (int row = 0; row < modifiers.Length; row++)
+                {
+                    Equal(CaptureKeyMap.Label(modifiers[row]), grid.GetControlFromPosition(0, row + 1)!.Text);
+                    Equal(CaptureKeyMap.Label(modifiers[row]), grid.GetControlFromPosition(row + 1, 0)!.Text);
+                    for (int column = 0; column < modifiers.Length; column++)
+                    {
+                        var combo = (ComboBox)grid.GetControlFromPosition(column + 1, row + 1)!;
+                        var keys = modifiers[row] | modifiers[column];
+                        Equal(CaptureKeyMap.Label(keys), combo.AccessibleName);
+                        Equal(group == 1 || keys != CaptureModifiers.Win, combo.Enabled);
+                    }
+                }
+                Equal(group == 2, page.Controls.Find("CaptureKeysSpace", true).Length == 1);
+                Equal(3, Descendants(page).OfType<ComboBox>().Count(combo => combo.Name.StartsWith("CaptureMouse", StringComparison.Ordinal)));
+            }
+
+            ComboBox Choice(string name) => (ComboBox)groups.Controls.Find(name, true).Single();
+            Equal("ウィンドウ撮影に切り替え", Choice("CaptureBeforeKeys8").Text);
+            Equal("なし", Choice("CaptureKeys8").Text);
+            Check(!Choice("CaptureKeys9").Items.Cast<object>().Any(item => item.ToString() == "ウィンドウ撮影に切り替え"),
+                "ドラッグ中にウィンドウ撮影の選択肢がある");
+            Check(!Choice("CaptureBeforeKeys9").Items.Cast<object>().Any(item => item.ToString() is "上下に変更" or "左右に変更"),
+                "撮影範囲設定前にドラッグの寸法固定がある");
+            var beforeMirror = Choice("CaptureBeforeKeys5Mirror");
+            beforeMirror.SelectedIndex = beforeMirror.Items.Cast<object>().ToList().FindIndex(item => item.ToString() == "基点切替（固定サイズ）");
+            Equal(beforeMirror.SelectedIndex, Choice("CaptureBeforeKeys5").SelectedIndex);
+            Equal("なし", Choice("CaptureKeys5").Text);
+
+            Equal("ウィンドウ撮影／ドラッグ開始（固定サイズでは確定）", Choice("CaptureMouseBeforeLeft").Text);
+            Equal("撮影メニューを開く", Choice("CaptureMouseBeforeRight").Text);
+            Equal("なし", Choice("CaptureMouseBeforeMiddle").Text);
+            var dragLeft = Choice("CaptureMouseDragLeft");
+            var dragMiddle = Choice("CaptureMouseDragMiddle");
+            Check(!dragLeft.Enabled && !dragMiddle.Enabled, "使用できないドラッグのクリック欄が有効");
+            Equal("使用不可", dragLeft.Text);
+            Equal("なし", dragMiddle.Text);
+            Equal("ドラッグを中止", Choice("CaptureMouseDragRight").Text);
+            Choice("CaptureMouseBeforeLeft").SelectedIndex = 0;
+            Choice("CaptureMouseBeforeRight").SelectedIndex = 0;
+            Choice("CaptureMouseBeforeMiddle").SelectedIndex = 1;
+            Equal("ポインタ下のモニターを撮影", Choice("CaptureMouseBeforeMiddle").Text);
+            Choice("CaptureMouseDragRight").SelectedIndex = 0;
+            ((CheckBox)groups.Controls.Find("CaptureKeysSpace", true).Single()).Checked = false;
+
+            typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, null);
+            Check(saved is not null, "ショートカット設定が保存されない");
+            Equal(CaptureKeyMap.BeforeDefaults with { CtrlAlt = CaptureKeyAction.SwitchAnchor }, saved!.CaptureBeforeKeys);
+            Equal(new CaptureKeyMap(ShiftWin: CaptureKeyAction.Snap, SpaceEnabled: false), saved.CaptureKeys);
+            Equal(new CaptureMouseMap(false, false, true, false), saved.CaptureMouse);
+        });
         Run("設定10タブの入力欄とボタンが表示領域に収まる", () =>
         {
             using var form = NewSettings();
@@ -178,15 +252,33 @@ internal static partial class Program
             foreach (TabPage page in tabs.TabPages)
             {
                 tabs.SelectedTab = page;
+                if (page.Controls.Find("ShortcutGroups", true).SingleOrDefault() is TabControl groups)
+                {
+                    foreach (TabPage group in groups.TabPages)
+                    {
+                        groups.SelectedTab = group;
+                        CheckFields(group);
+                    }
+                }
+                else CheckFields(page);
+            }
+            void CheckFields(TabPage page)
+            {
                 LayoutTree(form);
                 foreach (var input in Descendants(page).Where(c => c is TextBox or ComboBox && c.Parent is not UpDownBase))
                 {
-                    int minimumWidth = input.Name.StartsWith("CaptureKeys", StringComparison.Ordinal) ? 290
-                        : input.Name.EndsWith("EditorPreset", StringComparison.Ordinal) ? 160
+                    bool captureGrid = input.Parent!.Name is "CaptureBeforeKeysGrid" or "CaptureKeysGrid";
+                    int minimumWidth = input.Name.EndsWith("EditorPreset", StringComparison.Ordinal) ? 160
                         : input.Name.EndsWith("Key", StringComparison.Ordinal) ? 200 : page.Text == "入力プリセット" ? 300 : 420;
+                    if (captureGrid && input is ComboBox combo)
+                        minimumWidth = combo.Items.Cast<object>().Max(item => TextRenderer.MeasureText(item.ToString(), combo.Font).Width)
+                            + SystemInformation.VerticalScrollBarWidth + 8;
                     Check(input.Width >= minimumWidth, $"{input.Name} 幅 {input.Width}");
                     Check(input.Height >= 24, $"{input.Name} 高さ {input.Height}");
                     Check(input.Parent!.ClientRectangle.Contains(input.Bounds), $"{input.Name} が親領域外: {input.Bounds} parent={input.Parent.ClientRectangle}");
+                    if (captureGrid)
+                        Check(input.Bottom + input.Margin.Bottom <= input.Parent.ClientSize.Height,
+                            $"{input.Name} の下余白が収まらない: {input.Bounds} margin={input.Margin} parent={input.Parent.ClientRectangle}");
                 }
                 foreach (var label in Descendants(page).OfType<Label>().Where(label =>
                     label.AutoSize && label.Parent is TableLayoutPanel table && table.GetColumn(label) == 0 && table.GetColumnSpan(label) == 1))

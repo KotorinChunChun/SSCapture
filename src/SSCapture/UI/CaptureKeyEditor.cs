@@ -4,46 +4,136 @@ namespace SSCapture.UI;
 
 internal sealed class CaptureKeyEditor : UserControl
 {
-    private readonly List<ComboBox> commands = [];
-    private readonly CheckBox space;
-    private sealed record Choice(CaptureKeyAction Action)
+    private static readonly CaptureModifiers[] Modifiers =
+        [CaptureModifiers.Ctrl, CaptureModifiers.Shift, CaptureModifiers.Alt, CaptureModifiers.Win];
+    private readonly Dictionary<CaptureModifiers, ComboBox> commands = [];
+    private readonly Dictionary<MouseButtons, ComboBox> clicks = [];
+    private readonly CheckBox? space;
+
+    private sealed record Choice(CaptureKeyAction Action, string Text)
     {
-        public override string ToString() => CaptureKeyMap.Describe(Action);
+        public override string ToString() => Text;
     }
 
-    internal CaptureKeyEditor(CaptureKeyMap map)
+    internal CaptureKeyEditor(CaptureKeyMap map, CaptureMouseMap mouse, bool beforeSelection)
     {
-        Name = "CaptureKeyEditor";
+        string prefix = beforeSelection ? "CaptureBeforeKeys" : "CaptureKeys";
+        Name = prefix + "Editor";
         Dock = DockStyle.Fill;
-        var table = new TableLayoutPanel { ColumnCount = 4, RowCount = 6, Dock = DockStyle.Top, AutoSize = true };
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 108));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 108));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        for (int row = 0; row < 6; row++) table.RowStyles.Add(new RowStyle(SizeType.Absolute, 37));
+        AutoScroll = true;
+        var table = new TableLayoutPanel { Name = prefix + "Grid", ColumnCount = 5,
+            RowCount = beforeSelection ? 8 : 9, Dock = DockStyle.Top };
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        for (int column = 0; column < Modifiers.Length; column++)
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        for (int row = 0; row < table.RowCount; row++) table.RowStyles.Add(new RowStyle(SizeType.Absolute));
         Controls.Add(table);
-        foreach (var keys in CaptureKeyMap.Combinations)
+
+        Choice[] choices = Enum.GetValues<CaptureKeyAction>()
+            .Where(action => beforeSelection ? CaptureKeyMap.IsBeforeAction(action) : action != CaptureKeyAction.HighlightWindow)
+            .Select(action => new Choice(action, beforeSelection && action == CaptureKeyAction.SwitchAnchor
+                ? "基点切替（固定サイズ）" : CaptureKeyMap.Describe(action))).ToArray();
+
+        for (int index = 0; index < Modifiers.Length; index++)
         {
-            int index = commands.Count;
-            int column = index < 5 ? 0 : 2;
-            int row = index % 5;
-            string label = CaptureKeyMap.Label(keys);
-            var combo = new ComboBox { Name = "CaptureKeys" + (int)keys, AccessibleName = label,
-                DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
-            foreach (CaptureKeyAction action in Enum.GetValues<CaptureKeyAction>()) combo.Items.Add(new Choice(action));
-            combo.SelectedIndex = (int)map.Resolve(keys);
-            commands.Add(combo);
-            table.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left }, column, row);
-            table.Controls.Add(combo, column + 1, row);
+            string label = CaptureKeyMap.Label(Modifiers[index]);
+            table.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.None }, index + 1, 0);
+            table.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left }, 0, index + 1);
         }
-        space = new CheckBox { Name = "CaptureKeysSpace", Text = "Spaceで基点を切り替える", AutoSize = true,
-            Anchor = AnchorStyles.Left, Checked = map.SpaceEnabled };
-        table.Controls.Add(space, 0, 5);
-        table.SetColumnSpan(space, 4);
+
+        for (int row = 0; row < Modifiers.Length; row++)
+        {
+            for (int column = row; column < Modifiers.Length; column++)
+            {
+                CaptureModifiers keys = Modifiers[row] | Modifiers[column];
+                bool enabled = beforeSelection || keys != CaptureModifiers.Win;
+                int selected = enabled ? Array.FindIndex(choices, choice => choice.Action == map.Resolve(keys)) : 0;
+                string name = prefix + (int)keys;
+                string label = CaptureKeyMap.Label(keys);
+                var primary = AddChoice(table, column + 1, row + 1, name, label,
+                    enabled ? choices : [choices[0]], Math.Max(0, selected), enabled);
+                commands.Add(keys, primary);
+                if (column == row) continue;
+
+                var mirror = AddChoice(table, row + 1, column + 1, name + "Mirror", label, choices, primary.SelectedIndex);
+                primary.SelectedIndexChanged += (_, _) => mirror.SelectedIndex = primary.SelectedIndex;
+                mirror.SelectedIndexChanged += (_, _) => primary.SelectedIndex = mirror.SelectedIndex;
+            }
+        }
+
+        int clickRow = 5;
+        if (!beforeSelection)
+        {
+            space = new CheckBox { Name = "CaptureKeysSpace", Text = "Spaceで基点を切り替える", AutoSize = true,
+                Anchor = AnchorStyles.Left, Checked = map.SpaceEnabled, Margin = new Padding(3, 6, 3, 6) };
+            table.Controls.Add(space, 1, clickRow++);
+            table.SetColumnSpan(space, 4);
+        }
+
+        if (beforeSelection)
+        {
+            AddClick(MouseButtons.Left, clickRow, "BeforeLeft", "左クリック", "ウィンドウ撮影／ドラッグ開始（固定サイズでは確定）", mouse.BeforeLeft);
+            AddClick(MouseButtons.Right, clickRow + 1, "BeforeRight", "右クリック", "撮影メニューを開く", mouse.BeforeRight);
+            AddClick(MouseButtons.Middle, clickRow + 2, "BeforeMiddle", "中クリック", "ポインタ下のモニターを撮影", mouse.BeforeMiddle);
+        }
+        else
+        {
+            AddClick(MouseButtons.Left, clickRow, "DragLeft", "左クリック", "使用不可", false, enabled: false);
+            AddClick(MouseButtons.Right, clickRow + 1, "DragRight", "右クリック", "ドラッグを中止", mouse.DragRight);
+            AddClick(MouseButtons.Middle, clickRow + 2, "DragMiddle", "中クリック", "なし", false, enabled: false);
+        }
+        SizeRows(table);
+        table.FontChanged += (_, _) => SizeRows(table);
+        table.DpiChangedAfterParent += (_, _) => SizeRows(table);
+
+        void AddClick(MouseButtons button, int row, string name, string label, string action, bool assigned, bool enabled = true)
+        {
+            table.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left }, 0, row);
+            var combo = AddChoice(table, 1, row, "CaptureMouse" + name, label,
+                enabled ? ["なし", action] : [action], assigned ? 1 : 0, enabled);
+            table.SetColumnSpan(combo, 4);
+            clicks.Add(button, combo);
+        }
     }
 
-    internal CaptureKeyMap Value => new(ActionAt(0), ActionAt(1), ActionAt(2), ActionAt(3), ActionAt(4),
-        ActionAt(5), ActionAt(6), ActionAt(7), ActionAt(8), ActionAt(9), space.Checked);
+    internal CaptureKeyMap Value => new(
+        ActionAt(CaptureModifiers.Ctrl), ActionAt(CaptureModifiers.Shift), ActionAt(CaptureModifiers.Alt), ActionAt(CaptureModifiers.Win),
+        ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Shift), ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Alt),
+        ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Win), ActionAt(CaptureModifiers.Shift | CaptureModifiers.Alt),
+        ActionAt(CaptureModifiers.Shift | CaptureModifiers.Win), ActionAt(CaptureModifiers.Alt | CaptureModifiers.Win), space?.Checked ?? false);
 
-    private CaptureKeyAction ActionAt(int index) => ((Choice)commands[index].SelectedItem!).Action;
+    internal bool IsClickEnabled(MouseButtons button) => clicks[button].SelectedIndex == 1;
+
+    private CaptureKeyAction ActionAt(CaptureModifiers keys) => ((Choice)commands[keys].SelectedItem!).Action;
+
+    private static void SizeRows(TableLayoutPanel table)
+    {
+        var heights = new int[table.RowCount];
+        foreach (Control control in table.Controls)
+        {
+            int row = table.GetRow(control);
+            int height = control is ComboBox combo ? Math.Max(combo.Height, combo.PreferredHeight)
+                : control.GetPreferredSize(Size.Empty).Height;
+            heights[row] = Math.Max(heights[row], height + control.Margin.Vertical);
+        }
+        table.SuspendLayout();
+        for (int row = 0; row < heights.Length; row++) table.RowStyles[row].Height = heights[row];
+        table.Padding = new Padding(0, 0, 0, table.LogicalToDeviceUnits(4));
+        table.Height = heights.Sum() + table.Padding.Vertical;
+        table.ResumeLayout();
+    }
+
+    private static ComboBox AddChoice(TableLayoutPanel table, int column, int row, string name, string label,
+        object[] items, int selected, bool enabled = true)
+    {
+        var combo = new ComboBox { Name = name, AccessibleName = label, DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, Enabled = enabled };
+        combo.Items.AddRange(items);
+        combo.SelectedIndex = selected;
+        combo.DropDown += (_, _) => combo.DropDownWidth = Math.Max(combo.Width,
+            combo.Items.Cast<object>().Max(item => TextRenderer.MeasureText(item.ToString(), combo.Font).Width)
+            + SystemInformation.VerticalScrollBarWidth + 8);
+        table.Controls.Add(combo, column, row);
+        return combo;
+    }
 }

@@ -36,6 +36,20 @@ internal static partial class Program
 
     private static void CaptureMenuEditingTests()
     {
+        Run("ウィンドウ撮影時だけ取得方式を選べる", () =>
+        {
+            bool? isolated = null;
+            using var menu = new CaptureContextMenu(OutputDestination.Clipboard, _ => { }, () => { }, () => { },
+                changeWindowSource: value => isolated = value);
+            var source = menu.Command("WindowCaptureSource");
+            Check(!source.Available, "矩形撮影にウィンドウ撮影方式が出た");
+            menu.SetWindowSource(CaptureMode.Window, false);
+            Check(source.Available && menu.Command("VisibleWindowCapture").Checked, "画面切り抜きが初期選択されていない");
+            menu.Command("IsolatedWindowCapture").PerformClick();
+            Equal<bool?>(true, isolated);
+            menu.SetWindowSource(CaptureMode.Window, true);
+            Check(menu.Command("IsolatedWindowCapture").Checked && !menu.Command("VisibleWindowCapture").Checked, "WGCのチェックが不一致");
+        });
         Run("撮影メニューのルートは2プリセットと一時カスタマイズ・表示操作", () =>
         {
             var session = MenuSession();

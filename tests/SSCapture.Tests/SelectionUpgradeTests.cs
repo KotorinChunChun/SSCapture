@@ -8,19 +8,53 @@ internal static partial class Program
 {
     private static void SelectionUpgradeTests()
     {
-        Run("修飾キー10組を個別に選び、キー設定とSpaceの無効を保存できる", () => WithServiceDirectory(directory =>
+        Run("撮影前とドラッグ中のキー設定・クリック設定を独立して保存できる", () => WithServiceDirectory(directory =>
         {
             var map = new CaptureKeyMap(Ctrl: CaptureKeyAction.Snap, CtrlAlt: CaptureKeyAction.LockHeight, SpaceEnabled: false);
-            using var editor = new CaptureKeyEditor(map);
+            var beforeMap = CaptureKeyMap.BeforeDefaults with { CtrlAlt = CaptureKeyAction.CrossMonitor };
+            var mouse = new CaptureMouseMap(BeforeLeft: false, BeforeMiddle: false, DragRight: false);
+            using var editor = new CaptureKeyEditor(map, mouse, beforeSelection: false);
             Equal(10, CaptureKeyMap.Combinations.Distinct().Count());
             Equal(map, editor.Value);
-            ((ComboBox)editor.Controls.Find("CaptureKeys5", true).Single()).SelectedIndex = (int)CaptureKeyAction.CrossMonitor;
+            var primary = (ComboBox)editor.Controls.Find("CaptureKeys5", true).Single();
+            var mirror = (ComboBox)editor.Controls.Find("CaptureKeys5Mirror", true).Single();
+            primary.SelectedIndex = (int)CaptureKeyAction.CrossMonitor;
+            Equal(primary.SelectedIndex, mirror.SelectedIndex);
+            mirror.SelectedIndex = (int)CaptureKeyAction.Snap;
+            Equal(mirror.SelectedIndex, primary.SelectedIndex);
             var store = new SettingsStore(Path.Combine(directory, "settings.json"));
-            store.Save(new AppSettings { CaptureKeys = editor.Value });
-            Equal(map with { CtrlAlt = CaptureKeyAction.CrossMonitor }, store.Load(out _).CaptureKeys);
+            store.Save(new AppSettings { CaptureKeys = editor.Value, CaptureBeforeKeys = beforeMap, CaptureMouse = mouse });
+            var loaded = store.Load(out string? warning);
+            Check(warning is null, warning ?? "");
+            Equal(map with { CtrlAlt = CaptureKeyAction.Snap }, loaded.CaptureKeys);
+            Equal(beforeMap, loaded.CaptureBeforeKeys);
+            Equal(mouse, loaded.CaptureMouse);
             Equal(CaptureKeyAction.None, map.Resolve(CaptureModifiers.Ctrl | CaptureModifiers.Alt | CaptureModifiers.Shift));
         }));
-        Run("ウィンドウ強調はWin単押しで切り替え最前面の撮影対象を追う", () =>
+        Run("旧HighlightWindowを読み込み、撮影前とクリックに初期値を補いドラッグ編集で正規化する", () => WithServiceDirectory(directory =>
+        {
+            string path = Path.Combine(directory, "settings.json");
+            File.WriteAllText(path, """
+                { "SchemaVersion": 3, "CaptureKeys": { "Ctrl": "Snap", "Win": "HighlightWindow",
+                  "CtrlShift": "HighlightWindow", "CtrlAlt": "LockHeight", "AltWin": "SwitchAnchor", "SpaceEnabled": false } }
+                """);
+            var store = new SettingsStore(path);
+            var loaded = store.Load(out string? warning);
+            Check(warning is null, warning ?? "");
+            Equal(CaptureKeyAction.HighlightWindow, loaded.CaptureKeys.Win);
+            Equal(CaptureKeyAction.HighlightWindow, loaded.CaptureKeys.CtrlShift);
+            Equal(CaptureKeyAction.None, new AppSettings().CaptureKeys.Win);
+            foreach (var keys in CaptureKeyMap.Combinations)
+                Equal(keys == CaptureModifiers.Win ? CaptureKeyAction.HighlightWindow : CaptureKeyAction.None, loaded.CaptureBeforeKeys.Resolve(keys));
+            Check(!loaded.CaptureBeforeKeys.SpaceEnabled, "撮影範囲設定前にSpaceが有効");
+            Equal(new CaptureMouseMap(true, true, true, true), loaded.CaptureMouse);
+
+            using var editor = new CaptureKeyEditor(loaded.CaptureKeys, loaded.CaptureMouse, beforeSelection: false);
+            var expected = loaded.CaptureKeys with { Win = CaptureKeyAction.None, CtrlShift = CaptureKeyAction.None };
+            store.Save(loaded with { CaptureKeys = editor.Value });
+            Equal(expected, store.Load(out _).CaptureKeys);
+        }));
+        Run("撮影前のWin単押しでウィンドウ撮影に切り替え、再度押すと元のモードに戻る", () =>
         {
             Rectangle monitor = new(0, 0, 600, 400);
             Rectangle front = new(100, 100, 140, 160), back = new(10, 10, 300, 300);
@@ -30,15 +64,39 @@ internal static partial class Program
             try
             {
                 session.ApplyPointerInput(new(110, 110), CaptureModifiers.Win);
-                Check(!session.HighlightWindow, "単押しが確定する前に切り替わった");
+                Equal(CaptureMode.Rectangle, session.Mode);
                 session.ApplyPointerInput(new(110, 110), CaptureModifiers.None, windowsTap: true);
+                Equal(CaptureMode.Window, session.Mode);
+                Check(session.HighlightWindow, "ウィンドウ撮影で対象が強調されない");
                 Equal(front, session.HighlightedWindow);
                 session.ApplyPointerInput(new(20, 20), CaptureModifiers.Ctrl);
-                Equal("Ctrl : 上下に変更", session.ModifierHint);
+                Equal("Ctrl : なし", session.ModifierHint);
                 Equal(back, session.HighlightedWindow);
                 session.ApplyPointerInput(new(20, 20), CaptureModifiers.None, windowsTap: true);
+                Equal(CaptureMode.Rectangle, session.Mode);
                 Equal(Rectangle.Empty, session.HighlightedWindow);
                 Check(session.ModifierHint is null, "修飾キーを離しても効果が表示される");
+            }
+            finally { session.Cancel(); }
+        });
+        Run("矩形ドラッグ中のWin単押しは旧割り当てでも撮影モードを変えない", () =>
+        {
+            Rectangle monitor = new(0, 0, 600, 400);
+            var snapshot = new DesktopSnapshot(new Bitmap(600, 400), monitor, [monitor]);
+            var settings = new AppSettings { CaptureKeys = new CaptureKeyMap(Win: CaptureKeyAction.HighlightWindow) };
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
+                OutputSettings: settings), snapshot, []);
+            try
+            {
+                var gesture = (SelectionGesture)typeof(SessionController).GetField("gesture",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(session)!;
+                gesture.Begin(new(100, 100), new(8, 8));
+                session.ApplyPointerInput(new(160, 150), CaptureModifiers.Win);
+                Equal("Win : なし", session.ModifierHint);
+                session.ApplyPointerInput(new(180, 170), CaptureModifiers.None, windowsTap: true);
+                Equal(CaptureMode.Rectangle, session.Mode);
+                Check(gesture.IsPressed && gesture.HasDragged && !session.HighlightWindow, "Win単押しでドラッグ状態が変わった");
+                Equal(new Rectangle(100, 100, 80, 70), gesture.Selection);
             }
             finally { session.Cancel(); }
         });

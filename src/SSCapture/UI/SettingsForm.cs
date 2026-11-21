@@ -12,7 +12,7 @@ internal sealed class SettingsForm : Form
     private Action? refreshSaveButton;
     private readonly TextBox directory, imageEditor, videoEditor, imageArguments, videoArguments, fileNamePattern, ocrSeparator, oneOcrDirectory;
     private readonly HotkeyEditor screenshot1, screenshot2, recording1, recording2, lastRegionKey, lastRecipeKey;
-    private readonly CaptureKeyEditor captureKeys;
+    private readonly CaptureKeyEditor captureBeforeKeys, captureKeys;
     private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration, screenshotPadding;
     private readonly ComboBox screenshotColorDepth;
     private readonly ComboBox metadataMode;
@@ -111,20 +111,25 @@ internal sealed class SettingsForm : Form
         metadataPage.Controls.Add(metadataHelp, 0, 1); metadataPage.SetColumnSpan(metadataHelp, 2); metadataPage.SetRowSpan(metadataHelp, 4);
         var namingHelp = new Label { Dock = DockStyle.Fill, Text = "{yyyymmdd} 年月日　{hhmmss} 時分秒　{ocr} 文字列\n{region} 範囲名　{#} 1,2…　{##} 01,02…　動画は.mp4" };
         naming.Controls.Add(namingHelp, 0, 3); naming.SetColumnSpan(namingHelp, 2); naming.SetRowSpan(namingHelp, 2);
-        var keys = Page(tabs, "ショートカット");
+        var shortcutPage = new TabPage("ショートカット") { BackColor = BackColor, Padding = new Padding(8) };
+        var shortcutTabs = new TabControl { Name = "ShortcutGroups", Dock = DockStyle.Fill };
+        shortcutPage.Controls.Add(shortcutTabs);
+        tabs.TabPages.Add(shortcutPage);
+        var keys = Page(shortcutTabs, "PC作業中のショートカットキー");
+        keys.RowStyles[5] = new RowStyle(SizeType.Absolute, 40);
         screenshot1 = KeyField(keys, "撮影 1", "ScreenshotShortcut1", settings.ScreenshotShortcut1, 0);
         screenshot2 = KeyField(keys, "撮影 2", "ScreenshotShortcut2", settings.ScreenshotShortcut2, 1);
         recording1 = KeyField(keys, "録画 1", "RecordingShortcut1", settings.RecordingShortcut1, 2);
         recording2 = KeyField(keys, "録画 2", "RecordingShortcut2", settings.RecordingShortcut2, 3);
         lastRegionKey = KeyField(keys, "前回の範囲", "LastRegionShortcut", settings.LastRegionShortcut, 4);
         lastRecipeKey = KeyField(keys, "直前の設定で再撮影", "LastRecipeShortcut", settings.LastRecipeShortcut, 5);
-        keys.RowStyles.Clear(); keys.RowCount = 7;
-        for (int row = 0; row < 6; row++) keys.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        keys.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        captureKeys = new CaptureKeyEditor(settings.CaptureKeys);
-        var captureKeyGroup = new GroupBox { Text = "撮影中の操作", Dock = DockStyle.Fill, Padding = new Padding(10, 8, 10, 6) };
-        captureKeyGroup.Controls.Add(captureKeys);
-        keys.Controls.Add(captureKeyGroup, 0, 6); keys.SetColumnSpan(captureKeyGroup, 2);
+        captureBeforeKeys = new CaptureKeyEditor(settings.CaptureBeforeKeys, settings.CaptureMouse, beforeSelection: true);
+        captureKeys = new CaptureKeyEditor(settings.CaptureKeys, settings.CaptureMouse, beforeSelection: false);
+        var beforePage = new TabPage("撮影範囲設定前の操作") { BackColor = BackColor, Padding = new Padding(8) };
+        var dragPage = new TabPage("撮影ドラッグ中の操作") { BackColor = BackColor, Padding = new Padding(8) };
+        beforePage.Controls.Add(captureBeforeKeys);
+        dragPage.Controls.Add(captureKeys);
+        shortcutTabs.TabPages.AddRange([beforePage, dragPage]);
         var regions = inputs;
         fixedWidth = PixelField(regions, "固定幅 (px)", "FixedWidth", settings.FixedWidth, 1);
         fixedHeight = PixelField(regions, "固定高さ (px)", "FixedHeight", settings.FixedHeight, 2);
@@ -421,6 +426,12 @@ internal sealed class SettingsForm : Form
                 RecordingShortcut1 = recording1.Value, RecordingShortcut2 = recording2.Value,
                 LastRegionShortcut = lastRegionKey.Value, LastRecipeShortcut = lastRecipeKey.Value, KeepHistory = keepHistory.Checked,
                 CaptureKeys = captureKeys.Value,
+                CaptureBeforeKeys = captureBeforeKeys.Value,
+                CaptureMouse = new CaptureMouseMap(
+                    BeforeLeft: captureBeforeKeys.IsClickEnabled(MouseButtons.Left),
+                    BeforeRight: captureBeforeKeys.IsClickEnabled(MouseButtons.Right),
+                    BeforeMiddle: captureBeforeKeys.IsClickEnabled(MouseButtons.Middle),
+                    DragRight: captureKeys.IsClickEnabled(MouseButtons.Right)),
                 NotificationDurationSeconds = (int)notificationDuration.Value, PlayCaptureSound = playCaptureSound.Checked,
                 HoldNotificationWhileApproaching = holdNotification.Checked,
                 NotificationApplicationId = NotificationAppId(),

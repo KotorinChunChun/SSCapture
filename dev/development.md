@@ -102,7 +102,7 @@ pwsh -File scripts/start.ps1 -Settings
 通常テストのビルド後、次のコマンドで実モニタごとの配置を確認できます。単色の検証画面が短時間表示されます。画面撮影・音声取得・クリップボード変更は行いません。
 
 ```powershell
-dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --overlay-placement-smoke
+dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows10.0.19041.0/SSCapture.Tests.dll --overlay-placement-smoke
 ```
 
 FancyZonesの「新規ウィンドウを現在のアクティブモニタへ移動」が有効な環境では、表示後の物理座標・クライアントサイズ・自動移動印を確認します。FancyZonesが停止中の成功は、FancyZonesとの併用確認を意味しません。通常テストでは、非表示の実HWNDとハンドル再作成後のツールウィンドウ属性を確認します。
@@ -110,7 +110,7 @@ FancyZonesの「新規ウィンドウを現在のアクティブモニタへ移�
 開始画面限定設定とポインタ制限の実機検証は次のコマンドで行います。単色の選択画面を表示して実ポインタを動かすため、実行中はPC操作を控えてください。画面画像・音声・クリップボードは取得しません。
 
 ```powershell
-dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --selection-monitor-smoke
+dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows10.0.19041.0/SSCapture.Tests.dll --selection-monitor-smoke
 ```
 
 各実モニタで設定ON/OFF、4辺からのポインタ逸脱防止、確定・Esc・非アクティブ化・設定へ移動・画像取得例外の終了経路を確認します。終了後は元のポインタ位置と制限へ戻します。
@@ -120,8 +120,8 @@ dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --s
 専用の合成画面で修飾キー・中断・メニュー・単押し・撮影タイミングを確認します。実行中はPC操作を控えてください。通常テストをビルドした後に実行します。実デスクトップ画像・音声・クリップボードは取得しません。前面ウィンドウを確認できないときは入力を中止します。
 
 ```powershell
-dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --selection-input-smoke
-dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --window-hit-smoke
+dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows10.0.19041.0/SSCapture.Tests.dll --selection-input-smoke
+dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows10.0.19041.0/SSCapture.Tests.dll --window-hit-smoke
 ```
 
 ## ペイントと具体的な通知の実機検証
@@ -129,8 +129,8 @@ dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --w
 通常テストをビルドした後、生成PNGだけを使って保存ON/OFFの実ペイント起動を確認します。検証用に新規作成されたウィンドウだけを正常終了し、開始前のペイントは保持します。通知試験は短時間の実表示・折返し・画面取得除外を確認します。デスクトップ画像・個人クリップボード・音声は取得しません。
 
 ```powershell
-dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --paint-launch-smoke C:/develop/test/SSCapture/dev/temp/paint-launch-check
-dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows/SSCapture.Tests.dll --capture-target-toast-smoke
+dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows10.0.19041.0/SSCapture.Tests.dll --paint-launch-smoke C:/develop/test/SSCapture/dev/temp/paint-launch-check
+dotnet tests/SSCapture.Tests/bin/Release/net10.0-windows10.0.19041.0/SSCapture.Tests.dll --capture-target-toast-smoke
 ```
 
 ## ファイルと配布の扱い

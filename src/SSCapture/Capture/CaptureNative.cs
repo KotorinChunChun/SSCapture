@@ -172,7 +172,8 @@ internal static class CaptureNative
             {
                 var title = new StringBuilder(512);
                 GetWindowText(window, title, title.Capacity);
-                windows.Add(new(clipped, title.ToString().Replace('\r', ' ').Replace('\n', ' ').Trim()));
+                uint thread = GetWindowThreadProcessId(window, out uint process);
+                windows.Add(new(clipped, title.ToString().Replace('\r', ' ').Replace('\n', ' ').Trim(), window, process, thread));
             }
             return true;
         }, 0);
@@ -181,6 +182,18 @@ internal static class CaptureNative
 
     internal static IReadOnlyList<Rectangle> WindowBounds(Rectangle desktop) =>
         CaptureWindows(desktop).Select(window => window.Bounds).ToArray();
+
+    internal static Rectangle RequireCaptureWindow(CaptureWindow target)
+    {
+        uint thread = GetWindowThreadProcessId(target.Handle, out uint process);
+        if (thread == 0 || thread != target.ThreadId || process != target.ProcessId
+            || !IsWindowVisible(target.Handle) || IsIconic(target.Handle))
+            throw new InvalidOperationException("選択したウィンドウを取得できません。選び直してください。");
+        if (DwmGetWindowAttribute(target.Handle, 9, out NativeRect bounds, Marshal.SizeOf<NativeRect>()) != 0
+            && !GetWindowRect(target.Handle, out bounds))
+            throw new InvalidOperationException("選択したウィンドウの範囲を取得できません。");
+        return bounds.ToRectangle();
+    }
 }
 
-internal sealed record CaptureWindow(Rectangle Bounds, string Title);
+internal sealed record CaptureWindow(Rectangle Bounds, string Title, nint Handle, uint ProcessId, uint ThreadId);
