@@ -125,6 +125,7 @@ internal sealed class SessionController
     private System.Windows.Forms.Timer? snapTimer;
     private bool overlayUpdatePending;
     private CaptureWindowsKey? windowsKey;
+    private bool idleWindowsMove;
     private CaptureModifiers activeModifiers;
     private bool activeDrag;
     private CaptureMode? modeBeforeWindowShortcut;
@@ -299,6 +300,7 @@ internal sealed class SessionController
             if (monitor.IsEmpty) throw new InvalidOperationException("ポインタのあるモニタが見つかりません。");
             limit = monitor;
         }
+        idleWindowsMove = false;
         cursorConfinement?.Dispose(); cursorConfinement = null;
         selectionBounds = limit; SelectionMonitors = limit is Rectangle limited ? [limited] : Snapshot.Monitors;
         gesture.UpdateTargets(SelectionMonitors, windows, limit);
@@ -532,12 +534,12 @@ internal sealed class SessionController
         }
     }
 
-    private void ReplaceGuide()
+    private void ReplaceGuide(CaptureOverlay? preferredOwner = null)
     {
         guide?.Dispose();
         guide = null;
         if (overlays.Count == 0 || !ShowSelectionGuide) return;
-        CaptureOverlay owner = menuOwner ?? overlays.FirstOrDefault(o => o.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
+        CaptureOverlay owner = preferredOwner ?? menuOwner ?? overlays.FirstOrDefault(o => o.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
         guide = new UI.SelectionGuideForm(owner.MonitorBounds, options.Intent, () => { if (!refreshing) Cancel(); },
             Mode == CaptureMode.FixedRegion ? activeFixedSize : null, HandleCommandKey, activeAnchor, AltKeyChanged, Mode,
             dismiss: () => ChangeGuideVisibility(false), spaceEnabled: OutputSettings.CaptureKeys.SpaceEnabled);
@@ -659,11 +661,41 @@ internal sealed class SessionController
                 gesture.ExpandMonitors(SelectionMonitors);
                 OutputSettings = OutputSettings with { LimitToStartingMonitor = false }; UpdateMenu();
                 if (!starting)
-                    foreach (Rectangle monitor in SelectionMonitors.Where(m => overlays.All(o => o.MonitorBounds != m)))
-                    { var overlay = new CaptureOverlay(this, monitor); overlays.Add(overlay); overlay.Show(); }
+                    foreach (Rectangle monitor in SelectionMonitors) ShowMonitorOverlay(monitor);
             }
         }
         else if (!starting && cursorConfinement is null) cursorConfinement = confineCursor(bounds);
+    }
+
+    private CaptureOverlay ShowMonitorOverlay(Rectangle monitor)
+    {
+        var overlay = overlays.FirstOrDefault(candidate => candidate.MonitorBounds == monitor);
+        if (overlay is null)
+        {
+            overlay = new CaptureOverlay(this, monitor);
+            overlays.Add(overlay);
+        }
+        if (!overlay.Visible) overlay.Show();
+        return overlay;
+    }
+
+    private void FollowIdleWindowsPointer(Point pointer)
+    {
+        var monitor = Snapshot.Monitors.FirstOrDefault(candidate => candidate.Contains(pointer));
+        if (monitor.IsEmpty || selectionBounds == monitor) return;
+        selectionBounds = monitor;
+        SelectionMonitors = [monitor];
+        gesture.UpdateTargets(SelectionMonitors, windows, monitor);
+        lastPointerPosition = null;
+        if (starting) return;
+
+        menuOwner = null;
+        var owner = ShowMonitorOverlay(monitor);
+        owner.Activate();
+        owner.Focus();
+        foreach (var overlay in overlays)
+            if (overlay != owner && overlay.Visible) overlay.Hide();
+        ReplaceGuide(owner);
     }
 
     internal void ModifiersChanged() => UpdateModifiers(false);
@@ -682,10 +714,13 @@ internal sealed class SessionController
 
     internal void ApplyPointerInput(Point pointer, CaptureModifiers modifiers, bool windowsTap = false, bool forceMove = false)
     {
+        windowsKey?.ObservePointer(pointer);
         bool dragging = gesture.IsPressed;
         var bindings = dragging ? OutputSettings.CaptureKeys : OutputSettings.CaptureBeforeKeys;
         CaptureKeyAction action = ResolveCaptureAction(bindings, modifiers, dragging);
-        bool changed = modifiers != activeModifiers || dragging != activeDrag;
+        bool movingWhileIdle = !HasPointerPress && !dragging && selectionBounds is not null && Snapshot.Monitors.Count > 1
+            && modifiers == CaptureModifiers.Win && action is (CaptureKeyAction.HighlightWindow or CaptureKeyAction.CrossMonitor);
+        bool changed = modifiers != activeModifiers || dragging != activeDrag || idleWindowsMove != movingWhileIdle;
         CaptureKeyAction pressedAction = windowsTap && !HasPointerPress && !dragging ? bindings.Win
             : (modifiers & ~activeModifiers) != 0 && modifiers != CaptureModifiers.Win ? action : CaptureKeyAction.None;
         if (changed)
@@ -693,12 +728,21 @@ internal sealed class SessionController
             activeModifiers = modifiers;
             activeDrag = dragging;
             if (modifiers != CaptureModifiers.None) hasSelectionInput = true;
-            ModifierHint = modifiers == CaptureModifiers.None ? null : $"{CaptureKeyMap.Label(modifiers)} : {CaptureKeyMap.Describe(action)}";
+            var effect = movingWhileIdle ? CaptureKeyAction.CrossMonitor : action;
+            ModifierHint = modifiers == CaptureModifiers.None ? null : $"{CaptureKeyMap.Label(modifiers)} : {CaptureKeyMap.Describe(effect)}";
         }
         bool snap = action == CaptureKeyAction.Snap;
         bool height = action == CaptureKeyAction.LockHeight;
         bool width = action == CaptureKeyAction.LockWidth;
-        UpdateMonitorRestriction(pointer, action == CaptureKeyAction.CrossMonitor);
+        if ((idleWindowsMove || movingWhileIdle) && !HasPointerPress && !dragging && selectionBounds is not null)
+            FollowIdleWindowsPointer(pointer);
+        idleWindowsMove = movingWhileIdle;
+        if (movingWhileIdle)
+        {
+            cursorConfinement?.Dispose();
+            cursorConfinement = null;
+        }
+        else UpdateMonitorRestriction(pointer, action == CaptureKeyAction.CrossMonitor);
         CaptureKeyAction rectangleAction = dragging && action is CaptureKeyAction.LockAspectRatio
             or CaptureKeyAction.FromCenter or CaptureKeyAction.FromCenterWithAspectRatio ? action : CaptureKeyAction.None;
         if (forceMove || pointer != lastPointerPosition || snap != lastSnap || height != lastHeightLock || width != lastWidthLock

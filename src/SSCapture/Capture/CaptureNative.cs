@@ -86,8 +86,15 @@ internal static class CaptureNative
 
     internal static Point CursorPosition()
     {
-        if (!GetPhysicalCursorPos(out NativePoint point)) throw new Win32Exception(Marshal.GetLastWin32Error());
-        return new Point(point.X, point.Y);
+        if (!TryCursorPosition(out Point point)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        return point;
+    }
+
+    internal static bool TryCursorPosition(out Point point)
+    {
+        bool available = GetPhysicalCursorPos(out NativePoint native);
+        point = new Point(native.X, native.Y);
+        return available;
     }
 
     internal static Keys Modifiers(bool queuedKeyState = false)

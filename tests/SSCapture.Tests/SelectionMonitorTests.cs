@@ -76,6 +76,35 @@ internal static partial class Program
             Equal(new Rectangle(-100, 20, 200, 100), gesture.Selection);
             Check(gesture.IsPressed && gesture.HasDragged, "ドラッグをリセットした");
         });
+        Run("ドラッグ前のWin長押しは移動先を撮影モニターにしウィンドウ撮影へ切り替えない", () =>
+        {
+            var session = MonitorSession(true);
+            try
+            {
+                Point start = new(-100, 20), gap = new(20, -50), destination = new(100, 120);
+                session.ApplyPointerInput(start, CaptureModifiers.Win);
+                session.ApplyPointerInput(gap, CaptureModifiers.Win);
+                Equal(SelectionTestMonitors[0], session.SelectionMonitors.Single());
+                session.ApplyPointerInput(destination, CaptureModifiers.Win);
+                Equal(SelectionTestMonitors[1], session.SelectionMonitors.Single());
+                Equal(destination, session.Pointer);
+                session.ApplyPointerInput(destination, CaptureModifiers.None);
+                Equal(CaptureMode.Rectangle, session.Mode);
+                Check(session.OutputSettings.LimitToStartingMonitor, "開始画面限定の設定を解除した");
+                session.MoveTo(start);
+                Equal(new Point(0, 20), session.Pointer);
+                Check(session.SelectionMenu.Command("LimitToStartingMonitor").Checked, "メニューの画面限定が外れた");
+            }
+            finally { session.Cancel(); }
+        });
+        Run("Winの短押しは静止中だけ成立し押下中に移動して戻った場合も切り替えない", () =>
+        {
+            Point start = new(-100, 20);
+            Check(CaptureWindowsKey.IsStationaryTap(start, start, 100, false), "静止タップを取り逃した");
+            Check(!CaptureWindowsKey.IsStationaryTap(start, new(20, 20), 100, false), "移動して離した操作をタップにした");
+            Check(!CaptureWindowsKey.IsStationaryTap(start, start, 100, true), "移動して戻った操作をタップにした");
+            Check(!CaptureWindowsKey.IsStationaryTap(start, start, 1000, false), "長押しをタップにした");
+        });
         Run("開始画面限定は既定ON・旧設定ON・明示OFFを保存", () => WithServiceDirectory(directory =>
         {
             var store = new SettingsStore(Path.Combine(directory, "settings.json"));
@@ -218,6 +247,37 @@ internal static partial class Program
                 finally { session.Cancel(); }
             }
             Console.WriteLine($"PASS 開始画面限定ON/OFF・{monitors.Count}モニタ・5終了経路・ポインタ4辺の制限と復元");
+            if (monitors.Count >= 2)
+            {
+                Rectangle first = monitors[0], destination = monitors[1];
+                Point start = new(first.Left + first.Width / 2, first.Top + first.Height / 2);
+                Point target = new(destination.Left + destination.Width / 2, destination.Top + destination.Height / 2);
+                input.Move(start);
+                Rectangle desktop = monitors.Aggregate(Rectangle.Union);
+                var snapshot = new DesktopSnapshot(new Bitmap(desktop.Width, desktop.Height), desktop, monitors);
+                var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Recording, OutputDestination.None),
+                    snapshot, [], initialPointer: start);
+                try
+                {
+                    session.Start();
+                    PumpOverlayMessages(TimeSpan.FromMilliseconds(100));
+                    session.ApplyPointerInput(start, CaptureModifiers.Win);
+                    Equal(originalClip, CursorConfinement.ReadBounds());
+                    input.Move(target);
+                    Equal(target, CaptureNative.CursorPosition());
+                    session.ApplyPointerInput(target, CaptureModifiers.Win);
+                    Equal(destination, Application.OpenForms.OfType<CaptureOverlay>().Single(o => o.Visible).MonitorBounds);
+                    session.ApplyPointerInput(target, CaptureModifiers.None);
+                    Equal(destination, CursorConfinement.ReadBounds());
+                    Equal(CaptureMode.Rectangle, session.Mode);
+                    Check(!session.Completion.IsCompleted, "モニターを切り替えた時に選択が中断した");
+                    session.UpdateMonitorRestriction(start, true);
+                    Equal(monitors.Count, Application.OpenForms.OfType<CaptureOverlay>().Count(o => o.Visible));
+                }
+                finally { session.Cancel(); }
+                Equal(originalClip, CursorConfinement.ReadBounds());
+                Console.WriteLine("PASS ドラッグ前のモニター移動・移動先での制限復元・ドラッグ中の再拡張");
+            }
             return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine($"FAIL 開始画面限定: {ex}"); return 1; }

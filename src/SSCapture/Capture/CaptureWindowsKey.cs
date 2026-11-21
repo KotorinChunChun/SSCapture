@@ -5,6 +5,7 @@ namespace SSCapture.Capture;
 // Only active in an interactive capture session. All keys other than Win pass through.
 internal sealed class CaptureWindowsKey : IDisposable
 {
+    private const int TapMilliseconds = 350;
     private readonly HookProcedure callback;
     private readonly Func<bool> ignoreTap;
     private nint hook;
@@ -12,8 +13,18 @@ internal sealed class CaptureWindowsKey : IDisposable
     private int previouslyHeld;
     private bool combined;
     private bool tapped;
+    private Point pressedAt;
+    private long pressedTime;
 
     internal bool IsHeld => held != 0;
+    internal void ObservePointer(Point pointer)
+    {
+        if (IsHeld && pointer != pressedAt) combined = true;
+    }
+
+    internal static bool IsStationaryTap(Point start, Point end, long elapsed, bool pointerMovedOrCombined) =>
+        !pointerMovedOrCombined && start == end && elapsed is >= 0 and <= TapMilliseconds;
+
     internal bool TakeTap()
     {
         bool value = tapped;
@@ -45,12 +56,18 @@ internal sealed class CaptureWindowsKey : IDisposable
             if (side != 0 && (held & side) != 0 && !down)
             {
                 held &= ~side;
-                if (held == 0 && !combined && !ignoreTap()) tapped = true;
+                if (held == 0 && !ignoreTap() && CaptureNative.TryCursorPosition(out Point releasedAt)
+                    && IsStationaryTap(pressedAt, releasedAt, Environment.TickCount64 - pressedTime, combined)) tapped = true;
                 return 1;
             }
             if (side != 0 && down && CaptureNative.OwnsForegroundWindow())
             {
-                if (held == 0) combined = ignoreTap() || CaptureNative.Modifiers() != Keys.None;
+                if (held == 0)
+                {
+                    bool pointerAvailable = CaptureNative.TryCursorPosition(out pressedAt);
+                    combined = !pointerAvailable || ignoreTap() || CaptureNative.Modifiers() != Keys.None;
+                    pressedTime = Environment.TickCount64;
+                }
                 else if ((held & side) == 0) combined = true;
                 held |= side;
                 return 1;
