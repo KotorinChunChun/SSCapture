@@ -4,7 +4,7 @@ param([Parameter(Mandatory)][ValidateSet('Enable','Disable','Status')][string]$A
 $ErrorActionPreference = 'Stop'
 # 開発出力や無引数のlnkは登録しない。GUIと同じ所有照合・共通タスクを使う。
 $startupRoot = [IO.Path]::GetFullPath($InstallDirectory)
-$startupHelper = Join-Path $startupRoot 'KotorinToys.Maintenance.exe'
+$startupHelper = Join-Path $startupRoot 'maintenance/KotorinToys.Maintenance.exe'
 if (-not (Test-Path -LiteralPath $startupHelper -PathType Leaf)) { throw '正式インストール先の保守補助が見つかりません。' }
 $operation = switch ($Action) { 'Enable' { 'startup-enable' } 'Disable' { 'startup-disable' } 'Status' { 'startup-status' } }
 & $startupHelper --product SSCapture --root $startupRoot --operation $operation

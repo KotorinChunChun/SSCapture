@@ -1,4 +1,5 @@
 using SSCapture.Capture;
+using SSCapture.Services;
 using SSCapture.UI;
 
 namespace SSCapture.Tests;
@@ -62,7 +63,7 @@ internal static partial class Program
                     }
                     finally { input.ReleaseInjectedInput(); CloseSmokeOverlays(); }
                 }
-                await Test("Shift/Ctrl途中固定・同時固定・解除連続性", async token =>
+                await Test("Shift/Ctrlの方向固定を離したらポインタと選択端が一致", async token =>
                 {
                     using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, ct) =>
                     {
@@ -70,14 +71,16 @@ internal static partial class Program
                         await Down(overlay); await Move(overlay, 180, 140);
                         await Key(overlay, 0xA0, true); await Move(overlay, 230, 200);
                         Equal(new Size(150, 60), session.Selection.Size);
+                        await Key(overlay, 0xA0, false);
+                        Equal(new Size(150, 120), session.Selection.Size);
                         await Key(overlay, 0xA2, true); await Move(overlay, 260, 220);
-                        Equal(new Size(150, 60), session.Selection.Size);
-                        await Key(overlay, 0xA0, false); await Key(overlay, 0xA2, false);
-                        Equal(new Size(150, 60), session.Selection.Size);
-                        await Move(overlay, 270, 230); Equal(new Size(160, 70), session.Selection.Size);
+                        Equal(new Size(150, 140), session.Selection.Size);
+                        await Key(overlay, 0xA2, false);
+                        Equal(new Size(180, 140), session.Selection.Size);
+                        await Move(overlay, 270, 230); Equal(new Size(190, 150), session.Selection.Size);
                         input.LeftUp();
-                    }, token);
-                    Equal(new Size(160, 70), result.Image!.Size);
+                    }, token, showGuide: false);
+                    Equal(new Size(190, 150), result.Image!.Size);
                 });
                 foreach (bool escape in new[] { false, true })
                     await Test((escape ? "Esc" : "右クリック") + "は選択だけ中断し再ドラッグ可能", async token =>
@@ -91,7 +94,7 @@ internal static partial class Program
                             Check(!overlay.IsDisposed && !overlay.SelectionMenu.Visible, "撮影終了またはメニュー表示");
                             Check(!OverlaySession(overlay).Dragging && OverlaySession(overlay).Selection.IsEmpty, "選択が残る");
                             await Down(overlay, 100, 80); await Move(overlay, 220, 160); input.LeftUp();
-                        }, token);
+                        }, token, showGuide: false);
                         Equal(new Size(120, 80), result.Image!.Size);
                     });
                 await Test("Alt一時20pxとメニュー20px・保持", async token =>
@@ -108,8 +111,38 @@ internal static partial class Program
                         await MenuClick(overlay, (ToolStripMenuItem)overlay.SelectionMenu.Command("Grid20")!);
                         Check(session.Grid20, "メニュー20pxが反映されない");
                         await Down(overlay); await Move(overlay, 153, 137); input.LeftUp();
-                    }, token);
+                    }, token, settings: new() { GridStepPixels = 20 }, showGuide: false);
                     Equal(new Size(80, 60), result.Image!.Size);
+                });
+                await Test("Spaceで実ポインタを対角へ移動して同じ範囲を確定", async token =>
+                {
+                    Rectangle expected = Rectangle.FromLTRB(P(80, 80).X, P(80, 80).Y, P(230, 180).X, P(230, 180).Y);
+                    using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, _) =>
+                    {
+                        await Down(overlay); await Move(overlay, 230, 180);
+                        Equal(expected, OverlaySession(overlay).Selection);
+                        await Key(overlay, 0x20, true); await Key(overlay, 0x20, false);
+                        Equal(P(80, 80), CaptureNative.CursorPosition());
+                        Equal(expected, OverlaySession(overlay).Selection);
+                        input.LeftUp();
+                    }, token, captureWindowsKey: true, showGuide: false);
+                    Equal(expected, result.Selection!.Bounds);
+                });
+                await Test("カーソル切替で再取得に失敗しても次のドラッグで撮影", async token =>
+                {
+                    using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, ct) =>
+                    {
+                        await OpenSelectionMenu(overlay, bounds, input, ct);
+                        var item = (ToolStripMenuItem)overlay.SelectionMenu.Command("IncludeCursor")!;
+                        await MenuClick(overlay, item);
+                        Check(!overlay.SelectionMenu.Visible, "再取得失敗後にメニューが残る");
+                        var session = OverlaySession(overlay);
+                        Check(session.SelectionError?.Contains("試験用の再取得失敗", StringComparison.Ordinal) == true,
+                            "再取得の失敗理由が表示されない");
+                        Check(!session.OutputSettings.IncludeCursor, "失敗した切替が適用された");
+                        await Down(overlay); await Move(overlay, 240, 180); input.LeftUp();
+                    }, token, currentFrameFactory: () => throw new IOException("試験用の再取得失敗"), showGuide: false);
+                    Equal(new Size(160, 100), result.Image!.Size);
                 });
                 await Test("一時モード選択はセッション内で変更し画像を維持", async token =>
                 {
@@ -134,7 +167,7 @@ internal static partial class Program
                         Check(!overlay.SelectionMenu.Visible && !root.DropDown.Visible, "モード確定後に親/子メニューが残る");
                         NativeSmokeInput.RequireForeground(overlay.Handle);
                         await Down(overlay, 120, 80); input.LeftUp();
-                    }, token);
+                    }, token, showGuide: false);
                     Equal(bounds, result.Selection!.Bounds);
                 });
                 await Test("固定サイズ中央クリックでモニタ全体", async token =>
@@ -143,7 +176,7 @@ internal static partial class Program
                     {
                         await Move(overlay, 120, 80); NativeSmokeInput.RequireTarget(overlay.Handle, P(120, 80));
                         input.MiddleDown(); await Task.Delay(60); input.MiddleUp();
-                    }, token, fixedSize: new(200, 120));
+                    }, token, fixedSize: new(200, 120), showGuide: false);
                     Equal(bounds, result.Selection!.Bounds);
                 });
                 await Test("メニューのデスクトップ全体はメニュー開始位置を使用", async token =>
@@ -152,7 +185,7 @@ internal static partial class Program
                     {
                         await OpenSelectionMenu(overlay, bounds, input, ct);
                         await MenuClick(overlay, (ToolStripMenuItem)overlay.SelectionMenu.Command("CaptureDesktop")!);
-                    }, token, fixedSize: new(200, 120));
+                    }, token, fixedSize: new(200, 120), showGuide: false);
                     Equal(bounds, result.Selection!.Bounds);
                 });
                 await Test("native列挙の対象ウィンドウを左単押しで確定", async token =>
@@ -165,8 +198,43 @@ internal static partial class Program
                     using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, ct) =>
                     {
                         await Down(overlay, 120, 80); input.LeftUp();
-                    }, token, windows: windows);
+                    }, token, windows: windows, showGuide: false);
                     Equal(bounds, result.Selection!.Bounds);
+                });
+                await Test("WGCを実メニューで選択して対象の画素をPNGへ保存", async token =>
+                {
+                    CaptureWindow target = CaptureNative.CaptureWindows(Screen.FromControl(host).Bounds)
+                        .Single(window => window.Handle == host.Handle);
+                    using var result = await CaptureSyntheticOutcome(CaptureMode.Window, bounds, input, async (overlay, ct) =>
+                    {
+                        await OpenSelectionMenu(overlay, bounds, input, ct);
+                        var item = (ToolStripMenuItem)overlay.SelectionMenu.Command("IsolatedWindowCapture")!;
+                        await MenuClick(overlay, item);
+                        Check(!overlay.SelectionMenu.Visible, "WGC選択後にメニューが残る");
+                        await Down(overlay, 120, 80); input.LeftUp();
+                    }, token, windows: [target.Bounds], findWindow: point => target.Bounds.Contains(point) ? target : null, showGuide: false);
+                    Equal(target, result.Selection!.IsolatedWindow);
+                    Equal(target.Title, result.Selection.WindowTitle);
+                    string directory = Path.Combine(Path.GetTempPath(), "sscapture-wgc-" + Guid.NewGuid().ToString("N"));
+                    string? savedPath = null;
+                    try
+                    {
+                        using var router = new OutputRouter(directory, delivered: delivery =>
+                        {
+                            savedPath = delivery.SavedPath;
+                            delivery.NotificationImage?.Dispose();
+                        });
+                        var output = new AppSettings { SaveDirectory = directory, DefaultDestination = OutputDestination.File };
+                        await InstantCapture.DeliverAsync(result.Image!, output, DateTimeOffset.Now, router, preserveOutputs: true);
+                        Check(savedPath is not null, "WGCのPNGが保存されない");
+                        using var saved = new Bitmap(savedPath!);
+                        Equal(result.Image!.Size, saved.Size);
+                        Equal(host.BackColor.ToArgb(), saved.GetPixel(saved.Width / 2, saved.Height / 2).ToArgb());
+                    }
+                    finally
+                    {
+                        if (savedPath is not null) File.Delete(savedPath);
+                    }
                 });
                 foreach (bool freeze in new[] { true, false })
                     await Test("実入力後の撮影タイミング " + (freeze ? "ON" : "OFF"), async token =>
@@ -183,7 +251,7 @@ internal static partial class Program
                         using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, ct) =>
                         {
                             await Down(overlay); await Move(overlay, 180, 160); input.LeftUp();
-                        }, token, freeze: freeze, currentFrameFactory: Future);
+                        }, token, freeze: freeze, currentFrameFactory: Future, showGuide: false);
                         Equal(freeze ? 0 : 1, reads);
                         Equal((freeze ? Color.Red : Color.Green).ToArgb(), result.Image!.GetPixel(10, 10).ToArgb());
                     });
@@ -193,7 +261,7 @@ internal static partial class Program
         };
         Application.Run(host);
         Console.WriteLine($"SELECTION INPUT RESULT: {successes} passed, {failures} failed");
-        return failures == 0 && successes == 10 ? 0 : 1;
+        return failures == 0 && successes == 13 ? 0 : 1;
     }
 
     private static SessionController OverlaySession(CaptureOverlay overlay) => (SessionController)typeof(CaptureOverlay)

@@ -32,6 +32,32 @@ pwsh -File scripts/test.ps1 -Suite Recording
 pwsh -File scripts/test.ps1 -Suite Startup
 ```
 
+### 実デスクトップのCLI検証
+
+ロックを解除したWindowsデスクトップで、試験中に他のマウス・キー操作を行わずに実行します。テストは専用画面を使い、対象が前面にない場合は入力を中止します。
+
+```powershell
+$run = 'dev/history/v0.1.10/logs/native-tests'
+pwsh -File scripts/test.ps1 -NativeSmoke Selection -OutputPath "$run/tests"
+pwsh -File scripts/test.ps1 -NativeSmoke Notification -OutputPath "$run/tests"
+pwsh -File scripts/test.ps1 -NativeSmoke Monitors -OutputPath "$run/tests"
+pwsh -File scripts/test.ps1 -NativeSmoke Placement -OutputPath "$run/tests"
+```
+
+- `Selection` は方向ロックの解除、Spaceの対角切替、メニュー終了と画面再取得失敗からの復帰、WGCでの対象ウィンドウ取得とPNG保存を検査します。
+- `Notification` は本文の透過、フォルダ操作、未保存画像のダブルクリックと生成PNG、前回結果の表示とフォーカス維持を検査します。フォルダと編集アプリの呼び出しは試験内で受け取ります。
+- `Monitors` と `Placement` は接続中のモニタを使って選択制限と物理座標を検査します。
+
+同じテストDLLで外部アプリへ専用の画像・動画を渡したり、専用ウィンドウを一定時間録画したりできます。フォトとClipchampへのファイル受け渡しはWindowsの「プログラムから開く」の登録を使います。ファイルを受け取った後の表示やサインイン状態は対象アプリの画面で確認します。録画テストは専用ウィンドウの400×240pxを取得し、途中で一時停止・再開します。出力の寸法、色、音声トラック数、録画時間を照合します。最後のWAV引数を付けたときだけ試験音を再生し、PC音と既定のマイクを同時に有効にして録画中のマイク切り替えを検査します。
+
+```powershell
+$test = "$run/tests/SSCapture.Tests.dll"
+dotnet $test --store-editor-open photos "$run/sample.png"
+dotnet $test --store-editor-open clipchamp "$run/sample.mp4"
+dotnet $test --recording-desktop-smoke artifacts/app/tools/ffmpeg.exe artifacts/app/tools/ffprobe.exe "$run/recording" 120
+dotnet $test --recording-desktop-smoke artifacts/app/tools/ffmpeg.exe artifacts/app/tools/ffprobe.exe "$run/audio-check" 12 "$run/test-tone.wav"
+```
+
 ほかに `Command`、`Pinned`、`Preset`、`Recipe`、`Snap`、`Menu` を指定できます。通知からExplorerやOfficeへの実際のドロップと、他アプリが前面にある場合のフォーカスは実機で確認します。
 
 ### 撮影CLIの保存を検証する

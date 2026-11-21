@@ -13,6 +13,8 @@ internal static partial class Program
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         if (args.FirstOrDefault() == "--notification-drag-preview") return NotificationDragPreview(args[1]);
+        if (args.FirstOrDefault() == "--store-editor-open") return OpenStoreEditorSmoke(args);
+        if (args.FirstOrDefault() == "--recording-desktop-smoke") return RunRecordingDesktopSmoke(args);
         if (args.SequenceEqual(["--notification-tests"]))
         {
             NotificationUpgradeTests(); NotificationActionTests(); NotificationPresentationTests(); NotificationDragTests(); FeedbackTests();

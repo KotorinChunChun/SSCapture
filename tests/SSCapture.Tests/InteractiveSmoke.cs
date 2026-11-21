@@ -588,7 +588,9 @@ internal static partial class Program
     private static async Task<CaptureOutcome> CaptureSyntheticOutcome(CaptureMode mode, Rectangle bounds, NativeSmokeInput input,
         Func<CaptureOverlay, CancellationToken, Task> action, CancellationToken token, bool splitMonitors = false,
         IReadOnlyList<Rectangle>? windows = null, Size? fixedSize = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft,
-        bool freeze = true, Func<DesktopSnapshot>? currentFrameFactory = null)
+        bool freeze = true, Func<DesktopSnapshot>? currentFrameFactory = null,
+        SSCapture.Services.AppSettings? settings = null, bool captureWindowsKey = false,
+        Func<Point, CaptureWindow?>? findWindow = null, bool showGuide = true)
     {
         var pixels = new Bitmap(bounds.Width, bounds.Height);
         using (Graphics graphics = Graphics.FromImage(pixels))
@@ -603,7 +605,8 @@ internal static partial class Program
         var snapshot = new DesktopSnapshot(pixels, bounds, monitors);
         Task<CaptureOutcome> capture = CaptureSession.SelectAsync(
             new CaptureOptions(mode, CaptureIntent.Screenshot, OutputDestination.Clipboard, FreezeFrame: freeze, FixedSize: fixedSize, FixedAnchor: fixedAnchor,
-                LimitToStartingMonitor: false), snapshot, windows ?? [bounds], currentFrameFactory);
+                LimitToStartingMonitor: false, ShowSelectionGuide: showGuide, OutputSettings: settings), snapshot, windows ?? [bounds], currentFrameFactory,
+            captureWindowsKey: captureWindowsKey, findWindow: findWindow);
         bool returned = false;
         try
         {

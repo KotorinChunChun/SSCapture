@@ -7,13 +7,25 @@ internal static class EditorExecutable
 
     internal static string? FindPPPaint()
     {
-        using var registered = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-            @"Software\Microsoft\Windows\CurrentVersion\Uninstall\KotorinToys.PPPaint_is1");
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var sibling = Directory.GetParent(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))?.FullName;
-        return FindPPPaint([registered?.GetValue("InstallLocation") as string,
+        return FindPPPaint([ReadPPPaintInstallLocation(),
             sibling is null ? null : Path.Combine(sibling, "PPPaint"),
             Path.Combine(local, "Programs", "PPPaint")], File.Exists);
+    }
+
+    private static string? ReadPPPaintInstallLocation()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Uninstall\KotorinToys.PPPaint_is1");
+            return key?.GetValue("InstallLocation") as string;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     internal static string? FindPPPaint(IEnumerable<string?> directories, Func<string, bool> exists) =>
