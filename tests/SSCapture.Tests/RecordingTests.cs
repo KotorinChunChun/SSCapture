@@ -8,6 +8,29 @@ internal static partial class Program
 {
     static partial void RecordingTests()
     {
+        Run("録画: toolsの不足ファイルだけを報告", () =>
+        {
+            var directory = new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"SSCapture-tools-{Guid.NewGuid():N}"));
+            Equal("ffmpeg.exe,ffprobe.exe", string.Join(',', RecordingMedia.MissingTools(directory.FullName)));
+            directory.Create();
+            var ffmpeg = Path.Combine(directory.FullName, "ffmpeg.exe");
+            var ffprobe = Path.Combine(directory.FullName, "ffprobe.exe");
+            try
+            {
+                File.WriteAllText(ffmpeg, "");
+                Equal("ffprobe.exe", RecordingMedia.MissingTools(directory.FullName).Single());
+                File.WriteAllText(ffprobe, "");
+                Equal(0, RecordingMedia.MissingTools(directory.FullName).Length);
+                File.Delete(ffmpeg);
+                Equal("ffmpeg.exe", RecordingMedia.MissingTools(directory.FullName).Single());
+            }
+            finally
+            {
+                File.Delete(ffmpeg);
+                File.Delete(ffprobe);
+                directory.Delete();
+            }
+        });
         Run("録画: 負座標・奇数寸法を保持", () =>
         {
             var bounds = new Rectangle(-1921, -241, 321, 241);

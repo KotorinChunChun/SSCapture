@@ -9,6 +9,25 @@ internal static partial class Program
 {
     static partial void UiTests()
     {
+        Run("PC作業中のショートカット6行は設定ウィンドウを縦に広げても等間隔", () =>
+        {
+            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
+            form.SelectCategory("ショートカット");
+            _ = form.Handle;
+            var tabs = (TabControl)form.Controls.Find("ShortcutGroups", true).Single();
+            var table = tabs.TabPages[0].Controls.OfType<TableLayoutPanel>().Single();
+            foreach (int height in new[] { 760, 1320 })
+            {
+                form.Height = height;
+                LayoutTree(form);
+                int[] rows = table.GetRowHeights();
+                Equal(7, rows.Length);
+                Check(rows.Take(6).All(row => row > 0 && row == rows[0]), "再撮影を含む6行の高さが一致しない");
+                var previous = table.GetControlFromPosition(1, 4)!;
+                var recent = table.GetControlFromPosition(1, 5)!;
+                Equal(rows[0], recent.Top - previous.Top);
+            }
+        });
         Run("基本は指定の順序・項目名・ツールチップで、グリッド間隔とガイドを個別に保存する", () =>
         {
             AppSettings? saved = null;

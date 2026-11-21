@@ -9,12 +9,30 @@ namespace SSCapture;
 
 internal sealed partial class TrayApplicationContext
 {
+    private bool CheckRecordingTools()
+    {
+        string directory = Path.Combine(AppContext.BaseDirectory, "tools");
+        string[] missing = RecordingMedia.MissingTools(directory);
+        if (missing.Length == 0)
+            return true;
+
+        busy = true;
+        RefreshMenu();
+        try
+        {
+            using var guide = new RecordingSetupForm(directory, missing);
+            guide.ShowDialog(form is { Visible: true } ? form : null);
+        }
+        finally
+        {
+            busy = false;
+            RefreshMenu();
+        }
+        return false;
+    }
+
     private void PrepareRecording(CaptureSelection selection, AppSettings captureSettings)
     {
-        string ffmpeg = Path.Combine(AppContext.BaseDirectory, "tools", "ffmpeg.exe");
-        string ffprobe = Path.Combine(AppContext.BaseDirectory, "tools", "ffprobe.exe");
-        if (!File.Exists(ffmpeg) || !File.Exists(ffprobe))
-            throw new FileNotFoundException("録画エンジンがありません。setup-media.ps1 と build.ps1 を実行してください。");
         pendingRecording = selection;
         recordingSettings = captureSettings;
         recordingForm = new RecordingControlForm(selection.Bounds, captureSettings);

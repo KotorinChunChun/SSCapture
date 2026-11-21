@@ -244,12 +244,14 @@ await Run("越境・利用者dataを目録から拒否", async () =>
 {
     var f = New();
     foreach (var path in new[] { "../outside.json", "data/settings.json", "tools/ffmpeg.exe", @"C:\outside.exe",
-        "data /settings.json", "other./file.json", "NUL.json", "test*/file.json" })
+        "data /settings.json", "other./file.json", "NUL.json", "test*/file.json", "captures.png", "data/docs/images/readme/test.png" })
     {
         SafeFiles.Write(Path.Combine(f.Payload, "payload-manifest.json"), new PayloadManifest(1, "ss-capture", "0.1.3", [new(path, 0, new string('a', 64))]));
         await Rejected(() => f.Update.Prepare(f.Root, f.Payload));
     }
 });
+await Run("READMEの操作画像を管理対象にできる", () => Done(() =>
+    Check(PayloadManifest.OwnedPath("docs/images/readme/01-settings-0110.png"))));
 await Run("本体実検出器が正規定義とEXEを要求", () => Done(() =>
 {
     var f = New();

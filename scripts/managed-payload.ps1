@@ -36,6 +36,17 @@ function Assert-PayloadLinks([string]$Root) {
     }
 }
 
+function Get-ReadmeImages {
+    @(
+        'docs/images/readme/01-settings-0110.png'
+        'docs/images/readme/02-input-0110.png'
+        'docs/images/readme/03-output-0110.png'
+        'docs/images/readme/04-selection-0110.png'
+        'docs/images/readme/05-menu-0110.png'
+        'docs/images/readme/capture-complete.png'
+    )
+}
+
 function Assert-ManagedPayload {
     param(
         [Parameter(Mandatory)][string]$Root,
@@ -47,7 +58,10 @@ function Assert-ManagedPayload {
         'coreclr.dll','hostfxr.dll','hostpolicy.dll','System.Private.CoreLib.dll','System.Windows.Forms.dll',
         'maintenance/KotorinToys.Maintenance.exe','maintenance/KotorinToys.Maintenance.dll',
         'maintenance/KotorinToys.Maintenance.deps.json','maintenance/KotorinToys.Maintenance.runtimeconfig.json',
-        'maintenance/coreclr.dll','maintenance/hostfxr.dll','maintenance/hostpolicy.dll','maintenance/System.Private.CoreLib.dll')
+        'maintenance/coreclr.dll','maintenance/hostfxr.dll','maintenance/hostpolicy.dll','maintenance/System.Private.CoreLib.dll',
+        'LICENSE.txt','docs/usage.md',"docs/releases/v$Version.md")
+    $images = @(Get-ReadmeImages)
+    $required += $images
     foreach ($relative in $required) {
         if (-not (Test-Path -LiteralPath (Resolve-PayloadPath $Root $relative) -PathType Leaf)) { throw "管理用必須物がありません: $relative" }
     }
@@ -56,7 +70,7 @@ function Assert-ManagedPayload {
         if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "配布物にリンクがあります: $relative" }
         if ($relative -match '(^|/)(data|Captures|tools|\.git|private|temp|node_modules)(/|$)' -or
             $item.Name -match '^\.env($|\.)|^(credentials|secrets|settings|last-region)\.json$|^(ffmpeg|ffprobe|oneocr|onnxruntime)(\.|$)' -or
-            (-not $item.PSIsContainer -and $item.Extension -notin @('.exe','.dll','.json','.txt','.md'))) {
+            (-not $item.PSIsContainer -and $item.Extension -notin @('.exe','.dll','.json','.txt','.md') -and $relative -notin $images)) {
             throw "配布禁止ファイルがあります: $relative"
         }
     }
@@ -98,7 +112,15 @@ function Assert-ManagedPayload {
 }
 
 function Copy-ManagedDocuments([string]$Source, [string]$Destination, [string]$Version) {
-    $documents = @('README.md','docs/usage.md','docs/recovery.md','THIRD_PARTY.md')
+    $documents = @('README.md','docs/usage.md','docs/recovery.md','THIRD_PARTY.md',"docs/releases/v$Version.md")
+    $images = @(Get-ReadmeImages)
+    foreach ($relative in $images) {
+        $sourceFile = Resolve-PayloadPath $Source $relative
+        $targetFile = Resolve-PayloadPath $Destination $relative
+        New-Item -ItemType Directory -Path (Split-Path -Parent $targetFile) -Force | Out-Null
+        Copy-Item -LiteralPath $sourceFile -Destination $targetFile
+    }
+    Copy-Item -LiteralPath (Resolve-PayloadPath $Source 'LICENSE') -Destination (Resolve-PayloadPath $Destination 'LICENSE.txt')
     foreach ($relative in $documents) {
         $sourceFile = Resolve-PayloadPath $Source $relative
         $targetFile = Resolve-PayloadPath $Destination $relative
@@ -113,7 +135,8 @@ function Copy-ManagedDocuments([string]$Source, [string]$Destination, [string]$V
             $repositoryPath = [IO.Path]::GetRelativePath($Source, $resolved).Replace('\','/')
             $null = Resolve-PayloadPath $Source $repositoryPath
             if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { throw "説明書の元参照がありません: $repositoryPath" }
-            if ($repositoryPath -in $documents) { return $match.Value }
+            if ($repositoryPath -eq 'LICENSE') { return $match.Groups[1].Value + "(${link}.txt)" }
+            if ($repositoryPath -in $documents -or $repositoryPath -in $images) { return $match.Value }
             $encoded = (($repositoryPath -split '/') | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/'
             $fragment = if ($parts.Count -eq 2) { '#' + $parts[1] } else { '' }
             return $match.Groups[1].Value + "(https://github.com/KotorinChunChun/SSCapture/blob/v$Version/$encoded$fragment)"

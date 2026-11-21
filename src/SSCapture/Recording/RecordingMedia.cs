@@ -13,6 +13,10 @@ internal sealed record RecordingMediaPart(string Path, VideoTiming Timing, bool 
 
 internal static class RecordingMedia
 {
+    internal static string[] MissingTools(string directory) =>
+        new[] { "ffmpeg.exe", "ffprobe.exe" }
+            .Where(name => !File.Exists(Path.Combine(directory, name))).ToArray();
+
     private static string Number(double value) => value.ToString("0.#########", CultureInfo.InvariantCulture);
     internal static Size PaddedSize(Rectangle bounds) => new(checked(bounds.Width + bounds.Width % 2), checked(bounds.Height + bounds.Height % 2));
 

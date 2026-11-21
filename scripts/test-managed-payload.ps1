@@ -2,8 +2,8 @@
 param([string]$OutputRoot)
 . (Join-Path $PSScriptRoot 'managed-payload.ps1')
 $repository = Split-Path -Parent $PSScriptRoot
+$fixtureVersion = [string](Get-Content -LiteralPath (Join-Path $repository 'tool.json') -Raw | ConvertFrom-Json).version
 if (-not $OutputRoot) {
-    $fixtureVersion = [string](Get-Content -LiteralPath (Join-Path $repository 'tool.json') -Raw | ConvertFrom-Json).version
     $OutputRoot = "dev/history/v$fixtureVersion/logs/payload-fixtures"
 }
 $base = [IO.Path]::GetFullPath($OutputRoot, $repository)
@@ -28,7 +28,8 @@ $files = @('SSCapture.exe','SSCapture.dll','SSCapture.deps.json','coreclr.dll','
     'System.Private.CoreLib.dll','System.Windows.Forms.dll','README.md','capture-key-defaults.json',
     'maintenance/KotorinToys.Maintenance.exe','maintenance/KotorinToys.Maintenance.dll',
     'maintenance/KotorinToys.Maintenance.deps.json','maintenance/coreclr.dll',
-    'maintenance/hostfxr.dll','maintenance/hostpolicy.dll','maintenance/System.Private.CoreLib.dll')
+    'maintenance/hostfxr.dll','maintenance/hostpolicy.dll','maintenance/System.Private.CoreLib.dll',
+    'LICENSE.txt','docs/usage.md','docs/releases/v0.1.3.md') + @(Get-ReadmeImages)
 foreach ($file in $files) {
     $path = Join-Path $root $file
     New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
@@ -102,7 +103,7 @@ foreach ($link in @('missing.md','../outside.md','C:\Windows\win.ini','%2e%2e/ou
         try { Rejected { Validate } } finally { [IO.File]::WriteAllText((Join-Path $root 'README.md'), 'fixture') }
     }
 }
-foreach ($forbidden in @('secrets.json','sample.pdb','private/test.md','data/settings.json','tools/ffmpeg.exe')) {
+foreach ($forbidden in @('secrets.json','sample.pdb','private/test.md','data/settings.json','tools/ffmpeg.exe','captures.png')) {
     Case "禁止物 $forbidden" {
         $path = Join-Path $root $forbidden
         New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
@@ -111,6 +112,15 @@ foreach ($forbidden in @('secrets.json','sample.pdb','private/test.md','data/set
             Remove-Item -LiteralPath $path
             if ($forbidden.Contains('/')) { Remove-Item -LiteralPath (Split-Path -Parent $path) }
         }
+    }
+}
+Case '同梱READMEの操作画像とライセンスをローカル参照' {
+    $destination = Join-Path $base ([Guid]::NewGuid().ToString('N'))
+    Copy-ManagedDocuments $repository $destination $fixtureVersion
+    Assert-PayloadLinks $destination
+    $readme = [IO.File]::ReadAllText((Join-Path $destination 'README.md'))
+    foreach ($relative in @(Get-ReadmeImages) + @('LICENSE.txt')) {
+        if (!$readme.Contains("($relative)")) { throw "READMEの参照がローカルにありません: $relative" }
     }
 }
 Case '目録の全件照合・欠落・追加・改変・重複' {

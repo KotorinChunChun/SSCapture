@@ -115,6 +115,8 @@ internal sealed class SettingsForm : Form
         tabs.TabPages.Add(shortcutPage);
         var keys = Page(shortcutTabs, "PC作業中のショートカットキー");
         keys.RowStyles[5] = new RowStyle(SizeType.Absolute, 40);
+        keys.RowCount = 7;
+        keys.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         screenshot1 = KeyField(keys, "撮影 1", "ScreenshotShortcut1", settings.ScreenshotShortcut1, 0);
         screenshot2 = KeyField(keys, "撮影 2", "ScreenshotShortcut2", settings.ScreenshotShortcut2, 1);
         recording1 = KeyField(keys, "録画 1", "RecordingShortcut1", settings.RecordingShortcut1, 2);

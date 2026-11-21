@@ -94,6 +94,8 @@ internal sealed record PayloadManifest(int SchemaVersion, string Id, string Vers
             System.Text.RegularExpressions.Regex.IsMatch(p, @"^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(\.|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) ||
             Path.IsPathRooted(path)) return false;
         if (parts.Any(p => new[] { "data", "tools", "Captures", ".git", "private", "temp" }.Contains(p, StringComparer.OrdinalIgnoreCase))) return false;
+        if (parts.Length == 4 && string.Join('/', parts.Take(3)).Equals("docs/images/readme", StringComparison.OrdinalIgnoreCase)
+            && Path.GetExtension(path).Equals(".png", StringComparison.OrdinalIgnoreCase)) return true;
         return new[] { ".exe", ".dll", ".json", ".md", ".txt" }.Contains(System.IO.Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
     }
     public void Verify(string root)

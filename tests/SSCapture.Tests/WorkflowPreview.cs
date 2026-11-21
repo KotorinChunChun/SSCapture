@@ -7,6 +7,13 @@ internal static partial class Program
 {
     internal static int WorkflowPreview(string kind)
     {
+        if (kind == "recording-setup")
+        {
+            string directory = Path.Combine(AppContext.BaseDirectory, "tools");
+            using var form = new RecordingSetupForm(directory, Recording.RecordingMedia.MissingTools(directory));
+            form.ShowDialog();
+            return 0;
+        }
         if (kind == "startup-settings")
         {
             using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => [], startupRegistration: new FakeStartup());

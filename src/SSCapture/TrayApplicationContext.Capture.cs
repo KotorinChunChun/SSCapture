@@ -73,6 +73,9 @@ internal sealed partial class TrayApplicationContext
     {
         if (busy || exiting || pendingRecording is not null)
             return;
+        if (intent == CaptureIntent.Recording &&
+            !CheckRecordingTools())
+            return;
         busy = true;
         RefreshMenu();
         bool openSettings = false;
