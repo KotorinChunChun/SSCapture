@@ -8,27 +8,26 @@ Windows 11用の軽快な常駐スクリーンショット・領域録画ツー�
 
 ```mermaid
 flowchart LR
-    area["任意範囲撮影"] --> capture["SSCapture"]
-    size["固定サイズ撮影"] --> capture
-    position["固定位置とサイズで撮影"] --> capture
-    repeat["直前と同じ範囲を再撮影"] --> capture
+    resize["ChunapToolでウィンドウ寸法を調整"] --> area["任意範囲撮影"]
+    area --> output["クリップボード／ファイル保存"]
+    size["固定サイズ撮影"] --> output
+    position["固定位置とサイズで撮影"] --> output
+    repeat["直前と同じ範囲を再撮影"] --> output
 ```
-
-固定サイズや固定位置は入力プリセットに登録できます。
 
 ### アウトプット
 
 ```mermaid
 flowchart LR
-    capture["SSCapture"] --> clipboard["クリップボード"]
-    capture --> file["ファイル保存"]
+    clipboard["クリップボード"] --> currentFolder["SmartPasteで開いているフォルダーへ保存"]
     clipboard --> office["Officeへ貼り付け"]
-    clipboard --> currentFolder["開いているフォルダーへ貼り付け"]
-    file --> destination["指定フォルダーにPNGを残す"]
+    file["ファイル保存"] --> editor["PPPaintで画像を編集"]
+    file --> manual["MdVisualizerで画像付き手順書を作成"]
     file --> openFolder["通知から保存先を開く"]
+    notice["撮影通知"] --> excel["OfficeAssistでExcelへ直接配置"]
 ```
 
-出力方法と保存先は出力プリセットで指定します。開いているフォルダーへ貼り付けるときはSmartPasteを使います。[用途別の操作例](docs/usage.md#用途別の操作例)
+出力方法と保存先は出力プリセットで指定します。[おすすめ連携ツール](#おすすめ連携ツール)・[用途別の操作例](docs/usage.md#用途別の操作例)
 
 ## 本ツールの特徴
 
