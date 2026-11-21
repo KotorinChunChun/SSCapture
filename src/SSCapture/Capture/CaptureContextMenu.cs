@@ -93,8 +93,8 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             if (editing.ResetOutput is not null) Item("選択した出力プリセットに戻す", "ResetOutputPreset", editing.ResetOutput, output.DropDownItems);
             var parent = Menu("固定サイズの基点", "FixedAnchorMenu", range.DropDownItems);
             foreach (var value in Enum.GetValues<CaptureAnchor>()) anchors[value] = Item(AnchorName(value), "Anchor" + value, () => editing.ChangeAnchor(value), parent.DropDownItems);
-            Toggle("開始画面内だけで選択", "LimitToStartingMonitor", editing.Limited, editing.ChangeLimit, operation.DropDownItems,
-                "今回だけモニタ制限を切り替えます。ONは現在のポインタがあるモニタを対象にします。");
+            Toggle("開始したモニター内で選択する", "LimitToStartingMonitor", editing.Limited, editing.ChangeLimit, operation.DropDownItems,
+                "今回だけモニター制限を切り替えます。ONに戻すとメニューを開いた位置のモニター内で選択します。");
         }
         if (changeRatio is not null)
         {
@@ -141,11 +141,11 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             var freeze = Toggle("撮影開始時の画面を固定", "FreezeFrame", editing.Settings.FreezeFrame, editing.ChangeFreeze, range.DropDownItems, "切替時に画面を取り直します。ONはその画像、OFFは確定時の画像を出力します。");
             var cursor = Toggle("カーソルを含める", "IncludeCursor", editing.Settings.IncludeCursor, editing.ChangeCursor, range.DropDownItems, "切替時に画面を取り直します。録画ではカーソル描画も今回だけ変更します。");
             freeze.Enabled = cursor.Enabled = editing.CanRefresh;
-            Toggle("背景を暗くする", "DimCaptureBackground", editing.Settings.DimCaptureBackground, editing.ChangeDim, operation.DropDownItems);
+            Toggle("選択中モニタの背景を暗くする", "DimCaptureBackground", editing.Settings.DimCaptureBackground, editing.ChangeDim, operation.DropDownItems);
             if (editing.ChangeOpenFolder is not null) Toggle("保存後にフォルダを開く", "OpenFolderAfterSave", editing.Settings.OpenFolderAfterSave, editing.ChangeOpenFolder, output.DropDownItems);
         }
-        if (changeGrid is not null) Toggle("グリッドを使用", "Grid20", grid20, changeGrid, operation.DropDownItems, "グリッドを常時使用し、次回の撮影にも引き継ぎます。");
-        if (changeGuide is not null) Toggle("操作ガイドを表示", "ShowSelectionGuide", showGuide, changeGuide, operation.DropDownItems, "表示設定を次回にも保存します。ドラッグ中に近づくと一時的に隠れます。");
+        if (changeGrid is not null) Toggle("グリッドスナップを既定でON", "Grid20", grid20, changeGrid, operation.DropDownItems, "グリッドスナップのON/OFFを切り替え、次回の撮影にも引き継ぎます。");
+        if (changeGuide is not null) Toggle("画面右下に操作ガイドを表示する", "ShowSelectionGuide", showGuide, changeGuide, operation.DropDownItems, "表示設定を次回にも保存します。ドラッグ中に近づくと一時的に隠れます。");
         if (inputPresetsMenu.DropDownItems.Count == 0) EmptyHint(inputPresetsMenu);
         if (outputPresetsMenu.DropDownItems.Count == 0) EmptyHint(outputPresetsMenu);
         Items.Add(new ToolStripSeparator());
@@ -188,8 +188,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         foreach (var pair in metadata) pair.Value.Checked = pair.Key == settings.MetadataMode;
         foreach (var item in AllCommands) item.Checked = item.Name switch { "FreezeFrame" => settings.FreezeFrame, "IncludeCursor" => settings.IncludeCursor, "DimCaptureBackground" => settings.DimCaptureBackground, "LimitToStartingMonitor" => limited, _ => item.Checked };
         var parent = AllCommands.FirstOrDefault(i => i.Name == "FixedSizeMenu"); if (parent is not null) parent.Text = $"固定寸法（{size.Width}×{size.Height}px）";
-        var precision = AllCommands.FirstOrDefault(i => i.Name == "CapturePrecisionMenu"); if (precision is not null) precision.Text = $"スナップ距離 {settings.SnapDistancePixels}px / グリッド間隔 {settings.GridStepPixels}px";
-        var grid = AllCommands.FirstOrDefault(i => i.Name == "Grid20"); if (grid is not null) grid.Text = $"{settings.GridStepPixels}px単位";
+        var grid = AllCommands.FirstOrDefault(i => i.Name == "Grid20"); if (grid is not null) grid.Text = $"グリッドスナップを既定でON（{settings.GridStepPixels}px）";
         var folder = AllCommands.FirstOrDefault(i => i.Name == "OpenFolderAfterSave"); if (folder is not null) { folder.Checked = settings.OpenFolderAfterSave; folder.Enabled = currentDestination.HasFlag(OutputDestination.File); }
         var details = AllCommands.FirstOrDefault(i => i.Name == "OutputDetailsMenu"); if (details is not null) details.Enabled = currentDestination.HasFlag(OutputDestination.File);
     }

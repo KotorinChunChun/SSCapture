@@ -766,7 +766,7 @@ internal sealed class SessionController
             && modifiers == CaptureModifiers.Win && action is (CaptureKeyAction.HighlightWindow or CaptureKeyAction.CrossMonitor);
         bool changed = modifiers != activeModifiers || dragging != activeDrag || idleWindowsMove != movingWhileIdle;
         var effect = movingWhileIdle ? CaptureKeyAction.CrossMonitor : action;
-        string? hint = modifiers == CaptureModifiers.None ? altSnapEnabled ? "ウィンドウ枠スナップ ON" : null
+        string? hint = modifiers == CaptureModifiers.None ? altSnapEnabled ? "ウィンドウスナップ ON" : null
             : $"{CaptureKeyMap.Label(modifiers)} : {CaptureKeyMap.Describe(effect)}";
         if (!HasPointerPress && modifiers == CaptureModifiers.Win && action == CaptureKeyAction.HighlightWindow
             && (windowsKey?.CanTap ?? true))

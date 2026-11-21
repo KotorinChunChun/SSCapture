@@ -90,14 +90,12 @@ internal sealed class SettingsForm : Form
         { Text = text, Name = name, AutoSize = true, Checked = settings.DefaultDestination.HasFlag(value), Margin = new Padding(0, 3, 12, 0) };
         freeze = Toggle(basic, "撮影タイミング", "FreezeFrame", "撮影開始時の画面を固定", settings.FreezeFrame, 2);
         openFolderAfterSave = Toggle(basic, "保存後", "OpenFolderAfterSave", "保存フォルダを開く", settings.OpenFolderAfterSave, 3);
-        limitToStartingMonitor = Toggle(basic, "範囲選択", "LimitToStartingMonitor", "開始画面内だけで選択", settings.LimitToStartingMonitor, 4);
         screenshotPadding = new NumericUpDown { Name = "ScreenshotPaddingPixels", Minimum = 0,
             Maximum = ScreenshotPadding.MaximumPixels, DecimalPlaces = 0, Increment = 1, Value = settings.ScreenshotPaddingPixels };
         Add(basic, "画像の余白 (px)", screenshotPadding, 5);
         screenshotColorDepth = Combo(basic, "静止画の減色", "ScreenshotColorDepth", 6);
         screenshotColorDepth.Items.AddRange(["減色なし", "256色（8ビット）", "16色（4ビット）"]);
         screenshotColorDepth.SelectedIndex = (int)settings.ScreenshotColorDepth;
-        dimCaptureBackground = Toggle(basic, "背景表示", "DimCaptureBackground", "撮影中に背景を暗くする", settings.DimCaptureBackground, 7);
         var naming = Page(tabs, "ファイル名");
         fileNamePattern = Field(naming, "パターン", "FileNamePattern", settings.FileNamePattern, 0);
         ocrSeparator = Field(naming, "OCR区切り", "OcrSeparator", settings.OcrSeparator, 1);
@@ -260,25 +258,43 @@ internal sealed class SettingsForm : Form
             return outcome.Selection?.Bounds;
         }
         // 旧単独ページを廃止し、プリセットの編集欄だけを公開する。
-        MoveSetting(limitToStartingMonitor, basic, 0); MoveSetting(dimCaptureBackground, basic, 1);
         basic.Controls.Clear();
-        Add(basic, "範囲選択", limitToStartingMonitor, 0); Add(basic, "背景表示", dimCaptureBackground, 1);
-        gridEnabled = Toggle(basic, "グリッド", "GridEnabled", "グリッドを常時使用", settings.Grid20, 2);
-        snapDistance = PixelField(basic, "スナップ距離 (px)", "SnapDistancePixels", settings.SnapDistancePixels, 3);
-        gridStep = PixelField(basic, "グリッド間隔 (px)", "GridStepPixels", settings.GridStepPixels, 4);
+        basic.RowStyles.Clear(); basic.RowCount = 6;
+        foreach (int height in new[] { 76, 120, 44, 168, 96 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        basic.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var selectionOptions = BasicFields(34, 34);
+        limitToStartingMonitor = BasicCheckBox("LimitToStartingMonitor", "開始したモニター内で選択する", settings.LimitToStartingMonitor);
+        dimCaptureBackground = BasicCheckBox("DimCaptureBackground", "選択中モニタの背景を暗くする", settings.DimCaptureBackground);
+        AddFullRow(selectionOptions, limitToStartingMonitor, 0);
+        AddFullRow(selectionOptions, dimCaptureBackground, 1);
+        Add(basic, "選択範囲", selectionOptions, 0);
+
+        var precisionOptions = BasicFields(33, 40, 40);
+        gridEnabled = BasicCheckBox("GridEnabled", "グリッドスナップを既定でON", settings.Grid20);
+        AddFullRow(precisionOptions, gridEnabled, 0);
+        gridStep = PixelField(precisionOptions, "グリッド間隔（px）", "GridStepPixels", settings.GridStepPixels, 1);
+        snapDistance = PixelField(precisionOptions, "ウィンドウスナップ距離（px）", "SnapDistancePixels", settings.SnapDistancePixels, 2);
+        Add(basic, "位置・寸法の補正", precisionOptions, 1);
+
         var guideOptions = new FlowLayoutPanel { WrapContents = false };
-        guideEnabled = new CheckBox { Name = "ShowSelectionGuide", Text = "画面右下に表示", Checked = settings.ShowSelectionGuide, AutoSize = true };
-        pointerGuideEnabled = new CheckBox { Name = "ShowPointerGuide", Text = "ポインタ右下に表示", Checked = settings.ShowPointerGuide, AutoSize = true };
+        guideEnabled = BasicCheckBox("ShowSelectionGuide", "画面右下に操作ガイドを表示する", settings.ShowSelectionGuide);
+        pointerGuideEnabled = BasicCheckBox("ShowPointerGuide", "ポインタ横に操作ガイドを表示する", settings.ShowPointerGuide);
         guideOptions.Controls.AddRange([guideEnabled, pointerGuideEnabled]);
-        Add(basic, "操作ガイド", guideOptions, 5);
+        Add(basic, "操作ガイド", guideOptions, 2);
+
+        var presetSummaries = BasicFields(80, 80);
         var inputSummary = MakeButton("", "DefaultInputSummary", ButtonRole.Secondary); inputSummary.AutoSize = false; inputSummary.Height = 76;
         var outputSummary = MakeButton("", "DefaultOutputSummary", ButtonRole.Secondary); outputSummary.AutoSize = false; outputSummary.Height = 76;
-        Add(basic, "既定の入力", inputSummary, 6); Add(basic, "既定の出力", outputSummary, 7);
-        basic.RowStyles.Clear(); basic.RowCount = 10;
-        for (int row = 0; row < 8; row++) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, row >= 6 ? 84 : 40));
-        basic.RowStyles.Add(new RowStyle(SizeType.Absolute, 96)); basic.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        Add(presetSummaries, "入力", inputSummary, 0); Add(presetSummaries, "出力", outputSummary, 1);
+        Add(basic, "既定プリセット", presetSummaries, 3);
         var startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration());
-        Add(basic, "自動起動", startupSettings, 8);
+        Add(basic, "自動起動", startupSettings, 4);
+        foreach (Label label in basic.Controls.OfType<Label>())
+        {
+            label.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            label.Margin = new Padding(3, 7, 3, 0);
+        }
         Shown += async (_, _) => await startupSettings.RefreshAsync();
         inputSummary.Click += (_, _) => { if (inputPresetEditor.SelectDefault()) SelectCategory("入力プリセット"); else SetStatus("入力プリセットを切り替えられません。入力内容と入力プリセット内のメッセージを確認してください。", true); };
         outputSummary.Click += (_, _) => { if (presetEditor.SelectDefault()) SelectCategory("出力プリセット"); else SetStatus(presetEditor.Error ?? "出力プリセットの入力内容を確認してください。", true); };
@@ -300,13 +316,6 @@ internal sealed class SettingsForm : Form
         string[] order = ["基本", "入力プリセット", "出力プリセット", "外部アプリ", "ショートカット", "即時撮影キー", "撮影コマンド", "通知", "履歴"];
         var ordered = order.Select(title => tabs.TabPages.Cast<TabPage>().Single(p => p.Text == title)).ToArray();
         tabs.TabPages.Clear(); tabs.TabPages.AddRange(ordered);
-        void MoveSetting(Control control, TableLayoutPanel destination, int row)
-        {
-            var source = (TableLayoutPanel)control.Parent!;
-            var label = source.GetControlFromPosition(0, source.GetRow(control))!;
-            source.Controls.Remove(label); source.Controls.Remove(control);
-            destination.Controls.Add(label, 0, row); destination.Controls.Add(control, 1, row);
-        }
         status = new TextBox { Name = "Status", Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
             WordWrap = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None,
             BackColor = BackColor, TabStop = false, Margin = new Padding(8, 6, 8, 6) };
@@ -479,6 +488,24 @@ internal sealed class SettingsForm : Form
     private sealed record NotificationAppItem(string Id, string Label) { public override string ToString() => Label; }
     private static NumericUpDown PixelField(TableLayoutPanel table, string label, string name, int value, int row)
     { var control = new NumericUpDown { Name = name, Minimum = 1, Maximum = 32768, Value = value }; Add(table, label, control, row); return control; }
+
+    private static TableLayoutPanel BasicFields(params int[] heights)
+    {
+        var table = new TableLayoutPanel { ColumnCount = 2, RowCount = heights.Length };
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        foreach (int height in heights) table.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        return table;
+    }
+
+    private static CheckBox BasicCheckBox(string name, string label, bool isChecked) =>
+        new() { Name = name, Text = label, Checked = isChecked, AutoSize = true };
+
+    private static void AddFullRow(TableLayoutPanel table, Control control, int row)
+    {
+        table.Controls.Add(control, 0, row);
+        table.SetColumnSpan(control, table.ColumnCount);
+    }
     internal void UpdateLastOutputSettings(AppSettings? value) => presetEditor.PreviousOutput = value;
 
     private static HotkeyEditor KeyField(TableLayoutPanel table, string label, string name, string value, int row)

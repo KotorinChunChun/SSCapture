@@ -1,3 +1,4 @@
+using SSCapture.Capture;
 using SSCapture.Services;
 
 namespace SSCapture.UI;
@@ -22,14 +23,14 @@ internal static class SettingsHelp
         ["CaptureCommandGenerate"] = "選択した条件のPowerShellコマンドを生成します。実行・撮影・設定保存はしません。",
         ["CaptureCommandCopy"] = "生成済みのPowerShellコマンドをクリップボードへコピーします。撮影はしません。",
         ["CaptureCommandText"] = "生成したコマンドです。PowerShellで実行すると、その時点の画面を撮影します。",
-        ["DimCaptureBackground"] = "選択中の背景だけを暗くします。新規設定はON、既存の選択は保持します。画面固定・撮影時点・選択枠とは独立した設定です。",
+        ["DimCaptureBackground"] = "ONのときは、選択中のモニターで選択範囲の外側を暗くします。\nOFFのときは、クリック中・ドラッグ中・ウィンドウ選択中も背景を暗くしません。",
         ["CaptureMode"] = "矩形はドラッグ、ウィンドウは対象をクリック、全画面は全モニタ、自由形状は輪郭を囲みます。固定サイズは撮影時に位置を選ぶ枠、固定位置とサイズは保存した座標と寸法をそのまま使う定位置です。",
         ["ClipboardOutput"] = "ONのときは撮影結果をクリップボードへコピーします。他の出力先と併用できます。録画では動画ファイルをコピーします。",
         ["FileOutput"] = "ONのときは保存先と命名パターンに従って画像・動画を保存します。他の出力先と併用できます。",
         ["ExternalOutput"] = "ONのときは撮影結果を指定した画像・動画編集アプリへ渡します。対応する実行ファイルとパラメータを設定してください。即時撮影には適用しません。",
         ["FreezeFrame"] = "ONのときは撮影開始時の画面を保存・コピーします。OFFのときは範囲確定後、選択画面を閉じてから画面を取得します。選択中の背景はどちらも開始時の静止画です。選択を中断してやり直しても開始画像は保持します。録画映像は固定しません。",
         ["OpenFolderAfterSave"] = "ONのときはファイル保存に成功した後、保存先フォルダを開いて保存ファイルを選択します。ファイル保存がOFFのときと即時撮影では実行しません。",
-        ["LimitToStartingMonitor"] = "ONのときは開始時にポインタがあるモニタだけを暗転し、選択範囲とポインタをそのモニタ内に制限します。他のモニタは映像を更新し続けます。OFFのときは全モニタで選択できます。選択画面を使わない全画面・即時撮影には適用しません。",
+        ["LimitToStartingMonitor"] = "ONのときは、撮影開始時にポインタがあったモニター内で選択します。\nONのままでも「別モニタへの移動を許可」に割り当てたキー（既定はWin）を押しながらポインタを動かすと、別のモニターへ移動できます。\nOFFのときは、キーを押さずにモニターをまたいで選択できます。",
         ["ScreenshotPaddingPixels"] = "静止画の外側へ上下左右同じ幅の白い余白を追加します。0～4096物理px、0は余白なしです。コピー・保存・外部アプリ・履歴に共通で適用します。撮影範囲や録画映像は変わりません。余白込みで各辺32768px・合計1億画素以内にしてください。",
         ["ScreenshotColorDepth"] = "静止画を最大256色（8ビット）または16色（4ビット）へ減色します。PNGはパレット形式で保存。コピー・外部アプリ・履歴にも同じ色を使用します。寸法・白余白・完全透明領域を保持し、録画は変更しません。写真やグラデーションは色が変わります。",
         ["CapturePresetEditor"] = "出力先・減色・外部アプリ・保存先・命名・OCR・撮影情報の組合せを登録し、変更確定時に自動保存します。白い余白は入力プリセットで設定します。撮影中の適用や個別変更は今回だけです。",
@@ -90,11 +91,11 @@ internal static class SettingsHelp
         if (name == "ScreenshotPaddingPixels") return "選択範囲の外側へ上下左右同じ幅の白い余白を追加します。元画像の縮小や周囲の画面の撮り足しはしません。0～4096物理px、0は余白なし。静止画だけに適用し録画には適用しません。";
         if (name == "FileNamePattern") return "{yyyymmdd} 年月日 / {hhmmss} 時分秒 / {ext} 静止画png・録画mp4 / {ocr} OCR文字列 / {region} 範囲名 / {#}・{##} 連番。例: {yyyymmdd}_{hhmmss}.{ext}";
         if (Descriptions.TryGetValue(name, out string? description)) return description;
-        if (name == "SnapDistancePixels") return "ポインタがウィンドウ枠・モニタ端からこの物理px以内ならスナップします。1～32768px、既定20px。";
-        if (name == "GridStepPixels") return $"グリッドが有効なとき、矩形の幅・高さをこの間隔で揃えます。1～32768物理px、既定{AppSettings.DefaultGridStepPixels}px。";
-        if (name == "GridEnabled") return "グリッドを常時使用します。OFFの場合も、ショートカットで一時的に使用できます。";
-        if (name == "ShowSelectionGuide") return "撮影中の操作ガイドを表示します。ドラッグ中にポインタが近づくと一時的に隠れます。";
-        if (name == "ShowPointerGuide") return "撮影中にポインタ右下へ、押したボタンや修飾キーの操作と取り消し方法を表示します。";
+        if (name == "SnapDistancePixels") return $"ウィンドウ枠やデスクトップ（モニター）の端・角にスナップする距離です。既定値は{SelectionSnap.Distance}pxです。";
+        if (name == "GridStepPixels") return $"例えば10pxにすると、グリッドスナップで矩形の幅と高さを10px単位で調整します。既定値は{AppSettings.DefaultGridStepPixels}pxです。\n一時使用にも同じ間隔を使います。「グリッドスナップを既定でON」がOFFでも変更できます。";
+        if (name == "GridEnabled") return "矩形選択の幅と高さをグリッド間隔に揃えます。\nOFFでも、ショートカットで「一時グリッドスナップ」に割り当てたキーを押している間は使えます。";
+        if (name == "ShowSelectionGuide") return "画面右下に操作一覧のウィンドウを表示します。ドラッグ中にポインタが近づくと一時的に隠れます。";
+        if (name == "ShowPointerGuide") return "現在の操作、押しているキーの効果、取り消し方法をポインタの近くに表示します。";
         if (name == "DefaultInputSummary") return "既定の入力プリセットの概要です。クリックすると、そのプリセットを選択した編集ページへ移動します。";
         if (name == "DefaultOutputSummary") return "既定の出力プリセットの概要です。クリックすると、そのプリセットを選択した編集ページへ移動します。";
         if (name == "InputFixedCoordinates") return "ONは登録した位置へ固定枠を表示します。OFFは撮影モードに従い位置や範囲を選びます。再撮影キーはONなら即時撮影、OFFなら選択開始です。";

@@ -9,6 +9,52 @@ internal static partial class Program
 {
     static partial void UiTests()
     {
+        Run("基本は指定の順序・項目名・ツールチップで、グリッド間隔とガイドを個別に保存する", () =>
+        {
+            AppSettings? saved = null;
+            using var form = new SettingsForm(new AppSettings { ShowSelectionGuide = true, ShowPointerGuide = true },
+                settings => { saved = settings; return null; }, () => { }, () => []);
+            form.Size = form.MinimumSize;
+            _ = form.Handle;
+            LayoutTree(form);
+            var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
+            var basic = tabs.TabPages[0].Controls.OfType<TableLayoutPanel>().Single();
+            string[] groups = basic.Controls.OfType<Label>().OrderBy(label => basic.GetRow(label)).Select(label => label.Text).ToArray();
+            Check(groups.SequenceEqual(["選択範囲", "位置・寸法の補正", "操作ガイド", "既定プリセット", "自動起動"]), "基本のグループ順が異なる");
+
+            CheckBox Box(string name) => (CheckBox)form.Controls.Find(name, true).Single();
+            Equal("開始したモニター内で選択する", Box("LimitToStartingMonitor").Text);
+            Equal("選択中モニタの背景を暗くする", Box("DimCaptureBackground").Text);
+            var grid = Box("GridEnabled");
+            Equal("グリッドスナップを既定でON", grid.Text);
+            var step = (NumericUpDown)form.Controls.Find("GridStepPixels", true).Single();
+            var distance = (NumericUpDown)form.Controls.Find("SnapDistancePixels", true).Single();
+            var precision = (TableLayoutPanel)step.Parent!;
+            Equal(precision.GetRow(grid) + 1, precision.GetRow(step));
+            Equal(precision.GetRow(step) + 1, precision.GetRow(distance));
+            Equal("グリッド間隔（px）", precision.GetControlFromPosition(0, precision.GetRow(step))!.Text);
+            Equal("ウィンドウスナップ距離（px）", precision.GetControlFromPosition(0, precision.GetRow(distance))!.Text);
+            Check(!grid.Checked && step.Enabled, "既定OFFでグリッド間隔が編集できない");
+            var screenGuide = Box("ShowSelectionGuide");
+            var pointerGuide = Box("ShowPointerGuide");
+            Equal("画面右下に操作ガイドを表示する", screenGuide.Text);
+            Equal("ポインタ横に操作ガイドを表示する", pointerGuide.Text);
+            using var tooltip = new ToolTip();
+            SettingsHelp.Apply(form, tooltip);
+            string Tip(Control control) => tooltip.GetToolTip(control) ?? "";
+            Check(Tip(Box("LimitToStartingMonitor")).Contains("既定はWin", StringComparison.Ordinal), "モニター移動の案内がない");
+            Check(Tip(Box("DimCaptureBackground")).Contains("ウィンドウ選択中も", StringComparison.Ordinal), "暗転OFFの案内がない");
+            Check(Tip(step).Contains("10px単位", StringComparison.Ordinal) && Tip(distance).Contains("端・角", StringComparison.Ordinal),
+                "グリッド間隔またはウィンドウスナップ距離の説明がない");
+            screenGuide.Checked = false;
+            step.Value = 10;
+            SaveConsolidation(form);
+            Check(saved is { ShowSelectionGuide: false, ShowPointerGuide: true, Grid20: false, GridStepPixels: 10 }, "画面右下だけOFFにできないか、間隔が保存されない");
+            screenGuide.Checked = true;
+            pointerGuide.Checked = false;
+            SaveConsolidation(form);
+            Check(saved is { ShowSelectionGuide: true, ShowPointerGuide: false }, "ポインタ横だけOFFにできない");
+        });
         Run("設定の結果は発生時刻を保持し60秒で消え新しい結果で期限を更新", () =>
         {
             var clock = new DateTimeOffset(2026, 10, 10, 21, 0, 0, TimeSpan.FromHours(9));
@@ -203,8 +249,8 @@ internal static partial class Program
 
             ComboBox Choice(string name) => (ComboBox)groups.Controls.Find(name, true).Single();
             Equal("ウィンドウ撮影に切り替え", Choice("CaptureBeforeKeys8").Text);
-            Equal("ウィンドウ枠スナップ", Choice("CaptureBeforeKeys4").Text);
-            Check(Choice("CaptureKeys4").Items.Cast<object>().Any(item => item.ToString() == "グリッドを一時的に使用"),
+            Equal("ウィンドウスナップ", Choice("CaptureBeforeKeys4").Text);
+            Check(Choice("CaptureKeys4").Items.Cast<object>().Any(item => item.ToString() == "一時グリッドスナップ"),
                 "撮影ドラッグ中にグリッドを割り当てられない");
             Equal("別モニタへの移動を許可", Choice("CaptureKeys8").Text);
             Check(!Choice("CaptureKeys9").Items.Cast<object>().Any(item => item.ToString() == "ウィンドウ撮影に切り替え"),

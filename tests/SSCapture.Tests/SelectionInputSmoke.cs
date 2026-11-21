@@ -149,7 +149,7 @@ internal static partial class Program
                         var session = OverlaySession(overlay);
                         await Move(overlay, 80, 80);
                         await Key(overlay, 0xA4, true); await Key(overlay, 0xA4, false);
-                        Equal("ウィンドウ枠スナップ ON", session.ModifierHint);
+                        Equal("ウィンドウスナップ ON", session.ModifierHint);
                         await Down(overlay); await Move(overlay, 108, 109);
                         Equal(P(100, 100), session.Current);
                         await Key(overlay, 0x1B, true); await Key(overlay, 0x1B, false); input.LeftUp(); await Task.Delay(100);
@@ -366,17 +366,16 @@ internal static partial class Program
                 foreach (bool owned in new[] { true, false })
                 await Test(owned ? "WGC左単押しは前面の所有ウィンドウをプレビューと撮影に含める" : "WGC左ドラッグは枠なしで軌跡を描き、通過したウィンドウを合成する", async token =>
                 {
-                    using var independent = owned ? null : new HitFixture(false) { Text = "最初に選ぶ検証用ウィンドウ", Bounds = new(P(55, 155), new Size(240, 155)), BackColor = Color.White };
-                    independent?.Show();
+                    using var first = new HitFixture(false) { Text = "最初に選ぶ検証用ウィンドウ", Bounds = new(P(55, 155), new Size(240, 155)), BackColor = Color.White };
+                    first.Show();
                     using var second = new HitFixture(false) { Text = "合成する検証用ウィンドウ", Bounds = new(P(380, 180), new Size(250, 160)), BackColor = Color.Orange };
-                    if (owned) second.Show(host); else second.Show();
+                    if (owned) second.Show(first); else second.Show();
                     second.Refresh();
                     await Task.Delay(125, token);
-                    nint firstHandle = independent?.Handle ?? host.Handle;
                     CaptureWindow[] targets = CaptureNative.CaptureWindows(Screen.FromControl(host).Bounds)
-                        .Where(w => w.Handle == firstHandle || w.Handle == second.Handle).ToArray();
+                        .Where(w => w.Handle == first.Handle || w.Handle == second.Handle).ToArray();
                     Equal(2, targets.Length);
-                    CaptureWindow parent = targets.Single(window => window.Handle == firstHandle);
+                    CaptureWindow parent = targets.Single(window => window.Handle == first.Handle);
                     var child = targets.Single(window => window.Handle == second.Handle);
                     Equal(owned, child.Owner == parent.Handle);
                     Check(child.ZOrder < parent.ZOrder, "検証ウィンドウが前面にない");
@@ -389,7 +388,12 @@ internal static partial class Program
                         {
                             for (int count = 0; count < 120 && session.PreviewFrame is null; count++) await Task.Delay(25, ct);
                             Check(session.PreviewFrame is not null, "所有ウィンドウを含むプレビューが取得できない: " + session.PointerHint);
-                            Equal(Color.Orange.ToArgb(), session.PreviewFrame!.Image.GetPixel(440, 220).ToArgb());
+                            var preview = session.PreviewFrame!;
+                            Equal(Color.Orange.ToArgb(), preview.Image.GetPixel(P(440, 220).X - preview.Bounds.X, P(440, 220).Y - preview.Bounds.Y).ToArgb());
+                            Equal(0, preview.Image.GetPixel(P(330, 200).X - preview.Bounds.X, P(330, 200).Y - preview.Bounds.Y).A);
+                            using var rendered = new Bitmap(bounds.Width, bounds.Height);
+                            overlay.DrawToBitmap(rendered, new(Point.Empty, bounds.Size));
+                            Equal(Color.Blue.ToArgb(), rendered.GetPixel(330, 200).ToArgb());
                         }
                         await Down(overlay, 80, 220);
                         Check(session.PointerHint?.Contains("ドラッグ：複数ウィンドウを合成", StringComparison.Ordinal) == true, "左ドラッグの案内がない");

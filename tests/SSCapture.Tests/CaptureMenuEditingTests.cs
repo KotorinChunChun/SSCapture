@@ -64,6 +64,10 @@ internal static partial class Program
                     Check(menu.Command("CaptureOutputGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
                 foreach (string name in new[] { "LimitToStartingMonitor", "DimCaptureBackground", "Grid20", "ShowSelectionGuide" })
                     Check(menu.Command("CaptureOperationGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
+                Equal("開始したモニター内で選択する", menu.Command("LimitToStartingMonitor").Text);
+                Equal("選択中モニタの背景を暗くする", menu.Command("DimCaptureBackground").Text);
+                Equal("グリッドスナップを既定でON（1px）", menu.Command("Grid20").Text);
+                Equal("画面右下に操作ガイドを表示する", menu.Command("ShowSelectionGuide").Text);
                 Check(!menu.Command("FreezeFrame").Enabled && !menu.Command("IncludeCursor").Enabled, "再取得不可の入口を有効にした");
             }
             finally { session.Cancel(); }

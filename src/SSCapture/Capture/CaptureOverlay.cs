@@ -130,8 +130,7 @@ internal sealed class CaptureOverlay : Form
         Rectangle bright = Rectangle.Intersect(Local(target), dirty);
         if (session.PreviewFrame is { } frame && bright.Width > 0 && bright.Height > 0)
         {
-            // Transparent parts of the captured window must not reveal other desktop windows.
-            graphics.FillRectangle(Brushes.Black, bright);
+            if (session.DimCaptureBackground) graphics.FillRectangle(Brushes.Black, bright);
             Rectangle source = bright;
             source.Offset(MonitorBounds.X - frame.Bounds.X, MonitorBounds.Y - frame.Bounds.Y);
             graphics.DrawImage(frame.Image, bright, source, GraphicsUnit.Pixel);
