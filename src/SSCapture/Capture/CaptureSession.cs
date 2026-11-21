@@ -269,6 +269,9 @@ internal sealed partial class SessionController
             () => ChangeSelectionMethod(CaptureSelectionMethod.Drag), () => ChangeSelectionMethod(CaptureSelectionMethod.TwoClicks));
         SelectionMenu.AddPresentationOptions(OutputSettings.ShowMagnifier, ChangeMagnifierVisibility,
             OutputSettings.ShareCapturePresentation, ChangeSharePresentation);
+        if (options.Intent == CaptureIntent.Screenshot && !options.SelectionOnly)
+            SelectionMenu.AddWindowCropOptions(() => ApplyMenuSetting(OutputSettings with { WindowCrop = selectedOutput.WindowCrop }),
+                () => ApplyMenuSetting(OutputSettings with { WindowCrop = default }));
         if (options.SelectionOnly)
         {
             foreach (var item in SelectionMenu.Items.Cast<ToolStripItem>())
@@ -333,6 +336,8 @@ internal sealed partial class SessionController
         SelectionMenu.SetPresetStatus(selectedInput.Name, selectedOutput.Name, InputPresetModified, OutputPresetModified, selectedInput.Id, selectedOutput.Id);
         SelectionMenu.SetRectangleSelectionMethod(OutputSettings.SelectionMethod == CaptureSelectionMethod.TwoClicks);
         SelectionMenu.SetPresentationOptions(OutputSettings.ShowMagnifier, OutputSettings.ShareCapturePresentation);
+        SelectionMenu.SetWindowCrop(OutputSettings.WindowCrop, selectedOutput.WindowCrop);
+        UpdateControlShortcutMenu();
     }
     private void ChangeDestination(OutputDestination destination) { Destination = options.Intent == CaptureIntent.Recording ? destination & ~OutputDestination.Pinned : destination; SelectionMenu.SetDestination(Destination); UpdateMenu(); }
     internal Task ResetInputPresetAsync() => ApplyInputPresetAsync(selectedInput);

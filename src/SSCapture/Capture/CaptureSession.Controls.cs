@@ -60,7 +60,7 @@ internal sealed partial class SessionController
                 try
                 {
                     Rectangle actual = CaptureNative.RequireCaptureWindow(window);
-                    if (!OutputSettings.FreezeFrame || bounds == actual)
+                    if (!OutputSettings.FreezeFrame || bounds == Rectangle.Intersect(actual, Snapshot.Bounds))
                     {
                         observedWindow = window with { Bounds = actual };
                         hit = await CaptureContextClient.Shared.FindControlAsync(new(window.Handle.ToInt64(), window.ProcessId,
@@ -83,6 +83,20 @@ internal sealed partial class SessionController
             }
         }
         finally { controlLookupRunning = false; }
+    }
+
+    private void UpdateControlShortcutMenu()
+    {
+        CaptureModifiers before = CaptureKeyMap.Combinations.FirstOrDefault(keys => OutputSettings.CaptureBeforeKeys.Resolve(keys) == CaptureKeyAction.SelectControl);
+        CaptureModifiers during = CaptureKeyMap.Combinations.FirstOrDefault(keys => OutputSettings.CaptureKeys.Resolve(keys) == CaptureKeyAction.SelectControl);
+        string label = string.Join("／", new[]
+        {
+            before == CaptureModifiers.None ? null : "選択前 " + CaptureKeyMap.Label(before),
+            during == CaptureModifiers.None ? null : "ドラッグ中 " + CaptureKeyMap.Label(during)
+        }.OfType<string>());
+        string control = before != CaptureModifiers.None ? $"CaptureBeforeKeys{(int)before}"
+            : during != CaptureModifiers.None ? $"CaptureKeys{(int)during}" : "CaptureBeforeKeysEditor";
+        SelectionMenu.SetControlSelectionShortcut(label.Length == 0 ? "未割り当て" : label, control);
     }
 
     private void ExitControlSelection(bool restoreOverlayFocus = true)

@@ -26,6 +26,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     private bool dispatchingCommand;
     private CaptureMode currentMode;
     private ToolStripMenuItem? selectionMethod, selectDrag, selectTwoClicks, magnifier, sharePresentation, shortcut;
+    private ToolStripMenuItem? windowCrop, presetCrop, noCrop;
     private string? shortcutControlName;
 
     internal event Action? CommandInvoking;
@@ -220,6 +221,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         if (AllCommands.FirstOrDefault(i => i.Name == "AspectRatioMenu") is { } aspect)
             aspect.Enabled = mode == CaptureMode.Rectangle;
         if (selectionMethod is not null) selectionMethod.Available = mode == CaptureMode.Rectangle;
+        if (windowCrop is not null) windowCrop.Available = mode is CaptureMode.Rectangle or CaptureMode.Window;
     }
 
     internal void AddRectangleSelectionMethods(Action selectByDrag, Action selectByTwoClicks)
@@ -257,6 +259,22 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         if (shortcut is null) return;
         shortcut.Text = $"コントロール選択キー（{shortcutLabel}）";
         shortcutControlName = controlName;
+    }
+
+    internal void AddWindowCropOptions(Action usePreset, Action disable)
+    {
+        windowCrop = Menu("選択したウィンドウの内側の切り抜き", "WindowCropOptions", Command("CaptureOutputGroup").DropDownItems);
+        presetCrop = Item("プリセット値を使う", "WindowCropPreset", usePreset, windowCrop.DropDownItems);
+        noCrop = Item("今回は切り抜かない", "WindowCropOff", disable, windowCrop.DropDownItems);
+        windowCrop.Available = currentMode is CaptureMode.Rectangle or CaptureMode.Window;
+    }
+
+    internal void SetWindowCrop(WindowCrop current, WindowCrop preset)
+    {
+        if (windowCrop is null) return;
+        windowCrop.Text = $"ウィンドウの切り抜き（上{current.Top}／下{current.Bottom}／左{current.Left}／右{current.Right}px）";
+        presetCrop!.Checked = current == preset;
+        noCrop!.Checked = current.IsEmpty && !preset.IsEmpty;
     }
     internal void SetWindowSource(CaptureMode mode, bool isolated)
     {

@@ -1,5 +1,6 @@
 using SSCapture.Capture;
 using SSCapture.Services;
+using System.Runtime.InteropServices;
 
 namespace SSCapture.Tests;
 
@@ -27,19 +28,39 @@ internal static partial class Program
                 {
                     await Task.Delay(90);
                     CaptureNative.SynchronizeDesktop();
-                    using Bitmap frame = InstantCapture.Take(new Rectangle(point, new Size(1, 1)));
+                    using Bitmap frame = new(1, 1, System.Drawing.Imaging.PixelFormat.Format32bppRgb);
+                    using (Graphics draw = Graphics.FromImage(frame))
+                    {
+                        nint screenDc = PresentationProbe.GetDC(0), targetDc = draw.GetHdc();
+                        try
+                        {
+                            Check(PresentationProbe.BitBlt(targetDc, 0, 0, 1, 1, screenDc, point.X, point.Y, 0x40cc0020),
+                                "画面共有用レイヤーを含む画面を取得できません。");
+                        }
+                        finally
+                        {
+                            draw.ReleaseHdc(targetDc);
+                            PresentationProbe.ReleaseDC(0, screenDc);
+                        }
+                    }
                     return frame.GetPixel(0, 0).B;
                 }
                 Point outside = Local(32, 32), inside = Local(100, 100);
                 int clearBlue = await ReadBlue(outside);
                 Check(clearBlue >= 220, $"検証用の青い画面が見えません（B={clearBlue}）");
                 int clearInside = await ReadBlue(inside);
+                using (var surface = new CapturePresentation(bounds))
+                {
+                    Check(surface.Present(new Rectangle(Point.Empty, bounds.Size),
+                        (graphics, dirty, _) => graphics.FillRectangle(Brushes.Green, dirty)), "描画レイヤーをWindowsに登録できません。");
+                    Equal(0, await ReadBlue(outside));
+                }
                 var screenshot = new Bitmap(bounds.Width, bounds.Height);
                 using (Graphics draw = Graphics.FromImage(screenshot)) draw.Clear(Color.Red);
                 var snapshot = new DesktopSnapshot(screenshot, bounds, [bounds]);
                 var settings = new AppSettings { DimCaptureBackground = true, ShowPointerGuide = false, ShowSelectionGuide = false };
                 var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.File,
-                    ShowSelectionGuide: false, OutputSettings: settings), snapshot, [], initialPointer: Local(60, 60),
+                    ShowSelectionGuide: false, OutputSettings: settings, DimCaptureBackground: true), snapshot, [], initialPointer: Local(60, 60),
                     confineCursor: _ => new System.IO.MemoryStream());
                 try
                 {
@@ -74,5 +95,13 @@ internal static partial class Program
         if (error is null) return 0;
         Console.Error.WriteLine(error);
         return 1;
+    }
+
+    private static class PresentationProbe
+    {
+        [DllImport("user32.dll")] internal static extern nint GetDC(nint window);
+        [DllImport("user32.dll")] internal static extern int ReleaseDC(nint window, nint dc);
+        [DllImport("gdi32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool BitBlt(nint target, int x, int y, int width, int height, nint source, int sx, int sy, uint operation);
     }
 }

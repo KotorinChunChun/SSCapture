@@ -35,6 +35,7 @@ internal static partial class Program
                 var window = new CaptureWindow(host.Bounds, host.Text, host.Handle,
                     (uint)Environment.ProcessId, NativeControlSmoke.GetWindowThreadProcessId(host.Handle, nint.Zero),
                     Owner: nint.Zero, ZOrder: 0, ClassName: "");
+                window = window with { Bounds = CaptureNative.RequireCaptureWindow(window) };
                 var settings = new AppSettings
                 {
                     CaptureBeforeKeys = new(Ctrl: CaptureKeyAction.SelectControl),
