@@ -111,7 +111,7 @@ internal sealed partial class TrayApplicationContext
         savedRegionMenu.DropDownItems.Clear();
         var lastItem = new ToolStripMenuItem("前回の範囲", null, (_, _) => _ = TakeRegionAsync(AppSettings.LastRegionKeyId))
         {
-            Enabled = lastRegion is not null
+            Enabled = lastRegion is not null || recipes.Current?.HasTrackedTarget == true
         };
         savedRegionMenu.DropDownItems.Add(lastItem);
         foreach (var region in settings.SavedRegions)

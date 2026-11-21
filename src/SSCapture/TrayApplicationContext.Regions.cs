@@ -11,6 +11,11 @@ internal sealed partial class TrayApplicationContext
 {
     private async Task TakeRegionAsync(string id)
     {
+        if (id == AppSettings.LastRegionKeyId && recipes.Current?.HasTrackedTarget == true)
+        {
+            await TakeSameSettingsAsync(useCurrentOutputs: true);
+            return;
+        }
         var requested = settings.SavedRegions.FirstOrDefault(r => r.Id == id);
         if (requested is { UseFixedCoordinates: false })
         {

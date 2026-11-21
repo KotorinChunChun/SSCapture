@@ -159,7 +159,7 @@ internal static class CaptureCommandRunner
                 string result = await InstantCapture.DeliverAsync(outcome.Image, settings, capturedAt, output,
                     regionName: command.InputPreset.Name, captureBounds: outcome.Selection.Bounds, metadata: outcome.Metadata,
                     preserveOutputs: true, capturePolygon: outcome.Selection.Polygon, onDelivered: () => delivered = true,
-                    windowTitle: outcome.Selection.WindowTitle, isolatedWindow: outcome.Selection.IsolatedWindow, composite: outcome.Selection.Composite);
+                    windowTitle: outcome.Selection.WindowTitle, replaySource: outcome.Selection.ReplaySource);
                 report?.Invoke(result, false);
             }
             if (!delivered) throw new InvalidOperationException("撮影画像を出力できませんでした。");

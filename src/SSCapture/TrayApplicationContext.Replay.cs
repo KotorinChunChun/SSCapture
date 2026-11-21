@@ -6,29 +6,24 @@ namespace SSCapture;
 
 internal sealed partial class TrayApplicationContext
 {
-    private async Task TakeSameSettingsAsync()
+    private async Task TakeSameSettingsAsync(bool useCurrentOutputs = false)
     {
         if (exiting || busy || recorder is not null || pendingRecording is not null || WindowVisibility.RestorePending(namingForm)) return;
         busy = true; RefreshMenu();
         try
         {
             var recipe = recipes.Current ?? throw new InvalidOperationException("成功した静止画の記録がありません。先に撮影してください。");
-            recipe.ValidateApplications(settings);
-            AppSettings captureSettings = recipe.SettingsForReplay(settings);
+            if (!useCurrentOutputs) recipe.ValidateApplications(settings);
+            AppSettings captureSettings = useCurrentOutputs ? settings : recipe.SettingsForReplay(settings);
             PrepareCaptureUi();
             DateTimeOffset capturedAt = DateTimeOffset.Now;
-            CaptureWindow? target = recipe.IsolatedWindow ?? recipe.WindowRoots?.FirstOrDefault();
-            if (target is not null)
+            if (recipe.TracksWindows)
             {
-                var windows = CaptureNative.CaptureWindows(CaptureNative.MonitorBounds().Aggregate(Rectangle.Union));
-                var group = (recipe.WindowRoots ?? [target]).SelectMany(root => CaptureWindowGroups.ForegroundGroup(root, windows))
-                    .DistinctBy(window => window.Handle).OrderBy(window => window.ZOrder).ToArray();
-                var window = await IsolatedWindowCapture.TakeAsync(target, captureSettings, foregroundFirst: group);
+                var window = await InstantCapture.TakeReplayWindowsAsync(recipe, captureSettings);
                 using var windowImage = window.Image;
                 StoreStatus(await InstantCapture.DeliverAsync(windowImage, captureSettings, capturedAt, output, regionName: "再撮影",
-                    captureBounds: window.Bounds, metadata: window.Metadata, preserveOutputs: true,
-                    windowTitle: recipe.WindowRoots is { Count: > 1 } roots ? $"ウィンドウ {roots.Count} 件" : target.Title,
-                    isolatedWindow: recipe.IsolatedWindow, composite: recipe.WindowRoots is { } selected ? new(WindowRoots: selected) : null));
+                    captureBounds: window.Bounds, metadata: window.Metadata, preserveOutputs: !useCurrentOutputs, windowTitle: window.Title,
+                    replaySource: window.Source));
                 return;
             }
             var displays = RegionCoordinates.ReadDisplays();
@@ -38,10 +33,14 @@ internal sealed partial class TrayApplicationContext
             using var raw = capture.Image;
             using var image = regions is null ? recipe.Shape(raw) : CaptureGeometry.ComposeRegions(raw, bounds, bounds, regions);
             StoreStatus(await InstantCapture.DeliverAsync(image, captureSettings, capturedAt, output, regionName: "再撮影",
-                captureBounds: bounds, metadata: capture.Metadata, preserveOutputs: true, capturePolygon: recipe.PolygonFor(bounds),
-                composite: regions is null ? null : new(Regions: regions)));
+                captureBounds: bounds, metadata: capture.Metadata, preserveOutputs: !useCurrentOutputs, capturePolygon: recipe.PolygonFor(bounds),
+                replaySource: regions is null ? null : new CaptureReplaySource.Monitors(regions)));
         }
-        catch (Exception ex) { StoreStatus("直前の設定で再撮影できませんでした: " + ex.Message, true); }
+        catch (Exception ex)
+        {
+            string action = useCurrentOutputs ? "前回の範囲を再撮影" : "直前の設定で再撮影";
+            StoreStatus(action + "できませんでした: " + ex.Message, true);
+        }
         finally
         {
             busy = false;
@@ -49,4 +48,5 @@ internal sealed partial class TrayApplicationContext
             if (!exiting) { RefreshMenu(); FlushFeedback(); }
         }
     }
+
 }

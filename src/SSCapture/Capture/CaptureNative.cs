@@ -58,6 +58,8 @@ internal static class CaptureNative
     private static extern bool GetWindowRect(nint window, out NativeRect bounds);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(nint window, StringBuilder text, int count);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(nint window, StringBuilder text, int count);
     [DllImport("dwmapi.dll")]
     private static extern int DwmGetWindowAttribute(nint window, int attribute, out NativeRect value, int size);
     [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
@@ -169,6 +171,8 @@ internal static class CaptureNative
     {
         List<CaptureWindow> windows = [];
         nint shell = GetShellWindow();
+        var title = new StringBuilder(512);
+        var className = new StringBuilder(256);
         EnumWindows((window, data) =>
         {
             if (window == shell || !IsWindowVisible(window) || IsIconic(window)) return true;
@@ -183,11 +187,13 @@ internal static class CaptureNative
             Rectangle clipped = CaptureGeometry.Clip(bounds.ToRectangle(), desktop);
             if (CaptureGeometry.IsUsable(clipped))
             {
-                var title = new StringBuilder(512);
+                title.Clear();
+                className.Clear();
                 GetWindowText(window, title, title.Capacity);
+                GetClassName(window, className, className.Capacity);
                 uint thread = GetWindowThreadProcessId(window, out uint process);
                 windows.Add(new(clipped, title.ToString().Replace('\r', ' ').Replace('\n', ' ').Trim(), window, process, thread,
-                    GetWindow(window, 4 /* GW_OWNER */), windows.Count));
+                    GetWindow(window, 4 /* GW_OWNER */), windows.Count, className.ToString()));
             }
             return true;
         }, 0);
@@ -211,4 +217,4 @@ internal static class CaptureNative
 }
 
 internal sealed record CaptureWindow(Rectangle Bounds, string Title, nint Handle, uint ProcessId, uint ThreadId,
-    nint Owner = 0, int ZOrder = 0);
+    nint Owner = 0, int ZOrder = 0, string ClassName = "");

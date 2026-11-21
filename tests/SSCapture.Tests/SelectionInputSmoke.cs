@@ -263,6 +263,7 @@ internal static partial class Program
                     }, token, splitMonitors: true, limitToStart: true, showGuide: false, dimBackground: true);
                     Equal(bounds, result.Selection!.Bounds);
                     Equal(2, result.Selection.Composite!.Regions!.Count);
+                    Equal(2, ((CaptureReplaySource.Monitors)result.Selection.ReplaySource!).Bounds.Count);
                     Equal(Color.Red.ToArgb(), result.Image!.GetPixel(50, 50).ToArgb());
                     Equal(Color.Blue.ToArgb(), result.Image.GetPixel(560, 50).ToArgb());
                 });
@@ -282,7 +283,9 @@ internal static partial class Program
                     }, token, windows: windows.Select(window => window.Bounds).ToArray(),
                         findWindow: point => windows.FirstOrDefault(window => window.Bounds.Contains(point)), showGuide: false);
                     Equal(bounds, result.Selection!.Bounds);
-                    Check(result.Selection.IsolatedWindow is null, "通常の左単押しでWGCを使用した");
+                    var source = (CaptureReplaySource.Windows)result.Selection.ReplaySource!;
+                    Check(!source.Isolated, "通常の左単押しでWGCを使用した");
+                    Equal(target, source.Targets.Single());
                     Equal(Color.Blue.ToArgb(), result.Image!.GetPixel(250, 100).ToArgb());
                 });
                 foreach (bool viaWin in new[] { false, true })
@@ -319,7 +322,9 @@ internal static partial class Program
                         host.Refresh();
                         await Down(overlay, 120, 80); input.LeftUp();
                     }, token, windows: [target.Bounds], findWindow: point => target.Bounds.Contains(point) ? target : null, showGuide: false);
-                    Equal(target, result.Selection!.IsolatedWindow);
+                    var source = (CaptureReplaySource.Windows)result.Selection!.ReplaySource!;
+                    Check(source.Isolated, "WGCの撮影方式が失われた");
+                    Equal(target, source.Targets.Single());
                     Equal(target.Title, result.Selection.WindowTitle);
                     string directory = Path.Combine(Path.GetTempPath(), "sscapture-wgc-" + Guid.NewGuid().ToString("N"));
                     string? savedPath = null;
@@ -341,6 +346,38 @@ internal static partial class Program
                     {
                         if (savedPath is not null) File.Delete(savedPath);
                         host.BackColor = previewColor;
+                        host.Refresh();
+                    }
+                });
+                await Test("ウィンドウを移動後、同じPIDから現在位置の画素を通常撮影とWGCで取得する", async token =>
+                {
+                    Rectangle initial = host.Bounds;
+                    Rectangle desktop = CaptureNative.MonitorBounds().Aggregate(Rectangle.Union);
+                    var original = CaptureNative.CaptureWindows(desktop).Single(window => window.Handle == host.Handle);
+                    Color initialColor = host.BackColor;
+                    try
+                    {
+                        host.Bounds = new(initial.X + 35, initial.Y + 40, initial.Width - 15, initial.Height - 20);
+                        host.BackColor = Color.Cyan;
+                        host.Refresh();
+                        CaptureNative.SynchronizeDesktop();
+                        await Task.Delay(120, token);
+                        foreach (bool isolated in new[] { false, true })
+                        {
+                            var recipe = LastCaptureRecipe.Create(1, original.Bounds, null, new(), [],
+                                new CaptureReplaySource.Windows([original], isolated, IncludeOwned: isolated));
+                            var frame = await InstantCapture.TakeReplayWindowsAsync(recipe, new());
+                            using var image = frame.Image;
+                            Equal(original.ProcessId, frame.Source.Targets.Single().ProcessId);
+                            Equal(host.Bounds.Location, frame.Bounds.Location);
+                            Equal(host.Size, frame.Bounds.Size);
+                            Equal(Color.Cyan.ToArgb(), image.GetPixel(image.Width / 2, image.Height / 2).ToArgb());
+                        }
+                    }
+                    finally
+                    {
+                        host.Bounds = initial;
+                        host.BackColor = initialColor;
                         host.Refresh();
                     }
                 });

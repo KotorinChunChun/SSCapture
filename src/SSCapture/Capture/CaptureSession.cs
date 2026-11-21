@@ -1176,6 +1176,17 @@ internal sealed class SessionController
         Size fixedSize = activeFixedSize;
         if (Mode == CaptureMode.FixedRegion && !entireMonitor && (selection.Polygon is not null
             || selection.Bounds.Size != fixedSize || !CaptureGeometry.IsFullyCovered(selection.Bounds, SelectionMonitors))) return;
+        if (options.Intent == CaptureIntent.Screenshot)
+        {
+            if (entireMonitor || Mode == CaptureMode.FullScreen)
+            {
+                IReadOnlyList<Rectangle> monitors = selection.Composite?.Regions ??
+                    Snapshot.Monitors.Where(selection.Bounds.Contains).ToArray();
+                selection = selection with { ReplaySource = new CaptureReplaySource.Monitors(monitors) };
+            }
+            else if (target is not null)
+                selection = selection with { ReplaySource = new CaptureReplaySource.Windows(roots ?? [target], useWindowSource, groupWindows) };
+        }
         completed = true;
         using WindowCapturePreview? confirmedPreview = useWindowSource && roots is null && target is not null && windowPreview?.Target == target
             ? windowPreview : null;
@@ -1194,7 +1205,7 @@ internal sealed class SessionController
                         Snapshot.Context?.FocusedElement, confirmedPreview, group, roots);
                     result = capture.Image;
                     metadata = capture.Metadata;
-                    selection = selection with { Bounds = capture.Bounds, IsolatedWindow = roots is null ? target : null };
+                    selection = selection with { Bounds = capture.Bounds };
                 }
                 using DesktopSnapshot? current = useWindowSource || OutputSettings.FreezeFrame || options.Intent == CaptureIntent.Recording ? null : TakeFrame(OutputSettings);
                 DesktopSnapshot frame = current ?? Snapshot;

@@ -2,6 +2,12 @@ namespace SSCapture.Capture;
 
 internal sealed record CaptureComposite(IReadOnlyList<Rectangle>? Regions = null, IReadOnlyList<CaptureWindow>? WindowRoots = null);
 
+internal abstract record CaptureReplaySource
+{
+    internal sealed record Windows(IReadOnlyList<CaptureWindow> Targets, bool Isolated, bool IncludeOwned) : CaptureReplaySource;
+    internal sealed record Monitors(IReadOnlyList<Rectangle> Bounds) : CaptureReplaySource;
+}
+
 internal static class CaptureWindowGroups
 {
     internal static IReadOnlyList<CaptureWindow> ForegroundGroup(CaptureWindow root, IReadOnlyList<CaptureWindow> windows)

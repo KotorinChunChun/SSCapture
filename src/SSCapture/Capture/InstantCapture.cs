@@ -4,6 +4,7 @@ using SSCapture.Services;
 namespace SSCapture.Capture;
 
 internal sealed record DisplayTarget(string DeviceName, Rectangle Bounds, bool IsPrimary = false);
+internal sealed record WindowReplayFrame(Bitmap Image, Rectangle Bounds, CaptureMetadata? Metadata, string Title, CaptureReplaySource.Windows Source);
 
 internal static class InstantCapture
 {
@@ -72,10 +73,38 @@ internal static class InstantCapture
         catch { image.Dispose(); throw; }
     }
 
+    internal static async Task<WindowReplayFrame> TakeReplayWindowsAsync(LastCaptureRecipe recipe, AppSettings settings)
+    {
+        var monitors = CaptureNative.MonitorBounds();
+        var windows = CaptureNative.CaptureWindows(monitors.Aggregate(Rectangle.Union));
+        CaptureWindow[] roots = recipe.ResolveWindows(windows);
+        CaptureWindow target = roots[0];
+        var group = recipe.IncludeOwnedWindows
+            ? roots.SelectMany(root => CaptureWindowGroups.ForegroundGroup(root, windows))
+                .DistinctBy(window => window.Handle).OrderBy(window => window.ZOrder).ToArray()
+            : roots;
+        string title = roots.Length == 1 ? target.Title : $"ウィンドウ {roots.Length} 件";
+        var source = new CaptureReplaySource.Windows(roots, recipe.UseIsolatedWindow, recipe.IncludeOwnedWindows);
+        if (recipe.UseIsolatedWindow)
+        {
+            var window = await IsolatedWindowCapture.TakeAsync(target, settings, foregroundFirst: group, requiredWindows: roots);
+            return new(window.Image, window.Bounds, window.Metadata, title, source);
+        }
+
+        var regions = group.SelectMany(window => monitors.Select(monitor => Rectangle.Intersect(window.Bounds, monitor)))
+            .Where(CaptureGeometry.IsUsable).Distinct().ToArray();
+        if (regions.Length == 0) throw new InvalidOperationException("撮影するウィンドウがモニター内にありません。");
+        Rectangle bounds = regions.Aggregate(Rectangle.Union);
+        var capture = await TakeWithContextAsync(bounds, settings);
+        if (regions.Length == 1) return new(capture.Image, bounds, capture.Metadata, title, source);
+        using var raw = capture.Image;
+        return new(CaptureGeometry.ComposeRegions(raw, bounds, bounds, regions), bounds, capture.Metadata, title, source);
+    }
+
     internal static async Task<string> DeliverAsync(Bitmap image, AppSettings settings, DateTimeOffset capturedAt, OutputRouter output,
         Func<Bitmap, string, CancellationToken, Task<OcrResult>>? recognize = null, string regionName = "撮影", Rectangle? captureBounds = null,
         CaptureMetadata? metadata = null, bool preserveOutputs = false, Action? onDelivered = null, IReadOnlyList<Point>? capturePolygon = null,
-        string? windowTitle = null, CaptureWindow? isolatedWindow = null, CaptureComposite? composite = null)
+        string? windowTitle = null, CaptureReplaySource? replaySource = null)
     {
         OutputDestination destination = preserveOutputs ? settings.DefaultDestination : settings.DefaultDestination & (OutputDestination.Clipboard | OutputDestination.File);
         if (destination == OutputDestination.None) return "即時撮影の出力先がOFFです。クリップボードまたはファイル保存を有効にしてください。";
@@ -94,6 +123,6 @@ internal static class InstantCapture
         }
         var plan = destination.HasFlag(OutputDestination.File) ? new FileNamePlan(settings.FileNamePattern, capturedAt, CaptureIntent.Screenshot, ocr, Region: regionName) : null;
         return warning + await output.ScreenshotAsync(image, destination, settings with { OpenFolderAfterSave = preserveOutputs && settings.OpenFolderAfterSave }, namePlan: plan, captureBounds: captureBounds, metadata: metadata,
-            onDelivered: onDelivered, capturePolygon: capturePolygon, capturedAt: capturedAt, windowTitle: windowTitle, isolatedWindow: isolatedWindow, composite: composite);
+            onDelivered: onDelivered, capturePolygon: capturePolygon, capturedAt: capturedAt, windowTitle: windowTitle, replaySource: replaySource);
     }
 }

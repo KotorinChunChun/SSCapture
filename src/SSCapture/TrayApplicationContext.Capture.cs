@@ -50,7 +50,8 @@ internal sealed partial class TrayApplicationContext
             using Bitmap image = capture.Image;
             // Keep capture exclusive until output completes. The optional protected
             // completion toast is shown only after pixels have been acquired.
-            StoreStatus(await InstantCapture.DeliverAsync(image, settings, capturedAt, output, regionName: $"画面{number}", captureBounds: bounds, metadata: capture.Metadata));
+            StoreStatus(await InstantCapture.DeliverAsync(image, settings, capturedAt, output, regionName: $"画面{number}",
+                captureBounds: bounds, metadata: capture.Metadata, replaySource: new CaptureReplaySource.Monitors([bounds])));
         }
         catch (Exception ex)
         {
@@ -149,7 +150,7 @@ internal sealed partial class TrayApplicationContext
             {
                 SavedRegion? remembered = null;
                 if (mode is CaptureMode.Rectangle or CaptureMode.FixedRegion && outcome.Selection.Polygon is null
-                    && outcome.Selection.Composite is null && captureDisplays is not null)
+                    && outcome.Selection.ReplaySource is null && captureDisplays is not null)
                 {
                     try
                     {
@@ -232,7 +233,7 @@ internal sealed partial class TrayApplicationContext
                 warning = Environment.NewLine + "前回範囲を保存できませんでした: " + ex.Message;
             }
         }, captureBounds: selection.Bounds, requestFileNameForImage: requestFileName, metadata: metadata, capturePolygon: selection.Polygon,
-            windowTitle: selection.WindowTitle, isolatedWindow: selection.IsolatedWindow, composite: selection.Composite);
+            windowTitle: selection.WindowTitle, replaySource: selection.ReplaySource);
         return result + warning;
     }
 }

@@ -1,41 +1,55 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using SSCapture.Capture;
 
 namespace SSCapture.Services;
 
-// 画像履歴とは独立した、成功した静止画の入出力条件だけの記録。
+// 画像履歴とは独立した、成功した静止画の対象と入出力条件の記録。
 internal sealed class LastCaptureRecipe
 {
     private readonly AppSettings settings;
     private readonly SavedRegion? region;
-    private readonly IReadOnlyList<SavedRegion>? regionParts;
+    private readonly CaptureWindowIdentity[]? windows;
+    private readonly string[]? monitors;
     internal long Sequence { get; }
     internal Rectangle Bounds { get; }
-    internal CaptureWindow? IsolatedWindow { get; }
-    internal IReadOnlyList<CaptureWindow>? WindowRoots { get; }
+    internal bool TracksWindows => windows is not null;
+    internal bool TracksMonitors => monitors is not null;
+    internal bool HasTrackedTarget => TracksWindows || TracksMonitors;
+    internal bool UseIsolatedWindow { get; }
+    internal bool IncludeOwnedWindows { get; }
     internal IReadOnlyList<Point>? Polygon { get; }
     internal AppSettings Settings => CaptureSettingsSnapshot.Copy(settings);
 
     private LastCaptureRecipe(long sequence, Rectangle bounds, SavedRegion? region, IReadOnlyList<Point>? polygon, AppSettings settings,
-        CaptureWindow? isolatedWindow, IReadOnlyList<SavedRegion>? regionParts, IReadOnlyList<CaptureWindow>? windowRoots)
+        CaptureReplaySource? source, IReadOnlyList<DisplayLayout> displays, Func<uint, long?> processStart)
     {
         Sequence = sequence;
         this.region = region;
-        this.regionParts = regionParts;
         Bounds = bounds;
-        IsolatedWindow = isolatedWindow;
-        WindowRoots = windowRoots is null ? null : Array.AsReadOnly(windowRoots.ToArray());
+        if (source is CaptureReplaySource.Windows selected)
+        {
+            windows = selected.Targets.Select(window => new CaptureWindowIdentity(window, processStart(window.ProcessId))).ToArray();
+            if (windows.Length == 0) throw new InvalidOperationException("再撮影するウィンドウが選ばれていません。");
+            UseIsolatedWindow = selected.Isolated;
+            IncludeOwnedWindows = selected.IncludeOwned;
+        }
+        if (source is CaptureReplaySource.Monitors selectedMonitors)
+        {
+            monitors = selectedMonitors.Bounds.Select(member => FindDisplay(displays, display => display.Bounds == member).Identity).ToArray();
+            if (monitors.Length == 0) throw new InvalidOperationException("再撮影するモニターが選ばれていません。");
+        }
         Polygon = polygon is null ? null : Array.AsReadOnly(polygon.ToArray());
         this.settings = CaptureSettingsSnapshot.Copy(settings);
     }
 
     internal static LastCaptureRecipe Create(long sequence, Rectangle bounds, IReadOnlyList<Point>? polygon, AppSettings settings,
-        IReadOnlyList<DisplayLayout> displays, CaptureWindow? isolatedWindow = null, CaptureComposite? composite = null) =>
-        new(sequence, bounds, isolatedWindow is null && composite is null ? RegionCoordinates.FromBounds("直前の撮影", bounds, displays) : null,
-            polygon, settings, isolatedWindow, composite?.Regions?.Select(part => RegionCoordinates.FromBounds("直前の合成撮影", part, displays)).ToArray(),
-            composite?.WindowRoots);
+        IReadOnlyList<DisplayLayout> displays, CaptureReplaySource? source = null, Func<uint, long?>? processStart = null) =>
+        new(sequence, bounds, source is null ? RegionCoordinates.FromBounds("直前の撮影", bounds, displays) : null,
+            polygon, settings, source, displays, processStart ?? ReadProcessStart);
 
     internal Rectangle Resolve(IReadOnlyList<DisplayLayout> displays) => region is null
-        ? throw new InvalidOperationException("ウィンドウ単独撮影は選択ウィンドウから再取得してください。")
+        ? throw new InvalidOperationException("現在のウィンドウまたはモニターを指定してください。")
         : RegionCoordinates.Resolve(region, displays);
 
     internal AppSettings SettingsForReplay(AppSettings current) => CaptureSettingsSnapshot.ForReplay(settings, current);
@@ -50,7 +64,60 @@ internal sealed class LastCaptureRecipe
     }
     internal IReadOnlyList<Point>? PolygonFor(Rectangle bounds) => Polygon?.Select(p => new Point(checked(p.X + bounds.X - Bounds.X), checked(p.Y + bounds.Y - Bounds.Y))).ToArray();
     internal IReadOnlyList<Rectangle>? RegionsFor(IReadOnlyList<DisplayLayout> displays) =>
-        regionParts?.Select(part => RegionCoordinates.Resolve(part, displays)).ToArray();
+        monitors?.Select(id => FindDisplay(displays, display => StringComparer.OrdinalIgnoreCase.Equals(display.Identity, id)).Bounds).ToArray();
+
+    internal CaptureWindow[] ResolveWindows(IReadOnlyList<CaptureWindow> current, Func<uint, long?>? processStart = null)
+    {
+        if (windows is null) throw new InvalidOperationException("再撮影するウィンドウが記録されていません。");
+        var starts = windows.Select(window => window.Original.ProcessId).Distinct()
+            .ToDictionary(pid => pid, processStart ?? ReadProcessStart);
+        var resolved = windows.Select(window => window.Resolve(current, starts[window.Original.ProcessId])).ToArray();
+        if (resolved.DistinctBy(window => window.Handle).Count() != resolved.Length)
+            throw new InvalidOperationException("再撮影するウィンドウを区別できません。選び直してください。");
+        return resolved;
+    }
+
+    private static DisplayLayout FindDisplay(IReadOnlyList<DisplayLayout> displays, Func<DisplayLayout, bool> match)
+    {
+        var found = displays.Where(match).Take(2).ToArray();
+        return found.Length == 1 ? found[0]
+            : throw new InvalidOperationException("撮影したモニターを識別できません。接続を確認して選び直してください。");
+    }
+
+    private static long? ReadProcessStart(uint pid)
+    {
+        if (pid is 0 or > int.MaxValue) return null;
+        try
+        {
+            using var process = Process.GetProcessById((int)pid);
+            return process.StartTime.ToUniversalTime().Ticks;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    private sealed record CaptureWindowIdentity(CaptureWindow Original, long? ProcessStart)
+    {
+        internal CaptureWindow Resolve(IReadOnlyList<CaptureWindow> current, long? processStart)
+        {
+            if (ProcessStart is null || ProcessStart == processStart)
+            {
+                var candidates = current.Where(window => window.ProcessId == Original.ProcessId
+                    && window.ClassName == Original.ClassName).ToArray();
+                var sameHandle = candidates.FirstOrDefault(window => window.Handle == Original.Handle && window.ThreadId == Original.ThreadId);
+                if (sameHandle is not null) return sameHandle;
+                if (ProcessStart is not null && Original.ClassName.Length != 0 && Original.Title.Length != 0)
+                {
+                    var matching = candidates.Where(window => window.Title == Original.Title).Take(2).ToArray();
+                    if (matching.Length == 1) return matching[0];
+                }
+            }
+            throw new InvalidOperationException("再撮影するウィンドウが見つからないか、区別できません。選び直してください。");
+        }
+    }
+
     internal Bitmap Shape(Bitmap image) => Polygon is null ? (Bitmap)image.Clone() :
         CaptureGeometry.Freeform(image, Bounds, Polygon) ?? throw new InvalidOperationException("直前の自由形状を再現できません。");
 }

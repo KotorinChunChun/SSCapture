@@ -25,7 +25,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         DateTimeOffset? capturedAt = null, Action? onDelivered = null, Rectangle? captureBounds = null,
         Func<Task<ScreenshotFileName?>>? requestFileName = null,
         Func<Bitmap, Task<ScreenshotFileName?>>? requestFileNameForImage = null, CaptureMetadata? metadata = null,
-        IReadOnlyList<Point>? capturePolygon = null, string? windowTitle = null, CaptureWindow? isolatedWindow = null, CaptureComposite? composite = null)
+        IReadOnlyList<Point>? capturePolygon = null, string? windowTitle = null, CaptureReplaySource? replaySource = null)
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(settings);
@@ -36,7 +36,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         if (captureSucceeded is not null && captureBounds is Rectangle recordedBounds)
         {
             try { recipe = LastCaptureRecipe.Create(sequence, recordedBounds, capturePolygon, settings with { DefaultDestination = destination },
-                isolatedWindow is null && composite?.WindowRoots is null ? (readCaptureLayout ?? RegionCoordinates.ReadDisplays)() : [], isolatedWindow, composite); }
+                replaySource is CaptureReplaySource.Windows ? [] : (readCaptureLayout ?? RegionCoordinates.ReadDisplays)(), replaySource); }
             catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException) { /* 再撮影できない最新範囲は成功時に無効化し、旧範囲と取り違えない。 */ }
         }
         ValidateDestination(destination);

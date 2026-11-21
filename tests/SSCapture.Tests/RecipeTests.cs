@@ -10,15 +10,53 @@ internal static partial class Program
         {
             var bounds = new Rectangle(-20, 5, 240, 160);
             var target = new CaptureWindow(bounds, "撮影対象", (nint)8, 2, 3);
-            var recipe = LastCaptureRecipe.Create(1, bounds, null, new AppSettings(), [], target);
+            var recipe = LastCaptureRecipe.Create(1, bounds, null, new AppSettings(), [],
+                new CaptureReplaySource.Windows([target], Isolated: true, IncludeOwned: true), _ => 10);
             Equal(bounds, recipe.Bounds);
-            Equal(target, recipe.IsolatedWindow);
+            Check(recipe.UseIsolatedWindow, "単独撮影の方式が失われた");
+            Equal(target, recipe.ResolveWindows([target], _ => 10).Single());
             try
             {
                 _ = recipe.Resolve([]);
                 throw new Exception("ウィンドウを画面座標へ展開した");
             }
             catch (InvalidOperationException) { }
+        });
+        Run("ウィンドウ再撮影は同じPIDのハンドルと現在位置を優先し、一意な再作成にも追従する", () =>
+        {
+            var original = new CaptureWindow(new(30, 40, 240, 160), "原稿", 8, 2, 3, ClassName: "Editor");
+            var moved = original with { Bounds = new(-500, 90, 400, 300), Title = "編集中の原稿" };
+            var other = original with { Handle = 9, Title = "別の原稿" };
+            var reopened = original with { Handle = 10, ThreadId = 4, Bounds = new(-900, -5, 300, 270) };
+            var recipe = LastCaptureRecipe.Create(1, original.Bounds, null, new(), [],
+                new CaptureReplaySource.Windows([original], Isolated: false, IncludeOwned: false), _ => 10);
+            Check(!recipe.UseIsolatedWindow, "見えている画面の撮影方式が変わった");
+            Equal(moved, recipe.ResolveWindows([other, moved], _ => 10).Single());
+            Equal(reopened, recipe.ResolveWindows([other, reopened], _ => 10).Single());
+            foreach (var attempt in new (CaptureWindow[] Windows, long Start)[]
+            {
+                ([moved], 11),
+                ([reopened, reopened with { Handle = 11 }], 10),
+                ([other, reopened with { ProcessId = 12 }], 10)
+            })
+            {
+                bool rejected = false;
+                try { _ = recipe.ResolveWindows(attempt.Windows, _ => attempt.Start); }
+                catch (InvalidOperationException) { rejected = true; }
+                Check(rejected, "別のウィンドウを再撮影対象にした");
+            }
+        });
+        Run("モニターの再撮影は座標が同じ別のモニターで代用しない", () =>
+        {
+            DisplayLayout display = new("元のモニター", "左", new(-1920, 0, 1920, 1080), 96, 96);
+            var recipe = LastCaptureRecipe.Create(1, display.Bounds, null, new(), [display], new CaptureReplaySource.Monitors([display.Bounds]));
+            var moved = display with { Bounds = new(2560, -200, 2560, 1440), DpiX = 120, DpiY = 120 };
+            var replacement = display with { Identity = "別のモニター" };
+            Equal(moved.Bounds, recipe.RegionsFor([replacement, moved])!.Single());
+            bool rejected = false;
+            try { _ = recipe.RegionsFor([replacement]); }
+            catch (InvalidOperationException) { rejected = true; }
+            Check(rejected, "切断したモニターを別のモニターに置き換えた");
         });
         Run("OCR命名キャンセルでコピーが成功しても直前の再撮影条件を更新しない", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {

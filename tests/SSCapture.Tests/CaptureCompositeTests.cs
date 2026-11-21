@@ -38,8 +38,8 @@ internal static partial class Program
 
             DisplayLayout[] layout = [new("左", "左", left, 96, 96), new("右", "右", right, 96, 96), new("上", "上", skipped, 96, 96)];
             LastCaptureRecipe recipe = LastCaptureRecipe.Create(1, canvas, null, new AppSettings(), layout,
-                composite: new(Regions: [left, right]));
-            Rectangle movedRight = new(100, 50, right.Width, right.Height);
+                new CaptureReplaySource.Monitors([left, right]));
+            Rectangle movedRight = new(100, 50, right.Width + 60, right.Height + 20);
             DisplayLayout[] rearranged = [layout[0], layout[1] with { Bounds = movedRight }, layout[2]];
             Check(recipe.RegionsFor(rearranged)!.SequenceEqual([left, movedRight]), "再撮影に異なるモニターが混ざった");
         });
