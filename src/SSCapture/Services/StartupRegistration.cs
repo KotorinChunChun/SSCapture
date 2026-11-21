@@ -14,12 +14,8 @@ internal sealed class StartupRegistration : IStartupRegistration
 {
     public async Task<StartupRegistrationState> ReadAsync()
     {
-        try
-        {
-            string json = await InvokeAsync("startup-status");
-            return JsonSerializer.Deserialize<StartupRegistrationState>(json, Options) ?? throw new IOException("自動起動の応答が空です。");
-        }
-        catch (Exception ex) { return new(false, false, ex.Message); }
+        string json = await InvokeAsync("startup-status");
+        return JsonSerializer.Deserialize<StartupRegistrationState>(json, Options) ?? throw new IOException("自動起動の応答が空です。");
     }
     public async Task<string?> SetAsync(bool enabled)
     {

@@ -38,7 +38,12 @@ internal static partial class Program
             LayoutTree(form);
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
             var basic = tabs.TabPages[0].Controls.OfType<TableLayoutPanel>().Single();
-            string[] groups = basic.Controls.OfType<Label>().OrderBy(label => basic.GetRow(label)).Select(label => label.Text).ToArray();
+            string[] groups = basic.Controls.Cast<Control>()
+                .Where(control => control is Label or StartupSettingsControl)
+                .OrderBy(basic.GetRow)
+                .Select(control => control is StartupSettingsControl
+                    ? control.Controls.Find("StartupLabel", true).Single().Text : control.Text)
+                .ToArray();
             Check(groups.SequenceEqual(["選択範囲", "位置・寸法の補正", "操作ガイド", "既定プリセット", "自動起動"]), "基本のグループ順が異なる");
 
             CheckBox Box(string name) => (CheckBox)form.Controls.Find(name, true).Single();

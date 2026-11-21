@@ -43,7 +43,8 @@ internal sealed class SettingsForm : Form
         Func<DateTimeOffset>? now = null, Func<IReadOnlyList<DisplayTarget>>? listDisplays = null,
         SavedRegion? lastRegion = null, Func<Size?, CaptureAnchor, Task<Rectangle?>>? selectInputRegion = null,
         Func<IReadOnlyList<DisplayLayout>>? regionDisplays = null, IStartupRegistration? startupRegistration = null,
-        AppSettings? lastOutputSettings = null)
+        AppSettings? lastOutputSettings = null, Action<string>? exportSettings = null,
+        Func<AppSettings, string?>? importSettings = null)
     {
         settings = settings.UpdateDefaultProjections();
         committed = settings;
@@ -295,7 +296,28 @@ internal sealed class SettingsForm : Form
         Add(presetSummaries, "入力", inputSummary, 0); Add(presetSummaries, "出力", outputSummary, 1);
         Add(basic, "既定プリセット", presetSummaries, 3);
         var startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration());
-        Add(basic, "自動起動", startupSettings, 4);
+        AddFullRow(basic, startupSettings, 4);
+        var transfer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+        var exportButton = MakeButton("設定をエクスポート", "ExportSettings");
+        var importButton = MakeButton("設定をインポート", "ImportSettings");
+        exportButton.AutoSize = importButton.AutoSize = true;
+        exportButton.Enabled = exportSettings is not null;
+        importButton.Enabled = importSettings is not null;
+        exportButton.Click += (_, _) =>
+        {
+            using var dialog = new SettingsTransferForm(exportSettings!);
+            if (dialog.ShowDialog(this) == DialogResult.OK) SetStatus("設定を書き出しました。");
+        };
+        importButton.Click += (_, _) =>
+        {
+            using var dialog = new SettingsTransferForm(SettingsTransfer.Read, candidate => SettingsTransfer.Preview(
+                committed, candidate, regionDisplays ?? RegionCoordinates.ReadDisplays,
+                listMicrophones ?? RecordingService.GetMicrophones, listDisplays));
+            if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Candidate is not { } candidate) return;
+            if (importSettings!(candidate) is { } error) SetStatus(error, true);
+        };
+        transfer.Controls.AddRange([exportButton, importButton]);
+        AddFullRow(basic, transfer, 5);
         foreach (Label label in basic.Controls.OfType<Label>())
         {
             label.Anchor = AnchorStyles.Top | AnchorStyles.Left;
@@ -369,6 +391,8 @@ internal sealed class SettingsForm : Form
     }
 
     public void SetStatus(string text, bool error = false) => SetStatus(new StatusMessage(text, error, now()));
+    internal string? SelectedCategory => (categories.SelectedItem as TabPage)?.Text;
+
     internal void SelectCategory(string title)
     {
         for (int index = 0; index < categories.Items.Count; index++)

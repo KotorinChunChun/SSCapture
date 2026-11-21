@@ -104,7 +104,7 @@ internal static partial class Program
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }
         if (args.SequenceEqual(["--startup-tests"]))
-        { StartupTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
+        { StartupTests(); SettingsTransferTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
         Run("5つの撮影モード", () => Equal(5, Enum.GetValues<CaptureMode>().Length));
         PinnedImageTests();
         CaptureCommandTests();
@@ -122,6 +122,7 @@ internal static partial class Program
         ServiceTests();
         UiTests();
         StartupTests();
+        SettingsTransferTests();
         RecordingTests();
         RecordingSessionTests();
         AudioToggleTests();

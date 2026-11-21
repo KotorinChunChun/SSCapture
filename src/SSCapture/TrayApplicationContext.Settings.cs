@@ -19,8 +19,9 @@ internal sealed partial class TrayApplicationContext
         {
             form = new SettingsForm(settings, SaveSettings, OpenFolder,
                 openHistory: ShowHistory, lastRegion: lastRegion, selectInputRegion: PickRegionAsync,
-                lastOutputSettings: recipes.Current?.Settings);
-            form.FormClosed += (_, _) => form = null;
+                lastOutputSettings: recipes.Current?.Settings, exportSettings: path => SettingsTransfer.Export(path, settings),
+                importSettings: ImportSettings);
+            form.FormClosed += (sender, _) => { if (ReferenceEquals(sender, form)) form = null; };
             form.SetStatus(lastStatus);
         }
 
@@ -31,21 +32,64 @@ internal sealed partial class TrayApplicationContext
         form.Activate();
     }
 
-    private string? SaveSettings(AppSettings next)
+    private string? ImportFromManagement(System.Text.Json.JsonElement payload)
+    {
+        try { return ImportSettings(SettingsTransfer.Parse(payload)); }
+        catch (Exception ex) { return "設定を読み込めません: " + ex.Message; }
+    }
+
+    private string? ImportSettings(AppSettings next)
+    {
+        if (exiting || OperationPolicy.MustWaitToStop || pendingRecording is not null || namingForm is not null ||
+            Application.OpenForms.OfType<Form>().Any(window => window.Modal))
+            return "撮影・録画や開いている確認画面を終えてから取り込んでください。";
+
+        var error = SaveSettings(next, import: true);
+        if (error is not null) return error;
+
+        // 確定した設定で再構築し、置換前の入力内容が後から上書きされるのを防ぐ。
+        bool reopen = form?.Visible == true;
+        string? category = form?.SelectedCategory;
+        var previous = form;
+        form = null;
+        try
+        {
+            previous?.Dispose();
+            StoreStatus("設定を取り込みました。", false);
+            if (reopen)
+            {
+                ShowSettings();
+                if (category is not null) form?.SelectCategory(category);
+            }
+        }
+        catch (Exception ex) { StoreStatus("設定を取り込みました。設定画面を開き直してください: " + ex.Message, true); }
+        return null;
+    }
+
+    private string? SaveSettings(AppSettings next) => SaveSettings(next, import: false);
+
+    private string? SaveSettings(AppSettings next, bool import)
     {
         if (recorder is not null || pendingRecording is not null)
             return "録画を終了またはキャンセルしてから保存してください。";
-        KeyboardHook? replacement = null;
+
+        KeyboardHook replacement;
         try
         {
             next = next.UpdateDefaultProjections();
             next.Validate();
-            replacement = NewHook(next, false);
-            store.Save(next);
-            hook?.Dispose();
-            hook = replacement;
-            replacement = null;
-            settings = next;
+            replacement = store.PrepareAndSave(next, import, () => NewHook(next, false));
+        }
+        catch (Exception ex) { return "設定を保存できません: " + ex.Message; }
+
+        var previous = hook;
+        bool remainPaused = import && settings.HasShortcuts && previous?.Enabled == false;
+        hook = replacement;
+        settings = next;
+        previous?.Dispose();
+        hook.Enabled = settings.HasShortcuts && !remainPaused;
+        try
+        {
             // 旧通知が削除/変更前のアプリへ送信しないよう、設定確定時に破棄する。
             feedback.HideForCapture();
             if (!settings.KeepHistory)
@@ -53,16 +97,10 @@ internal sealed partial class TrayApplicationContext
                 history.Clear();
                 historyForm?.RefreshEntries();
             }
-
-            hook.Enabled = settings.HasShortcuts;
             RefreshMenu();
-            return null;
         }
-        catch (Exception ex)
-        {
-            replacement?.Dispose();
-            return "設定を保存できません: " + ex.Message;
-        }
+        catch (Exception ex) { StoreStatus("設定を保存しましたが画面を更新できません: " + ex.Message, true); }
+        return null;
     }
 
     private void SaveGrid20(bool enabled)

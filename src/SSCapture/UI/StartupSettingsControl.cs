@@ -6,7 +6,7 @@ internal sealed class StartupSettingsControl : UserControl
 {
     readonly IStartupRegistration registration;
     readonly CheckBox enabled = new() { Name = "StartWithWindows", Text = "Windowsサインイン時に自動起動（画面は表示しない）", AutoSize = true, Enabled = false };
-    readonly Button apply = new() { Name = "ApplyStartup", Text = "適用", AutoSize = true, Enabled = false };
+    readonly Button apply = new() { Name = "ApplyStartup", Text = "自動起動を適用", AutoSize = true, Enabled = false };
     readonly Label state = new() { Name = "StartupState", Text = "確認中…", AutoSize = true, MaximumSize = new Size(850, 0) };
     StartupRegistrationState? current;
     bool working;
@@ -16,7 +16,12 @@ internal sealed class StartupSettingsControl : UserControl
         Name = "StartupSettings"; Dock = DockStyle.Fill;
         var layout = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = Padding.Empty };
         var commands = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
-        commands.Controls.AddRange([enabled, apply]); layout.Controls.AddRange([commands, state]); Controls.Add(layout);
+        var title = new Label { Name = "StartupLabel", Text = "自動起動", AutoSize = true, Anchor = AnchorStyles.Left };
+        enabled.Anchor = AnchorStyles.Left;
+        ButtonTheme.Apply(apply, ButtonRole.StartupApply);
+        commands.Controls.AddRange([title, apply, enabled]);
+        layout.Controls.AddRange([commands, state]);
+        Controls.Add(layout);
         SizeChanged += (_, _) => state.MaximumSize = new Size(Math.Max(1, ClientSize.Width - 12), 0);
         enabled.CheckedChanged += (_, _) => apply.Enabled = !working && current?.CanChange == true && enabled.Checked != current.Enabled;
         apply.Click += async (_, _) => await ApplyAsync();
@@ -39,7 +44,7 @@ internal sealed class StartupSettingsControl : UserControl
     }
     async Task ApplyAsync()
     {
-        if (working || current?.CanChange != true) return;
+        if (working || current?.CanChange != true || enabled.Checked == current.Enabled) return;
         working = true; apply.Enabled = enabled.Enabled = false;
         string? error;
         try { error = await registration.SetAsync(enabled.Checked); }

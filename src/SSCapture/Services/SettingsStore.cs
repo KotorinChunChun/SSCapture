@@ -6,13 +6,14 @@ namespace SSCapture.Services;
 
 internal sealed class SettingsStore(string path)
 {
-    private static readonly JsonSerializerOptions Options = new()
+    internal static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter<CaptureMode>(), new JsonStringEnumConverter<OutputDestination>(),
             new JsonStringEnumConverter<NotificationCorner>(), new JsonStringEnumConverter<NotificationDisplay>(),
             new JsonStringEnumConverter<CaptureAnchor>(), new JsonStringEnumConverter<Capture.CaptureKeyAction>() }
     };
+    private static readonly JsonSerializerOptions StrictReadOptions = new(Options) { RespectNullableAnnotations = true };
     private readonly string filePath = Path.GetFullPath(path);
 
     public AppSettings Load(out string? warning)
@@ -20,76 +21,112 @@ internal sealed class SettingsStore(string path)
         warning = null;
         try
         {
-            string json = File.ReadAllText(filePath, Encoding.UTF8);
-            AppSettings settings = JsonSerializer.Deserialize<AppSettings>(json, Options)
-                ?? throw new JsonException("設定が空です。");
-            using var document = JsonDocument.Parse(json);
-            // 旧設定で省略されていた暗転は、当時の初期値OFFを維持する。
-            if (!document.RootElement.TryGetProperty(nameof(AppSettings.DimCaptureBackground), out _))
-                settings = settings with { DimCaptureBackground = false };
-            if (!document.RootElement.TryGetProperty(nameof(AppSettings.NotificationDurationSeconds), out _)
-                && document.RootElement.TryGetProperty(nameof(AppSettings.ShowCaptureNotification), out var showNotification)
-                && showNotification.ValueKind == JsonValueKind.False)
-                settings = settings with { NotificationDurationSeconds = 0 };
-            if (!document.RootElement.TryGetProperty("SchemaVersion", out var version) || version.GetInt32() < 2)
-            {
-                if (document.RootElement.TryGetProperty("DefaultDestination", out var destination) && destination.ValueKind == JsonValueKind.Number)
-                    settings = settings with { DefaultDestination = destination.GetInt32() switch
-                    {
-                        0 => OutputDestination.Clipboard, 1 => OutputDestination.File, 2 => OutputDestination.ExternalApp,
-                        _ => throw new JsonException("旧設定の送信先が正しくありません。")
-                    } };
-                if (document.RootElement.TryGetProperty("ShortcutEnabled", out var enabled) && enabled.ValueKind == JsonValueKind.False)
-                    settings = settings with { ScreenshotShortcut1 = "", ScreenshotShortcut2 = "", RecordingShortcut1 = "", RecordingShortcut2 = "", InstantShortcuts = Enumerable.Repeat("", 10).ToArray(), LastRegionShortcut = "" };
-                settings = settings with { SchemaVersion = 2 };
-            }
-            if (!document.RootElement.TryGetProperty(nameof(AppSettings.InstantShortcuts), out _))
-            {
-                // Preserve existing custom keys when adding the new default slots.
-                var existing = new[] { settings.ScreenshotShortcut1, settings.ScreenshotShortcut2, settings.RecordingShortcut1, settings.RecordingShortcut2 }
-                    .Select(HotkeyBinding.Parse).Where(binding => binding is not null).ToHashSet();
-                settings = settings with { InstantShortcuts = settings.InstantShortcuts.Select(key => existing.Contains(HotkeyBinding.Parse(key)) ? "" : key).ToArray() };
-            }
-            if (!document.RootElement.TryGetProperty(nameof(AppSettings.LastRegionShortcut), out _))
-            {
-                var assigned = HotkeyBinding.ReadAssignments(settings with { LastRegionShortcut = "" });
-                if (HotkeyBinding.Parse(settings.LastRegionShortcut) is { } repeat && assigned.Any(a => a.Binding == repeat))
-                    settings = settings with { LastRegionShortcut = "" };
-            }
-            if (!document.RootElement.TryGetProperty("SchemaVersion", out var editorVersion) || editorVersion.GetInt32() < 3)
-                settings = settings.MigrateEditors();
-            settings.Validate();
-            return settings.ApplyDefaults();
+            using var document = JsonDocument.Parse(File.ReadAllText(filePath, Encoding.UTF8));
+            return ReadSettings(document.RootElement);
         }
         catch (FileNotFoundException) { return new AppSettings().ApplyDefaults(); }
         catch (DirectoryNotFoundException) { return new AppSettings().ApplyDefaults(); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException or FormatException or InvalidOperationException)
         {
             warning = $"設定を読み込めないため既定値で起動しました。元の設定ファイルは保持されています。{Environment.NewLine}{ex.Message}";
             return new AppSettings().ApplyDefaults();
         }
     }
 
-    public void Save(AppSettings settings)
+    internal static AppSettings ReadSettings(JsonElement root, bool strict = false)
+    {
+        if (root.ValueKind != JsonValueKind.Object) throw new JsonException("設定はJSONオブジェクトで指定してください。");
+        AppSettings settings = root.Deserialize<AppSettings>(strict ? StrictReadOptions : Options) ?? throw new JsonException("設定が空です。");
+        // 旧設定で省略されていた暗転は、当時の初期値OFFを維持する。
+        if (!root.TryGetProperty(nameof(AppSettings.DimCaptureBackground), out _))
+            settings = settings with { DimCaptureBackground = false };
+        if (!root.TryGetProperty(nameof(AppSettings.NotificationDurationSeconds), out _)
+            && root.TryGetProperty(nameof(AppSettings.ShowCaptureNotification), out var showNotification)
+            && showNotification.ValueKind == JsonValueKind.False)
+            settings = settings with { NotificationDurationSeconds = 0 };
+        if (!root.TryGetProperty("SchemaVersion", out var version) || version.GetInt32() < 2)
+        {
+            if (root.TryGetProperty("DefaultDestination", out var destination) && destination.ValueKind == JsonValueKind.Number)
+                settings = settings with { DefaultDestination = destination.GetInt32() switch
+                {
+                    0 => OutputDestination.Clipboard, 1 => OutputDestination.File, 2 => OutputDestination.ExternalApp,
+                    _ => throw new JsonException("旧設定の送信先が正しくありません。")
+                } };
+            if (root.TryGetProperty("ShortcutEnabled", out var enabled) && enabled.ValueKind == JsonValueKind.False)
+                settings = settings with { ScreenshotShortcut1 = "", ScreenshotShortcut2 = "", RecordingShortcut1 = "", RecordingShortcut2 = "", InstantShortcuts = Enumerable.Repeat("", 10).ToArray(), LastRegionShortcut = "" };
+            settings = settings with { SchemaVersion = 2 };
+        }
+        if (!root.TryGetProperty(nameof(AppSettings.InstantShortcuts), out _))
+        {
+            // Preserve existing custom keys when adding the new default slots.
+            var existing = new[] { settings.ScreenshotShortcut1, settings.ScreenshotShortcut2, settings.RecordingShortcut1, settings.RecordingShortcut2 }
+                .Select(HotkeyBinding.Parse).Where(binding => binding is not null).ToHashSet();
+            settings = settings with { InstantShortcuts = settings.InstantShortcuts.Select(key => existing.Contains(HotkeyBinding.Parse(key)) ? "" : key).ToArray() };
+        }
+        if (!root.TryGetProperty(nameof(AppSettings.LastRegionShortcut), out _))
+        {
+            var assigned = HotkeyBinding.ReadAssignments(settings with { LastRegionShortcut = "" });
+            if (HotkeyBinding.Parse(settings.LastRegionShortcut) is { } repeat && assigned.Any(a => a.Binding == repeat))
+                settings = settings with { LastRegionShortcut = "" };
+        }
+        if (!root.TryGetProperty("SchemaVersion", out var editorVersion) || editorVersion.GetInt32() < 3)
+            settings = settings.MigrateEditors();
+        settings.Validate();
+        return settings.ApplyDefaults();
+    }
+
+    public void Save(AppSettings settings) => Save(settings, import: false);
+
+    internal void Import(AppSettings settings) => Save(settings, import: true);
+
+    internal T PrepareAndSave<T>(AppSettings settings, bool import, Func<T> prepare) where T : IDisposable
+    {
+        T prepared = prepare();
+        try
+        {
+            Save(settings, import);
+            return prepared;
+        }
+        catch
+        {
+            prepared.Dispose();
+            throw;
+        }
+    }
+
+    private void Save(AppSettings settings, bool import)
     {
         ArgumentNullException.ThrowIfNull(settings);
         settings = settings.UpdateDefaultProjections();
         settings.Validate();
         if (File.Exists(filePath))
         {
-            string? suffix = null;
-            try
+            if (import)
             {
-                using var old = JsonDocument.Parse(File.ReadAllText(filePath, Encoding.UTF8));
-                if (!old.RootElement.TryGetProperty("SchemaVersion", out var version) || version.GetInt32() < 3) suffix = ".schema2.bak";
-                else if (!old.RootElement.TryGetProperty(nameof(AppSettings.PresetSchemaVersion), out var profiles) || profiles.GetInt32() < 1) suffix = ".presets-v0.bak";
-                else if (profiles.GetInt32() < 2) suffix = ".presets-v1.bak";
-                else if (profiles.GetInt32() < 3) suffix = ".presets-v2.bak";
-                else if (!old.RootElement.TryGetProperty(nameof(AppSettings.ExternalApplicationsVersion), out var apps) || apps.GetInt32() < 1) suffix = ".external-apps-v0.bak";
+                AtomicFile.Write(filePath + ".import.bak", destination =>
+                {
+                    using var previous = File.OpenRead(filePath);
+                    previous.CopyTo(destination);
+                });
             }
-            catch (JsonException) { suffix = ".invalid.bak"; }
-            if (suffix is not null && !File.Exists(filePath + suffix)) File.Copy(filePath, filePath + suffix, false);
+            else BackupLegacySettings();
         }
         AtomicFile.Write(filePath, stream => JsonSerializer.Serialize(stream, settings, Options));
+    }
+
+    private void BackupLegacySettings()
+    {
+        string? suffix = null;
+        try
+        {
+            using var old = JsonDocument.Parse(File.ReadAllText(filePath, Encoding.UTF8));
+            if (!old.RootElement.TryGetProperty("SchemaVersion", out var version) || version.GetInt32() < 3) suffix = ".schema2.bak";
+            else if (!old.RootElement.TryGetProperty(nameof(AppSettings.PresetSchemaVersion), out var profiles) || profiles.GetInt32() < 1) suffix = ".presets-v0.bak";
+            else if (profiles.GetInt32() < 2) suffix = ".presets-v1.bak";
+            else if (profiles.GetInt32() < 3) suffix = ".presets-v2.bak";
+            else if (!old.RootElement.TryGetProperty(nameof(AppSettings.ExternalApplicationsVersion), out var apps) || apps.GetInt32() < 1) suffix = ".external-apps-v0.bak";
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException) { suffix = ".invalid.bak"; }
+        if (suffix is not null && !File.Exists(filePath + suffix)) File.Copy(filePath, filePath + suffix, false);
     }
 }

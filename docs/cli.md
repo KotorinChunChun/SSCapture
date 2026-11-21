@@ -101,6 +101,31 @@ if ($process.ExitCode -eq 2) {
 
 リダイレクトした標準出力と標準エラーはUTF-8です。クリップボード出力だけでも成功時は `0` になるため、PNGが必要な処理では保存先の行とファイルを確かめます。命名パターンに `{ocr}` がある場合、撮影CLIは認識した最初の行を使います。取得できない場合はファイル名に「OCRなし」を使います。
 
+## 設定ファイルと自動起動
+
+設定コマンドは撮影コマンドと別に実行します。標準出力・標準エラーをリダイレクトして実行すると結果をUTF-8で確認できます。終了コードは成功時が0、失敗時が1です。
+
+| 引数 | 動作 |
+| --- | --- |
+| `--settings-export <path>` | 保存済み設定を、新規のUTF-8 JSONに書き出します。 |
+| `--settings-import <path> --check` | JSONの形式・設定・参照を検証し、置換件数と端末固有の指定を表示します。 |
+| `--settings-import <path>` | 設定を置き換えます。常駐時は同じ実行ファイルの常駐アプリが適用します。 |
+| `--startup-status` | 実行した導入先の自動起動状態をJSONで表示します。 |
+| `--startup-enable` | Windowsサインイン時の無表示起動を登録します。 |
+| `--startup-disable` | Windowsサインイン時のSSCaptureの自動起動を解除します。 |
+
+```powershell
+$settingsFile = Join-Path (Get-Location) 'sscapture-settings.json'
+& $sscapture '--settings-export' $settingsFile | Out-Host
+& $sscapture '--settings-import' $settingsFile '--check' | Out-Host
+& $sscapture '--settings-import' $settingsFile | Out-Host
+& $sscapture '--startup-status' | Out-Host
+```
+
+取込元には書き出したJSONと旧版の `data/settings.json` を指定できます。設定を置き換えるときは以前のファイルを `data/settings.json.import.bak` に退避します。撮影や録画などの終了を求められた場合は、操作を終えてから再実行してください。事前確認の結果に未確認の項目があれば、取込後に設定画面の該当箇所で指定し直せます。
+
+自動起動の登録・解除は、正式に導入した実行ファイルに対して行います。KotorinToys経由の起動を設定している場合は、本体で変更します。設定ファイルの読込・書き出しでWindowsの予約は変わりません。
+
 ## 撮影サンプル集
 
 サンプル1～7は、[まず実行する](#まず実行する)と同じ `$sscapture` を使います。座標は撮りたい場所の物理ピクセル値へ置き換えてください。IDが必要な例では「撮影コマンド」で対象のプリセットを個別に選び、生成結果の `--input-preset` または `--output-preset` の直後にあるIDを使います。

@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 
 namespace SSCapture.UI;
 
-internal enum ButtonRole { Primary, Secondary, Neutral, Danger, Pause }
+internal enum ButtonRole { Primary, Secondary, Neutral, Danger, Pause, StartupApply }
 
 internal static class ButtonTheme
 {
@@ -19,6 +19,7 @@ internal static class ButtonTheme
     private static readonly Palette Neutral = new(0xECEFF1, 0x3B4852, 0xBCC7CD, 0xE0E5E9, 0xD2DADF);
     private static readonly Palette Danger = new(0xFCE8E6, 0x9C2F2F, 0xD99E9A, 0xF9D5D1, 0xF3BFBA);
     private static readonly Palette Pause = new(0xFFF0CF, 0x764500, 0xD9AA51, 0xFFE4AB, 0xFFD987);
+    private static readonly Palette StartupApply = new(0x185A31, 0xFFFFFF, 0x104523, 0x124A29, 0x0C3A20);
     private static readonly Palette Disabled = new(0xF1F3F5, 0x626B73, 0xCAD0D5, 0xF1F3F5, 0xF1F3F5);
 
     public static void Apply(ButtonBase button, ButtonRole role)
@@ -57,6 +58,7 @@ internal static class ButtonTheme
             ButtonRole.Secondary => Secondary,
             ButtonRole.Danger => Danger,
             ButtonRole.Pause => Pause,
+            ButtonRole.StartupApply => StartupApply,
             _ => Neutral
         };
         button.FlatStyle = FlatStyle.Flat;
@@ -64,7 +66,7 @@ internal static class ButtonTheme
         button.FlatAppearance.BorderSize = 1;
         if (SystemInformation.HighContrast)
         {
-            bool emphasis = button.Enabled && role == ButtonRole.Primary;
+            bool emphasis = button.Enabled && role is (ButtonRole.Primary or ButtonRole.StartupApply);
             button.BackColor = emphasis ? SystemColors.Highlight : SystemColors.Control;
             button.ForeColor = !button.Enabled ? SystemColors.GrayText : emphasis ? SystemColors.HighlightText : SystemColors.ControlText;
             button.FlatAppearance.BorderColor = button.Enabled ? SystemColors.ControlText : SystemColors.GrayText;

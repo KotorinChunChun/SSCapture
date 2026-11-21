@@ -63,5 +63,17 @@ internal sealed partial class TrayApplicationContext
         }
     }
 
-    private KeyboardHook NewHook(AppSettings value, bool enabled = true) => new(intent => Post(() => OnCaptureKey(intent)), value, enabled, number => Post(() => _ = TakeInstantAsync(number)), id => Post(() => _ = id == AppSettings.LastRecipeKeyId ? TakeSameSettingsAsync() : TakeRegionAsync(id)));
+    private KeyboardHook NewHook(AppSettings value, bool enabled = true)
+    {
+        KeyboardHook? source = null;
+        source = new KeyboardHook(intent => PostCurrent(() => OnCaptureKey(intent)), value, enabled,
+            number => PostCurrent(() => _ = TakeInstantAsync(number)),
+            id => PostCurrent(() => _ = id == AppSettings.LastRecipeKeyId ? TakeSameSettingsAsync() : TakeRegionAsync(id)));
+        return source;
+
+        void PostCurrent(Action action) => Post(() =>
+        {
+            if (source is not null && ReferenceEquals(hook, source) && source.Enabled) action();
+        });
+    }
 }

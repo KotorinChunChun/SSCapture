@@ -3,7 +3,7 @@ namespace SSCapture.Services;
 internal static class AtomicFile
 {
     // The callback borrows the stream; this helper owns its flush and disposal.
-    internal static void Write(string path, Action<Stream> write)
+    internal static void Write(string path, Action<Stream> write, bool overwrite = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(write);
@@ -22,7 +22,7 @@ internal static class AtomicFile
             }
             // Keeping both paths on the same volume preserves the old file if
             // serialization or publication fails, without a delete-before-move gap.
-            if (File.Exists(filePath)) File.Replace(temporary, filePath, null);
+            if (overwrite && File.Exists(filePath)) File.Replace(temporary, filePath, null);
             else File.Move(temporary, filePath);
             ownsTemporary = false;
         }

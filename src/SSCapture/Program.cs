@@ -5,6 +5,20 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (Services.SettingsCommandLine.Handles(args))
+        {
+            try
+            {
+                if (Console.IsOutputRedirected)
+                    Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
+                if (Console.IsErrorRedirected)
+                    Console.SetError(new StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
+                var store = new Services.SettingsStore(Path.Combine(AppContext.BaseDirectory, "data", "settings.json"));
+                Services.SettingsCommandLine.Run(args, store, Console.Out, new Services.StartupRegistration());
+            }
+            catch (Exception ex) { Console.Error.WriteLine(ex.Message); Environment.ExitCode = 1; }
+            return;
+        }
         if (Services.CaptureCommandLine.Handles(args))
         {
             try
@@ -54,7 +68,10 @@ internal static class Program
             return;
         }
 
-        using var mutex = new Mutex(true, @"Local\SSCapture.Singleton", out bool firstInstance);
+        using var mutex = new Mutex(false, Services.SettingsCommandLine.SingletonName);
+        bool firstInstance;
+        try { firstInstance = mutex.WaitOne(0); }
+        catch (AbandonedMutexException) { firstInstance = true; }
         if (!firstInstance)
         {
             if (!Services.LaunchBehavior.ShowSettings(args)) return;
@@ -62,9 +79,13 @@ internal static class Program
             catch (WaitHandleCannotBeOpenedException) { }
             return;
         }
-        using var context = new TrayApplicationContext(Services.LaunchBehavior.ShowSettings(args));
-        Application.ThreadException += (_, e) => context.HandleUnexpectedError(e.Exception);
-        Application.Run(context);
+        try
+        {
+            using var context = new TrayApplicationContext(Services.LaunchBehavior.ShowSettings(args));
+            Application.ThreadException += (_, e) => context.HandleUnexpectedError(e.Exception);
+            Application.Run(context);
+        }
+        finally { mutex.ReleaseMutex(); }
     }
 
     private static void ConfigureUi()

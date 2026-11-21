@@ -7,9 +7,11 @@ internal static class SettingsHelp
 {
     private static readonly IReadOnlyDictionary<string, string> Descriptions = new Dictionary<string, string>
     {
-        ["StartupSettings"] = "Windowsサインイン時の自動起動です。初期設定はOFFです。KotorinToysと同じ所有予約を参照します。変更はこの欄の「適用」で確定します。設定全体の保存やビルドでは予約を変更しません。",
-        ["StartWithWindows"] = "ONにして「適用」を押すと、次回のWindowsサインイン時から設定画面を表示せず起動します。正式インストール版だけが登録できます。本体経由の予約はKotorinToysで変更してください。",
+        ["StartupSettings"] = "Windowsサインイン時の自動起動です。初期設定はOFFです。KotorinToysと同じ所有予約を参照します。変更は「自動起動を適用」で確定します。設定全体の保存やビルドでは予約を変更しません。",
+        ["StartWithWindows"] = "ONにして「自動起動を適用」を押すと、次回のWindowsサインイン時から設定画面を表示せず起動します。正式インストール版だけが登録できます。本体経由の予約はKotorinToysで変更してください。",
         ["ApplyStartup"] = "自動起動のON/OFFだけを適用します。他の設定編集中の値は保存しません。OFFにしても現在のアプリは終了しません。",
+        ["ExportSettings"] = "保存済みの設定とプリセットを新規のJSONファイルに書き出します。外部アプリの実行先や保存先も含まれます。",
+        ["ImportSettings"] = "書き出したJSONや旧版の設定を確認します。「適用」で現在の設定を置き換えます。",
         ["SaveDirectory"] = "ファイル保存とピン留め窓のCtrl+Sで使う保存先です。フォルダの完全パスを指定してください。存在しない場合は保存時に作成します。",
         ["PinnedOutput"] = "静止画を撮影位置へ枠なし・常に最前面の窓として残します。複数枚を並べられます。Ctrlで描画、Shiftでコピー範囲、通常ドラッグで移動します。録画には適用しません。",
         ["CaptureCommandMethod"] = "範囲選択は実行時に囲んで撮影、固定範囲は指定した物理座標で即時撮影します。生成だけでは撮影しません。",
