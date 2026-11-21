@@ -266,7 +266,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                 NotifyDelivered(new CaptureDelivery(intent, succeeded, failed, folderOpenFailed,
                     succeeded.HasFlag(OutputDestination.File) ? saved : null, captureBounds, captureDescription, metadataFailed,
                     saved is null ? notificationPath : null, notificationImage?.Invoke(), captureSettings,
-                    retry is { Failed: true } ? retry.Serial : null, prepareNotificationFile));
+                    retry is { Failed: true } ? retry.Serial : null, saved is null ? prepareNotificationFile : null));
             }
         }
         if (errors.Count > 0) throw new IOException(result, new AggregateException(errors));
