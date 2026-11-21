@@ -34,7 +34,8 @@ internal sealed record CaptureSelection(
     string? WindowTitle = null,
     CaptureComposite? Composite = null,
     CaptureReplaySource? ReplaySource = null,
-    CaptureReplaySource.Control? ControlSource = null);
+    CaptureReplaySource.Control? ControlSource = null,
+    string? RegionName = null);
 
 internal enum CaptureSettingsDestination { General, InputPreset, OutputPreset, Shortcut }
 

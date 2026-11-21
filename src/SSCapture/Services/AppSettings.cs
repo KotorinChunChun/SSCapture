@@ -79,6 +79,20 @@ internal sealed record AppSettings
             VideoEditorPath = video?.Executable ?? (VideoEditors.Length == 0 ? VideoEditorPath : ""), VideoEditorArguments = video?.Arguments ?? VideoEditorArguments };
     }
 
+    internal ExternalApplication? EditorFor(CaptureIntent intent)
+    {
+        bool video = intent == CaptureIntent.Recording;
+        var apps = video ? VideoEditors : ImageEditors;
+        string id = video ? SelectedVideoEditorId : SelectedImageEditorId;
+        if (apps.Length != 0) return apps.FirstOrDefault(app => app.Id == id);
+        string path = video ? VideoEditorPath : ImageEditorPath;
+        return string.IsNullOrWhiteSpace(path) ? null : new ExternalApplication
+        {
+            Name = Path.GetFileNameWithoutExtension(path), Executable = path,
+            Arguments = video ? VideoEditorArguments : ImageEditorArguments
+        };
+    }
+
     internal AppSettings MigrateEditors() => this with { SchemaVersion = 3,
         ImageEditors = Legacy(ImageEditorPath, ImageEditorArguments, "legacy-image"),
         VideoEditors = Legacy(VideoEditorPath, VideoEditorArguments, "legacy-video"),
@@ -100,6 +114,8 @@ internal sealed record AppSettings
             throw new ArgumentException("ウィンドウスナップ距離とグリッド間隔は1～32768pxで指定してください。");
         ExternalApplication.ValidateList(ImageEditors, SelectedImageEditorId);
         ExternalApplication.ValidateList(VideoEditors, SelectedVideoEditorId);
+        if (VideoEditors.Any(app => app.Launch != ExternalApplicationLaunch.Executable))
+            throw new ArgumentException("PNG関連付けの外部アプリは静止画専用です。");
         if (!Enum.IsDefined(NotificationClickAction)) throw new ArgumentException("通知クリックの動作が正しくありません。");
         ExternalApplication.ValidateReference(ImageEditors.Concat(VideoEditors).ToArray(), NotificationApplicationId);
         WindowCrop.Validate();

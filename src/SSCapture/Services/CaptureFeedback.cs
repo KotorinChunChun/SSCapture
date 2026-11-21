@@ -4,9 +4,10 @@ namespace SSCapture.Services;
 
 internal enum NotificationCorner { BottomRight, BottomLeft, TopLeft, TopCenter, TopRight, MiddleLeft, Center, MiddleRight, BottomCenter }
 internal enum NotificationClickAction { None, OpenFolder, ExternalApplication }
+internal sealed record NotificationEditorChoice(string Name, Action Open);
 internal sealed record NotificationActions(Action? OpenFolder, Action? Edit, string RepeatHint,
     Bitmap? Thumbnail = null, Func<Control, CancellationToken, Task>? Drag = null,
-    Action? Retry = null, string? Heading = null)
+    Action? Retry = null, string? Heading = null, IReadOnlyList<NotificationEditorChoice>? Editors = null)
 {
     internal int ButtonRows => (OpenFolder, Edit, Retry) switch
     {
@@ -21,6 +22,7 @@ internal interface ICaptureToast : IDisposable
 {
     Rectangle DisplayBounds => Rectangle.Empty;
     int DisplayDpi => 96;
+    bool IsEditorMenuOpen => false;
     void SetActions(NotificationActions actions) { }
     bool TryShow(string message, bool hasFailure, NotificationCorner corner, out string? warning,
         Action? activate = null, NotificationDisplay display = NotificationDisplay.Captured, Rectangle? captureBounds = null);
@@ -48,7 +50,7 @@ internal sealed class CaptureFeedback : IDisposable
     private readonly IFeedbackTimer timer;
     private readonly Action<string>? warning;
     private readonly Action<string> openSavedFile;
-    private readonly Action<System.Diagnostics.ProcessStartInfo> launch;
+    private readonly ExternalEditor editor;
     private int notificationSerial;
     private ICaptureToast? toast;
     private volatile bool disposed;
@@ -60,26 +62,27 @@ internal sealed class CaptureFeedback : IDisposable
     private Bitmap? thumbnail;
     private CaptureDelivery? previousScreenshot;
     private int draggingSerial;
-    private readonly Func<Control, string, bool> dragFile;
+    private readonly Func<Control, string, bool>? dragFile;
     private readonly Func<bool> dragButtonDown;
-    private readonly Action<string> retainDragFile;
+    private readonly Action<string>? retainDragFile;
 
     internal CaptureFeedback(Action<string>? warning = null, Func<ICaptureToast>? createToast = null,
         ICompletionSound? sound = null, IFeedbackTimer? timer = null, Action<string>? openSavedFile = null,
         Func<long>? now = null, Func<Point>? pointer = null, Action<System.Diagnostics.ProcessStartInfo>? launch = null,
-        Func<Control, string, bool>? dragFile = null, Func<bool>? dragButtonDown = null, Action<string>? retainDragFile = null)
+        Func<Control, string, bool>? dragFile = null, Func<bool>? dragButtonDown = null, Action<string>? retainDragFile = null,
+        ExternalEditor? externalEditor = null)
     {
         this.warning = warning;
         this.createToast = createToast ?? (() => new CaptureToastForm());
         this.sound = sound ?? new CompletionSound(warning: Warn);
         this.timer = timer ?? new FeedbackTimer();
         this.openSavedFile = openSavedFile ?? (path => ExplorerSelection.Open(path));
-        this.launch = launch ?? (info => { using var process = System.Diagnostics.Process.Start(info); });
+        editor = externalEditor ?? new(launch);
         this.now = now ?? (() => Environment.TickCount64);
         this.pointer = pointer ?? Capture.CaptureNative.CursorPosition;
-        this.dragFile = dragFile ?? ((source, path) => NotificationFileDrag.Run(source, path));
+        this.dragFile = dragFile;
         this.dragButtonDown = dragButtonDown ?? (() => (Control.MouseButtons & MouseButtons.Left) != 0);
-        this.retainDragFile = retainDragFile ?? NotificationImage.RetainAfterLaunch;
+        this.retainDragFile = retainDragFile;
         this.timer.Elapsed += PollLifetime;
     }
 
@@ -138,6 +141,9 @@ internal sealed class CaptureFeedback : IDisposable
             }
             string? heading = reference ? "前回の撮影結果" : !result.HasFailure ? null
                 : result.HasSuccess ? "一部の出力に失敗" : "出力に失敗";
+            NotificationEditorChoice[]? editorChoices = thumbnail is null ? null :
+                NotificationPresentation.ScreenshotEditors(settings, editor)
+                    .Select(candidate => new NotificationEditorChoice(candidate.Name, () => OpenApplication(serial, result, candidate))).ToArray();
             toast.SetActions(new(folder, edit, presentation.RepeatHint, thumbnail,
                 canDrag && thumbnail is not null ? (source, gesture) => DragAsync(serial, result, settings, source, gesture) : null,
                 retryOutput is not null && result.HasFailure ? () =>
@@ -145,7 +151,7 @@ internal sealed class CaptureFeedback : IDisposable
                     if (disposed || serial != notificationSerial) return;
                     HideForCapture();
                     retryOutput();
-                } : null, heading));
+                } : null, heading, editorChoices));
             if (!toast.TryShow(presentation.Message, presentation.HasFailure, settings.NotificationCorner, out string? error,
                 null, settings.NotificationDisplay, result.CaptureBounds))
             {
@@ -179,6 +185,7 @@ internal sealed class CaptureFeedback : IDisposable
     {
         if (disposed || lifetime is null || toast is null) return;
         if (draggingSerial == notificationSerial) return;
+        if (toast.IsEditorMenuOpen) { timer.Restart(50); return; }
         try
         {
             if (toast.DisplayBounds.IsEmpty || lifetime.Expired(now(), pointer(), toast.DisplayBounds, toast.DisplayDpi)) HideForCapture();
@@ -200,20 +207,22 @@ internal sealed class CaptureFeedback : IDisposable
         if (disposed || serial != notificationSerial || draggingSerial != 0) return;
         draggingSerial = serial;
         timer.Stop();
-        string? temporary = null;
+        TemporaryHandoff? temporary = null;
         try
         {
             string path;
-            if (result.SavedPath is not null) path = result.SavedPath;
-            else if (pendingImage is not null) path = temporary = await pendingImage.PrepareAsync();
-            else path = result.NotificationPath ?? throw new IOException("ドラッグする画像がありません。");
+            if (result.SavedPath is { } saved && File.Exists(saved)) path = saved;
+            else if (pendingImage is not null) path = (temporary = await pendingImage.PrepareForHandoffAsync()).Path;
+            else path = result.SavedPath ?? result.NotificationPath ?? throw new IOException("ドラッグする画像がありません。");
             if (disposed || serial != notificationSerial || source.IsDisposed || gesture.IsCancellationRequested || !dragButtonDown()) return;
-            if (dragFile(source, path) && !disposed && serial == notificationSerial) HideForCapture();
+            Action? completeMove = temporary is null ? null : temporary.CompleteMove;
+            bool dropped = dragFile?.Invoke(source, path) ?? NotificationFileDrag.Run(source, path, completeMove: completeMove);
+            if (dropped && !disposed && serial == notificationSerial) HideForCapture();
         }
         catch (Exception ex) { Warn("通知から画像を渡せません: " + ex.Message); }
         finally
         {
-            if (temporary is not null) retainDragFile(temporary);
+            if (temporary is not null) { temporary.Dispose(); retainDragFile?.Invoke(temporary.Path); }
             draggingSerial = 0;
             if (!disposed && serial == notificationSerial && toast is not null)
             {
@@ -229,19 +238,23 @@ internal sealed class CaptureFeedback : IDisposable
         if (disposed || serial != notificationSerial) return;
         var image = pendingImage; pendingImage = null;
         HideForCapture();
+        TemporaryHandoff? temporary = null;
         try
         {
-            _ = EditorExecutable.Resolve(app.Executable);
-            EditorArguments.Validate(app.Arguments);
-            string path = result.SavedPath ?? result.NotificationPath ?? (image is not null
-                ? await image.PrepareAsync() : throw new IOException("通知から開く画像・動画を準備できませんでした。"));
-            if (!File.Exists(path)) throw new FileNotFoundException("通知のファイルが見つかりません。", path);
-            if (disposed) return;
-            launch(OutputRouter.EditorStartInfo(app.Executable, path, app.Arguments));
-            if (result.SavedPath is null && result.NotificationPath is null && image is not null) retainDragFile(path);
+            var open = editor.Resolve(app);
+            string path;
+            if (result.SavedPath is { } saved && File.Exists(saved)) path = saved;
+            else if (image is not null) path = (temporary = await image.PrepareForHandoffAsync()).Path;
+            else if (result.PrepareNotificationFile is { } prepare) path = (temporary = await prepare()).Path;
+            else path = result.SavedPath ?? result.NotificationPath ?? throw new IOException("通知から開く画像・動画を準備できませんでした。");
+            if (!disposed) open(path);
         }
         catch (Exception ex) { Warn("通知から外部アプリを開けません: " + ex.Message); }
-        finally { image?.Dispose(); }
+        finally
+        {
+            image?.Dispose();
+            if (temporary is not null) { temporary.Dispose(); retainDragFile?.Invoke(temporary.Path); }
+        }
     }
 
     private void Warn(string text)

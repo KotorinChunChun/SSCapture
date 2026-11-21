@@ -1312,6 +1312,7 @@ internal sealed partial class SessionController
             else if (target is not null)
                 selection = selection with { ReplaySource = new CaptureReplaySource.Windows(roots ?? [target], useWindowSource, groupWindows, singleWindow) };
         }
+        selection = selection with { RegionName = selectedInput.Name };
         completed = true;
         using WindowCapturePreview? confirmedPreview = useWindowSource && roots is null && target is not null && windowPreview?.Target == target
             ? windowPreview : null;

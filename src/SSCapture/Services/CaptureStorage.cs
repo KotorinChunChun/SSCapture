@@ -6,7 +6,8 @@ namespace SSCapture.Services;
 internal static class CaptureStorage
 {
     public static string SavePng(Bitmap image, string folder, DateTimeOffset capturedAt, string? fileName = null, FileNamePlan? namePlan = null,
-        CaptureMetadata? metadata = null, CaptureMetadataMode metadataMode = CaptureMetadataMode.None, Action<string>? prepared = null)
+        CaptureMetadata? metadata = null, CaptureMetadataMode metadataMode = CaptureMetadataMode.None, Action<string>? prepared = null,
+        Action<string, string>? beforePublish = null)
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentException.ThrowIfNullOrWhiteSpace(folder);
@@ -41,13 +42,14 @@ internal static class CaptureStorage
                 try
                 {
                     if (File.Exists(destination) || Directory.Exists(destination) || metadataMode.HasFlag(CaptureMetadataMode.Json) && Path.Exists(Path.ChangeExtension(destination, ".json"))) continue;
+                    beforePublish?.Invoke(temporary, destination);
                     // Move with overwrite=false publishes only a complete PNG. A racing
                     // saver may win the filename, but can never overwrite another image.
                     File.Move(temporary, destination, false);
                     ownsTemporary = false;
                     return destination;
                 }
-                catch (IOException) when (File.Exists(destination)) { }
+                catch (IOException) when (Path.Exists(destination)) { }
             }
         }
         finally

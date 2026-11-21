@@ -369,7 +369,7 @@ internal sealed class SettingsForm : Form
         void UpdateFileFields()
         {
             metadataMode.Enabled = openFolderAfterSave.Enabled = fileOutput.Checked;
-            folderButton.Enabled = directory.Enabled = fileNamePattern.Enabled = ocrSeparator.Enabled = oneOcrDirectory.Enabled = fileOutput.Checked || pinnedOutput.Checked;
+            folderButton.Enabled = directory.Enabled = fileOutput.Checked || pinnedOutput.Checked;
         }
         fileOutput.CheckedChanged += (_, _) => UpdateFileFields(); pinnedOutput.CheckedChanged += (_, _) => UpdateFileFields(); UpdateFileFields();
         SettingsHelp.Apply(this, settingTips);

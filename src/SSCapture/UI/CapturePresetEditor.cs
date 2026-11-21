@@ -139,7 +139,7 @@ internal sealed class CapturePresetEditor : UserControl
     private void UpdateFileFields()
     {
         metadataMode.Enabled = openFolder.Enabled = file.Checked;
-        directory.Enabled = pattern.Enabled = separator.Enabled = file.Checked || pinned.Checked;
+        directory.Enabled = file.Checked || pinned.Checked;
     }
     private void Fill(CapturePreset p)
     {
@@ -175,7 +175,7 @@ internal sealed class CapturePresetEditor : UserControl
         storing = true;
         try
         {
-            var p = ReadCurrent(); p.Validate();
+            var p = ReadCurrent(); p.Validate(); FileNamePattern.Validate(p.FileNamePattern, p.OcrSeparator);
             if (Presets.Any(x => x.Id != p.Id && string.Equals(x.Name, p.Name, StringComparison.OrdinalIgnoreCase))) throw new ArgumentException("名前が重複しています。");
             ExternalApplication.ValidateReference(CurrentSettings().ImageEditors, p.ImageEditorId); ExternalApplication.ValidateReference(CurrentSettings().VideoEditors, p.VideoEditorId);
             var all = Presets.ToList(); int index = all.FindIndex(x => x.Id == p.Id);

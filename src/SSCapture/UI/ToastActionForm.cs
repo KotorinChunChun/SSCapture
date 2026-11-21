@@ -13,6 +13,8 @@ internal sealed class ToastActionForm : Form
     private readonly ActionButton folder, edit, retry;
     private readonly PictureBox preview;
     private readonly ToolTip tips = new() { ShowAlways = true };
+    private readonly ContextMenuStrip editorMenu = new() { Name = "NotificationEditorMenu" };
+    internal bool IsEditorMenuOpen => editorMenu.Visible;
     private nint protectedHandle;
     private NotificationActions? actions;
     private bool ready;
@@ -34,6 +36,12 @@ internal sealed class ToastActionForm : Form
             BackColor = Color.FromArgb(235, 241, 244), TabStop = false, AccessibleName = "撮影画像をドラッグ" };
         tips.SetToolTip(preview, "フォルダへドラッグして移動。Ctrlを押すとコピー。対応アプリへドロップして開きます。");
         Controls.AddRange([folder, edit, retry, preview]);
+        editorMenu.Opening += (_, e) => e.Cancel = !protect(editorMenu.Handle).Success;
+        preview.MouseUp += (_, e) =>
+        {
+            if (!ready || e.Button != MouseButtons.Right || editorMenu.Items.Count == 0) return;
+            editorMenu.Show(preview, e.Location);
+        };
         preview.MouseEnter += (_, _) => { previewHover = true; preview.Invalidate(); };
         preview.MouseLeave += (_, _) => { previewHover = false; preview.Invalidate(); };
         preview.Paint += (_, e) => PaintPreviewGrip(e.Graphics);
@@ -106,8 +114,11 @@ internal sealed class ToastActionForm : Form
         int top = Math.Max(0, ClientSize.Height - height - Math.Min(inset, ClientSize.Height / 4));
         preview.Bounds = ToastCardStyle.PreviewBounds(dpi);
         preview.Image = value.Thumbnail; preview.Visible = value.Thumbnail is not null;
+        SetEditorMenu(value.Editors ?? []);
         tips.SetToolTip(preview, value.Edit is null ? "フォルダや対応アプリへドラッグできます。Ctrlを押すとコピー。"
             : "ダブルクリックで編集アプリを開きます。フォルダや対応アプリへドラッグできます。Ctrlを押すとコピー。");
+        if (editorMenu.Items.Count != 0)
+            tips.SetToolTip(preview, tips.GetToolTip(preview) + " 右クリックで編集アプリを選べます。");
         preview.Cursor = value.Drag is null ? Cursors.Default : Cursors.Hand;
         if (actionFont is null || actionFont.Size != 14 * scale)
         {
@@ -155,14 +166,31 @@ internal sealed class ToastActionForm : Form
             }
         }
     }
+    private void SetEditorMenu(IReadOnlyList<NotificationEditorChoice> choices)
+    {
+        editorMenu.Close();
+        foreach (ToolStripItem item in editorMenu.Items.Cast<ToolStripItem>().ToArray()) item.Dispose();
+        if (choices.Count == 0) return;
+        var editWith = new ToolStripMenuItem("アプリを選んで編集") { Name = "NotificationEditWith" };
+        if (editWith.DropDown is ToolStripDropDown submenu)
+            submenu.Opening += (_, e) => e.Cancel = !protect(submenu.Handle).Success;
+        foreach (var choice in choices)
+        {
+            var item = new ToolStripMenuItem(choice.Name);
+            item.Click += (_, _) => InvokeAction(choice.Open);
+            editWith.DropDownItems.Add(item);
+        }
+        editorMenu.Items.Add(editWith);
+    }
+
     internal void ShowProtected() { if (ready && protectedHandle == Handle && nativeShow) CaptureToastForm.ShowNative(this); }
     private void InvokeAction(Action? action)
     {
         if (action is null || !ready) return;
-        ready = false; actions = null; Hide(); action();
+        ready = false; actions = null; editorMenu.Close(); Hide(); action();
     }
     public new void Hide() { base.Hide(); }
-    internal void Clear() { ready = false; actions = null; CancelGesture(); preview.Image = null; base.Hide(); }
+    internal void Clear() { ready = false; actions = null; SetEditorMenu([]); CancelGesture(); preview.Image = null; base.Hide(); }
     protected override void OnHandleCreated(EventArgs e)
     { base.OnHandleCreated(e); protectedHandle = 0; ready = false; SetLayeredWindowAttributes(Handle, 0, 0, 2); }
     protected override void OnHandleDestroyed(EventArgs e)
@@ -182,7 +210,7 @@ internal sealed class ToastActionForm : Form
         base.WndProc(ref m);
     }
     protected override void Dispose(bool disposing)
-    { if (disposing) { actions = null; CancelGesture(); preview.Image = null; tips.Dispose(); actionFont?.Dispose(); actionFont = null; } base.Dispose(disposing); }
+    { if (disposing) { actions = null; CancelGesture(); preview.Image = null; editorMenu.Dispose(); tips.Dispose(); actionFont?.Dispose(); actionFont = null; } base.Dispose(disposing); }
 
     private sealed class ActionButton : Button
     {

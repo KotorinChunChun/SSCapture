@@ -8,14 +8,14 @@ internal static partial class Program
 {
     private static void NotificationUpgradeTests()
     {
-        Run("再起動の整理は通知用の正規名だけ削除し保存画像や他の作業を保持", () => WithServiceDirectory(directory =>
+        Run("再起動の整理は所有記録のないPNGと他の作業を保護する", () => WithServiceDirectory(directory =>
         {
-            string folder = Path.Combine(directory, "notification-images"); Directory.CreateDirectory(folder);
-            string owned = Path.Combine(folder, "notify-" + Guid.NewGuid().ToString("N") + ".png");
+            string folder = TemporaryHandoff.DirectoryFor(directory); Directory.CreateDirectory(folder);
+            string untracked = Path.Combine(folder, "notify-" + Guid.NewGuid().ToString("N") + ".png");
             string unrelated = Path.Combine(folder, "saved.png"); string otherWork = Path.Combine(directory, "recording.mp4");
-            File.WriteAllText(owned, "fixture"); File.WriteAllText(unrelated, "fixture"); File.WriteAllText(otherWork, "fixture");
+            File.WriteAllText(untracked, "fixture"); File.WriteAllText(unrelated, "fixture"); File.WriteAllText(otherWork, "fixture");
             NotificationImage.CleanupPreviousSession(directory);
-            Check(!File.Exists(owned) && File.Exists(unrelated) && File.Exists(otherWork), "整理対象が通知用ファイルに限定されない");
+            Check(File.Exists(untracked) && File.Exists(unrelated) && File.Exists(otherWork), "所有記録のないファイルを消した");
         }));
         Run("通知用画像は履歴OFF・Clipboardのみでも余白と減色済み", () => WithServiceDirectory(directory => RunOutputTask(async () =>
         {

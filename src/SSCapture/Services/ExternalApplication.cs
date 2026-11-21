@@ -1,16 +1,26 @@
 namespace SSCapture.Services;
 
+internal enum ExternalApplicationLaunch { Executable, SnippingToolPng, ScreenpressoPng }
+
 internal sealed record ExternalApplication
 {
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
     public string Name { get; init; } = "";
     public string Executable { get; init; } = "";
+    public ExternalApplicationLaunch Launch { get; init; }
     public string Arguments { get; init; } = EditorArguments.Default;
     public override string ToString() => Name;
     internal void Validate()
     {
         if (string.IsNullOrWhiteSpace(Id) || string.IsNullOrWhiteSpace(Name) || Name.Length > 80)
             throw new ArgumentException("外部アプリ名は1～80文字で指定してください。");
+        if (!Enum.IsDefined(Launch)) throw new ArgumentException("外部アプリの起動方式が正しくありません。");
+        if (Launch != ExternalApplicationLaunch.Executable)
+        {
+            if (Executable != "" || Arguments != EditorArguments.Default)
+                throw new ArgumentException("PNGの関連付けを使うアプリに実行ファイル・引数は指定できません。");
+            return;
+        }
         if (!Path.IsPathFullyQualified(Executable) || !Executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("外部アプリにはexeファイルの絶対パスを指定してください。");
         EditorArguments.Validate(Arguments);

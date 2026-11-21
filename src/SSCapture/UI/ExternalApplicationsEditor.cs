@@ -18,6 +18,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
     internal string SelectedId => (selected.SelectedItem as ExternalApplication)?.Id ?? "";
     internal ExternalApplication? SelectedApplication => selected.SelectedItem as ExternalApplication;
     private bool refreshing;
+    private ExternalApplicationLaunch launch;
     internal event Action<string>? SelectedChanged;
     internal void SelectApplication(string id)
     {
@@ -60,12 +61,24 @@ internal sealed class ExternalApplicationsEditor : UserControl
             item.Click += (_, _) =>
             {
                 list.ClearSelected();
-                Executable.Text = preset.Executable; Arguments.Text = preset.Arguments;
-                appName.Text = string.IsNullOrWhiteSpace(preset.Executable) ? "" : Path.GetFileNameWithoutExtension(preset.Executable);
+                SetLaunch(preset.Launch, preset.Executable, preset.Arguments);
+                appName.Text = preset.Launch != ExternalApplicationLaunch.Executable ? preset.Name
+                    : string.IsNullOrWhiteSpace(preset.Executable) ? "" : Path.GetFileNameWithoutExtension(preset.Executable);
                 status.Text = "新規入力です。「保存」で一覧に登録し、設定の「保存」で確定します。";
             };
             newMenu.Items.Add(item);
         }
+        newMenu.Opening += (_, _) =>
+        {
+            for (int i = 0; i < examples.Count; i++)
+            {
+                var preset = examples[i];
+                if (preset.Launch == ExternalApplicationLaunch.Executable) continue;
+                bool available = PngEditorAssociation.Find(preset.Launch) is not null;
+                newMenu.Items[i].Enabled = available;
+                newMenu.Items[i].ToolTipText = available ? "" : "このPCにPNGを開く関連付けがありません。";
+            }
+        };
         newButton.Click += (_, _) => newMenu.Show(newButton, 0, newButton.Height);
         buttons.Controls.Add(newButton);
         Button("複製", "Duplicate", () => { list.ClearSelected(); appName.Text += " コピー"; });
@@ -74,7 +87,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
         status = new Label { Name = prefix + "EditorStatus", Dock = DockStyle.Fill, Text = "「保存」で一覧登録、設定の「保存」で確定。引数欄のツールチップで置換語を確認できます。" };
         argumentTips.SetToolTip(Arguments, EditorArguments.Help);
         root.Controls.Add(status, 0, 7); root.SetColumnSpan(status, 2);
-        list.SelectedIndexChanged += (_, _) => { if (list.SelectedItem is ExternalApplication app) { appName.Text = app.Name; Executable.Text = app.Executable; Arguments.Text = app.Arguments; } };
+        list.SelectedIndexChanged += (_, _) => { if (list.SelectedItem is ExternalApplication app) { appName.Text = app.Name; SetLaunch(app.Launch, app.Executable, app.Arguments); } };
         Refresh(selectedId);
         if (applications.Count > 0) list.SelectedIndex = Math.Max(0, applications.FindIndex(a => a.Id == selectedId));
 
@@ -107,11 +120,18 @@ internal sealed class ExternalApplicationsEditor : UserControl
         finally { refreshing = false; }
         SelectedChanged?.Invoke(SelectedId);
     }
+    private void SetLaunch(ExternalApplicationLaunch kind, string path, string arguments)
+    {
+        launch = kind;
+        Executable.Text = path; Arguments.Text = arguments;
+        Executable.ReadOnly = Arguments.ReadOnly = kind != ExternalApplicationLaunch.Executable;
+        Executable.PlaceholderText = Executable.ReadOnly ? "WindowsのPNG関連付け" : "";
+    }
     private void Store()
     {
         var prior = list.SelectedItem as ExternalApplication;
         var app = new ExternalApplication { Id = prior?.Id ?? Guid.NewGuid().ToString("N"), Name = appName.Text.Trim(),
-            Executable = Environment.ExpandEnvironmentVariables(Executable.Text.Trim().Trim('"')), Arguments = Arguments.Text };
+            Launch = launch, Executable = Environment.ExpandEnvironmentVariables(Executable.Text.Trim().Trim('"')), Arguments = Arguments.Text };
         var next = applications.Where(a => a.Id != app.Id).Append(app).ToArray();
         ExternalApplication.ValidateList(next, "");
         string id = SelectedId;

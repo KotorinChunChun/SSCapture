@@ -12,12 +12,13 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
     Func<IReadOnlyList<DisplayTarget>>? readDisplays = null, Action? retryChanged = null,
     long retryByteLimit = 256L * 1024 * 1024, Func<string, Task>? beforeMetadataSave = null,
     Action<long, LastCaptureRecipe?>? captureSucceeded = null, Func<IReadOnlyList<DisplayLayout>>? readCaptureLayout = null,
-    Action<Bitmap, Rectangle, AppSettings>? pinImage = null) : IDisposable
+    Action<Bitmap, Rectangle, AppSettings>? pinImage = null, ExternalEditor? externalEditor = null,
+    Func<Bitmap, string, CancellationToken, Task<OcrResult>>? recognizeForHandoff = null) : IDisposable
 {
     private long captureSequence;
     private readonly Func<Bitmap, Task> copyImage = copyImage ?? ClipboardWriter.CopyAsync;
     private readonly Func<string, Task> copyFile = copyFile ?? ClipboardWriter.CopyFileAsync;
-    private readonly Action<ProcessStartInfo> launchEditor = launch ?? LaunchProcess;
+    private readonly ExternalEditor editor = externalEditor ?? new(launch);
     private readonly Action<string> selectSavedFile = CreateFileSelector(launch);
     private readonly Func<IReadOnlyList<DisplayTarget>> readDisplays = readDisplays ?? InstantCapture.ReadDisplays;
 
@@ -60,24 +61,25 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
             try { owned = await Task.Run(() => ScreenshotColors.Apply(padded, settings.ScreenshotColorDepth)); }
             finally { padded.Dispose(); }
         }
+        DateTimeOffset captureTime = capturedAt ?? namePlan?.CapturedAt ?? DateTimeOffset.Now;
+        FileNamePlan defaultPlan = namePlan ?? new(settings.FileNamePattern, captureTime, CaptureIntent.Screenshot);
+        var naming = new HandoffFileName(defaultPlan, namePlan is null ? fileName : null, settings.OneOcrDirectory, recognize: recognizeForHandoff);
         var retry = NewRetry(owned);
-        if (requestFileNameForImage is not null && (cropped is not null ||
-            useSourceForNaming && (settings.ScreenshotPaddingPixels != 0 || settings.ScreenshotColorDepth != ScreenshotColorDepth.Original)))
+        if (cropped is not null && (requestFileNameForImage is not null || naming.NeedsOcr) ||
+            useSourceForNaming && requestFileNameForImage is not null &&
+            (settings.ScreenshotPaddingPixels != 0 || settings.ScreenshotColorDepth != ScreenshotColorDepth.Original))
             retry.NamingImage = (Bitmap)(cropped ?? image).Clone();
         metadata = metadata?.WithPadding(settings.ScreenshotPaddingPixels);
         CaptureMetadataMode metadataMode = destination.HasFlag(OutputDestination.File) ? settings.MetadataMode : CaptureMetadataMode.None;
         MetadataSidecar? sidecar = metadata is not null && metadataMode.HasFlag(CaptureMetadataMode.Json) ? new(metadata) : null;
-        DateTimeOffset captureTime = capturedAt ?? namePlan?.CapturedAt ?? DateTimeOffset.Now;
         bool fileCancelled = false;
-        if (destination.HasFlag(OutputDestination.File) && fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, captureTime, CaptureIntent.Screenshot);
         Func<Task<bool?>>? prepareFile = requestFileName is null && requestFileNameForImage is null ? null : async () =>
         {
             var requested = requestFileNameForImage is not null ? await requestFileNameForImage(retry.NamingImage ?? owned) : await requestFileName!();
-            retry.ReleaseNamingImage();
             if (requested is null) { fileCancelled = true; return null; }
-            fileName = requested.FileName;
-            namePlan = requested.NamePlan;
-            if (fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, captureTime, CaptureIntent.Screenshot);
+            naming = new(requested.NamePlan ?? defaultPlan, requested.NamePlan is null ? requested.FileName : null, settings.OneOcrDirectory,
+                confirmed: requested.NamePlan is not null, recognize: recognizeForHandoff);
+            if (!naming.NeedsOcr) retry.ReleaseNamingImage();
             return requested.OpenFolderAfterSave;
         };
         retry.Pending = destination;
@@ -85,10 +87,15 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         retry.Execute = () => DeliverAsync(CaptureIntent.Screenshot, retry.Pending, () => copyImage(owned),
             async () =>
             {
-                return await SaveAsync(owned, settings.SaveDirectory, fileName, namePlan, metadata, metadataMode,
+                FileNamePlan? plan = await naming.ResolveAsync(retry.NamingImage ?? owned);
+                return await SaveAsync(owned, settings.SaveDirectory, naming.FileName, plan, metadata, metadataMode,
                     sidecar is null ? null : sidecar.RememberImage);
             },
-            () => SaveAsync(owned, NewWorkDirectory()), settings.ImageEditorPath, settings.ImageEditorArguments, settings.OpenFolderAfterSave,
+            async () =>
+            {
+                using var pending = new NotificationImage(owned, TemporaryHandoff.DirectoryFor(workRoot), naming, retry.NamingImage);
+                return await pending.PrepareForHandoffAsync();
+            }, settings.EditorFor(CaptureIntent.Screenshot), settings.OpenFolderAfterSave,
             (saved, succeeded, attempted) =>
             {
                 if (!retry.IsRetry && settings.KeepHistory && attempted)
@@ -106,7 +113,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                 ? DescribeCapture(captureBounds, (replaySource as CaptureReplaySource.Monitors)?.Bounds) : $"ウィンドウ「{windowTitle}」" + (crop.IsEmpty ? "" : $"【{outputBounds.X},{outputBounds.Y} / {outputBounds.Width}×{outputBounds.Height}px】"), retry,
             sidecar is null ? null : async path => { if (beforeMetadataSave is not null) await beforeMetadataSave(path); await Task.Run(() => sidecar.Write(path)); },
             settings.ShowCaptureNotification
-                ? () => new NotificationImage(owned, Path.Combine(workRoot, "notification-images")) : null,
+                ? () => new NotificationImage(owned, TemporaryHandoff.DirectoryFor(workRoot), naming, naming.NeedsOcr ? retry.NamingImage : null) : null,
             captureSettings: settings with { DefaultDestination = destination },
             pin: () =>
             {
@@ -130,21 +137,33 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
             destination &= ~OutputDestination.Pinned;
             if (destination == OutputDestination.None) throw new ArgumentException("ピン留め表示は静止画専用です。録画の出力先を選択してください。");
         }
-        if (destination.HasFlag(OutputDestination.File) && fileName is null && namePlan is null) namePlan = new(settings.FileNamePattern, DateTimeOffset.Now, CaptureIntent.Recording);
-        return await DeliverAsync(CaptureIntent.Recording, destination, () => copyFile(source),
-            () => Task.Run(() => CopyVideo(source, settings.SaveDirectory, fileName: fileName, namePlan: namePlan)),
-            () => Task.FromResult(source), settings.VideoEditorPath, settings.VideoEditorArguments, settings.OpenFolderAfterSave,
-            captureBounds: captureBounds, captureDescription: DescribeCapture(captureBounds),
-            notificationPath: settings.ShowCaptureNotification ? source : null,
-            captureSettings: settings with { DefaultDestination = destination });
+        namePlan ??= fileName is null ? new(settings.FileNamePattern, DateTimeOffset.Now, CaptureIntent.Recording,
+            FileNamePattern.UsesOcr(settings.FileNamePattern) ? "OCRなし" : "") : null;
+        string cache = TemporaryHandoff.DirectoryFor(workRoot);
+        Task<TemporaryHandoff> PrepareVideo() => Task.Run(() => TemporaryHandoff.Publish(cache,
+            publish => CopyVideo(source, cache, fileName: fileName, namePlan: HandoffFileName.CachePlan(namePlan), beforePublish: publish)));
+        try
+        {
+            return await DeliverAsync(CaptureIntent.Recording, destination, () => copyFile(source),
+                () => Task.Run(() => CopyVideo(source, settings.SaveDirectory, fileName: fileName, namePlan: namePlan)),
+                PrepareVideo, settings.EditorFor(CaptureIntent.Recording), settings.OpenFolderAfterSave,
+                captureBounds: captureBounds, captureDescription: DescribeCapture(captureBounds),
+                notificationPath: settings.ShowCaptureNotification ? source : null,
+                prepareNotificationFile: settings.ShowCaptureNotification ? PrepareVideo : null,
+                captureSettings: settings with { DefaultDestination = destination });
+        }
+        catch (IOException ex) when (destination.HasFlag(OutputDestination.ExternalApp))
+        {
+            throw new IOException(ex.Message + Environment.NewLine + "録画原本は保持されています: " + source, ex);
+        }
     }
 
     private async Task<string> DeliverAsync(CaptureIntent intent, OutputDestination destination, Func<Task> copy,
-        Func<Task<string>> save, Func<Task<string>> prepareExternal, string executable, string arguments, bool openFolderAfterSave,
+        Func<Task<string>> save, Func<Task<TemporaryHandoff>> prepareExternal, ExternalApplication? application, bool openFolderAfterSave,
         Action<string?, bool, bool>? completed = null, Rectangle? captureBounds = null, Func<Task<bool?>>? prepareFile = null,
         string? captureDescription = null, RetryJob? retry = null, Func<string, Task>? saveMetadata = null,
         Func<NotificationImage>? notificationImage = null, string? notificationPath = null, AppSettings? captureSettings = null,
-        Action? pin = null)
+        Action? pin = null, Func<Task<TemporaryHandoff>>? prepareNotificationFile = null)
     {
         var messages = new List<string>();
         var errors = new List<Exception>();
@@ -206,14 +225,25 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         {
             try
             {
-                string resolvedExecutable = EditorExecutable.Resolve(executable);
-                EditorArguments.Validate(arguments);
+                var open = editor.Resolve(application);
                 if (destination.HasFlag(OutputDestination.File) && saved is null)
                     throw new IOException("保存に失敗したため、編集アプリへ保存ファイルを渡せません。");
-                string path = saved ?? retry?.ExternalPath ?? await prepareExternal();
-                if (retry is not null) retry.ExternalPath = path;
-                if (!File.Exists(path)) throw new FileNotFoundException("送信する保存済みファイルがありません。", path);
-                LaunchEditor(resolvedExecutable, path, arguments);
+                TemporaryHandoff? handoff = null;
+                try
+                {
+                    if (saved is null)
+                    {
+                        handoff = retry?.ExternalFile;
+                        if (handoff?.TryRenew() != true)
+                        {
+                            handoff?.Dispose();
+                            handoff = await prepareExternal();
+                            if (retry is not null) retry.ExternalFile = handoff;
+                        }
+                    }
+                    open(saved ?? handoff!.Path);
+                }
+                finally { handoff?.Dispose(); }
                 succeeded |= OutputDestination.ExternalApp;
                 messages.Add("外部アプリに送りました。");
             }
@@ -232,11 +262,11 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         {
             if (attempted || metadataFailed || folderOpenFailed || openFolderAfterSave && saved is not null)
             {
-                if (saved is null && notificationImage is not null) notificationPath ??= retry?.ExternalPath;
+                if (saved is null && notificationImage is not null) notificationPath ??= retry?.ExternalFile?.Path;
                 NotifyDelivered(new CaptureDelivery(intent, succeeded, failed, folderOpenFailed,
                     succeeded.HasFlag(OutputDestination.File) ? saved : null, captureBounds, captureDescription, metadataFailed,
                     saved is null ? notificationPath : null, notificationImage?.Invoke(), captureSettings,
-                    retry is { Failed: true } ? retry.Serial : null));
+                    retry is { Failed: true } ? retry.Serial : null, prepareNotificationFile));
             }
         }
         if (errors.Count > 0) throw new IOException(result, new AggregateException(errors));
@@ -272,8 +302,6 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
             throw new ArgumentOutOfRangeException(nameof(value));
     }
 
-    private string NewWorkDirectory() => Path.Combine(workRoot, Guid.NewGuid().ToString("N"));
-
     private static async Task<string> SaveAsync(Bitmap image, string folder, string? fileName = null, FileNamePlan? namePlan = null,
         CaptureMetadata? metadata = null, CaptureMetadataMode metadataMode = CaptureMetadataMode.None, Action<string>? prepared = null)
     {
@@ -281,7 +309,8 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         return await Task.Run(() => { using (copy) return CaptureStorage.SavePng(copy, folder, DateTimeOffset.Now, fileName, namePlan, metadata, metadataMode, prepared); });
     }
 
-    internal static string CopyVideo(string source, string folder, DateTimeOffset? capturedAt = null, string? fileName = null, FileNamePlan? namePlan = null)
+    internal static string CopyVideo(string source, string folder, DateTimeOffset? capturedAt = null, string? fileName = null, FileNamePlan? namePlan = null,
+        Action<string, string>? beforePublish = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(folder);
@@ -313,11 +342,13 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                 // the same name. A collision does not recopy large video bytes.
                 try
                 {
+                    if (Path.Exists(target)) continue;
+                    beforePublish?.Invoke(temporary, target);
                     File.Move(temporary, target, false);
                     ownsTemporary = false;
                     return target;
                 }
-                catch (IOException) when (File.Exists(target)) { }
+                catch (IOException) when (Path.Exists(target)) { }
             }
         }
         finally
@@ -344,17 +375,4 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         return info;
     }
 
-    private void LaunchEditor(string executable, string path, string arguments)
-    {
-        try { launchEditor(EditorStartInfo(executable, path, arguments)); }
-        catch (Exception ex)
-        {
-            throw new IOException($"外部アプリを起動できません。ファイルは保持されています: {Path.GetFullPath(path)}", ex);
-        }
-    }
-
-    private static void LaunchProcess(ProcessStartInfo startInfo)
-    {
-        using var process = Process.Start(startInfo) ?? throw new IOException("外部アプリのプロセスを開始できません。");
-    }
 }

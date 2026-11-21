@@ -115,36 +115,36 @@ internal sealed partial class TrayApplicationContext
             }
 
             string? fileName = null;
-            FileNamePlan? namePlan = null;
             AppSettings captureSettings = outcome.OutputSettings ?? settings;
-            if (outcome.Selection.Destination.HasFlag(OutputDestination.File))
+            string regionName = outcome.Selection.RegionName ?? "撮影";
+            FileNamePlan? namePlan = new(captureSettings.FileNamePattern, capturedAt, intent,
+                intent == CaptureIntent.Recording && FileNamePattern.UsesOcr(captureSettings.FileNamePattern) ? "OCRなし" : "",
+                Region: regionName);
+            if (intent == CaptureIntent.Recording && outcome.Selection.Destination.HasFlag(OutputDestination.File)
+                && FileNamePattern.UsesOcr(captureSettings.FileNamePattern))
             {
-                if (FileNamePattern.UsesOcr(captureSettings.FileNamePattern) && intent == CaptureIntent.Recording)
+                using var naming = new OcrNameForm(outcome.Image ?? throw new InvalidOperationException("OCR用画像がありません。"),
+                    captureSettings, intent, capturedAt, regionName: regionName);
+                namingForm = naming;
+                DialogResult result;
+                try
                 {
-                    using var naming = new OcrNameForm(outcome.Image ?? throw new InvalidOperationException("OCR用画像がありません。"), captureSettings, intent, capturedAt);
-                    namingForm = naming;
-                    DialogResult result;
-                    try
-                    {
-                        result = naming.ShowDialog();
-                    }
-                    finally
-                    {
-                        namingForm = null;
-                    }
-
-                    if (result != DialogResult.OK)
-                    {
-                        StoreStatus("OCR命名をキャンセルしました。");
-                        return;
-                    }
-
-                    fileName = naming.FileName;
-                    namePlan = naming.NamePlan;
-                    captureSettings = naming.OutputSettings;
+                    result = naming.ShowDialog();
                 }
-                else if (!FileNamePattern.UsesOcr(captureSettings.FileNamePattern))
-                    namePlan = new FileNamePlan(captureSettings.FileNamePattern, capturedAt, intent);
+                finally
+                {
+                    namingForm = null;
+                }
+
+                if (result != DialogResult.OK)
+                {
+                    StoreStatus("OCR命名をキャンセルしました。");
+                    return;
+                }
+
+                fileName = naming.FileName;
+                namePlan = naming.NamePlan;
+                captureSettings = naming.OutputSettings;
             }
 
             if (intent == CaptureIntent.Recording)
@@ -175,7 +175,7 @@ internal sealed partial class TrayApplicationContext
                 {
                     try
                     {
-                        return await RequestScreenshotFileNameAsync(namingImage, captureSettings, capturedAt);
+                        return await RequestScreenshotFileNameAsync(namingImage, captureSettings, capturedAt, regionName);
                     }
                     finally
                     {
@@ -206,9 +206,9 @@ internal sealed partial class TrayApplicationContext
         }
     }
 
-    private Task<ScreenshotFileName?> RequestScreenshotFileNameAsync(Bitmap image, AppSettings captureSettings, DateTimeOffset capturedAt)
+    private Task<ScreenshotFileName?> RequestScreenshotFileNameAsync(Bitmap image, AppSettings captureSettings, DateTimeOffset capturedAt, string regionName)
     {
-        using var naming = new OcrNameForm(image, captureSettings, CaptureIntent.Screenshot, capturedAt);
+        using var naming = new OcrNameForm(image, captureSettings, CaptureIntent.Screenshot, capturedAt, regionName: regionName);
         namingForm = naming;
         try
         {

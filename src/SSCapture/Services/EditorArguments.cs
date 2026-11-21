@@ -55,7 +55,8 @@ internal static partial class EditorArguments
     }
 }
 
-internal sealed record EditorPreset(string Name, string Executable, string Arguments)
+internal sealed record EditorPreset(string Name, string Executable, string Arguments,
+    ExternalApplicationLaunch Launch = ExternalApplicationLaunch.Executable)
 {
     public override string ToString() => Name;
 }
@@ -72,6 +73,8 @@ internal static class EditorPresets
                 new("Paint.NET", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "paint.net", "paintdotnet.exe"), EditorArguments.Default)
             ];
             if (EditorExecutable.FindPPPaint() is string path) presets.Add(new("PPPaint", path, EditorArguments.Default));
+            presets.Add(new("Snipping Tool", "", EditorArguments.Default, ExternalApplicationLaunch.SnippingToolPng));
+            presets.Add(new("Screenpresso", "", EditorArguments.Default, ExternalApplicationLaunch.ScreenpressoPng));
             return presets;
         }
     }

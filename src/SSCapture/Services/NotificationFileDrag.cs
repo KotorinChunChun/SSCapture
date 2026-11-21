@@ -7,7 +7,8 @@ internal static class NotificationFileDrag
     internal const string PerformedEffect = "Performed DropEffect";
     internal const string LogicalEffect = "Logical Performed DropEffect";
 
-    internal static bool Run(Control source, string path, Func<DataObject, DragDropEffects>? perform = null)
+    internal static bool Run(Control source, string path, Func<DataObject, DragDropEffects>? perform = null,
+        Action? completeMove = null)
     {
         path = Path.GetFullPath(path);
         if (!File.Exists(path)) throw new FileNotFoundException("ドラッグする画像が見つかりません。", path);
@@ -16,15 +17,18 @@ internal static class NotificationFileDrag
         using var preference = new MemoryStream(BitConverter.GetBytes((int)DragDropEffects.Move));
         data.SetData(PreferredEffect, false, preference);
         DragDropEffects result = perform is null ? source.DoDragDrop(data, DragDropEffects.Copy | DragDropEffects.Move) : perform(data);
-        return Complete(path, data, result);
+        return Complete(path, data, result, completeMove);
     }
 
-    internal static bool Complete(string path, IDataObject data, DragDropEffects result)
+    internal static bool Complete(string path, IDataObject data, DragDropEffects result, Action? completeMove = null)
     {
         // アプリの「取込み」をMoveと返す実装でも、戻り値だけで保存原本を削除しない。
         // Shellの非最適化移動は戻り値とPerformedの両方がMoveの時だけ削除を要求する。
         if (result == DragDropEffects.Move && ReadEffect(data, PerformedEffect) == DragDropEffects.Move && File.Exists(path))
-            File.Delete(path);
+        {
+            if (completeMove is null) File.Delete(path);
+            else completeMove();
+        }
         // Explorerの最適化移動はNoneを返す場合もあり、既に元ファイルは移動済み。
         return result != DragDropEffects.None || ReadEffect(data, LogicalEffect) is DragDropEffects.Copy or DragDropEffects.Move
             || !File.Exists(path);

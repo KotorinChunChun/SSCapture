@@ -9,6 +9,7 @@ internal static partial class Program
     static partial void OutputTests()
     {
         WindowCropTests();
+        HandoffTests();
         Run("履歴は取得時刻を保持し命名時刻や完了順に左右されない", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {
             using var history = new CaptureHistory(); using var image = OutputImage();
@@ -372,8 +373,12 @@ internal static partial class Program
                 }
                 else Check(!Directory.Exists(settings.SaveDirectory), "選択されていない保存フォルダを作成しない");
                 if (destination == OutputDestination.Clipboard) Equal(source, probe.Files[0]);
-                if (destination == OutputDestination.ExternalApp) Equal(source, probe.Launches[0].ArgumentList.Single());
-                Check(!Directory.Exists(Path.Combine(directory, "work")), "動画原本を不必要に複製しない");
+                if (destination == OutputDestination.ExternalApp)
+                {
+                    string handedOff = probe.Launches[0].ArgumentList.Single();
+                    Check(handedOff != source && bytes.SequenceEqual(File.ReadAllBytes(handedOff)), "完成した命名済みコピーを使わない");
+                }
+                else Check(!Directory.Exists(Path.Combine(directory, "work")), "動画原本を不必要に複製しない");
             })));
         }
         Run("動画外部起動失敗は原本を保持・パスを通知", () => WithOutputDirectory(directory => RunOutputTask(async () =>

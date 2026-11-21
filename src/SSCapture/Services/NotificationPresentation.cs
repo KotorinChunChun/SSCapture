@@ -9,7 +9,7 @@ internal sealed record NotificationPresentation(string Message, bool HasFailure,
         string? savedFile = result.Completed.HasFlag(OutputDestination.File) ? result.SavedPath : null;
         var app = ResolveApplication(result, current);
         bool canEdit = result.HasSuccess && app is not null
-            && (result.SavedPath is not null || result.NotificationPath is not null || hasPendingImage);
+            && (result.SavedPath is not null || result.NotificationPath is not null || result.PrepareNotificationFile is not null || hasPendingImage);
 
         string key = current.LastRecipeShortcut;
         string repeatHint = string.IsNullOrWhiteSpace(key) ? "" : result.Intent == CaptureIntent.Recording
@@ -21,7 +21,8 @@ internal sealed record NotificationPresentation(string Message, bool HasFailure,
 
     internal static ExternalApplication? ResolveApplication(CaptureDelivery result, AppSettings current)
     {
-        var registered = current.ImageEditors.Concat(current.VideoEditors).FirstOrDefault(app => app.Id == current.NotificationApplicationId);
+        var applications = EditorsFor(result.Intent, current);
+        var registered = applications.FirstOrDefault(app => app.Id == current.NotificationApplicationId);
         if (registered is not null) return registered;
 
         var captured = result.CaptureSettings;
@@ -29,7 +30,14 @@ internal sealed record NotificationPresentation(string Message, bool HasFailure,
         bool video = result.Intent == CaptureIntent.Recording;
         string id = video ? captured.SelectedVideoEditorId : captured.SelectedImageEditorId;
         var original = (video ? captured.VideoEditors : captured.ImageEditors).FirstOrDefault(app => app.Id == id);
-        var available = (video ? current.VideoEditors : current.ImageEditors).FirstOrDefault(app => app.Id == id);
+        var available = applications.FirstOrDefault(app => app.Id == id);
         return original is not null && original == available ? available : null;
     }
+
+    private static IEnumerable<ExternalApplication> EditorsFor(CaptureIntent intent, AppSettings settings) =>
+        intent == CaptureIntent.Screenshot ? settings.ImageEditors :
+            settings.VideoEditors.Where(app => app.Launch == ExternalApplicationLaunch.Executable);
+
+    internal static ExternalApplication[] ScreenshotEditors(AppSettings settings, ExternalEditor editor) =>
+        EditorsFor(CaptureIntent.Screenshot, settings).Where(editor.CanOpen).ToArray();
 }

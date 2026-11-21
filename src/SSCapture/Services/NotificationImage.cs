@@ -5,20 +5,43 @@ internal sealed class NotificationImage : IDisposable
 {
     private Bitmap? image;
     private readonly string directory;
-    internal NotificationImage(Bitmap image, string directory)
+    private readonly Bitmap? namingImage;
+    private readonly HandoffFileName naming;
+
+    internal NotificationImage(Bitmap image, string directory, HandoffFileName? naming = null, Bitmap? namingImage = null)
     {
         this.image = (Bitmap)image.Clone();
         this.directory = directory;
+        this.naming = naming ?? new(new(FileNamePattern.Default, DateTimeOffset.Now, CaptureIntent.Screenshot), null, "");
+        this.namingImage = namingImage is null ? null : (Bitmap)namingImage.Clone();
+    }
+
+    internal Task<TemporaryHandoff> PrepareForHandoffAsync()
+    {
+        var bitmap = (Bitmap)(image ?? throw new ObjectDisposedException(nameof(NotificationImage))).Clone();
+        var ocrImage = namingImage is not null && naming.NeedsOcr ? (Bitmap)namingImage.Clone() : null;
+        return Task.Run(async () =>
+        {
+            using (bitmap)
+            using (ocrImage)
+            {
+                var plan = await naming.ResolveAsync(ocrImage ?? bitmap).ConfigureAwait(false);
+                return TemporaryHandoff.Publish(directory, publish =>
+                    CaptureStorage.SavePng(bitmap, directory, naming.Plan.CapturedAt, naming.FileName, HandoffFileName.CachePlan(plan), beforePublish: publish));
+            }
+        });
     }
 
     internal Task<string> PrepareAsync()
     {
-        // 通知の差替え・撮影開始が非同期保存へ割り込んでも、この保存用コピーは生存する。
-        var bitmap = (Bitmap)(image ?? throw new ObjectDisposedException(nameof(NotificationImage))).Clone();
-        return Task.Run(() =>
+        var pending = PrepareForHandoffAsync();
+        return ReadPathAsync();
+
+        async Task<string> ReadPathAsync()
         {
-            using (bitmap) return CaptureStorage.SavePng(bitmap, directory, DateTimeOffset.Now, "notify-" + Guid.NewGuid().ToString("N") + ".png");
-        });
+            using var prepared = await pending;
+            return prepared.Path;
+        }
     }
 
     internal Bitmap CreateThumbnail() => Thumbnail(image ?? throw new ObjectDisposedException(nameof(NotificationImage)));
@@ -32,29 +55,14 @@ internal sealed class NotificationImage : IDisposable
         return thumbnail;
     }
 
-    internal static void CleanupPreviousSession(string workRoot)
-    {
-        string folder = Path.Combine(Path.GetFullPath(workRoot), "notification-images");
-        if (!Directory.Exists(folder) || (File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0) return;
-        foreach (string path in Directory.EnumerateFiles(folder, "notify-*.png", SearchOption.TopDirectoryOnly))
-        {
-            string name = Path.GetFileNameWithoutExtension(path);
-            if (name.Length != 39 || !Guid.TryParseExact(name[7..], "N", out _)) continue;
-            try { if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) == 0) File.Delete(path); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
-        }
-    }
+    internal static void CleanupPreviousSession(string workRoot) =>
+        TemporaryHandoff.CleanupPreviousSession(TemporaryHandoff.DirectoryFor(workRoot));
 
-    internal static void RetainAfterLaunch(string path) => _ = DeleteAfterMinuteAsync(path);
-    private static async Task DeleteAfterMinuteAsync(string path)
+    public void Dispose()
     {
-        await Task.Delay(TimeSpan.FromMinutes(1)).ConfigureAwait(false);
-        // 呼出元が生成した通知用ファイル1つだけ。親フォルダや保存済み画像は削除しない。
-        try { File.Delete(path); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        if (image is null) return;
+        image.Dispose();
+        image = null;
+        namingImage?.Dispose();
     }
-
-    public void Dispose() { image?.Dispose(); image = null; }
 }

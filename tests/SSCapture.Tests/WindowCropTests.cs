@@ -66,10 +66,19 @@ internal static partial class Program
         Run("WGCの合成外周を基準とし、手動ウィンドウ合成は元寸法を維持", () =>
             WithOutputDirectory(directory => RunOutputTask(async () =>
             {
-                using var image = new Bitmap(6, 4);
-                image.SetPixel(5, 1, Color.Red);
                 var root = new CaptureWindow(new(30, 20, 4, 4), "窓", 1, 2, 3);
-                var bounds = new Rectangle(30, 20, 6, 4);
+                var dialog = new CaptureWindow(new(32, 21, 4, 1), "ダイアログ", 2, 2, 3, Owner: root.Handle);
+                var frame = await IsolatedWindowCapture.TakeGroupAsync([dialog, root], false,
+                    takeFrame: (window, _, _) =>
+                    {
+                        var bitmap = new Bitmap(window.Bounds.Width, window.Bounds.Height);
+                        using var g = Graphics.FromImage(bitmap);
+                        g.Clear(window == dialog ? Color.Red : Color.Blue);
+                        return Task.FromResult(new WindowCaptureFrame(bitmap, window.Bounds, DateTimeOffset.Now));
+                    });
+                using var image = frame.Image;
+                var bounds = frame.Bounds;
+                Equal(new Rectangle(30, 20, 6, 4), bounds);
                 Size size = default;
                 using var router = new OutputRouter(directory, bitmap =>
                 {
@@ -85,6 +94,27 @@ internal static partial class Program
                     replaySource: new CaptureReplaySource.Windows([root], true, true));
                 Equal(image.Size, size);
             })));
+
+        Run("囲うモードと見えている画面の左単押しは同じ単一窓属性を渡す", () =>
+        {
+            var monitor = new Rectangle(0, 0, 100, 70);
+            var target = new CaptureWindow(new(10, 10, 50, 30), "窓", 1, 2, 3);
+            var dialog = new CaptureWindow(new(40, 20, 40, 25), "ダイアログ", 2, 2, 3, Owner: target.Handle);
+            foreach (var mode in new[] { CaptureMode.Rectangle, CaptureMode.Window })
+            {
+                using var snapshot = new DesktopSnapshot(new Bitmap(monitor.Width, monitor.Height), monitor, [monitor]);
+                var session = new SessionController(new(mode, CaptureIntent.Screenshot, OutputDestination.Clipboard),
+                    snapshot, [target.Bounds], initialPointer: new(12, 12), findWindow: _ => target,
+                    findWindowGroup: _ => [dialog, target]);
+                using var menu = session.SelectionMenu;
+                session.CompleteSelection(new(target.Bounds, null, OutputDestination.Clipboard, WindowHitPoint: new(12, 12)));
+                WaitHistory(session.Completion);
+                using var result = session.Completion.GetAwaiter().GetResult();
+                Equal(target.Bounds, result.Selection!.Bounds);
+                Check(result.Selection.ReplaySource is CaptureReplaySource.Windows
+                    { IsSingleWindowSelection: true, Isolated: false, IncludeOwned: false }, "単一窓の識別を失った");
+            }
+        });
 
         Run("四辺0は全画素、残り1pxは有効、0px以下は該当軸を案内", () =>
         {

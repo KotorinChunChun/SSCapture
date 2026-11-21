@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Win32;
 using SSCapture.Capture;
 using SSCapture.Recording;
@@ -50,7 +49,7 @@ internal sealed partial class TrayApplicationContext
         {
             try
             {
-                using var process = Process.Start(OutputRouter.EditorStartInfo(editorSettings.ImageEditorPath, saved, editorSettings.ImageEditorArguments)) ?? throw new IOException("画像編集アプリを開始できません。");
+                new ExternalEditor().Resolve(editorSettings.EditorFor(CaptureIntent.Screenshot))(saved);
             }
             catch
             {

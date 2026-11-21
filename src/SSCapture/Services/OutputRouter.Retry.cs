@@ -15,7 +15,8 @@ internal sealed partial class OutputRouter
         internal long Serial { get; } = serial;
         internal OutputDestination Pending;
         internal bool FolderPending, IsRetry, SuccessNotified, MetadataPending;
-        internal string? SavedPath, ExternalPath;
+        internal string? SavedPath;
+        internal TemporaryHandoff? ExternalFile;
         internal Func<Task<bool?>>? PrepareFile;
         internal Func<Task<string>> Execute { get; set; } = null!;
         internal bool Failed => Pending != OutputDestination.None || FolderPending || MetadataPending;

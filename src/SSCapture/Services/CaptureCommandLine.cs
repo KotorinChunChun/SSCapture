@@ -168,7 +168,7 @@ internal static partial class CaptureCommandRunner
                 settings = (outcome.OutputSettings ?? settings) with { DefaultDestination = outcome.Selection.Destination };
                 if (settings.DefaultDestination == OutputDestination.None) throw new ArgumentException("出力先がすべてOFFです。");
                 string result = await InstantCapture.DeliverAsync(outcome.Image, settings, capturedAt, output,
-                    regionName: command.InputPreset.Name, captureBounds: outcome.Selection.Bounds, metadata: outcome.Metadata,
+                    regionName: outcome.Selection.RegionName ?? command.InputPreset.Name, captureBounds: outcome.Selection.Bounds, metadata: outcome.Metadata,
                     preserveOutputs: true, capturePolygon: outcome.Selection.Polygon, onDelivered: () => delivered = true,
                     windowTitle: outcome.Selection.WindowTitle, replaySource: outcome.Selection.ReplaySource);
                 report?.Invoke(result, false);

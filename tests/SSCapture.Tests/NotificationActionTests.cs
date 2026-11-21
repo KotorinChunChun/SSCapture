@@ -7,6 +7,34 @@ internal static partial class Program
 {
     static void NotificationActionTests()
     {
+        Run("静止画通知で種別の合う登録先を選び、移動済み保存画像は撮影時の名前で再生成", () =>
+            WithServiceDirectory(directory => RunNotificationTask(async () =>
+            {
+                using var image = new Bitmap(12, 6);
+                string saved = CaptureStorage.SavePng(image, directory, DateTimeOffset.Now, "saved.png");
+                using var scratch = new NotificationImage(image, TemporaryHandoff.DirectoryFor(directory),
+                    new(new("{region}_{##}.png", DateTimeOffset.Now, CaptureIntent.Screenshot, Region: "通知"), null, ""));
+                var toast = new FakeCaptureToast();
+                var opened = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var valid = new ExternalApplication { Name = "静止画", Executable = Environment.ProcessPath! };
+                var missing = new ExternalApplication { Name = "削除済み", Launch = ExternalApplicationLaunch.ScreenpressoPng };
+                var video = new ExternalApplication { Name = "動画", Executable = Environment.ProcessPath! };
+                var settings = new AppSettings { ImageEditors = [valid, missing], VideoEditors = [video], NotificationApplicationId = video.Id };
+                using var feedback = new CaptureFeedback(createToast: () => toast, sound: new FakeCompletionSound(),
+                    timer: new FakeFeedbackTimer(), externalEditor: new(info => opened.TrySetResult(info.ArgumentList.Single()), _ => null));
+                feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.File, OutputDestination.None,
+                    SavedPath: saved, NotificationImage: scratch), settings);
+                var actions = toast.Actions!;
+                Check(actions.Edit is null, "動画編集アプリが静止画の通常編集に出た");
+                var choice = actions.Editors!.Single();
+                Equal(valid.Name, choice.Name);
+                string moved = Path.Combine(directory, "moved.png");
+                File.Move(saved, moved);
+                choice.Open();
+                string handoff = await opened.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Equal("通知_01.png", Path.GetFileName(handoff));
+                Check(File.ReadAllBytes(moved).SequenceEqual(File.ReadAllBytes(handoff)), "移動済み原本とPNGが一致しない");
+            })));
         Run("通知のサムネイルを左ダブルクリックしたときだけ割り当て済みの編集を実行する", () =>
         {
             using var thumbnail = new Bitmap(44, 24);

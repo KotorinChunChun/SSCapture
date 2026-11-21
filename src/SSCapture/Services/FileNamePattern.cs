@@ -10,7 +10,7 @@ internal static partial class FileNamePattern
     private static partial Regex Token();
     [GeneratedRegex(@"^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Reserved();
-    internal static bool UsesOcr(string pattern) => pattern.Contains("{ocr}", StringComparison.Ordinal);
+    internal static bool UsesOcr(string? pattern) => pattern?.Contains("{ocr}", StringComparison.Ordinal) == true;
 
     internal static string Expand(string pattern, DateTimeOffset capturedAt, CaptureIntent intent, string ocr = "", int sequence = 1, string region = "撮影")
     {

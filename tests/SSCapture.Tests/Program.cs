@@ -10,6 +10,7 @@ internal static partial class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Contains("--context-stall")) { Console.WriteLine("ready"); Console.In.ReadLine(); Thread.Sleep(30000); return 0; }
         if (args.FirstOrDefault() == "--editor-received") { File.WriteAllText(Path.Combine(args[3], "editor-" + args[1] + ".json"), System.Text.Json.JsonSerializer.Serialize(new { application = args[1], image = args[2] })); return 0; }
+        if (args.FirstOrDefault() == "--handoff-test-worker") return HoldTestHandoff(args[1]);
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         if (args.FirstOrDefault() == "--notification-drag-preview") return NotificationDragPreview(args[1]);

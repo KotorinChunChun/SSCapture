@@ -9,6 +9,7 @@ internal sealed class OcrNameForm : Form
     private readonly AppSettings settings;
     private readonly CaptureIntent intent;
     private readonly DateTimeOffset capturedAt;
+    private readonly string regionName;
     private readonly ListBox candidates;
     private readonly TextBox[] selected = new TextBox[3];
     private readonly TextBox separator, pattern, date, time;
@@ -26,10 +27,11 @@ internal sealed class OcrNameForm : Form
     internal AppSettings OutputSettings => settings with { FileNamePattern = pattern.Text, OcrSeparator = separator.Text, OpenFolderAfterSave = openFolder.Checked };
 
     internal OcrNameForm(Bitmap source, AppSettings settings, CaptureIntent intent, DateTimeOffset capturedAt,
-        Func<Bitmap, string, CancellationToken, Task<OcrResult>>? recognize = null)
+        Func<Bitmap, string, CancellationToken, Task<OcrResult>>? recognize = null, string regionName = "撮影")
     {
         image = (Bitmap)source.Clone(); this.settings = settings; this.intent = intent; this.capturedAt = capturedAt;
         this.recognize = recognize ?? OneOcr.RecognizeAsync;
+        this.regionName = regionName;
         Text = WindowTitle.Create("OCRファイル名"); Name = "OcrNameForm";
         MinimizeBox = false; MaximizeBox = false;
         AutoScaleMode = AutoScaleMode.Dpi; Font = new Font("Yu Gothic UI", 12F);
@@ -147,7 +149,7 @@ internal sealed class OcrNameForm : Form
             throw new ArgumentException("年月日はyyyyMMdd形式の有効な8桁で入力してください。");
         if (pattern.Text.Contains("{hhmmss}", StringComparison.Ordinal) && !TimeOnly.TryParseExact(time.Text, "HHmmss", CultureInfo.InvariantCulture, DateTimeStyles.None, out clock))
             throw new ArgumentException("時分秒はHHmmss形式の有効な6桁で入力してください。");
-        return new FileNamePlan(pattern.Text, new DateTimeOffset(day.ToDateTime(clock), capturedAt.Offset), intent, text);
+        return new FileNamePlan(pattern.Text, new DateTimeOffset(day.ToDateTime(clock), capturedAt.Offset), intent, text, regionName);
     }
     private void RefreshName()
     {

@@ -8,7 +8,7 @@ internal static partial class Program
 {
     private static void OutputConditionTests()
     {
-        Run("Fileフラグだけが保存先と命名の検証・有効状態を決める", () =>
+        Run("保存先とフォルダー表示はFileに従い命名欄は未保存でも編集できる", () =>
         {
             for (int bits = 0; bits < 8; bits++)
             {
@@ -22,7 +22,8 @@ internal static partial class Program
                 {
                     var fields = form.Controls.Find(name, true);
                     if (fields.Length == 0 && name == "OneOCRDirectory") fields = form.Controls.Find("OneOcrDirectory", true);
-                    Equal(destination.HasFlag(OutputDestination.File), fields.Single().Enabled);
+                    bool fileOnly = name is "SaveDirectory" or "OpenFolderAfterSave";
+                    Equal(!fileOnly || destination.HasFlag(OutputDestination.File), fields.Single().Enabled);
                 }
                 ((CheckBox)form.Controls.Find("FileOutput", true).Single()).Checked = true;
                 Equal("relative", form.Controls.Find("SaveDirectory", true).Single().Text);
@@ -49,11 +50,13 @@ internal static partial class Program
             await InstantCapture.DeliverAsync(image, new AppSettings { DefaultDestination = OutputDestination.Clipboard, FileNamePattern = "{unknown}", SaveDirectory = "relative" }, DateTimeOffset.Now, router);
             Equal(1, copied);
         })));
-        Run("出力プリセットのFile欄も値を保持して無効化する", () =>
+        Run("出力プリセットの命名は未保存でも有効で保存先の値を保持する", () =>
         {
             using var editor = new CapturePresetEditor(new AppSettings(), () => new AppSettings());
             editor.Controls.Find("SaveDirectory", true).Single().Text = "relative";
-            editor.Controls.Find("FileNamePattern", true).Single().Text = "{unknown}";
+            var pattern = editor.Controls.Find("FileNamePattern", true).Single();
+            pattern.Text = "{region}_{##}.{ext}";
+            Check(pattern.Enabled, "未保存の命名パターンが無効");
             editor.Controls.Find("CapturePresetName", true).Single().Text = "コピー専用";
             editor.StoreCurrent(); Equal(1, editor.Presets.Length);
             Check(!editor.Controls.Find("SaveDirectory", true).Single().Enabled, "プリセットの保存欄が有効");

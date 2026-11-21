@@ -44,15 +44,16 @@ internal static partial class Program
             }
         });
 
-        Run("通知専用アプリは撮影時アプリより優先し画像動画の区別を強制しない", () =>
+        Run("通知専用アプリは撮影種別が合う場合にだけ優先する", () =>
         {
             var captured = SnapshotFixtureSettings();
             var current = captured with { NotificationApplicationId = "image" };
             foreach (CaptureIntent intent in Enum.GetValues<CaptureIntent>())
             {
                 var result = new CaptureDelivery(intent, OutputDestination.Clipboard, OutputDestination.None, CaptureSettings: captured);
-                Equal(current.ImageEditors[0], NotificationPresentation.Create(result, current, true).Editor);
-                Equal(current.ImageEditors[0], NotificationPresentation.ResolveApplication(result with { CaptureSettings = null }, current));
+                bool screenshot = intent == CaptureIntent.Screenshot;
+                Equal(screenshot ? current.ImageEditors[0] : current.VideoEditors[0], NotificationPresentation.Create(result, current, true).Editor);
+                Equal(screenshot ? current.ImageEditors[0] : null, NotificationPresentation.ResolveApplication(result with { CaptureSettings = null }, current));
             }
         });
 

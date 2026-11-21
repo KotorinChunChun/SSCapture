@@ -26,6 +26,7 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
     private bool hasFailure;
     private int displayDpi = 96;
     public Rectangle DisplayBounds => Bounds;
+    public bool IsEditorMenuOpen => actionHost?.IsEditorMenuOpen == true;
     public int DisplayDpi => displayDpi;
 
     internal CaptureToastForm(Func<nint, CaptureProtection>? protect = null,
