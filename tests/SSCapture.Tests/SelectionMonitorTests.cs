@@ -236,7 +236,7 @@ internal static partial class Program
                     {
                         case "cancel": session.HandleCommandKey(Keys.Escape); break;
                         case "deactivate": session.ApplicationDeactivated(); break;
-                        case "settings": session.SelectionMenu.AllCommands.Single(item => item.Text == "設定").PerformClick(); break;
+                        case "settings": session.SelectionMenu.Command("OpenSettings").PerformClick(); break;
                         default: session.CompleteSelection(new CaptureSelection(new Rectangle(start, new Size(20, 20)), null, OutputDestination.None)); break;
                     }
                     if (finish == "error") Check(session.Completion.IsFaulted, "画像取得失敗が通知されない");

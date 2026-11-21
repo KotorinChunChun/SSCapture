@@ -42,6 +42,18 @@ internal sealed class CapturePresetEditor : UserControl
         if (index < 0) return false;
         list.SelectedIndex = index; return true;
     }
+
+    internal bool SelectPreset(string? id)
+    {
+        if (id is null) return false;
+        if (list.SelectedItem is CapturePreset selected && selected.Id == id) return true;
+        StoreCurrent();
+        if (Error is not null) return false;
+        int index = Array.FindIndex(Presets, p => p.Id == id);
+        if (index < 0) return false;
+        list.SelectedIndex = index;
+        return true;
+    }
     internal string? Error { get; private set; }
     internal CapturePresetEditor(AppSettings initial, Func<AppSettings> readSettings)
     {

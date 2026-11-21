@@ -11,12 +11,12 @@ internal sealed partial class TrayApplicationContext
 {
     private Form[] windowsToRestore = [];
 
-    private void PrepareCaptureUi()
+    private void PrepareCaptureUi(bool syncClosedMenu = false)
     {
         windowsToRestore = Application.OpenForms.Cast<Form>()
             .Where(f => f.Visible && !f.IsDisposed && f != namingForm && f != recordingForm).ToArray();
         CaptureUiPreparation.Prepare(windowsToRestore,
-            () => { feedback.HideForCapture(); menu.Close(); }, menu.Visible);
+            () => { feedback.HideForCapture(); menu.Close(); }, syncClosedMenu || menu.Visible);
     }
 
     private void RestoreCaptureSettings()
@@ -27,7 +27,7 @@ internal sealed partial class TrayApplicationContext
         if (!exiting) CaptureUiPreparation.RestoreAll(previous);
     }
 
-    private async Task TakeInstantAsync(int number)
+    private async Task TakeInstantAsync(int number, DisplayTarget? menuTarget = null)
     {
         if (exiting || WindowVisibility.RestorePending(namingForm))
             return;
@@ -43,9 +43,12 @@ internal sealed partial class TrayApplicationContext
         RefreshMenu();
         try
         {
-            PrepareCaptureUi();
+            PrepareCaptureUi(syncClosedMenu: menuTarget is not null);
             DateTimeOffset capturedAt = DateTimeOffset.Now;
-            Rectangle bounds = InstantCapture.ResolveDisplay(number, InstantCapture.ReadDisplays());
+            var displays = InstantCapture.ReadDisplays();
+            Rectangle bounds = menuTarget is null
+                ? InstantCapture.ResolveDisplay(number, displays)
+                : InstantCapture.ResolveDisplay(menuTarget, displays).Bounds;
             var capture = await InstantCapture.TakeWithContextAsync(bounds, settings);
             using Bitmap image = capture.Image;
             // Keep capture exclusive until output completes. The optional protected
@@ -78,7 +81,7 @@ internal sealed partial class TrayApplicationContext
             return;
         busy = true;
         RefreshMenu();
-        bool openSettings = false;
+        CaptureSettingsLink? settingsLink = null;
         bool showPrevious = false;
         DateTimeOffset capturedAt = DateTimeOffset.Now;
         long sequence = ++captureSerial;
@@ -96,7 +99,8 @@ internal sealed partial class TrayApplicationContext
             PrepareCaptureUi();
             AppSettings startSettings = inputPreset?.Apply(settings) ?? settings;
             using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, startSettings.DefaultDestination, startSettings.FreezeFrame, IncludeRecordingImage: intent == CaptureIntent.Recording && (startSettings.DefaultDestination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(startSettings.FileNamePattern) || startSettings.CapturePresets.Any(p => p.Destination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(p.FileNamePattern))), IncludeCursor: startSettings.IncludeCursor, FixedSize: new Size(startSettings.FixedWidth, startSettings.FixedHeight), FixedAnchor: startSettings.FixedCaptureAnchor, LimitToStartingMonitor: startSettings.LimitToStartingMonitor, Grid20: startSettings.Grid20, ShowSelectionGuide: startSettings.ShowSelectionGuide, OutputSettings: startSettings, DimCaptureBackground: startSettings.DimCaptureBackground, InitialInputPreset: inputPreset ?? settings.SavedRegions.FirstOrDefault(p => p.IsDefault)), SaveGrid20, SaveGuideVisibility);
-            openSettings = outcome.OpenSettings;
+            if (outcome.OpenSettings)
+                settingsLink = outcome.SettingsLink ?? new(CaptureSettingsDestination.General);
             if (outcome.Selection is null)
             {
                 showPrevious = showPreviousOnEscape && outcome.EscapedBeforeSelectionInput;
@@ -196,8 +200,8 @@ internal sealed partial class TrayApplicationContext
                 RefreshMenu();
                 FlushFeedback();
                 if (showPrevious) feedback.ShowPreviousScreenshot(settings);
-                if (openSettings)
-                    ShowSettings();
+                if (settingsLink is not null)
+                    ShowSettings(settingsLink);
             }
         }
     }

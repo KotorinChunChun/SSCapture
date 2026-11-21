@@ -7,7 +7,8 @@ internal sealed record CaptureMenuEditing(AppSettings Settings, Size Size, Captu
     Action<bool> ChangeLimit, Action<ScreenshotColorDepth> ChangeColor, Action<CaptureMetadataMode> ChangeMetadata,
     Action<bool> ChangeDim, Action<bool> ChangeFreeze, Action<bool> ChangeCursor,
     Action<int, int>? ChangePrecision = null, Action<string, string, string>? ChangeOutputDetails = null,
-    Action<bool>? ChangeOpenFolder = null, Action? ResetInput = null, Action? ResetOutput = null);
+    Action<bool>? ChangeOpenFolder = null, Action? ResetInput = null, Action? ResetOutput = null,
+    Action<bool>? ChangePointerGuide = null, Action<bool>? ChangeSystemAudio = null, Action<bool>? ChangeMicrophone = null);
 
 internal sealed class CaptureContextMenu : ContextMenuStrip
 {
@@ -20,10 +21,14 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     private readonly Dictionary<CaptureAnchor, ToolStripMenuItem> anchors = [];
     private readonly Dictionary<ScreenshotColorDepth, ToolStripMenuItem> colors = [];
     private readonly Dictionary<CaptureMetadataMode, ToolStripMenuItem> metadata = [];
-    private readonly Func<bool> ownsPopupFocus;
     private readonly ToolStripMenuItem? windowSource, visibleWindow, isolatedWindow;
     private OutputDestination currentDestination;
-    private bool closingCommand;
+    private bool dispatchingCommand;
+    private CaptureMode currentMode;
+    private ToolStripMenuItem? selectionMethod, selectDrag, selectTwoClicks, magnifier, sharePresentation, shortcut;
+    private string? shortcutControlName;
+
+    internal event Action? CommandInvoking;
 
     internal IEnumerable<ToolStripMenuItem> AllCommands => Walk(Items);
     private static IEnumerable<ToolStripMenuItem> Walk(ToolStripItemCollection items)
@@ -37,28 +42,25 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     internal ToolStripMenuItem Command(string name) => AllCommands.Single(i => i.Name == name);
     internal void CloseForCapture()
     {
-        closingCommand = true;
-        try
-        {
-            foreach (var command in AllCommands.Reverse().Where(i => i.HasDropDownItems && i.DropDown.Visible).ToArray())
-                command.DropDown.Close(ToolStripDropDownCloseReason.ItemClicked);
-            Close(ToolStripDropDownCloseReason.ItemClicked);
-        }
-        finally { closingCommand = false; }
+        // ItemClicked on a child rolls up the root before the child's own close completes.
+        // Close any surviving children first without starting another roll-up.
+        foreach (var command in AllCommands.Reverse().Where(i => i.HasDropDownItems && i.DropDown.Visible).ToArray())
+            command.DropDown.Close();
+        if (Visible) Close(ToolStripDropDownCloseReason.ItemClicked);
     }
 
     internal CaptureContextMenu(OutputDestination selected, Action<OutputDestination> changeDestination,
         Action openSettings, Action cancel, CaptureMode mode = CaptureMode.Rectangle, bool grid20 = false,
         Action<CaptureMode>? changeMode = null, Action<bool>? changeGrid = null, Action? captureDesktop = null,
-        Func<bool>? ownsPopupFocus = null, bool showGuide = true, Action<bool>? changeGuide = null, Action<CaptureAspectRatio>? changeRatio = null,
+        bool showGuide = true, Action<bool>? changeGuide = null, Action<CaptureAspectRatio>? changeRatio = null,
         int defaultPadding = 0, Action<int>? changePadding = null, IReadOnlyList<CapturePreset>? presets = null, Action<CapturePreset>? applyPreset = null,
         IReadOnlyList<ExternalApplication>? applications = null, string selectedApplication = "", Action<string>? changeApplication = null,
         IReadOnlyList<SavedRegion>? inputPresets = null, Action<SavedRegion>? applyInputPreset = null, CaptureMenuEditing? editing = null,
-        Action<bool>? changeWindowSource = null)
+        Action<bool>? changeWindowSource = null, Action<CaptureSettingsDestination, string?>? openSettingsLink = null)
     {
         this.cancel = cancel;
-        this.ownsPopupFocus = ownsPopupFocus ?? (() => CaptureNative.OwnsForegroundWindow() || CaptureNative.ForegroundTransition);
         Font = menuFont;
+        ShowItemToolTips = true;
         var inputPresetsMenu = Menu("入力プリセット", "InputPresetMenu", Items);
         var outputPresetsMenu = Menu("出力プリセット", "CapturePresetMenu", Items);
         if (changeWindowSource is not null)
@@ -142,6 +144,14 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             var cursor = Toggle("カーソルを含める", "IncludeCursor", editing.Settings.IncludeCursor, editing.ChangeCursor, range.DropDownItems, "切替時に画面を取り直します。録画ではカーソル描画も今回だけ変更します。");
             freeze.Enabled = cursor.Enabled = editing.CanRefresh;
             Toggle("選択中モニタの背景を暗くする", "DimCaptureBackground", editing.Settings.DimCaptureBackground, editing.ChangeDim, operation.DropDownItems);
+            if (editing.ChangePointerGuide is { } changePointerGuide)
+                Toggle("ポインタ横に操作ガイドを表示する", "ShowPointerGuide", editing.Settings.ShowPointerGuide, changePointerGuide, operation.DropDownItems);
+            if (editing is { Screenshot: false, ChangeSystemAudio: { } changeSystemAudio, ChangeMicrophone: { } changeMicrophone })
+            {
+                var audio = Menu("今回の録画音声", "RecordingAudio", range.DropDownItems);
+                Toggle("PCの再生音を録音する", "RecordSystemAudio", editing.Settings.RecordSystemAudio, changeSystemAudio, audio.DropDownItems);
+                Toggle("マイクを録音する", "RecordMicrophone", editing.Settings.RecordMicrophone, changeMicrophone, audio.DropDownItems);
+            }
             if (editing.ChangeOpenFolder is not null) Toggle("保存後にフォルダを開く", "OpenFolderAfterSave", editing.Settings.OpenFolderAfterSave, editing.ChangeOpenFolder, output.DropDownItems);
         }
         if (changeGrid is not null) Toggle("グリッドスナップを既定でON", "Grid20", grid20, changeGrid, operation.DropDownItems, "グリッドスナップのON/OFFを切り替え、次回の撮影にも引き継ぎます。");
@@ -149,21 +159,105 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         if (inputPresetsMenu.DropDownItems.Count == 0) EmptyHint(inputPresetsMenu);
         if (outputPresetsMenu.DropDownItems.Count == 0) EmptyHint(outputPresetsMenu);
         Items.Add(new ToolStripSeparator());
-        Item("設定", "OpenSettings", openSettings, Items);
+        if (openSettingsLink is null)
+            Item("設定", "OpenSettings", openSettings, Items);
+        else
+        {
+            var settings = Menu("設定", "CaptureSettingsMenu", Items);
+            settings.ToolTipText = "撮影を終了して設定を開きます。";
+            SettingsItem("設定を開く", "OpenSettings", openSettings);
+            SettingsItem("選択中の入力プリセット", "OpenInputPresetSettings", () => openSettingsLink(CaptureSettingsDestination.InputPreset, null));
+            SettingsItem("選択中の出力プリセット", "OpenOutputPresetSettings", () => openSettingsLink(CaptureSettingsDestination.OutputPreset, null));
+            shortcut = SettingsItem("ショートカット", "OpenShortcutSettings", () => openSettingsLink(CaptureSettingsDestination.Shortcut, shortcutControlName));
+
+            ToolStripMenuItem SettingsItem(string text, string name, Action action)
+            {
+                var item = Item(text, name, action, settings.DropDownItems);
+                item.ToolTipText = settings.ToolTipText;
+                return item;
+            }
+        }
         Item("撮影をキャンセル", "CancelCapture", cancel, Items);
         SetMode(mode); SetRatio(CaptureAspectRatio.Free); SetApplication(selectedApplication); SetDestination(selected);
         if (editing is not null) UpdateEditing(editing.Settings, editing.Size, editing.Anchor, editing.Limited);
     }
     private ToolStripMenuItem Menu(string text, string name, ToolStripItemCollection owner)
-    { var item = new ToolStripMenuItem(text) { Name = name, DropDown = new SelectionModeDropDown(() => !closingCommand && ownsPopupFocus()) }; owner.Add(item); return item; }
+    {
+        var item = new CaptureSubmenuItem(text, HandleCommandKey) { Name = name };
+        item.DropDown.ShowItemToolTips = true;
+        owner.Add(item);
+        return item;
+    }
+
     private ToolStripMenuItem Item(string text, string name, Action action, ToolStripItemCollection owner)
-    { var item = new ToolStripMenuItem(text) { Name = name }; item.Click += (_, _) => { CloseForCapture(); action(); }; owner.Add(item); return item; }
+    {
+        var item = new ToolStripMenuItem(text) { Name = name };
+        item.Click += (_, _) => RunCommand(action);
+        owner.Add(item);
+        return item;
+    }
+
+    private void RunCommand(Action action)
+    {
+        if (dispatchingCommand || IsDisposed) return;
+        dispatchingCommand = true;
+        try
+        {
+            CloseForCapture();
+            CommandInvoking?.Invoke();
+            action();
+        }
+        finally { dispatchingCommand = false; }
+    }
     private ToolStripMenuItem Toggle(string text, string name, bool initial, Action<bool> change, ToolStripItemCollection owner, string? help = null)
     { ToolStripMenuItem? item = null; item = Item(text, name, () => change(!item!.Checked), owner); item.Checked = initial; item.ToolTipText = help; return item; }
     private static void EmptyHint(ToolStripMenuItem parent)
     { if (parent.DropDownItems.Count == 0) parent.DropDownItems.Add(new ToolStripMenuItem("設定画面で登録してください") { Enabled = false }); }
     internal void SetMode(CaptureMode mode)
-    { foreach (var pair in modes) pair.Value.Checked = pair.Key == mode; if (AllCommands.Any(i => i.Name == "AspectRatioMenu")) Command("AspectRatioMenu").Enabled = mode == CaptureMode.Rectangle; }
+    {
+        currentMode = mode;
+        foreach (var pair in modes) pair.Value.Checked = pair.Key == mode;
+        if (AllCommands.FirstOrDefault(i => i.Name == "AspectRatioMenu") is { } aspect)
+            aspect.Enabled = mode == CaptureMode.Rectangle;
+        if (selectionMethod is not null) selectionMethod.Available = mode == CaptureMode.Rectangle;
+    }
+
+    internal void AddRectangleSelectionMethods(Action selectByDrag, Action selectByTwoClicks)
+    {
+        selectionMethod = Menu("選択方法", "RectangleSelectionMethod", Command("CaptureRangeGroup").DropDownItems);
+        selectionMethod.Available = currentMode == CaptureMode.Rectangle;
+        selectDrag = Item("ドラッグ", "SelectionMethodDrag", selectByDrag, selectionMethod.DropDownItems);
+        selectTwoClicks = Item("2点クリック", "SelectionMethodTwoClicks", selectByTwoClicks, selectionMethod.DropDownItems);
+        SetRectangleSelectionMethod(false);
+    }
+
+    internal void SetRectangleSelectionMethod(bool twoClicks)
+    {
+        if (selectDrag is not null) selectDrag.Checked = !twoClicks;
+        if (selectTwoClicks is not null) selectTwoClicks.Checked = twoClicks;
+    }
+
+    internal void AddPresentationOptions(bool showMagnifier, Action<bool> changeMagnifier,
+        bool shareCapturePresentation, Action<bool> changeSharePresentation)
+    {
+        var operation = Command("CaptureOperationGroup").DropDownItems;
+        magnifier = Toggle("拡大鏡を表示する", "ShowMagnifier", showMagnifier, changeMagnifier, operation);
+        sharePresentation = Toggle("今回の撮影操作を画面共有・配信に表示する", "ShareCapturePresentation",
+            shareCapturePresentation, changeSharePresentation, operation);
+    }
+
+    internal void SetPresentationOptions(bool showMagnifier, bool shareCapturePresentation)
+    {
+        if (magnifier is not null) magnifier.Checked = showMagnifier;
+        if (sharePresentation is not null) sharePresentation.Checked = shareCapturePresentation;
+    }
+
+    internal void SetControlSelectionShortcut(string shortcutLabel, string controlName)
+    {
+        if (shortcut is null) return;
+        shortcut.Text = $"コントロール選択キー（{shortcutLabel}）";
+        shortcutControlName = controlName;
+    }
     internal void SetWindowSource(CaptureMode mode, bool isolated)
     {
         if (windowSource is null) return;
@@ -185,7 +279,18 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         foreach (var pair in anchors) pair.Value.Checked = pair.Key == anchor;
         foreach (var pair in colors) pair.Value.Checked = pair.Key == settings.ScreenshotColorDepth;
         foreach (var pair in metadata) pair.Value.Checked = pair.Key == settings.MetadataMode;
-        foreach (var item in AllCommands) item.Checked = item.Name switch { "FreezeFrame" => settings.FreezeFrame, "IncludeCursor" => settings.IncludeCursor, "DimCaptureBackground" => settings.DimCaptureBackground, "LimitToStartingMonitor" => limited, _ => item.Checked };
+        foreach (var item in AllCommands)
+            item.Checked = item.Name switch
+            {
+                "FreezeFrame" => settings.FreezeFrame,
+                "IncludeCursor" => settings.IncludeCursor,
+                "DimCaptureBackground" => settings.DimCaptureBackground,
+                "LimitToStartingMonitor" => limited,
+                "ShowPointerGuide" => settings.ShowPointerGuide,
+                "RecordSystemAudio" => settings.RecordSystemAudio,
+                "RecordMicrophone" => settings.RecordMicrophone,
+                _ => item.Checked
+            };
         var parent = AllCommands.FirstOrDefault(i => i.Name == "FixedSizeMenu"); if (parent is not null) parent.Text = $"固定寸法（{size.Width}×{size.Height}px）";
         var grid = AllCommands.FirstOrDefault(i => i.Name == "Grid20"); if (grid is not null) grid.Text = $"グリッドスナップを既定でON（{settings.GridStepPixels}px）";
         var folder = AllCommands.FirstOrDefault(i => i.Name == "OpenFolderAfterSave"); if (folder is not null) { folder.Checked = settings.OpenFolderAfterSave; folder.Enabled = currentDestination.HasFlag(OutputDestination.File); }
@@ -197,11 +302,26 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         if (input is not null) { input.Text = "入力プリセット: " + inputName + (inputChanged ? "（変更あり）" : ""); foreach (var item in input.DropDownItems.OfType<ToolStripMenuItem>()) item.Checked = item.Name == inputId; }
         if (output is not null) { output.Text = "出力プリセット: " + outputName + (outputChanged ? "（変更あり）" : ""); foreach (var item in output.DropDownItems.OfType<ToolStripMenuItem>()) item.Checked = item.Name == outputId; }
     }
-    protected override void OnClosing(ToolStripDropDownClosingEventArgs e)
-    { if (!closingCommand && e.CloseReason == ToolStripDropDownCloseReason.AppFocusChange && AllCommands.Any(i => i.HasDropDownItems && i.DropDown.Visible) && ownsPopupFocus()) e.Cancel = true; base.OnClosing(e); }
-    private sealed class SelectionModeDropDown(Func<bool> ownsPopupFocus) : ToolStripDropDownMenu
-    { protected override void OnClosing(ToolStripDropDownClosingEventArgs e) { if (e.CloseReason == ToolStripDropDownCloseReason.AppFocusChange && ownsPopupFocus()) e.Cancel = true; base.OnClosing(e); } }
-    internal bool HandleCommandKey(Keys keyData) { if ((keyData & Keys.KeyCode) != Keys.Escape) return false; cancel(); return true; }
+    internal bool HandleCommandKey(Keys keyData)
+    {
+        if ((keyData & Keys.KeyCode) != Keys.Escape) return false;
+        RunCommand(cancel);
+        return true;
+    }
+    private sealed class CaptureSubmenuItem(string text, Func<Keys, bool> handleKey) : ToolStripMenuItem(text)
+    {
+        // Preserve WinForms' generated drop-down ownership and route Esc from every level.
+        protected override ToolStripDropDown CreateDefaultDropDown() => new CaptureSubmenu(handleKey);
+    }
+
+    private sealed class CaptureSubmenu(Func<Keys, bool> handleKey) : ToolStripDropDownMenu
+    {
+        protected override bool ProcessCmdKey(ref Message message, Keys keyData) =>
+            handleKey(keyData) || base.ProcessCmdKey(ref message, keyData);
+        protected override bool ProcessDialogKey(Keys keyData) =>
+            handleKey(keyData) || base.ProcessDialogKey(keyData);
+    }
+
     protected override bool ProcessCmdKey(ref Message m, Keys keyData) => HandleCommandKey(keyData) || base.ProcessCmdKey(ref m, keyData);
     protected override bool ProcessDialogKey(Keys keyData) => HandleCommandKey(keyData) || base.ProcessDialogKey(keyData);
     protected override void Dispose(bool disposing) { if (disposing) menuFont.Dispose(); base.Dispose(disposing); }

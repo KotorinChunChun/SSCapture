@@ -121,6 +121,8 @@ internal sealed partial class SessionController
     private bool starting = true;
     private bool menuTransition;
     private bool menuOpen;
+    private bool menuClosedByCommand;
+    private int menuGeneration;
     private Point? lastPointerPosition;
     private bool lastSnap;
     private bool lastHeightLock, lastWidthLock;
@@ -256,16 +258,26 @@ internal sealed partial class SessionController
                 recapture is not null || currentFrameFactory is not null, ChangeFixedSize, ChangeFixedAnchor, ChangeMonitorLimit, ChangeColor,
                 mode => _ = ChangeMetadataAsync(mode), ChangeDim, enabled => _ = ChangeCaptureSourceAsync(enabled, OutputSettings.IncludeCursor),
                 enabled => _ = ChangeCaptureSourceAsync(OutputSettings.FreezeFrame, enabled), ChangeSnapPrecision, ChangeOutputDetails,
-                ChangeOpenFolder, () => _ = ResetInputPresetAsync(), ResetOutputPreset),
+                ChangeOpenFolder, () => _ = ResetInputPresetAsync(), ResetOutputPreset,
+                enabled => ApplyMenuSetting(OutputSettings with { ShowPointerGuide = enabled }),
+                enabled => ApplyMenuSetting(OutputSettings with { RecordSystemAudio = enabled }),
+                enabled => ApplyMenuSetting(OutputSettings with { RecordMicrophone = enabled })),
             changeWindowSource: options.Intent == CaptureIntent.Screenshot && findWindow is not null
-                ? enabled => { exclusiveWindow = enabled; UpdateMenu(); RefreshOverlays(); } : null);
+                ? enabled => { exclusiveWindow = enabled; UpdateMenu(); RefreshOverlays(); } : null,
+            openSettingsLink: OpenCaptureSettings);
+        SelectionMenu.AddRectangleSelectionMethods(
+            () => ChangeSelectionMethod(CaptureSelectionMethod.Drag), () => ChangeSelectionMethod(CaptureSelectionMethod.TwoClicks));
+        SelectionMenu.AddPresentationOptions(OutputSettings.ShowMagnifier, ChangeMagnifierVisibility,
+            OutputSettings.ShareCapturePresentation, ChangeSharePresentation);
         if (options.SelectionOnly)
         {
             foreach (var item in SelectionMenu.Items.Cast<ToolStripItem>())
-                if (item.Name is "CapturePresetMenu" or "CaptureOutputGroup" or "OpenSettings") item.Available = false;
+                if (item.Name is "CapturePresetMenu" or "CaptureOutputGroup" or "OpenSettings" or "CaptureSettingsMenu") item.Available = false;
         }
         SelectionMenu.SetRatio(AspectRatio);
         SelectionMenu.Closed += MenuClosed;
+        // WinForms can label a parent close as AppFocusChange when a child item was clicked.
+        SelectionMenu.CommandInvoking += () => { if (menuTransition && !menuOpen) menuClosedByCommand = true; };
         UpdateMenu();
     }
 
@@ -296,11 +308,31 @@ internal sealed partial class SessionController
         || OutputSettings.WindowCrop != selectedOutput.WindowCrop || OutputSettings.MetadataMode != selectedOutput.MetadataMode
         || OutputSettings.SelectedImageEditorId != (selectedOutput.ImageEditorId ?? "")
         || OutputSettings.SelectedVideoEditorId != (selectedOutput.VideoEditorId ?? "");
+    private void ApplyMenuSetting(Services.AppSettings settings)
+    {
+        OutputSettings = settings;
+        UpdateMenu();
+        RefreshOverlays();
+    }
+
+    private void OpenCaptureSettings(CaptureSettingsDestination destination, string? shortcutControlName)
+    {
+        string? presetId = destination switch
+        {
+            CaptureSettingsDestination.InputPreset => selectedInput.Id,
+            CaptureSettingsDestination.OutputPreset => selectedOutput.Id,
+            _ => null
+        };
+        FinishCommand(true, settingsLink: new(destination, presetId, shortcutControlName));
+    }
+
     private void UpdateMenu()
     {
         SelectionMenu.SetWindowSource(Mode, exclusiveWindow);
         SelectionMenu.UpdateEditing(OutputSettings, activeFixedSize, activeAnchor, selectionBounds is not null);
         SelectionMenu.SetPresetStatus(selectedInput.Name, selectedOutput.Name, InputPresetModified, OutputPresetModified, selectedInput.Id, selectedOutput.Id);
+        SelectionMenu.SetRectangleSelectionMethod(OutputSettings.SelectionMethod == CaptureSelectionMethod.TwoClicks);
+        SelectionMenu.SetPresentationOptions(OutputSettings.ShowMagnifier, OutputSettings.ShareCapturePresentation);
     }
     private void ChangeDestination(OutputDestination destination) { Destination = options.Intent == CaptureIntent.Recording ? destination & ~OutputDestination.Pinned : destination; SelectionMenu.SetDestination(Destination); UpdateMenu(); }
     internal Task ResetInputPresetAsync() => ApplyInputPresetAsync(selectedInput);
@@ -962,6 +994,17 @@ internal sealed partial class SessionController
 
     internal void MouseDown(CaptureOverlay overlay, MouseButtons button, Point? eventPosition = null)
     {
+        if (menuTransition && !menuOpen)
+        {
+            if (menuClosedByCommand && menuOwner is { } owner)
+                RestoreAfterMenu(owner, menuGeneration);
+            else
+            {
+                // WinForms can pass the outside press to the overlay after closing the menu.
+                if (overlay != dragOwner && !overlay.IsDisposed) overlay.Capture = false;
+                return;
+            }
+        }
         if (completed || refreshing || menuOpen || menuTransition) return;
         if (suppressedButtons != MouseButtons.None) return;
         if (button == MouseButtons.Right)
@@ -975,7 +1018,7 @@ internal sealed partial class SessionController
             }
             hasSelectionInput = true;
             if (cancelling) { AbortSelection(); suppressedButtons |= MouseButtons.Right; overlay.Capture = false; }
-            else ShowMenu(overlay);
+            else ShowMenu(overlay, eventPosition);
             return;
         }
         if (button is not (MouseButtons.Left or MouseButtons.Middle) || pressedButton != MouseButtons.None) return;
@@ -1086,11 +1129,12 @@ internal sealed partial class SessionController
         RefreshOverlays();
     }
 
-    private void ShowMenu(CaptureOverlay overlay)
+    private void ShowMenu(CaptureOverlay overlay, Point? eventPosition)
     {
         try
         {
-            Move(true);
+            Move(true, eventPosition);
+            if (completed) return;
             menuPointer = gesture.RawCurrent;
             menuTransition = true;
             ExitControlSelection();
@@ -1100,38 +1144,50 @@ internal sealed partial class SessionController
             overlay.Capture = false;
             RefreshOverlays();
             menuOwner = overlay;
+            menuGeneration++;
             menuOpen = true;
             UpdateMenu();
-            SelectionMenu.Show(overlay, overlay.PointToClient(CaptureNative.CursorPosition()));
-            menuTransition = false;
+            SelectionMenu.Show(overlay, overlay.PointToClient(menuPointer));
+            if (menuOpen)
+            {
+                // A canceled opening does not raise Closed.
+                menuOpen = SelectionMenu.Visible;
+                menuTransition = false;
+                if (!menuOpen) menuOwner = null;
+            }
         }
         catch (Exception ex) { Fail(ex); }
     }
 
     private void MenuClosed(object? sender, ToolStripDropDownClosedEventArgs e)
     {
+        if (!menuOpen) return;
         menuOpen = false;
         if (completed || refreshing || starting) return;
         menuTransition = true;
-        // Popup activation can transiently clear GetForegroundWindow. Check focus
-        // after the closing input message instead of treating that transition as exit.
-        if (e.CloseReason == ToolStripDropDownCloseReason.Keyboard)
+        menuClosedByCommand = e.CloseReason == ToolStripDropDownCloseReason.ItemClicked;
+        if (menuOwner is not { IsDisposed: false } owner) { Cancel(); return; }
+
+        int generation = menuGeneration;
+        // The mouse message that closed the menu can still reach the overlay.
+        owner.BeginInvoke((Action)(() => RestoreAfterMenu(owner, generation)));
+    }
+
+    private void RestoreAfterMenu(CaptureOverlay owner, int generation)
+    {
+        if (completed || refreshing || menuOpen || !menuTransition
+            || generation != menuGeneration || owner != menuOwner || owner.IsDisposed) return;
+        if (!CaptureNative.OwnsForegroundWindow() && !(menuClosedByCommand && CaptureNative.ForegroundTransition))
         {
             Cancel();
             return;
         }
-        CaptureOverlay? owner = menuOwner;
-        if (owner is null || owner.IsDisposed) { Cancel(); return; }
-        // Keep the closing menu's mouse message from becoming a selection gesture.
-        owner.BeginInvoke((Action)(() =>
-        {
-            if (completed || refreshing || !menuTransition || owner.IsDisposed) return;
-            if (e.CloseReason != ToolStripDropDownCloseReason.ItemClicked && !CaptureNative.OwnsForegroundWindow()) { Cancel(); return; }
-            menuTransition = false;
-            owner.Activate();
-            owner.Focus();
-            ResumePointerAfterMenu();
-        }));
+        menuTransition = false;
+        menuOwner = null;
+        var target = owner.Visible ? owner : overlays.FirstOrDefault(overlay => overlay.Visible && !overlay.IsDisposed);
+        target?.Activate();
+        target?.Focus();
+        ResumePointerAfterMenu();
     }
 
     internal void CaptureLost(CaptureOverlay overlay)
@@ -1152,7 +1208,16 @@ internal sealed partial class SessionController
 
     internal void ApplicationDeactivated()
     {
-        if (!starting && !refreshing && !menuOpen && !menuTransition && !SelectingControl) Cancel();
+        if (starting || refreshing || completed || SelectingControl) return;
+        if (!menuOpen && !menuTransition) { Cancel(); return; }
+        if (menuOwner is not { IsDisposed: false } owner) return;
+
+        int generation = menuGeneration;
+        owner.BeginInvoke((Action)(() =>
+        {
+            if (completed || refreshing || generation != menuGeneration || CaptureNative.OwnsForegroundWindow()) return;
+            Cancel();
+        }));
     }
 
     private void ResumePointerAfterMenu()
@@ -1189,6 +1254,7 @@ internal sealed partial class SessionController
             windowsKey = null;
             ReleasePointer();
             gesture.Reset();
+            SelectionMenu.CloseForCapture();
             SelectionMenu.Dispose();
             guide?.Dispose();
             foreach (CaptureOverlay overlay in overlays) overlay.Dispose();
@@ -1302,14 +1368,15 @@ internal sealed partial class SessionController
         finally { result?.Dispose(); Snapshot.Dispose(); }
     }
 
-    private void FinishCommand(bool openSettings, bool escapedBeforeSelectionInput = false)
+    private void FinishCommand(bool openSettings, bool escapedBeforeSelectionInput = false, CaptureSettingsLink? settingsLink = null)
     {
         if (completed) return;
         completed = true;
         try
         {
             CloseOverlays();
-            completion.TrySetResult(new CaptureOutcome(null, null, openSettings, escapedBeforeSelectionInput: escapedBeforeSelectionInput));
+            completion.TrySetResult(new CaptureOutcome(null, null, openSettings,
+                escapedBeforeSelectionInput: escapedBeforeSelectionInput, settingsLink: settingsLink));
         }
         catch (Exception ex) { completion.TrySetException(ex); }
         finally { Snapshot.Dispose(); }

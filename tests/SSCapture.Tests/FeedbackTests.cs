@@ -257,6 +257,7 @@ internal static partial class Program
             var sound = new FakeCompletionSound();
             using var feedback = new CaptureFeedback(createToast: () => toast, sound: sound, timer: new FakeFeedbackTimer());
             var settings = new AppSettings { PlayCaptureSound = true, NotificationDurationSeconds = 5 };
+            Check(!feedback.CanShowPreviousScreenshot(settings), "撮影前に前回結果を有効化した");
             feedback.ShowPreviousScreenshot(settings);
             Equal(0, toast.Shows);
             int retries = 0;
@@ -268,6 +269,12 @@ internal static partial class Program
             feedback.Notify(new(CaptureIntent.Recording, OutputDestination.File, OutputDestination.None), settings);
             retry();
             Equal(0, retries);
+            var notificationsOff = settings with { NotificationDurationSeconds = 0 };
+            Check(!feedback.CanShowPreviousScreenshot(notificationsOff), "通知OFFで前回結果を有効化した");
+            int shows = toast.Shows;
+            feedback.ShowPreviousScreenshot(notificationsOff);
+            Equal(shows, toast.Shows);
+            Check(feedback.CanShowPreviousScreenshot(settings), "前回の静止画があっても項目を無効化した");
             feedback.ShowPreviousScreenshot(settings);
             Equal("前回の撮影結果", toast.Actions!.Heading);
             Check(toast.Message.StartsWith("640×360px") && !toast.Actions.HasInteractiveSurface, "参考表示が前回の静止画結果と一致しない");

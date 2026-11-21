@@ -157,7 +157,8 @@ internal static partial class Program
             Check(!canceledResult.EscapedBeforeSelectionInput, "メニューから前回結果を表示");
             SessionController settings = new(new CaptureOptions(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.File),
                 new DesktopSnapshot(PatternBitmap(), bounds, [bounds]), []);
-            settings.SelectionMenu.AllCommands.Single(item => item.Text == "設定").PerformClick();
+            settings.SelectionMenu.Command("OpenSettings").PerformClick();
+            WaitHistory(settings.Completion);
             using CaptureOutcome settingsResult = settings.Completion.GetAwaiter().GetResult();
             Check(settingsResult.OpenSettings && settingsResult.Image is null && settingsResult.Selection is null, "設定は撮影せずに返す");
         });

@@ -85,6 +85,9 @@ internal sealed class CaptureFeedback : IDisposable
 
     internal string? LastWarning => lastWarning ?? sound.LastWarning;
 
+    internal bool CanShowPreviousScreenshot(AppSettings settings) =>
+        !disposed && settings.ShowCaptureNotification && previousScreenshot is not null;
+
     internal void Notify(CaptureDelivery result, AppSettings settings, Action? retryOutput = null)
     {
         if (disposed || (!result.HasSuccess && !result.HasFailure)) { result.NotificationImage?.Dispose(); return; }
@@ -96,7 +99,7 @@ internal sealed class CaptureFeedback : IDisposable
 
     internal void ShowPreviousScreenshot(AppSettings settings)
     {
-        if (!disposed && previousScreenshot is { } result) Show(result, settings, null, reference: true);
+        if (CanShowPreviousScreenshot(settings) && previousScreenshot is { } result) Show(result, settings, null, reference: true);
     }
 
     private void Show(CaptureDelivery result, AppSettings settings, Action? retryOutput, bool reference)

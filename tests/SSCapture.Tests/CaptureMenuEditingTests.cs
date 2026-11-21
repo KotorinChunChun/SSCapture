@@ -56,13 +56,13 @@ internal static partial class Program
             try
             {
                 var menu = session.SelectionMenu;
-                Equal("InputPresetMenu,CapturePresetMenu,CaptureRangeGroup,CaptureOutputGroup,CaptureOperationGroup,OpenSettings,CancelCapture",
+                Equal("InputPresetMenu,CapturePresetMenu,CaptureRangeGroup,CaptureOutputGroup,CaptureOperationGroup,CaptureSettingsMenu,CancelCapture",
                     string.Join(',', menu.Items.OfType<ToolStripMenuItem>().Select(i => i.Name)));
                 foreach (string name in new[] { "CaptureModeMenu", "FixedAnchorMenu", "ScreenshotPaddingMenu", "FreezeFrame", "IncludeCursor" })
                     Check(menu.Command("CaptureRangeGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
                 foreach (string name in new[] { "ScreenshotColorDepthMenu", "MetadataModeMenu" })
                     Check(menu.Command("CaptureOutputGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
-                foreach (string name in new[] { "LimitToStartingMonitor", "DimCaptureBackground", "Grid20", "ShowSelectionGuide" })
+                foreach (string name in new[] { "LimitToStartingMonitor", "DimCaptureBackground", "Grid20", "ShowSelectionGuide", "ShowPointerGuide" })
                     Check(menu.Command("CaptureOperationGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
                 Equal("開始したモニター内で選択する", menu.Command("LimitToStartingMonitor").Text);
                 Equal("選択中モニタの背景を暗くする", menu.Command("DimCaptureBackground").Text);
@@ -136,6 +136,216 @@ internal static partial class Program
                 Check(!session.SelectionMenu.Visible && session.SelectionMenu.AllCommands.All(i => !i.HasDropDownItems || !i.DropDown.Visible), "子ポップアップが残る");
             }
             finally { session.Cancel(); }
+        });
+        Run("フォーカス喪失で右クリックメニューの全階層とキャプチャが閉じる", () =>
+        {
+            var session = MenuSession();
+            using var host = new Form { ShowInTaskbar = false };
+            try
+            {
+                host.Show();
+                var menu = session.SelectionMenu;
+                menu.Show(host, new Point(20, 20));
+                var leaf = RevealMenuCommand(menu, menu.Command("AnchorBottomRight"));
+                int VisibleMenus() => (menu.Visible ? 1 : 0)
+                    + menu.AllCommands.Count(item => item.HasDropDownItems && item.DropDown.Visible);
+                Equal(3, VisibleMenus());
+                leaf.Capture = true;
+                menu.Close(ToolStripDropDownCloseReason.AppFocusChange);
+                Equal(0, VisibleMenus());
+                Check(!leaf.Capture, "閉じたポップアップがキャプチャを保持");
+            }
+            finally { session.Cancel(); }
+        });
+        Run("末端実行は一度だけで閉じるクリックを選択に使わず次の左押下でドラッグできる", () =>
+        {
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot,
+                OutputDestination.Clipboard, LimitToStartingMonitor: false, ShowSelectionGuide: false), MenuFrame(Color.Red), []);
+            try
+            {
+                session.Start();
+                var overlay = Application.OpenForms.OfType<CaptureOverlay>().Single(f => f.SelectionMenu == session.SelectionMenu);
+                var menu = session.SelectionMenu;
+                var openAt = new Point(45, 45);
+                var start = new Point(80, 80);
+                var end = new Point(200, 170);
+                session.MouseDown(overlay, MouseButtons.Right, openAt);
+                var command = menu.Command("ColorIndexed4");
+                var popup = RevealMenuCommand(menu, command);
+                int closed = 0, clicked = 0;
+                menu.Closed += (_, _) => closed++;
+                command.Click += (_, _) =>
+                {
+                    clicked++;
+                    Check(!menu.Visible && !popup.Visible && !popup.Capture, "コマンド実行後もポップアップが残る");
+                };
+                command.PerformClick();
+                Equal(1, closed);
+                Equal(1, clicked);
+                session.MouseDown(overlay, MouseButtons.Left, start);
+                Check(session.HasPointerPress, "メニュー終了の遅延処理を待たずに押した左ボタンを落とした");
+                session.AbortSelection();
+                session.MouseUp(MouseButtons.Left, start);
+                session.MouseDown(overlay, MouseButtons.Right, openAt);
+                var reopenedPopup = RevealMenuCommand(menu, command);
+                Application.DoEvents();
+                Check(menu.Visible && reopenedPopup.Visible, "前回の終了通知が再表示したメニューを閉じた");
+                menu.Close(ToolStripDropDownCloseReason.AppClicked);
+                overlay.Capture = true;
+                session.MouseDown(overlay, MouseButtons.Left, start);
+                session.MouseUp(MouseButtons.Left, start);
+                Check(!session.HasPointerPress && !overlay.Capture && !session.Completion.IsCompleted, "閉じる押下が選択へ伝わった");
+                Application.DoEvents();
+                session.MouseDown(overlay, MouseButtons.Left, start);
+                Check(session.HasPointerPress, "次の左押下が無視された");
+                session.MoveTo(end);
+                Check(session.Dragging, "次の左押下からドラッグを開始できない");
+                session.MouseUp(MouseButtons.Left, end);
+                WaitHistory(session.Completion);
+                using var outcome = session.Completion.GetAwaiter().GetResult();
+                Equal(new Rectangle(80, 80, 120, 90), outcome.Selection!.Bounds);
+                Equal(ScreenshotColorDepth.Indexed4, outcome.OutputSettings!.ScreenshotColorDepth);
+            }
+            finally { session.Cancel(); }
+        });
+        Run("固定サイズはメニューで基点を選んだ直後の押下で新しいポインタ位置から撮影する", () =>
+        {
+            var session = new SessionController(new(CaptureMode.FixedRegion, CaptureIntent.Screenshot,
+                OutputDestination.Clipboard, FixedSize: new(100, 80), LimitToStartingMonitor: false,
+                ShowSelectionGuide: false), MenuFrame(Color.Red), []);
+            try
+            {
+                session.Start();
+                var overlay = Application.OpenForms.OfType<CaptureOverlay>().Single(f => f.SelectionMenu == session.SelectionMenu);
+                session.MouseDown(overlay, MouseButtons.Right, new Point(140, 120));
+                var command = session.SelectionMenu.Command("AnchorBottomRight");
+                RevealMenuCommand(session.SelectionMenu, command);
+                command.PerformClick();
+                var confirmAt = new Point(230, 200);
+                session.MouseDown(overlay, MouseButtons.Left, confirmAt);
+                Check(session.HasPointerPress, "基点選択後の最初の左押下を受け取らなかった");
+                session.MouseUp(MouseButtons.Left, confirmAt);
+                WaitHistory(session.Completion);
+                using var outcome = session.Completion.GetAwaiter().GetResult();
+                Equal(CaptureAnchor.BottomRight, session.FixedAnchor);
+                Equal(new Rectangle(130, 120, 100, 80), outcome.Selection!.Bounds);
+            }
+            finally { session.Cancel(); }
+        });
+        Run("Escと設定リンクは開いたメニューを閉じて撮影せずに終了する", () =>
+        {
+            foreach (bool openSettings in new[] { false, true })
+            {
+                var settings = new AppSettings();
+                SavedRegion preset = SavedRegion.FromSettings("指定する入力", settings) with { IsDefault = true };
+                var session = MenuSession(settings: settings with { SavedRegions = [preset] });
+                using var host = new Form { ShowInTaskbar = false };
+                try
+                {
+                    var menu = session.SelectionMenu;
+                    host.Show();
+                    menu.Show(host, new Point(20, 20));
+                    var command = menu.Command("OpenInputPresetSettings");
+                    var popup = RevealMenuCommand(menu, command);
+                    Check(popup.Visible && command.ToolTipText?.Contains("撮影を終了") == true, "設定先とツールチップが表示されない");
+                    if (openSettings) command.PerformClick();
+                    else
+                    {
+                        var escape = Message.Create(popup.Handle, 0x0100, (IntPtr)Keys.Escape, IntPtr.Zero);
+                        Check(popup.PreProcessMessage(ref escape), "子メニューがEscを処理しない");
+                    }
+                    using var outcome = session.Completion.GetAwaiter().GetResult();
+                    Check(!menu.Visible && !popup.Visible && outcome.Selection is null && outcome.Image is null, "撮影後のUIが残った");
+                    Equal(openSettings, outcome.OpenSettings);
+                    Equal(openSettings ? new CaptureSettingsLink(CaptureSettingsDestination.InputPreset, preset.Id) : null, outcome.SettingsLink);
+                }
+                finally { session.Cancel(); }
+            }
+        });
+        Run("設定リンクは指定した入出力プリセットとショートカット欄を開く", () =>
+        {
+            var defaults = new AppSettings();
+            var input = SavedRegion.FromSettings("用途別入力", defaults);
+            var output = CapturePreset.FromSettings("用途別出力", defaults);
+            var settings = defaults with
+            {
+                SavedRegions = [SavedRegion.FromSettings("既定入力", defaults) with { IsDefault = true }, input],
+                CapturePresets = [CapturePreset.FromSettings("既定出力", defaults) with { IsDefault = true }, output]
+            };
+            using var settingsForm = new SettingsForm(settings, _ => null, () => { }, listMicrophones: () => [], listDisplays: () => []);
+            Control Find(string name) => settingsForm.Controls.Find(name, true).Single();
+            var tabs = (TabControl)Find("SettingsTabs");
+
+            settingsForm.ShowCaptureSettings(new(CaptureSettingsDestination.InputPreset, input.Id));
+            Equal("入力プリセット", tabs.SelectedTab!.Text);
+            Equal(input.Id, ((SavedRegion)((ListBox)Find("SavedRegions")).SelectedItem!).Id);
+            settingsForm.ShowCaptureSettings(new(CaptureSettingsDestination.OutputPreset, output.Id));
+            Equal("出力プリセット", tabs.SelectedTab!.Text);
+            Equal(output.Id, ((CapturePreset)((ListBox)Find("CapturePresetList")).SelectedItem!).Id);
+            settingsForm.ShowCaptureSettings(new(CaptureSettingsDestination.Shortcut, ShortcutControlName: "CaptureKeysSpace"));
+            Equal("ショートカット", tabs.SelectedTab!.Text);
+            var shortcutTabs = (TabControl)Find("ShortcutGroups");
+            Equal("撮影ドラッグ中の操作", shortcutTabs.SelectedTab!.Text);
+        });
+        Run("操作ガイドと録画音声のチェックは各項目が独立し今回の撮影設定へ渡る", () =>
+        {
+            var settings = new AppSettings { ShowPointerGuide = true, RecordSystemAudio = false, RecordMicrophone = true };
+            var session = MenuSession(intent: CaptureIntent.Recording, settings: settings);
+            try
+            {
+                var menu = session.SelectionMenu;
+                var pointerGuide = menu.Command("ShowPointerGuide");
+                var bottomGuide = menu.Command("ShowSelectionGuide");
+                var systemAudio = menu.Command("RecordSystemAudio");
+                var microphone = menu.Command("RecordMicrophone");
+                Check(pointerGuide.Checked && !bottomGuide.Checked && !systemAudio.Checked && microphone.Checked, "初期チェックが設定と不一致");
+                pointerGuide.PerformClick();
+                systemAudio.PerformClick();
+                microphone.PerformClick();
+                Check(!pointerGuide.Checked && !bottomGuide.Checked && systemAudio.Checked && !microphone.Checked, "別の項目のチェックが連動した");
+                session.MoveTo(new(100, 100));
+                session.HandleCommandKey(Keys.Enter);
+                WaitHistory(session.Completion);
+                using var outcome = session.Completion.GetAwaiter().GetResult();
+                Check(outcome.OutputSettings is { ShowPointerGuide: false, RecordSystemAudio: true, RecordMicrophone: false }, "今回の録画準備へ設定が渡らない");
+                Check(settings is { ShowPointerGuide: true, RecordSystemAudio: false, RecordMicrophone: true }, "元設定が変更された");
+            }
+            finally { session.Cancel(); }
+
+            var screenshot = MenuSession();
+            try { Check(!screenshot.SelectionMenu.AllCommands.Any(i => i.Name == "RecordingAudio"), "静止画に録画音声項目がある"); }
+            finally { screenshot.Cancel(); }
+        });
+        Run("親側の選択方法・拡大鏡・配信設定をメニューへ接続できる", () =>
+        {
+            using var menu = new CaptureContextMenu(OutputDestination.Clipboard, _ => { }, () => { }, () => { },
+                CaptureMode.FixedRegion);
+            bool magnifier = false, share = true, twoClicks = false;
+            void UpdateMenu() { menu.SetRectangleSelectionMethod(twoClicks); menu.SetPresentationOptions(magnifier, share); }
+            menu.AddRectangleSelectionMethods(() => { twoClicks = false; UpdateMenu(); }, () => { twoClicks = true; UpdateMenu(); });
+            menu.AddPresentationOptions(magnifier, value => { magnifier = value; UpdateMenu(); },
+                share, value => { share = value; UpdateMenu(); });
+            Check(!menu.Command("RectangleSelectionMethod").Available, "固定サイズに選択方法が表示された");
+            menu.SetMode(CaptureMode.Rectangle);
+            Check(menu.Command("RectangleSelectionMethod").Available && menu.Command("SelectionMethodDrag").Checked, "矩形の初期選択方法が未反映");
+            menu.Command("SelectionMethodTwoClicks").PerformClick();
+            menu.Command("ShowMagnifier").PerformClick();
+            menu.Command("ShareCapturePresentation").PerformClick();
+            Check(twoClicks && magnifier && !share && menu.Command("SelectionMethodTwoClicks").Checked
+                && menu.Command("ShowMagnifier").Checked && !menu.Command("ShareCapturePresentation").Checked, "親のコールバックとメニューの状態が不一致");
+        });
+        Run("トレイで選んだモニターは番号が変わっても同じ表示先を解決する", () =>
+        {
+            var selected = new DisplayTarget("DISPLAY2", new(0, 0, 800, 600), true);
+            var moved = selected with { Bounds = new(-1200, 0, 1200, 900), IsPrimary = false };
+            var other = new DisplayTarget("DISPLAY3", new(0, 0, 1024, 768), true);
+            Equal(moved, InstantCapture.ResolveDisplay(selected, [other, moved]));
+            try
+            {
+                InstantCapture.ResolveDisplay(selected, [other]);
+                throw new Exception("切断済みのモニターから別のモニターに撮影を振り替えた");
+            }
+            catch (InvalidOperationException) { }
         });
         Run("画面固定とカーソルは両方向で再取得し固定枠を保持", () =>
         {

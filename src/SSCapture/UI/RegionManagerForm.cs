@@ -40,6 +40,15 @@ internal sealed class RegionManagerForm : Form
         if (preset is null) return false;
         ReloadList(preset.Id); return true;
     }
+
+    internal bool SelectPreset(string? id)
+    {
+        if (id is null) return false;
+        if (editing?.Id == id) return true;
+        if (!StoreCurrent() || !regions.Any(preset => preset.Id == id)) return false;
+        ReloadList(id);
+        return true;
+    }
     private Form Host => TopLevel ? this : Parent?.FindForm() ?? this;
 
     public RegionManagerForm(SavedRegion[] regions, SavedRegion? lastRegion,

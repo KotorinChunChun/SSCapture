@@ -26,6 +26,11 @@ internal static class InstantCapture
         return available[number - 1].Bounds;
     }
 
+    internal static DisplayTarget ResolveDisplay(DisplayTarget selected, IEnumerable<DisplayTarget> displays) =>
+        OrderDisplays(displays).FirstOrDefault(display =>
+            StringComparer.OrdinalIgnoreCase.Equals(display.DeviceName, selected.DeviceName))
+        ?? throw new InvalidOperationException("選択したモニターの接続を確認できませんでした。");
+
     // No windows are shown, hidden or activated before reading these physical pixels.
     internal static Bitmap Take(int number, bool includeCursor = false)
     {

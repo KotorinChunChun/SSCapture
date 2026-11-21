@@ -36,13 +36,19 @@ internal sealed record CaptureSelection(
     CaptureReplaySource? ReplaySource = null,
     CaptureReplaySource.Control? ControlSource = null);
 
+internal enum CaptureSettingsDestination { General, InputPreset, OutputPreset, Shortcut }
+
+internal sealed record CaptureSettingsLink(CaptureSettingsDestination Destination, string? PresetId = null,
+    string? ShortcutControlName = null);
+
 internal sealed class CaptureOutcome(Bitmap? image, CaptureSelection? selection, bool openSettings = false,
     SSCapture.Services.AppSettings? outputSettings = null, SSCapture.Services.CaptureMetadata? metadata = null,
-    bool escapedBeforeSelectionInput = false) : IDisposable
+    bool escapedBeforeSelectionInput = false, CaptureSettingsLink? settingsLink = null) : IDisposable
 {
     public Bitmap? Image { get; } = image;
     public CaptureSelection? Selection { get; } = selection;
     public bool OpenSettings { get; } = openSettings;
+    internal CaptureSettingsLink? SettingsLink { get; } = settingsLink;
     public bool EscapedBeforeSelectionInput { get; } = escapedBeforeSelectionInput;
     public SSCapture.Services.AppSettings? OutputSettings { get; } = outputSettings;
     public SSCapture.Services.CaptureMetadata? Metadata { get; } = metadata;

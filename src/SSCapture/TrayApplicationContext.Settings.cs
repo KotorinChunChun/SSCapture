@@ -9,7 +9,9 @@ namespace SSCapture;
 
 internal sealed partial class TrayApplicationContext
 {
-    private void ShowSettings()
+    private void ShowSettings() => ShowSettings(null);
+
+    private void ShowSettings(CaptureSettingsLink? settingsLink)
     {
         if (exiting || busy)
             return;
@@ -30,6 +32,7 @@ internal sealed partial class TrayApplicationContext
         if (form.WindowState == FormWindowState.Minimized)
             form.WindowState = FormWindowState.Normal;
         form.Activate();
+        if (settingsLink is not null) form.ShowCaptureSettings(settingsLink);
     }
 
     private string? ImportFromManagement(System.Text.Json.JsonElement payload)

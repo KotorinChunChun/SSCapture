@@ -399,6 +399,30 @@ internal sealed class SettingsForm : Form
             if (((TabPage)categories.Items[index]!).Text == title) { categories.SelectedIndex = index; refreshSaveButton?.Invoke(); return; }
     }
 
+    internal void ShowCaptureSettings(CaptureSettingsLink link)
+    {
+        switch (link.Destination)
+        {
+            case CaptureSettingsDestination.InputPreset:
+                SelectCategory("入力プリセット");
+                inputPresetEditor.SelectPreset(link.PresetId);
+                break;
+            case CaptureSettingsDestination.OutputPreset:
+                SelectCategory("出力プリセット");
+                presetEditor.SelectPreset(link.PresetId);
+                break;
+            case CaptureSettingsDestination.Shortcut:
+                SelectCategory("ショートカット");
+                Control target = link.ShortcutControlName is { Length: > 0 } name
+                    ? Controls.Find(name, true).FirstOrDefault() ?? captureBeforeKeys
+                    : captureBeforeKeys;
+                for (Control? parent = target.Parent; parent is not null; parent = parent.Parent)
+                    if (parent is TabPage page && page.Parent is TabControl tabs) tabs.SelectedTab = page;
+                target.Select();
+                break;
+        }
+    }
+
     public void SetStatus(StatusMessage? message)
     {
         statusTimer.Stop();

@@ -80,6 +80,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
             modeItems.Add(value, item);
         }
 
+        InitializeMonitorMenu();
         recordItem = new ToolStripMenuItem("録画", null, (_, _) => OnCaptureKey(CaptureIntent.Recording));
         menu.Items.Add(recordItem);
         menu.Items.Add(CreateTimerMenu());
@@ -88,6 +89,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         sameSettingsItem = new ToolStripMenuItem("直前と同じ設定で再撮影", null, (_, _) => _ = TakeSameSettingsAsync());
         menu.Items.Add(sameSettingsItem);
         menu.Items.Add("入力プリセット", null, (_, _) => ShowRegions());
+        AddPreviousCaptureMenu();
         menu.Items.Add("撮影履歴", null, (_, _) => ShowHistory());
         pinnedVisibility = new ToolStripMenuItem("すべてのピン留めを一時非表示", null, (_, _) => pinnedImages.ToggleVisibility()) { Enabled = false };
         menu.Items.Add(pinnedVisibility);
