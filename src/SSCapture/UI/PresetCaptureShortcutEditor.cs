@@ -195,7 +195,9 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
     }
 
     private object[] DisplayValues(PresetCaptureShortcut row) =>
-        [KeyDisplay.Binding(row.Key), row.IntentLabel, FindItem(inputs, row.InputPresetId).Name, FindItem(outputs, row.OutputPresetId).Name];
+        [KeyDisplay.Binding(row.Key), row.IntentLabel,
+            row.InputPresetId is null ? "★既定を使う" : FindItem(inputs, row.InputPresetId).Name,
+            row.OutputPresetId is null ? "★既定を使う" : FindItem(outputs, row.OutputPresetId).Name];
 
     private static void SetChoices(ComboBox combo, PresetItem[] choices, string? id)
     {

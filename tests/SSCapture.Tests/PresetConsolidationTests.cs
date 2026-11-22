@@ -90,6 +90,11 @@ internal static partial class Program
                     "既定にするボタンがリスト直下に揃わない");
             }
 
+            var grid = (DataGridView)form.Controls.Find("PresetCaptureShortcuts", true).Single();
+            var normal = grid.Rows.Cast<DataGridViewRow>().Single(row =>
+                Equals(row.Cells[0].Value, KeyDisplay.Binding("Win+Shift+S")));
+            Equal<string?>("★既定を使う", normal.Cells[2].Value as string);
+            Equal<string?>("★既定を使う", normal.Cells[3].Value as string);
             var group = form.Controls.Find("SelectedShortcutAssignment", true).Single();
             Check(group is GroupBox && group.Contains(form.Controls.Find("PresetCaptureShortcut", true).Single()) &&
                 !group.Contains(form.Controls.Find("PresetCaptureShortcuts", true).Single()), "ショートカットの一覧と編集欄の区別がない");
@@ -108,7 +113,7 @@ internal static partial class Program
             var quick = settings.PresetCaptureShortcuts!.Single(row => row.Key == "Win+Shift+Q");
             var fixedPreset = ResolvedPresetCapture.Resolve(settings, quick.InputPresetId, quick.OutputPresetId);
             Check(!quick.UsesDirectCapture(fixedPreset.Input), "固定サイズキーが選択画面を開かない");
-            Equal(new Size(960, 540), fixedPreset.Input.Bounds.Size);
+            Equal(new Size(800, 600), fixedPreset.Input.Bounds.Size);
             VerifyStandardFixedFrames(settings);
             Equal("囲った範囲", settings.SavedRegions.Single(p => p.IsDefault).Name); Equal("クリップボード", settings.CapturePresets.Single(p => p.IsDefault).Name);
             Check(settings.CapturePresets.Select(p => p.Destination).ToHashSet().SetEquals([OutputDestination.Clipboard, OutputDestination.File, OutputDestination.Clipboard | OutputDestination.File]), "初期出力の組合せが異なる");

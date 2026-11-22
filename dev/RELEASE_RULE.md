@@ -7,15 +7,15 @@
 | 項目 | 値 |
 | --- | --- |
 | リポジトリ | `KotorinChunChun/SSCapture`、main |
-| 対象の版・タグ | `0.1.10` / `v0.1.10` |
+| 対象の版・タグ | `0.1.11` / `v0.1.11` |
 | AppId | `KotorinToys.SSCapture` |
 | 導入先の既定 | `{localappdata}\Programs\SSCapture` |
 | 対象 | Windows 11 x64、ユーザー単位 |
 | 形式 | Inno Setupインストーラー、.NET 10 Desktop Runtime同梱 |
 | 公開状態 | 未署名のprereleaseを継続 |
-| 公開用出力先 | `release/v0.1.10/`、Git除外 |
+| 公開用出力先 | `release/v0.1.11/`、Git除外 |
 
-v0.1.10の変更点は[リリースノート](../docs/releases/v0.1.10.md)、確認した操作と条件は[版別報告](history/v0.1.10/v0.1.10-imp.md)を参照する。
+v0.1.11の変更点は[リリースノート](../docs/releases/v0.1.11.md)、確認した操作と条件は[版別報告](history/v0.1.11/v0.1.11-imp.md)を参照する。
 
 公開対象のコミットを確定し、新しい発行先で公開用セットアップと目録を生成して検査する。既存候補を版別logsへ退避する。正式導入済みのアプリは設定・履歴を保持して公開版へ更新し、再起動を確認する。
 
@@ -54,10 +54,10 @@ pwsh -File scripts/package.ps1
 git fetch origin --prune
 git status --short
 git rev-list --left-right --count origin/main...HEAD
-Get-FileHash release/v0.1.10/SSCapture-0.1.10-setup.exe -Algorithm SHA256
+Get-FileHash release/v0.1.11/SSCapture-0.1.11-setup.exe -Algorithm SHA256
 git push origin main
 $releaseCommit = git rev-parse HEAD
-gh release create v0.1.10 release/v0.1.10/SSCapture-0.1.10-setup.exe release/v0.1.10/SSCapture-packages.json release/v0.1.10/SSCapture-SHA256SUMS.txt --repo KotorinChunChun/SSCapture --target $releaseCommit --title 'SSCapture v0.1.10' --notes-file docs/releases/v0.1.10.md --prerelease
+gh release create v0.1.11 release/v0.1.11/SSCapture-0.1.11-setup.exe release/v0.1.11/SSCapture-packages.json release/v0.1.11/SSCapture-SHA256SUMS.txt --repo KotorinChunChun/SSCapture --target $releaseCommit --title 'SSCapture v0.1.11 (beta)' --notes-file docs/releases/v0.1.11.md --prerelease
 ```
 
 mainだけをプッシュする。不要な過去タグの一括送信・force pushを行わない。Release作成後はタグの対象コミット、3資産のサイズ・SHA256、ノートを確認し、実公開URLを報告する。

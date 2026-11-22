@@ -29,7 +29,7 @@ $files = @('SSCapture.exe','SSCapture.dll','SSCapture.deps.json','coreclr.dll','
     'maintenance/KotorinToys.Maintenance.exe','maintenance/KotorinToys.Maintenance.dll',
     'maintenance/KotorinToys.Maintenance.deps.json','maintenance/coreclr.dll',
     'maintenance/hostfxr.dll','maintenance/hostpolicy.dll','maintenance/System.Private.CoreLib.dll',
-    'LICENSE.txt','docs/usage.md','docs/releases/v0.1.3.md') + @(Get-ReadmeImages)
+    'LICENSE.txt','docs/usage.md','docs/releases/v0.1.3.md') + @(Get-ManagedDocumentImages)
 foreach ($file in $files) {
     $path = Join-Path $root $file
     New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
@@ -114,13 +114,19 @@ foreach ($forbidden in @('secrets.json','sample.pdb','private/test.md','data/set
         }
     }
 }
-Case '同梱READMEの操作画像とライセンスをローカル参照' {
+Case '同梱READMEと利用ガイドの画像およびライセンスをローカル参照' {
     $destination = Join-Path $base ([Guid]::NewGuid().ToString('N'))
     Copy-ManagedDocuments $repository $destination $fixtureVersion
     Assert-PayloadLinks $destination
     $readme = [IO.File]::ReadAllText((Join-Path $destination 'README.md'))
-    foreach ($relative in @(Get-ReadmeImages) + @('LICENSE.txt')) {
+    foreach ($relative in @('LICENSE.txt','docs/images/readme/capture-scene-drag.png','docs/images/readme/capture-complete.png',
+        'docs/usage.md#撮影中の画面')) {
         if (!$readme.Contains("($relative)")) { throw "READMEの参照がローカルにありません: $relative" }
+    }
+    $usage = [IO.File]::ReadAllText((Join-Path $destination 'docs/usage.md'))
+    foreach ($image in Get-ManagedDocumentImages | Where-Object { $_ -like '*/capture-scene-*.png' }) {
+        $relative = $image.Substring('docs/'.Length)
+        if (!$usage.Contains("($relative)")) { throw "利用ガイドの参照がローカルにありません: $relative" }
     }
 }
 Case '目録の全件照合・欠落・追加・改変・重複' {

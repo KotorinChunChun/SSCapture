@@ -7,6 +7,7 @@ internal static class PresetSettings
     internal const string PaintKey = "builtin-paint";
     internal const string InitialWindowKey = "initial-input-window";
     internal const string InitialFixedKey = "initial-input-fixed";
+    internal const string DefaultFixedShortcutPresetKey = "initial-input-fixed-800-600";
     internal const int InitialFixedWidth = 960;
     internal const int InitialFixedHeight = 540;
     internal static Size InitialFixedSize => new(InitialFixedWidth, InitialFixedHeight);
@@ -14,7 +15,7 @@ internal static class PresetSettings
     private static readonly (string Key, Size OldSize, Size NewSize)[] FixedTemplates =
     [
         (InitialFixedKey, new(1280, 720), InitialFixedSize),
-        ("initial-input-fixed-800-600", new(1920, 1080), new(800, 600)),
+        (DefaultFixedShortcutPresetKey, new(1920, 1080), new(800, 600)),
         ("initial-input-fixed-320-240", new(2560, 1440), new(320, 240))
     ];
 

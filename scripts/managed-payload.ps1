@@ -36,13 +36,8 @@ function Assert-PayloadLinks([string]$Root) {
     }
 }
 
-function Get-ReadmeImages {
+function Get-ManagedDocumentImages {
     @(
-        'docs/images/readme/01-settings-0110.png'
-        'docs/images/readme/02-input-0110.png'
-        'docs/images/readme/03-output-0110.png'
-        'docs/images/readme/04-selection-0110.png'
-        'docs/images/readme/05-menu-0110.png'
         'docs/images/readme/capture-complete.png'
         'docs/images/readme/capture-scene-drag.png'
         'docs/images/readme/capture-scene-two-clicks.png'
@@ -64,7 +59,7 @@ function Assert-ManagedPayload {
         'maintenance/KotorinToys.Maintenance.deps.json','maintenance/KotorinToys.Maintenance.runtimeconfig.json',
         'maintenance/coreclr.dll','maintenance/hostfxr.dll','maintenance/hostpolicy.dll','maintenance/System.Private.CoreLib.dll',
         'LICENSE.txt','docs/usage.md',"docs/releases/v$Version.md")
-    $images = @(Get-ReadmeImages)
+    $images = @(Get-ManagedDocumentImages)
     $required += $images
     foreach ($relative in $required) {
         if (-not (Test-Path -LiteralPath (Resolve-PayloadPath $Root $relative) -PathType Leaf)) { throw "管理用必須物がありません: $relative" }
@@ -117,7 +112,7 @@ function Assert-ManagedPayload {
 
 function Copy-ManagedDocuments([string]$Source, [string]$Destination, [string]$Version) {
     $documents = @('README.md','docs/usage.md','docs/recovery.md','THIRD_PARTY.md',"docs/releases/v$Version.md")
-    $images = @(Get-ReadmeImages)
+    $images = @(Get-ManagedDocumentImages)
     foreach ($relative in $images) {
         $sourceFile = Resolve-PayloadPath $Source $relative
         $targetFile = Resolve-PayloadPath $Destination $relative
