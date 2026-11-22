@@ -33,6 +33,11 @@ internal static partial class Program
             NotificationUpgradeTests(); NotificationActionTests(); NotificationPresentationTests(); NotificationDragTests(); FeedbackTests(); CaptureTargetTests();
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }
+        if (args.SequenceEqual(["--optics-tests"]))
+        {
+            CaptureOpticsTests(); SnapTests(); RecipeTests();
+            Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
+        }
         if (args.SequenceEqual(["--recipe-tests"]))
         {
             RecipeTests(); SnapshotRefactorTests(); RepeatTests(); InstantTests();
@@ -179,6 +184,7 @@ internal static partial class Program
         FeedbackTests();
         CaptureTargetTests();
         SnapTests();
+        CaptureOpticsTests();
         SelectionInteractionTests();
         SelectionUpgradeTests();
         CapturePresetTests();

@@ -88,33 +88,45 @@ internal static class InstantCapture
         {
             const string unavailable = "再撮影するコントロールを特定できません。選び直してください。";
             if (recipe.ControlIdentity is not { } identity) throw new InvalidOperationException(unavailable);
+            Rectangle windowBounds = CaptureNative.RequireCaptureWindow(target);
             var hit = await CaptureContextClient.Shared.FindControlAsync(new(target.Handle.ToInt64(), target.ProcessId,
-                PixelBounds.From(target.Bounds), null, identity));
+                PixelBounds.From(windowBounds), null, identity));
             if (hit is not { Bounds: var pixels }) throw new InvalidOperationException(unavailable);
             Rectangle controlBounds = new(pixels.X, pixels.Y, pixels.Width, pixels.Height);
-            if (!CaptureGeometry.IsFullyCovered(controlBounds, monitors) || CaptureNative.RequireCaptureWindow(target) != target.Bounds)
+            if (!windowBounds.Contains(controlBounds)
+                || !recipe.UseIsolatedWindow && !CaptureGeometry.IsFullyCovered(controlBounds, monitors)
+                || CaptureNative.RequireCaptureWindow(target) != windowBounds)
                 throw new InvalidOperationException(unavailable);
-            var controlSource = new CaptureReplaySource.Control(target, identity, recipe.UseIsolatedWindow);
+            var controlSource = new CaptureReplaySource.Control(target, identity, recipe.UseIsolatedWindow) { TargetMargin = recipe.TargetMargin };
             if (!recipe.UseIsolatedWindow)
             {
-                var controlCapture = await TakeWithContextAsync(controlBounds, settings);
-                return new(controlCapture.Image, controlBounds, controlCapture.Metadata, null, controlSource);
+                Rectangle edited = ResolveDesktopMargin(controlBounds, recipe.TargetMargin ?? 0, monitors, 1);
+                var controlCapture = await TakeWithContextAsync(edited, settings);
+                return new(controlCapture.Image, edited, controlCapture.Metadata, null, controlSource);
             }
             var isolated = await IsolatedWindowCapture.TakeAsync(target, settings);
-            using var image = isolated.Image;
-            Bitmap cropped = CaptureGeometry.Crop(image, isolated.Bounds, controlBounds, 1) ?? throw new InvalidOperationException(unavailable);
-            return new(cropped, controlBounds, isolated.Metadata?.WithCrop(controlBounds).WithPadding(settings.ScreenshotPaddingPixels), null, controlSource);
+            return CropIsolatedReplay(isolated, controlBounds, recipe.TargetMargin ?? 0, 1, settings.ScreenshotPaddingPixels, null, controlSource);
         }
         var group = recipe.IncludeOwnedWindows
             ? roots.SelectMany(root => CaptureWindowGroups.ForegroundGroup(root, windows))
                 .DistinctBy(window => window.Handle).OrderBy(window => window.ZOrder).ToArray()
             : roots;
         string title = roots.Length == 1 ? target.Title : $"ウィンドウ {roots.Length} 件";
-        var source = new CaptureReplaySource.Windows(roots, recipe.UseIsolatedWindow, recipe.IncludeOwnedWindows, recipe.IsSingleWindowSelection);
+        var source = new CaptureReplaySource.Windows(roots, recipe.UseIsolatedWindow, recipe.IncludeOwnedWindows, recipe.IsSingleWindowSelection)
+            { TargetMargin = recipe.TargetMargin };
         if (recipe.UseIsolatedWindow)
         {
             var window = await IsolatedWindowCapture.TakeAsync(target, settings, foregroundFirst: group, requiredWindows: roots);
-            return new(window.Image, window.Bounds, window.Metadata, title, source);
+            return recipe.TargetMargin is int margin
+                ? CropIsolatedReplay(window, window.Bounds, margin, CaptureGeometry.MinimumSize, settings.ScreenshotPaddingPixels, title, source)
+                : new(window.Image, window.Bounds, window.Metadata, title, source);
+        }
+
+        if (recipe.TargetMargin is int offset)
+        {
+            Rectangle edited = ResolveDesktopMargin(target.Bounds, offset, monitors, CaptureGeometry.MinimumSize);
+            var adjustedCapture = await TakeWithContextAsync(edited, settings);
+            return new(adjustedCapture.Image, edited, adjustedCapture.Metadata, title, source);
         }
 
         var regions = group.SelectMany(window => monitors.Select(monitor => Rectangle.Intersect(window.Bounds, monitor)))
@@ -125,6 +137,20 @@ internal static class InstantCapture
         if (regions.Length == 1) return new(capture.Image, bounds, capture.Metadata, title, source);
         using var raw = capture.Image;
         return new(CaptureGeometry.ComposeRegions(raw, bounds, bounds, regions), bounds, capture.Metadata, title, source);
+    }
+
+    internal static Rectangle ResolveDesktopMargin(Rectangle original, int margin, IReadOnlyList<Rectangle> monitors, int minimumSize) =>
+        CaptureTargetMargin.Apply(original, margin, monitors.Aggregate(Rectangle.Union), minimumSize, monitors).Bounds;
+
+    internal static WindowReplayFrame CropIsolatedReplay((Bitmap Image, Rectangle Bounds, CaptureMetadata? Metadata) frame,
+        Rectangle original, int margin, int minimumSize, int padding, string? title, CaptureReplaySource source)
+    {
+        using var raw = frame.Image;
+        if (!frame.Bounds.Contains(original))
+            throw new InvalidOperationException("再撮影する対象がウィンドウ画像の外にあります。選び直してください。");
+        Rectangle bounds = CaptureTargetMargin.Apply(original, margin, frame.Bounds, minimumSize).Bounds;
+        var metadata = frame.Metadata?.WithCrop(bounds).WithPadding(padding);
+        return new(CaptureTargetMargin.CropFrame(raw, frame.Bounds, bounds, minimumSize), bounds, metadata, title, source);
     }
 
     internal static async Task<string> DeliverAsync(Bitmap image, AppSettings settings, DateTimeOffset capturedAt, OutputRouter output,

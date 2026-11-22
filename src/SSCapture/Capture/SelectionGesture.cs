@@ -37,6 +37,7 @@ internal sealed class SelectionGesture
     internal bool HasDragged { get; private set; }
     internal Point Current { get; private set; }
     internal Point RawCurrent { get; private set; }
+    internal Point MagnifierPoint => mode == CaptureMode.Rectangle && IsPressed && !HasDragged ? start : Current;
     internal Point WindowTargetPoint => IsPressed && !HasDragged ? rawStart : RawCurrent;
     internal Rectangle Selection { get; private set; }
     internal Rectangle PressedWindow => IsPressed && !HasDragged && mode is (CaptureMode.Rectangle or CaptureMode.Freeform)

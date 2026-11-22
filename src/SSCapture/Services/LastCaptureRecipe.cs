@@ -21,6 +21,7 @@ internal sealed class LastCaptureRecipe
     internal ControlIdentity? ControlIdentity { get; }
     internal bool IncludeOwnedWindows { get; }
     internal bool IsSingleWindowSelection { get; }
+    internal int? TargetMargin { get; }
     internal IReadOnlyList<Point>? Polygon { get; }
     internal AppSettings Settings => CaptureSettingsSnapshot.Copy(settings);
 
@@ -37,6 +38,7 @@ internal sealed class LastCaptureRecipe
             UseIsolatedWindow = selected.Isolated;
             IncludeOwnedWindows = selected.IncludeOwned;
             IsSingleWindowSelection = selected.IsSingleWindowSelection;
+            TargetMargin = selected.TargetMargin;
         }
         if (source is CaptureReplaySource.Monitors selectedMonitors)
         {
@@ -49,6 +51,7 @@ internal sealed class LastCaptureRecipe
             UseIsolatedWindow = control.Isolated;
             TracksControl = true;
             ControlIdentity = control.Identity;
+            TargetMargin = control.TargetMargin;
         }
         Polygon = polygon is null ? null : Array.AsReadOnly(polygon.ToArray());
         this.settings = CaptureSettingsSnapshot.Copy(settings);

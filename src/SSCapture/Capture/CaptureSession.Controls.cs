@@ -12,7 +12,7 @@ internal sealed partial class SessionController
     private int controlVersion, controlActivation;
     private (Point Point, CaptureWindow? Window)? controlRequest;
     private (CaptureWindow Window, Rectangle Bounds, ControlIdentity? Identity)? controlCandidate;
-    internal Rectangle ControlBounds => controlCandidate?.Bounds ?? Rectangle.Empty;
+    internal Rectangle ControlBounds => MarginSelection ?? controlCandidate?.Bounds ?? Rectangle.Empty;
     internal bool SelectingControl => selectingControl;
     internal bool UsesControlPreview => selectingControl && previewControl;
     private bool ControlPreviewReady => windowPreviewIsControl && controlCandidate is { } candidate
@@ -141,7 +141,8 @@ internal sealed partial class SessionController
             if (!StillConfirming()) return;
             if (controlCandidate is not { } control || !control.Bounds.Contains(pointer))
                 throw new InvalidOperationException("撮影できるコントロールが見つかりません。");
-            if (UsesControlPreview)
+            bool isolated = UsesControlPreview || UsesWindowSource;
+            if (isolated)
             {
                 if (windowPreview is { } preview) await preview.Frame;
                 if (!StillConfirming()) return;
@@ -150,8 +151,9 @@ internal sealed partial class SessionController
             Rectangle current = CaptureNative.RequireCaptureWindow(control.Window);
             if (current != control.Window.Bounds || !current.Contains(control.Bounds))
                 throw new InvalidOperationException("対象の位置が変わりました。もう一度選び直してください。");
-            var source = new CaptureReplaySource.Control(control.Window, control.Identity, UsesControlPreview || UsesWindowSource);
-            CompleteSelection(new(control.Bounds, null, Destination, ControlSource: source));
+            UpdateTargetMargin();
+            var source = new CaptureReplaySource.Control(control.Window, control.Identity, isolated) { TargetMargin = AppliedTargetMargin };
+            CompleteSelection(new(ControlBounds, null, Destination, ControlSource: source));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException)
         {

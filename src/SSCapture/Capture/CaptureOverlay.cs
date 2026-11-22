@@ -10,13 +10,14 @@ internal sealed class CaptureOverlay : Form
     private CapturePresentation? sharedPresentation;
     private VisualState? rendered;
     private Keys? mouseButtonModifiers;
+    private int magnifierQuadrant = -1;
     internal Rectangle MonitorBounds { get; }
     internal CaptureContextMenu SelectionMenu => session.SelectionMenu;
 
     private sealed record VisualState(DesktopSnapshot Snapshot, CaptureMode Mode, bool Dim, bool Highlight,
-        Rectangle Selection, Rectangle Target, WindowCaptureFrame? Preview, bool Valid, int Points, Rectangle Dimensions, Rectangle Hint, string? HintText,
-        string? Error, int TrailPoints, Rectangle TrailBounds, IReadOnlyList<Rectangle> DragHighlights,
-        Rectangle Magnifier, Point MagnifierPointer, bool Shared);
+        Rectangle Selection, Rectangle Target, WindowCaptureFrame? Preview, bool Valid, int Points, Rectangle Dimensions, string? DimensionsText,
+        Rectangle Hint, string? HintText, string? Error, int TrailPoints, Rectangle TrailBounds, IReadOnlyList<Rectangle> DragHighlights,
+        Rectangle Magnifier, Point MagnifierSample, Rectangle MagnifierSelection, bool Shared);
 
     internal CaptureOverlay(SessionController session, Rectangle monitorBounds)
     {
@@ -132,6 +133,11 @@ internal sealed class CaptureOverlay : Form
     protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); session.MouseDown(this, e.Button, new Point(MonitorBounds.X + e.X, MonitorBounds.Y + e.Y), mouseButtonModifiers); }
     protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); session.Move(true, new Point(MonitorBounds.X + e.X, MonitorBounds.Y + e.Y)); }
     protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); session.MouseUp(e.Button, new Point(MonitorBounds.X + e.X, MonitorBounds.Y + e.Y), mouseButtonModifiers); }
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        session.MouseWheel(new Point(MonitorBounds.X + e.X, MonitorBounds.Y + e.Y), e.Delta);
+    }
     protected override void OnMouseCaptureChanged(EventArgs e) { base.OnMouseCaptureChanged(e); session.CaptureLost(this); }
     protected override void OnFormClosing(FormClosingEventArgs e) { base.OnFormClosing(e); session.Cancel(); }
 
@@ -140,24 +146,25 @@ internal sealed class CaptureOverlay : Form
         base.OnPaint(e);
         Rectangle dirty = Rectangle.Intersect(ClientRectangle, e.ClipRectangle);
         DrawSnapshot(e.Graphics, dirty);
-        if (session.OutputSettings.ShareCapturePresentation && Visible && !session.Refreshing)
+        VisualState visual = ReadVisualState();
+        if (visual.Shared && Visible && !session.Refreshing)
         {
             sharedPresentation ??= new CapturePresentation(MonitorBounds, Handle);
-            if (sharedPresentation.Present(dirty, DrawForeground))
+            if (sharedPresentation.Present(dirty, (graphics, area, shared) => DrawForeground(graphics, area, shared, visual)))
             {
-                rendered ??= ReadVisualState();
+                rendered ??= visual;
                 return;
             }
         }
         sharedPresentation?.Hide();
-        DrawForeground(e.Graphics, dirty, shared: false);
-        if (rendered is null || dirty.Contains(ClientRectangle)) rendered = ReadVisualState();
+        DrawForeground(e.Graphics, dirty, shared: false, visual);
+        if (rendered is null || dirty.Contains(ClientRectangle)) rendered = visual;
     }
 
-    private void DrawForeground(Graphics graphics, Rectangle dirty, bool shared)
+    private void DrawForeground(Graphics graphics, Rectangle dirty, bool shared, VisualState visual)
     {
-        Rectangle target = session.HighlightForOverlay(MonitorBounds);
-        Rectangle selection = Local(session.DisplaySelection);
+        Rectangle target = visual.Target;
+        Rectangle selection = Local(visual.Selection);
         if (session.DimCaptureBackground)
         {
             using SolidBrush dim = new(Color.FromArgb(115, Color.Black));
@@ -177,7 +184,8 @@ internal sealed class CaptureOverlay : Form
             else graphics.FillRectangle(dim, dirty);
         }
         Rectangle bright = Rectangle.Intersect(Local(target), dirty);
-        if (session.PreviewFrame is { } frame && bright.Width > 0 && bright.Height > 0)
+        if (visual.Preview is { } frame && bright.Width > 0 && bright.Height > 0
+            && frame.Bounds.Contains(target))
         {
             if (session.DimCaptureBackground && !shared) graphics.FillRectangle(Brushes.Black, bright);
             Rectangle source = bright;
@@ -190,12 +198,11 @@ internal sealed class CaptureOverlay : Form
                 DrawSnapshot(graphics, Rectangle.Intersect(Local(window), dirty));
         DrawSelection(graphics, selection, dirty, shared);
         DrawWindowTrail(graphics, dirty);
-        var (dimensions, dimensionsPointer, hint) = ReadPointerLabels(session.DisplaySelection);
-        if (dimensions is not null)
-            DrawPointerLabel(graphics, dimensions, dimensionsPointer, 24, shared, hint);
-        if (hint is not null)
-            DrawPointerLabel(graphics, hint, session.Pointer, HintOffset(dimensions, dimensionsPointer), shared);
-        DrawMagnifier(graphics);
+        if (visual.DimensionsText is string dimensions)
+            DrawPointerLabel(graphics, dimensions, visual.Dimensions, shared);
+        if (visual.HintText is string hint)
+            DrawPointerLabel(graphics, hint, visual.Hint, shared);
+        DrawMagnifier(graphics, visual);
         if (session.SelectionError is string error)
         {
             var box = new Rectangle(16, 16, Math.Max(1, ClientSize.Width - 32), 100);
@@ -262,7 +269,7 @@ internal sealed class CaptureOverlay : Form
             for (int index = Math.Max(1, old.TrailPoints); index < path.Count; index++)
                 dirty.Union(Inflate(SegmentBounds(path[index - 1], path[index])));
         }
-        if (old.Dimensions != next.Dimensions || old.Selection.Size != next.Selection.Size || old.Valid != next.Valid)
+        if (old.Dimensions != next.Dimensions || old.DimensionsText != next.DimensionsText)
         {
             dirty.Union(old.Dimensions);
             dirty.Union(next.Dimensions);
@@ -272,7 +279,8 @@ internal sealed class CaptureOverlay : Form
             dirty.Union(old.Hint);
             dirty.Union(next.Hint);
         }
-        if (old.Magnifier != next.Magnifier || old.MagnifierPointer != next.MagnifierPointer)
+        if (old.Magnifier != next.Magnifier || old.MagnifierSample != next.MagnifierSample
+            || old.MagnifierSelection != next.MagnifierSelection || old.Preview != next.Preview || old.Points != next.Points)
         {
             dirty.Union(old.Magnifier);
             dirty.Union(next.Magnifier);
@@ -300,13 +308,18 @@ internal sealed class CaptureOverlay : Form
     {
         Rectangle selection = session.DisplaySelection;
         var (dimensions, dimensionsPointer, hint) = ReadPointerLabels(selection);
-        Rectangle target = session.HighlightForOverlay(MonitorBounds);
+        Rectangle dimensionsBounds = dimensions is null ? Rectangle.Empty : PointerLabelBounds(dimensions, dimensionsPointer, 24, hint);
+        Rectangle hintBounds = hint is null ? Rectangle.Empty : PointerLabelBounds(hint, session.Pointer, HintOffset(dimensions, dimensionsPointer));
+        CaptureMagnifier.Placement lens = session.OutputSettings.ShowMagnifier && MonitorBounds.Contains(session.Pointer)
+            ? CaptureMagnifier.Place(ClientRectangle, new Point(session.Pointer.X - MonitorBounds.X, session.Pointer.Y - MonitorBounds.Y),
+                [dimensionsBounds, hintBounds, Local(session.VisibleGuideBounds)], magnifierQuadrant)
+            : new(Rectangle.Empty);
+        magnifierQuadrant = lens.Quadrant;
         return new(session.Snapshot, session.Mode, session.DimCaptureBackground, session.HighlightWindow, selection,
-            target, session.PreviewFrame, session.FixedSelectionValid, session.Points.Count,
-            dimensions is null ? Rectangle.Empty : PointerLabelBounds(dimensions, dimensionsPointer, 24, hint),
-            hint is null ? Rectangle.Empty : PointerLabelBounds(hint, session.Pointer, HintOffset(dimensions, dimensionsPointer)),
-            hint, session.SelectionError, session.WindowDragPath.Count, session.WindowDragBounds, session.WindowDragHighlights,
-            MagnifierBounds, MagnifierBounds.IsEmpty ? Point.Empty : session.Pointer, session.OutputSettings.ShareCapturePresentation);
+            session.HighlightForOverlay(MonitorBounds), session.PreviewFrame, session.FixedSelectionValid, session.Points.Count,
+            dimensionsBounds, dimensions, hintBounds, hint, session.SelectionError, session.WindowDragPath.Count, session.WindowDragBounds,
+            session.WindowDragHighlights, lens.Bounds, lens.Bounds.IsEmpty ? Point.Empty : session.MagnifierSample,
+            lens.Bounds.IsEmpty ? Rectangle.Empty : session.MagnifierSelection, session.OutputSettings.ShareCapturePresentation);
     }
 
     private static Rectangle SegmentBounds(Point start, Point end) => Rectangle.FromLTRB(
@@ -336,7 +349,8 @@ internal sealed class CaptureOverlay : Form
     private void DrawSelection(Graphics graphics, Rectangle selection, Rectangle dirty, bool shared)
     {
         using Pen border = new(session.FixedSelectionValid ? Color.FromArgb(55, 195, 255) : Color.OrangeRed, 2);
-        if (!session.SelectingControl && session.Mode == CaptureMode.Freeform && session.Points.Count >= 2)
+        if (!session.SelectingControl && session.Mode == CaptureMode.Freeform && session.Dragging
+            && session.Points.Count >= 2 && (selection.IsEmpty || session.MagnifierPolygon is not null))
             DrawFreeformSelection(graphics, border, dirty, shared);
         else if (selection.Width > 0 && selection.Height > 0)
         {
@@ -394,7 +408,9 @@ internal sealed class CaptureOverlay : Form
         int maximumLines = Math.Max(2, (ClientSize.Height - lineHeight - 16) / lineHeight);
         if (1 + hint.Count(c => c == '\n') <= maximumLines) return hint;
         string[] lines = hint.Split('\n');
-        return string.Join('\n', lines.Take(maximumLines - 1).Append($"ほか {lines.Length - maximumLines + 1} 件"));
+        bool hasMargin = lines[^1].Contains("）　余白", StringComparison.Ordinal);
+        var visible = lines.Take(maximumLines - (hasMargin ? 2 : 1)).Append($"ほか {lines.Length - maximumLines + 1} 件");
+        return string.Join('\n', hasMargin ? visible.Append(lines[^1]) : visible);
     }
 
     private Rectangle PointerLabelBounds(string text, Point pointer, int offset, string? hintBelow = null)
@@ -409,9 +425,8 @@ internal sealed class CaptureOverlay : Form
         return new(x, y, width, height);
     }
 
-    private void DrawPointerLabel(Graphics graphics, string text, Point pointer, int offset, bool shared, string? hintBelow = null)
+    private void DrawPointerLabel(Graphics graphics, string text, Rectangle label, bool shared)
     {
-        Rectangle label = PointerLabelBounds(text, pointer, offset, hintBelow);
         graphics.FillRectangle(Brushes.Black, label);
         string[] lines = text.Split('\n');
         int lineHeight = (label.Height - 4) / lines.Length;
@@ -433,19 +448,14 @@ internal sealed class CaptureOverlay : Form
         }
     }
 
-    private Rectangle MagnifierBounds => session.OutputSettings.ShowMagnifier && MonitorBounds.Contains(session.Pointer)
-        ? CaptureMagnifier.Place(ClientRectangle, new Point(session.Pointer.X - MonitorBounds.X, session.Pointer.Y - MonitorBounds.Y))
-        : Rectangle.Empty;
-
-    private void DrawMagnifier(Graphics graphics)
+    private void DrawMagnifier(Graphics graphics, VisualState visual)
     {
-        Rectangle target = MagnifierBounds;
-        if (target.IsEmpty) return;
-        WindowCaptureFrame? preview = session.PreviewFrame;
-        if (preview is not null && preview.Bounds.Contains(session.Pointer))
-            CaptureMagnifier.Draw(graphics, target, preview.Image, preview.Bounds, session.Pointer);
-        else
-            CaptureMagnifier.Draw(graphics, target, session.Snapshot.Image, session.Snapshot.Bounds, session.Pointer);
+        if (visual.Magnifier.IsEmpty) return;
+        WindowCaptureFrame? preview = visual.Preview;
+        var (image, source) = preview is not null
+            ? (preview.Image, preview.Bounds) : (visual.Snapshot.Image, visual.Snapshot.Bounds);
+        CaptureMagnifier.Draw(graphics, visual.Magnifier, image, source, visual.MagnifierSample,
+            visual.MagnifierSelection, session.MagnifierPolygon);
     }
 
     private void DrawSnapshot(Graphics graphics, Rectangle dirty)
