@@ -20,7 +20,7 @@ internal static partial class Program
         }
         if (args.FirstOrDefault() == "--browser-control-smoke" && args is not ["--browser-control-smoke", "--interactive", _, _])
         {
-            Console.Error.WriteLine("専用デスクトップで --browser-control-smoke --interactive <ブラウザーexe> <検証フォルダー> を指定してください。");
+            Console.Error.WriteLine("専用デスクトップで --browser-control-smoke --interactive <ブラウザーexe> <検証フォルダ> を指定してください。");
             return 2;
         }
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);

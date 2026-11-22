@@ -96,7 +96,7 @@ internal sealed class CapturePresetEditor : UserControl
         output.SetColumnSpan(output.Controls[output.Controls.Count - 1], 2);
         output.Controls.Add(cropFields, 0, 5); output.SetColumnSpan(cropFields, 2);
         output.RowStyles[5].Height = 62;
-        whitePadding = new TextBox { Name = "WhitePaddingPixels", MaxLength = 4, PlaceholderText = "旧入力の値を引き継ぐ（未指定の場合は0）" };
+        whitePadding = new TextBox { Name = "WhitePaddingPixels", MaxLength = 4, PlaceholderText = "空欄は0px（旧版で入力プリセットに設定した余白があればその値）" };
         Add(output, "白い余白（px）", whitePadding, 6);
         NumericUpDown AddCrop(string title, string edge, int column)
         {
@@ -105,7 +105,7 @@ internal sealed class CapturePresetEditor : UserControl
             cropFields.Controls.Add(input, column, 1);
             return input;
         }
-        directory = new TextBox { Name = "SaveDirectory" }; Add(naming, "保存フォルダー", directory, 0);
+        directory = new TextBox { Name = "SaveDirectory" }; Add(naming, "保存フォルダ", directory, 0);
         pattern = new TextBox { Name = "FileNamePattern" }; Add(naming, "命名パターン", pattern, 1);
         separator = new TextBox { Name = "OcrSeparator" }; Add(naming, "OCR区切り", separator, 2);
         openFolder = Toggle("保存フォルダを開く", "OpenFolderAfterSave"); Add(naming, "保存後", openFolder, 3);

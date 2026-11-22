@@ -96,7 +96,7 @@ internal static class SettingsTransfer
 
         foreach (var preset in candidate.CapturePresets)
             AppendDirectory($"出力プリセット「{preset.Name}」の保存先", preset.SaveDirectory);
-        AppendDirectory("出力プリセット共通のOneOCRフォルダー", candidate.OneOcrDirectory, "自動検出");
+        AppendDirectory("出力プリセット共通のOneOCRフォルダ", candidate.OneOcrDirectory, "自動検出");
 
         if (candidate.SavedRegions.Any(region => region.UseFixedCoordinates))
         {

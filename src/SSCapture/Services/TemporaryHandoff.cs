@@ -157,7 +157,7 @@ internal sealed class TemporaryHandoff : IDisposable
     private static void EnsureDirectory(string path)
     {
         System.IO.Directory.CreateDirectory(path);
-        if (!IsDirectory(path)) throw new IOException("受け渡し用フォルダーを安全に開けません。");
+        if (!IsDirectory(path)) throw new IOException("受け渡し用フォルダを安全に開けません。");
     }
 
     private sealed record Lease(string FileName, string StagingFileName, FileIdentity Identity);

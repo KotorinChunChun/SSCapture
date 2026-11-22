@@ -211,7 +211,7 @@ internal static partial class Program
                 var request = new CaptureCommandRequest(new Rectangle(0, 0, 4, 4)) { Schedule = periodic };
                 var command = CaptureCommandLine.Resolve(request, settings);
                 Equal(OutputDestination.File, command.Settings.DefaultDestination);
-                Check(!command.Settings.OpenFolderAfterSave, "予約専用の出力でフォルダー表示がON");
+                Check(!command.Settings.OpenFolderAfterSave, "予約専用の出力でフォルダ表示がON");
                 int copies = 0, launches = 0, recognized = 0, frames = 0;
                 using var output = new OutputRouter(Path.Combine(directory, "work"),
                     _ => { copies++; return Task.CompletedTask; }, launch: _ => launches++, readDisplays: () => []);

@@ -40,7 +40,7 @@ internal static partial class Program
             var help = tips.GetToolTip(form.Controls.Find("CapturePresetEditor", true).Single()) ?? "";
             Check(help.Contains("白い余白") && !help.Contains("入力プリセット"), "出力プリセットの説明が古い");
             string padding = tips.GetToolTip(form.Controls.Find("WhitePaddingPixels", true).Single()) ?? "";
-            Check(padding.Contains("0で余白なし") && padding.Contains("空欄は旧入力の余白を引き継ぎ"), "空欄と0の説明がない");
+            Check(padding.Contains("0で余白なし") && padding.Contains("空欄のときは0px") && padding.Contains("旧版で入力プリセットに余白を設定していた場合"), "空欄と0の説明がない");
         });
         Run("4画面の登録ボタンの並び・寸法と入出力の一覧幅を統一する", () =>
         {

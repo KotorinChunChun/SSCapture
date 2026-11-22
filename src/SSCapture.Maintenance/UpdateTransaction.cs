@@ -174,8 +174,8 @@ internal sealed class UpdateTransaction(TargetValidator validator, Func<string, 
             else if (File.Exists(path)) File.Delete(path);
         }
         journal.RegistrationBefore?.Restore(root, journal.OldVersion, journal.NewVersion);
-        // 新規導入取消後は、この配布で作った空の下位フォルダーだけを片付ける。
-        // 利用者が追加したファイル・フォルダーを再帰削除しない。
+        // 新規導入取消後は、この配布で作った空の下位フォルダだけを片付ける。
+        // 利用者が追加したファイル・フォルダを再帰削除しない。
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in journal.Files)
             for (var directory = Path.GetDirectoryName(SafeFiles.Resolve(root, entry.Path));

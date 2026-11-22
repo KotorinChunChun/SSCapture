@@ -70,7 +70,7 @@ dotnet $test --recording-desktop-smoke artifacts/app/tools/ffmpeg.exe artifacts/
 
 ### 撮影CLIの保存を検証する
 
-`pwsh -File scripts/test.ps1 -Suite Command` では合成画像を使い、座標、入力プリセットの余白、出力プリセットの保存フォルダー、完成パスと終了コードを検証できます。
+`pwsh -File scripts/test.ps1 -Suite Command` では合成画像を使い、座標、入力プリセットの余白、出力プリセットの保存フォルダ、完成パスと終了コードを検証できます。
 
 実プロセスで確認するときは、試験用に新規発行した `SSCapture.exe` と依存ファイルを使います。例では版別ログに `app` を発行し、その実行ファイルの隣に試験用の `data/settings.json` を作ります。
 

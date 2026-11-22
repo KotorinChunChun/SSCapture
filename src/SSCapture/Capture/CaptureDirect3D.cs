@@ -8,7 +8,7 @@ using Windows.Graphics.DirectX.Direct3D11;
 
 namespace SSCapture.Capture;
 
-/// <summary>Windows SDKのCOM ABIだけを扱う。各ポインターは取得した参照1件を所有する。</summary>
+/// <summary>Windows SDKのCOM ABIだけを扱う。各ポインタは取得した参照1件を所有する。</summary>
 internal sealed unsafe class CaptureDirect3D : IDisposable
 {
     private nint device;

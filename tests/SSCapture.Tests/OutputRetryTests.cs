@@ -83,7 +83,7 @@ internal static partial class Program
             await router.RetryFailedAsync(); Equal(paths[0], paths[1]);
             Equal(1, Directory.GetFiles(Path.Combine(directory, "work"), "*.png", SearchOption.AllDirectories).Length);
         })));
-        Run("保存後フォルダーだけの失敗は保存せず表示だけやり直す", () => WithOutputDirectory(directory => RunOutputTask(async () =>
+        Run("保存後フォルダだけの失敗は保存せず表示だけやり直す", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {
             int folders = 0; var settings = OutputSettings(directory) with { OpenFolderAfterSave = true };
             using var source = OutputImage();

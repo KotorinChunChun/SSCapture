@@ -522,7 +522,7 @@ internal sealed partial class SettingsForm : Form
         {
             if (next.OneOcrDirectory != committed.OneOcrDirectory && next.OneOcrDirectory.Length != 0
                 && (!Path.IsPathFullyQualified(next.OneOcrDirectory) || next.OneOcrDirectory.IndexOfAny(Path.GetInvalidPathChars()) >= 0))
-                return "OCRエンジンの場所はフォルダーの絶対パスで指定してください。";
+                return "OCRエンジンの場所はフォルダの絶対パスで指定してください。";
             next = next.ApplyDefaults();
             next.Validate();
             string? error = save(next);
