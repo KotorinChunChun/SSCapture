@@ -7,6 +7,8 @@ internal static class SettingsHelp
 {
     private static readonly IReadOnlyDictionary<string, string> Descriptions = new Dictionary<string, string>
     {
+        ["GitHubReadme"] = "GitHubでSSCaptureの使い方を開きます。",
+        ["GitHubReleases"] = "GitHubのリリース一覧から配布ファイルや変更点を確認できます。",
         ["ResetSettingsPage"] = "表示中のページの設定を初期値に戻します。ショートカットは選択中のタブだけが対象です。入力・出力プリセットは確認後に自動保存し、自作登録を保持します。",
         ["StartupSettings"] = "Windowsサインイン時の自動起動です。初期設定はOFFです。KotorinToysと同じ所有予約を参照します。変更は「自動起動を適用」で確定します。設定全体の保存やビルドでは予約を変更しません。",
         ["StartWithWindows"] = "ONにして「自動起動を適用」を押すと、次回のWindowsサインイン時から設定画面を表示せず起動します。正式インストール版だけが登録できます。本体経由の予約はKotorinToysで変更してください。",
@@ -123,6 +125,8 @@ internal static class SettingsHelp
             return Descriptions[name[^1] switch { '0' => "PresetCaptureShortcut", '1' => "ShortcutInputPreset", _ => "ShortcutOutputPreset" }];
         if (name.StartsWith("Capture", StringComparison.Ordinal) && name.EndsWith("Mirror", StringComparison.Ordinal))
             return "同じキーの組み合わせを表の右上側で変更できます。";
+        if (name.StartsWith("CaptureBeforeKeys", StringComparison.Ordinal) && char.IsDigit(name[^1]))
+            return "プッシュは指定キーを押している間だけ有効です。トグルは短押しして離すたびに切り替わります。";
         if (name == "SavedRegions")
             return """
                 標準の固定サイズ（物理ピクセル）

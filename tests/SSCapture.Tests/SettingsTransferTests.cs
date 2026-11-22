@@ -85,7 +85,7 @@ internal static partial class Program
             Equal(input.PresetCaptureShortcuts!.Single(), clone.PresetCaptureShortcuts!.Single());
             Equal(new WindowCrop(1, 2, 3, 4), clone.CapturePresets.Single(p => p.IsDefault).WindowCrop);
             Check(clone.ShowMagnifier && clone.ShareCapturePresentation, "拡大鏡・配信表示の設定が失われた");
-            Equal(Capture.CaptureKeyAction.SelectControl, clone.CaptureBeforeKeys.Ctrl);
+            Equal(Capture.CaptureKeyAction.SelectControlPush, clone.CaptureBeforeKeys.Ctrl);
             Equal(app.Id, clone.SelectedImageEditorId);
             Equal(input.CapturePresets.Single(p => p.IsDefault).Id, clone.CapturePresets.Single(p => p.IsDefault).Id);
             Equal(input.FileNamePattern, clone.FileNamePattern);

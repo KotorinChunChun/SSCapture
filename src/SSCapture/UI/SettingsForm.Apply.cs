@@ -105,8 +105,6 @@ internal sealed partial class SettingsForm
     private AppSettings ReadBeforeShortcuts() => committed with
     {
         CaptureBeforeKeys = captureBeforeKeys.Value,
-        ControlActivation = captureBeforeKeys.ControlActivation,
-        WindowActivation = captureBeforeKeys.WindowActivation,
         CaptureMouse = committed.CaptureMouse with
         {
             BeforeLeftAction = captureBeforeKeys.ClickAt(MouseButtons.Left),

@@ -50,6 +50,7 @@ internal static class SelectionGuideText
                         break;
                     case CaptureClickAction.Desktop when mode != CaptureMode.Scroll: clicks.Add($"{label}　画面全体"); break;
                     case CaptureClickAction.Menu: clicks.Add($"{label}　メニュー"); break;
+                    case CaptureClickAction.ToggleMagnifier: clicks.Add($"{label}　{CaptureMouseMap.MagnifierLabel}"); break;
                 }
             }
             clicks.Add($"{esc}　撮影終了");
@@ -57,6 +58,8 @@ internal static class SelectionGuideText
         else
         {
             if (twoPoints && select.Length > 0) clicks.Add($"{select}　終点を指定");
+            foreach (var button in buttons.Where(button => mouse.During(button) == CaptureClickAction.ToggleMagnifier))
+                clicks.Add($"{CaptureMouseMap.Label(button)}　{CaptureMouseMap.MagnifierLabel}");
             clicks.Add($"{CancelKeys(mouse)}　選択だけ中断");
         }
         if (mode != CaptureMode.FixedRegion) clicks.Add("矢印　1px移動");
@@ -66,15 +69,17 @@ internal static class SelectionGuideText
         foreach (var chord in CaptureKeyMap.Combinations)
         {
             CaptureKeyAction action = keys.Resolve(chord);
+            if (!dragging) action = CaptureKeyMap.BeforeActivation(action, controlActivation, windowActivation);
             if (mode == CaptureMode.Scroll) action = SessionController.ScrollSelectionAction(action);
-            if (action == CaptureKeyAction.SelectControl && intent != CaptureIntent.Screenshot) continue;
+            if (CaptureKeyMap.IsControlSelection(action) && intent != CaptureIntent.Screenshot) continue;
             if (!Applies(action, mode, dragging, canCrossMonitors)) continue;
             string label = CaptureKeyMap.Label(chord);
-            if (!dragging && action is CaptureKeyAction.HighlightWindow or CaptureKeyAction.SelectControl)
+            if (!dragging && (CaptureKeyMap.IsWindowSelection(action) || CaptureKeyMap.IsControlSelection(action)))
             {
-                var activation = action == CaptureKeyAction.HighlightWindow ? windowActivation : controlActivation;
-                modifiers.Add($"{label}{(activation == CaptureActivation.Push ? "を押しながら" : "を短押し")}　{CaptureKeyMap.Describe(action)}");
-                if (action == CaptureKeyAction.SelectControl) modifiers.Add("コントロールをドラッグ　複数を合成");
+                bool control = CaptureKeyMap.IsControlSelection(action);
+                var operation = control ? CaptureKeyAction.SelectControl : CaptureKeyAction.HighlightWindow;
+                modifiers.Add($"{label}{(CaptureKeyMap.IsModeToggle(action) ? "を短押し" : "を押しながら")}　{CaptureKeyMap.Describe(operation)}");
+                if (control) modifiers.Add("コントロールをドラッグ　複数を合成");
             }
             else if (!dragging && chord == CaptureModifiers.Alt && action == CaptureKeyAction.Snap)
                 modifiers.Add($"{label}を短押し　スナップのON/OFF");
@@ -108,7 +113,8 @@ internal static class SelectionGuideText
         CaptureKeyAction.None => false,
         CaptureKeyAction.CrossMonitor => canCrossMonitors,
         CaptureKeyAction.SwitchAnchor => mode is CaptureMode.FixedRegion or CaptureMode.Rectangle or CaptureMode.Scroll,
-        CaptureKeyAction.HighlightWindow or CaptureKeyAction.SelectDesktop => !dragging,
+        CaptureKeyAction.SelectDesktop or CaptureKeyAction.SelectControlPush or CaptureKeyAction.SelectControlToggle => !dragging,
+        _ when CaptureKeyMap.IsWindowSelection(action) => !dragging,
         CaptureKeyAction.LockAspectRatio or CaptureKeyAction.FromCenter or CaptureKeyAction.FromCenterWithAspectRatio
             or CaptureKeyAction.Grid or CaptureKeyAction.LockWidth or CaptureKeyAction.LockHeight => dragging && mode is CaptureMode.Rectangle or CaptureMode.Scroll,
         _ => true

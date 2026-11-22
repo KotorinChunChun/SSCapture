@@ -52,6 +52,10 @@ internal sealed partial class SettingsForm : Form
         Func<AppSettings, string?>? importSettings = null)
     {
         settings = settings.UpdateDefaultProjections();
+        settings = settings with
+        {
+            CaptureBeforeKeys = settings.CaptureBeforeKeys.WithBeforeActivations(settings.ControlActivation, settings.WindowActivation)
+        };
         committed = settings;
         save = onSave;
         this.now = now ?? (() => DateTimeOffset.Now);
@@ -125,8 +129,7 @@ internal sealed partial class SettingsForm : Form
         presetShortcutEditor = new PresetCaptureShortcutEditor(settings.PresetCaptureShortcuts ?? [], SaveWorkingShortcuts);
         keys.Controls.Add(presetShortcutEditor, 0, 0);
         keys.SetColumnSpan(presetShortcutEditor, 2);
-        captureBeforeKeys = new CaptureKeyEditor(settings.CaptureBeforeKeys, settings.CaptureMouse, beforeSelection: true,
-            settings.ControlActivation, settings.WindowActivation);
+        captureBeforeKeys = new CaptureKeyEditor(settings.CaptureBeforeKeys, settings.CaptureMouse, beforeSelection: true);
         captureKeys = new CaptureKeyEditor(settings.CaptureKeys, settings.CaptureMouse, beforeSelection: false);
         var beforePage = CaptureShortcutPage(FirstPointTab, captureBeforeKeys,
             "撮影を開始してから、1点目を決めるまでに使うキーとクリックを設定します。");
@@ -372,7 +375,8 @@ internal sealed partial class SettingsForm : Form
         var commandPage = new TabPage("コマンド生成") { BackColor = BackColor, Padding = new Padding(8) };
         captureCommand = new CaptureCommandControl(() => committed, SetStatus);
         commandPage.Controls.Add(captureCommand); tabs.TabPages.Add(commandPage);
-        string[] order = ["基本", "通知", "入力プリセット", "出力プリセット", "ショートカット", "外部アプリ", "コマンド生成", "履歴"];
+        AddVersionPage(tabs);
+        string[] order = ["基本", "通知", "入力プリセット", "出力プリセット", "ショートカット", "外部アプリ", "コマンド生成", "履歴", "バージョン情報"];
         var ordered = order.Select(title => tabs.TabPages.Cast<TabPage>().Single(p => p.Text == title)).ToArray();
         tabs.TabPages.Clear(); tabs.TabPages.AddRange(ordered);
         foreach (var page in ordered)
@@ -381,7 +385,7 @@ internal sealed partial class SettingsForm : Form
             {
                 foreach (TabPage group in shortcutTabs.TabPages) AddPageActions(group);
             }
-            else AddPageActions(page);
+            else if (page.Text != "バージョン情報") AddPageActions(page);
         }
         status = new TextBox { Name = "Status", Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
             WordWrap = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None,
@@ -605,6 +609,41 @@ internal sealed partial class SettingsForm : Form
     }
     private const string FirstPointTab = "1点目";
     private const string SecondPointTab = "2点目";
+
+    private void AddVersionPage(TabControl tabs)
+    {
+        const string projectUrl = "https://github.com/KotorinChunChun/SSCapture";
+        const string releasesUrl = projectUrl + "/releases";
+        var page = Page(tabs, "バージョン情報");
+        Add(page, "バージョン", new Label { Name = "ProductVersion", Text = WindowTitle.Create(), TextAlign = ContentAlignment.MiddleLeft }, 0);
+        Add(page, "ライセンス", new Label { Text = "MIT", TextAlign = ContentAlignment.MiddleLeft }, 1);
+
+        var readme = new LinkLabel { Name = "GitHubReadme", Text = "GitHubのREADME", TextAlign = ContentAlignment.MiddleLeft };
+        readme.Links.Add(0, readme.Text.Length, projectUrl + "#readme");
+        readme.LinkClicked += (_, e) => OpenLink((string)e.Link!.LinkData!);
+
+        var releases = MakeButton("リリースを開く", "GitHubReleases");
+        releases.Width = 152;
+        releases.Tag = releasesUrl;
+        releases.Margin = new Padding(12, 0, 0, 0);
+        releases.Click += (_, _) => OpenLink(releasesUrl);
+
+        var links = new FlowLayoutPanel { WrapContents = false, Padding = Padding.Empty };
+        readme.AutoSize = true;
+        readme.Margin = new Padding(0, 6, 0, 0);
+        links.Controls.AddRange([readme, releases]);
+        Add(page, "GitHub", links, 2);
+        page.RowStyles[2].Height = 46;
+
+        void OpenLink(string url)
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true })?.Dispose(); }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+            {
+                SetStatus("リンクを開けませんでした。 " + ex.Message, true);
+            }
+        }
+    }
 
     private TabPage CaptureShortcutPage(string title, CaptureKeyEditor editor, string description)
     {

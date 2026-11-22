@@ -15,7 +15,7 @@ internal static partial class Program
             using var form = new SettingsForm(initial, next => { saved.Add(next); return null; }, _ => { }, () => []);
             _ = form.Handle;
             var pages = Field<TabControl>(form, "SettingsTabs").TabPages.Cast<TabPage>()
-                .Where(page => page.Text != "ショートカット").Concat(Field<TabControl>(form, "ShortcutGroups").TabPages.Cast<TabPage>());
+                .Where(page => page.Text is not ("ショートカット" or "バージョン情報")).Concat(Field<TabControl>(form, "ShortcutGroups").TabPages.Cast<TabPage>());
             foreach (TabPage page in pages)
             {
                 var reset = page.Controls.Find("ResetSettingsPage", true).Single();

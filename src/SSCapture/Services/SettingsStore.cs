@@ -90,6 +90,10 @@ internal sealed class SettingsStore(string path)
         }
         settings = RemoveRetiredEditor(settings);
         settings.Validate();
+        settings = settings with
+        {
+            CaptureBeforeKeys = settings.CaptureBeforeKeys.WithBeforeActivations(settings.ControlActivation, settings.WindowActivation)
+        };
         settings = settings.ApplyDefaults();
         settings.Validate();
         return settings;

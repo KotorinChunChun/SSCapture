@@ -320,8 +320,7 @@ internal static partial class Program
             AppSettings? saved = null;
             using var form = new SettingsForm(new AppSettings
             {
-                CaptureKeys = new CaptureKeyMap(Win: CaptureKeyAction.CrossMonitor, ShiftWin: CaptureKeyAction.Snap),
-                CaptureMouse = new CaptureMouseMap()
+                CaptureKeys = new CaptureKeyMap(Win: CaptureKeyAction.CrossMonitor, ShiftWin: CaptureKeyAction.Snap)
             }, value => { saved = value; return null; }, _ => { }, () => []);
             var groups = (TabControl)form.Controls.Find("ShortcutGroups", true).Single();
             Check(groups.TabPages.Cast<TabPage>().Select(page => page.Text).SequenceEqual(
@@ -358,12 +357,19 @@ internal static partial class Program
             }
 
             ComboBox Choice(string name) => (ComboBox)groups.Controls.Find(name, true).Single();
-            Equal("ウィンドウ撮影に切り替え", Choice("CaptureBeforeKeys8").Text);
+            Equal("ウィンドウ撮影／プッシュ", Choice("CaptureBeforeKeys8").Text);
+            Equal("コントロール選択／プッシュ", Choice("CaptureBeforeKeys1").Text);
+            Check(groups.Controls.Find("ControlActivation", true).Length == 0 && groups.Controls.Find("WindowActivation", true).Length == 0,
+                "独立した切り替え欄が残っている");
+            foreach (string item in new[] { "コントロール選択／プッシュ", "コントロール選択／トグル", "ウィンドウ撮影／プッシュ", "ウィンドウ撮影／トグル" })
+                Check(Choice("CaptureBeforeKeys9").Items.Cast<object>().Any(choice => choice.ToString() == item), "組み合わせの候補がない " + item);
+            var control = Choice("CaptureBeforeKeys1");
+            control.SelectedIndex = control.Items.Cast<object>().ToList().FindIndex(item => item.ToString() == "コントロール選択／トグル");
             Equal("ウィンドウスナップ", Choice("CaptureBeforeKeys4").Text);
             Check(Choice("CaptureKeys4").Items.Cast<object>().Any(item => item.ToString() == "一時グリッドスナップ"),
                 "2点目にグリッドを割り当てられない");
             Equal("別モニターへの移動を許可", Choice("CaptureKeys8").Text);
-            Check(!Choice("CaptureKeys9").Items.Cast<object>().Any(item => item.ToString() == "ウィンドウ撮影に切り替え"),
+            Check(!Choice("CaptureKeys9").Items.Cast<object>().Any(item => item.ToString()!.StartsWith("ウィンドウ撮影", StringComparison.Ordinal)),
                 "ドラッグ中にウィンドウ撮影の選択肢がある");
             Check(!Choice("CaptureBeforeKeys9").Items.Cast<object>().Any(item => item.ToString() is "上下に変更" or "左右に変更"),
                 "1点目にドラッグの寸法固定がある");
@@ -375,7 +381,7 @@ internal static partial class Program
 
             Equal("撮影対象を選択／確定", Choice("CaptureMouseBeforeLeft").Text);
             Equal("撮影メニューを開く", Choice("CaptureMouseBeforeRight").Text);
-            Equal("なし", Choice("CaptureMouseBeforeMiddle").Text);
+            Equal(CaptureMouseMap.MagnifierLabel, Choice("CaptureMouseBeforeMiddle").Text);
             var dragLeft = Choice("CaptureMouseDragLeft");
             var dragMiddle = Choice("CaptureMouseDragMiddle");
             Check(!dragLeft.Enabled && dragMiddle.Enabled, "ドラッグ中のクリック欄の有効状態が不正");
@@ -385,7 +391,7 @@ internal static partial class Program
             Equal(Choice("CaptureMouseBeforeLeft").Items.Count, Choice("CaptureMouseBeforeMiddle").Items.Count);
             Equal(Choice("CaptureMouseDragRight").Items.Count, dragMiddle.Items.Count);
             Equal("使用不可", dragLeft.Text);
-            Equal("なし", dragMiddle.Text);
+            Equal(CaptureMouseMap.MagnifierLabel, dragMiddle.Text);
             Equal("ドラッグを中止", Choice("CaptureMouseDragRight").Text);
             Choice("CaptureMouseBeforeLeft").SelectedIndex = 0;
             Choice("CaptureMouseBeforeRight").SelectedIndex = 0;
@@ -399,11 +405,26 @@ internal static partial class Program
             ApplySettingsPage(form, "ショートカット", "1点目");
             ApplySettingsPage(form, "ショートカット", "2点目");
             Check(saved is not null, "ショートカット設定が保存されない");
-            Equal(CaptureKeyMap.BeforeDefaults with { CtrlAlt = CaptureKeyAction.SwitchAnchor }, saved!.CaptureBeforeKeys);
+            Equal(CaptureKeyMap.BeforeDefaults with { Ctrl = CaptureKeyAction.SelectControlToggle, CtrlAlt = CaptureKeyAction.SwitchAnchor }, saved!.CaptureBeforeKeys);
             Equal(new CaptureKeyMap(Win: CaptureKeyAction.CrossMonitor, ShiftWin: CaptureKeyAction.Snap), saved.CaptureKeys);
-            Equal(new CaptureMouseMap(CaptureClickAction.None, CaptureClickAction.None, CaptureClickAction.Desktop, CaptureClickAction.None), saved.CaptureMouse);
+            Equal(new CaptureMouseMap(CaptureClickAction.None, CaptureClickAction.None, CaptureClickAction.Desktop, CaptureClickAction.None,
+                CaptureClickAction.ToggleMagnifier), saved.CaptureMouse);
         });
-        Run("設定10タブの入力欄とボタンが表示領域に収まる", () =>
+        Run("バージョン情報は実行版とGitHubのREADME・リリースへの入口を表示する", () =>
+        {
+            using var form = NewSettings();
+            form.SelectCategory("バージョン情報");
+            Equal("バージョン情報", form.SelectedCategory);
+            var version = (Label)form.Controls.Find("ProductVersion", true).Single();
+            Equal(WindowTitle.Create(), version.Text);
+            var readme = (LinkLabel)form.Controls.Find("GitHubReadme", true).Single();
+            Equal("https://github.com/KotorinChunChun/SSCapture#readme", (string)readme.Links[0].LinkData!);
+            var releases = (Button)form.Controls.Find("GitHubReleases", true).Single();
+            Equal("https://github.com/KotorinChunChun/SSCapture/releases", (string)releases.Tag!);
+            var page = (TabPage)version.Parent!.Parent!;
+            Check(!Descendants(page).Any(control => control.Name == "ResetSettingsPage"), "情報ページに初期化ボタンがある");
+        });
+        Run("設定タブの入力欄とボタンが表示領域に収まる", () =>
         {
             using var form = NewSettings();
             Equal(WindowTitle.Create("設定"), form.Text);
@@ -415,7 +436,8 @@ internal static partial class Program
             var categories = (ListBox)form.Controls.Find("SettingsCategories", true).Single();
             Equal(tabs.TabCount, categories.Items.Count);
             Check(categories.Parent!.ClientRectangle.Contains(categories.Bounds), "分類一覧が領域外");
-            Check(!Descendants(form).OfType<Label>().Any(label => label.Text.Contains("SSCapture", StringComparison.Ordinal)), "アプリ名見出しが残っている");
+            Check(!Descendants(form).OfType<Label>().Any(label => label.Name != "ProductVersion" && label.Text.Contains("SSCapture", StringComparison.Ordinal)),
+                "設定ページにアプリ名見出しが残っている");
             Equal(0, ((TableLayoutPanel)tabs.Parent!).GetRow(tabs));
             foreach (TabPage page in tabs.TabPages)
             {

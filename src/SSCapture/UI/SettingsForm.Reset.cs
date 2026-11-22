@@ -130,10 +130,10 @@ internal sealed partial class SettingsForm
                 for (int index = 0; index < instantKeys.Length; index++) instantKeys[index].Value = committed.InstantShortcuts[index];
                 break;
             case FirstPointTab:
-                captureBeforeKeys.ResetDraft(committed.CaptureBeforeKeys, committed.CaptureMouse, committed.ControlActivation, committed.WindowActivation);
+                captureBeforeKeys.ResetDraft(committed.CaptureBeforeKeys, committed.CaptureMouse);
                 break;
             case SecondPointTab:
-                captureKeys.ResetDraft(committed.CaptureKeys, committed.CaptureMouse, committed.ControlActivation, committed.WindowActivation);
+                captureKeys.ResetDraft(committed.CaptureKeys, committed.CaptureMouse);
                 break;
         }
     }
@@ -188,10 +188,10 @@ internal sealed partial class SettingsForm
                 for (int index = 0; index < instantKeys.Length; index++) instantKeys[index].Value = defaults.InstantShortcuts[index];
                 break;
             case FirstPointTab:
-                captureBeforeKeys.ResetDraft(defaults.CaptureBeforeKeys, defaults.CaptureMouse, defaults.ControlActivation, defaults.WindowActivation);
+                captureBeforeKeys.ResetDraft(defaults.CaptureBeforeKeys, defaults.CaptureMouse);
                 break;
             case SecondPointTab:
-                captureKeys.ResetDraft(defaults.CaptureKeys, defaults.CaptureMouse, defaults.ControlActivation, defaults.WindowActivation);
+                captureKeys.ResetDraft(defaults.CaptureKeys, defaults.CaptureMouse);
                 break;
         }
     }

@@ -57,6 +57,35 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
+        Run("中クリックは1点目と2点目で拡大鏡だけを切り替え撮影範囲を維持する", () =>
+        {
+            foreach (var method in new[] { CaptureSelectionMethod.Drag, CaptureSelectionMethod.TwoClicks })
+            {
+                var session = RectangleSelectionSession(new Services.AppSettings { ShowMagnifier = false, SelectionMethod = method });
+                using var overlay = new CaptureOverlay(session, new(0, 0, 400, 300));
+                try
+                {
+                    _ = overlay.Handle;
+                    Point start = new(55, 50), end = new(230, 160);
+                    session.MouseDown(overlay, MouseButtons.Middle, start, Keys.None);
+                    session.MouseUp(MouseButtons.Middle, start, Keys.None);
+                    Check(session.OutputSettings.ShowMagnifier && !session.HasPointerPress, "1点目で拡大鏡だけを有効にできない");
+                    session.MouseDown(overlay, MouseButtons.Left, start, Keys.None);
+                    if (method == CaptureSelectionMethod.TwoClicks) session.MouseUp(MouseButtons.Left, start, Keys.None);
+                    session.MoveTo(end);
+                    var bounds = session.Selection;
+                    session.MouseDown(overlay, MouseButtons.Middle, end, Keys.None);
+                    session.MouseUp(MouseButtons.Middle, end, Keys.None);
+                    Check(!session.OutputSettings.ShowMagnifier && !session.Completion.IsCompleted, "2点目で拡大鏡だけを無効にできない");
+                    Equal(bounds, session.Selection);
+                    if (method == CaptureSelectionMethod.TwoClicks) session.MouseDown(overlay, MouseButtons.Left, end, Keys.None);
+                    session.MouseUp(MouseButtons.Left, end, Keys.None);
+                    using var result = session.Completion.GetAwaiter().GetResult();
+                    Equal(Rectangle.FromLTRB(start.X, start.Y, end.X, end.Y), result.Selection!.Bounds);
+                }
+                finally { session.Cancel(); }
+            }
+        });
         Run("右で選択を始め、中でドラッグを中止する割り当てを実行できる", () =>
         {
             var session = RectangleSelectionSession(new Services.AppSettings

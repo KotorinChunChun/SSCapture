@@ -261,6 +261,10 @@ internal sealed partial class SessionController
         OutputSettings = (options.OutputSettings ?? new SSCapture.Services.AppSettings()) with
         { FreezeFrame = options.FreezeFrame, IncludeCursor = options.IncludeCursor, DimCaptureBackground = options.DimCaptureBackground,
             LimitToStartingMonitor = options.LimitToStartingMonitor };
+        OutputSettings = OutputSettings with
+        {
+            CaptureBeforeKeys = OutputSettings.CaptureBeforeKeys.WithBeforeActivations(OutputSettings.ControlActivation, OutputSettings.WindowActivation)
+        };
         if (options.LimitToStartingMonitor && options.Mode != CaptureMode.FullScreen)
         {
             selectionBounds = snapshot.Monitors.FirstOrDefault(monitor => monitor.Contains(this.initialPointer));
@@ -911,7 +915,7 @@ internal sealed partial class SessionController
     internal static CaptureKeyAction ScrollSelectionAction(CaptureKeyAction action) => action switch
     {
         CaptureKeyAction.SelectDesktop => CaptureKeyAction.CrossMonitor,
-        CaptureKeyAction.SelectControl or CaptureKeyAction.HighlightWindow => CaptureKeyAction.None,
+        _ when CaptureKeyMap.IsControlSelection(action) || CaptureKeyMap.IsWindowSelection(action) => CaptureKeyAction.None,
         _ => action
     };
 
@@ -941,8 +945,8 @@ internal sealed partial class SessionController
         }
         CaptureKeyAction modeTap = Mode == CaptureMode.Scroll ? CaptureKeyAction.None : TakeBeforeModeTap(pointer, modifiers, beforeAction, windowsTap);
         if (modeTap != CaptureKeyAction.None) hasSelectionInput = true;
-        if (modeTap == CaptureKeyAction.SelectControl) controlToggled = !controlToggled;
-        if (Mode != CaptureMode.Scroll) UpdateBeforeWindowMode(modifiers, beforeAction, modeTap == CaptureKeyAction.HighlightWindow);
+        if (modeTap == CaptureKeyAction.SelectControlToggle) controlToggled = !controlToggled;
+        if (Mode != CaptureMode.Scroll) UpdateBeforeWindowMode(modifiers, beforeAction, modeTap == CaptureKeyAction.HighlightWindowToggle);
         UpdateAltSnapTap(pointer, modifiers);
         bool wasDesktopHeld = desktopHeld;
         desktopHeld = !dragging && beforeAction == CaptureKeyAction.SelectDesktop;
@@ -953,8 +957,8 @@ internal sealed partial class SessionController
         string? hint = altSnapEnabled ? "ウィンドウスナップ ON" : null;
         if (SelectionGuideText.Applies(action, Mode, dragging, CanGuideCrossMonitors))
             hint = $"{CaptureKeyMap.Label(modifiers)} : {CaptureKeyMap.Describe(action)}";
-        if (!HasPointerPress && modifiers == CaptureModifiers.Win && action == CaptureKeyAction.HighlightWindow
-            && OutputSettings.WindowActivation == CaptureActivation.Toggle && (windowsKey?.CanTap ?? true))
+        if (!HasPointerPress && modifiers == CaptureModifiers.Win && action == CaptureKeyAction.HighlightWindowToggle
+            && (windowsKey?.CanTap ?? true))
             hint += "\n" + CaptureKeyMap.Label(CaptureModifiers.Win) + (HighlightWindow
                 ? "を離すと元の撮影モードに戻る" : "を離すとウィンドウ撮影モードに変更");
         CaptureKeyAction pressedAction = windowsTap && !HasPointerPress && !dragging ? bindings.Win
@@ -965,14 +969,14 @@ internal sealed partial class SessionController
             activeDrag = dragging;
             if (modifiers != CaptureModifiers.None) hasSelectionInput = true;
         }
-        if (!dragging && !SelectingDesktop && (controlToggled || beforeAction == CaptureKeyAction.SelectControl && OutputSettings.ControlActivation == CaptureActivation.Push))
+        if (!dragging && !SelectingDesktop && (controlToggled || beforeAction == CaptureKeyAction.SelectControlPush))
             hint = "コントロールを選択";
         else if (!dragging && windowPushReturn is not null)
             hint = "ウィンドウ撮影中\nキーを離すと元の撮影モードに戻る";
         bool hintChanged = ModifierHint != hint;
         ModifierHint = hint;
         bool selectControl = dragging ? action == CaptureKeyAction.SelectControl
-            : controlToggled || beforeAction == CaptureKeyAction.SelectControl && OutputSettings.ControlActivation == CaptureActivation.Push;
+            : controlToggled || beforeAction == CaptureKeyAction.SelectControlPush;
         UpdateControlSelection(Mode != CaptureMode.Scroll && (selectControl || HasControlDrag) && IsScreenshot
             && !SelectingDesktop && !HasWindowDrag && suppressedButtons == MouseButtons.None, pointer, preview: !dragging);
         bool snap = altSnapEnabled || action == CaptureKeyAction.Snap;
@@ -1148,10 +1152,19 @@ internal sealed partial class SessionController
         if (suppressedButtons != MouseButtons.None) return;
         if (confirmingControl) return;
         bool choosingEnd = waitingForSecondPoint && !HasPointerPress;
-        bool selectEnd = choosingEnd && OutputSettings.CaptureMouse.Before(button) == CaptureClickAction.Select;
+        var beforeClick = OutputSettings.CaptureMouse.Before(button);
+        bool selectEnd = choosingEnd && beforeClick == CaptureClickAction.Select;
+        var click = HasPointerPress || choosingEnd && !selectEnd ? OutputSettings.CaptureMouse.During(button) : beforeClick;
+        if (button != pressedButton && click == CaptureClickAction.ToggleMagnifier)
+        {
+            hasSelectionInput = true;
+            ChangeMagnifierVisibility(!OutputSettings.ShowMagnifier);
+            if (overlay != dragOwner) overlay.Capture = false;
+            return;
+        }
         if (HasPointerPress || choosingEnd && !selectEnd)
         {
-            if (button != pressedButton && OutputSettings.CaptureMouse.During(button) == CaptureClickAction.Cancel)
+            if (button != pressedButton && click == CaptureClickAction.Cancel)
             {
                 AbortSelection();
                 suppressedButtons |= button;
@@ -1160,7 +1173,6 @@ internal sealed partial class SessionController
             return;
         }
 
-        CaptureClickAction click = OutputSettings.CaptureMouse.Before(button);
         if (click == CaptureClickAction.Menu)
         {
             hasSelectionInput = true;

@@ -13,18 +13,16 @@
     "WheelAdjustRectangle": true
   },
   "Before": {
-    "Ctrl": "SelectControl",
+    "Ctrl": "SelectControlPush",
     "Shift": "SelectDesktop",
     "Alt": "Snap",
-    "Win": "HighlightWindow"
+    "Win": "HighlightWindowPush"
   },
   "Mouse": {
     "BeforeLeftAction": "Select",
     "BeforeRightAction": "Menu",
-    "BeforeMiddleAction": "None",
+    "BeforeMiddleAction": "ToggleMagnifier",
     "DragRightAction": "Cancel",
-    "DragMiddleAction": "None"
-  },
-  "ControlActivation": "Push",
-  "WindowActivation": "Push"
+    "DragMiddleAction": "ToggleMagnifier"
+  }
 }

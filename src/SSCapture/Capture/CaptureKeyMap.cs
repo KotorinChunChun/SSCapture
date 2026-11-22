@@ -3,7 +3,7 @@ namespace SSCapture.Capture;
 [Flags]
 internal enum CaptureModifiers { None = 0, Ctrl = 1, Shift = 2, Alt = 4, Win = 8 }
 
-internal enum CaptureKeyAction { None, LockWidth, LockHeight, Snap, CrossMonitor, HighlightWindow, SwitchAnchor, LockAspectRatio, FromCenter, FromCenterWithAspectRatio, Grid, SelectControl, SelectDesktop }
+internal enum CaptureKeyAction { None, LockWidth, LockHeight, Snap, CrossMonitor, HighlightWindow, SwitchAnchor, LockAspectRatio, FromCenter, FromCenterWithAspectRatio, Grid, SelectControl, SelectDesktop, SelectControlPush, SelectControlToggle, HighlightWindowPush, HighlightWindowToggle }
 
 internal enum CaptureAnchorCycle { Legacy, Diagonal, Corners, CornersAndCenter }
 
@@ -23,10 +23,39 @@ internal sealed record CaptureKeyMap(
     internal static CaptureKeyMap BeforeDefaults => CaptureKeyDefaults.Current.Before;
 
     internal static bool IsBeforeAction(CaptureKeyAction action) => action is CaptureKeyAction.None or CaptureKeyAction.Snap
-        or CaptureKeyAction.CrossMonitor or CaptureKeyAction.SwitchAnchor or CaptureKeyAction.HighlightWindow or CaptureKeyAction.SelectControl or CaptureKeyAction.SelectDesktop;
+        or CaptureKeyAction.CrossMonitor or CaptureKeyAction.SwitchAnchor or CaptureKeyAction.SelectDesktop
+        || IsControlSelection(action) || IsWindowSelection(action);
 
     internal static bool IsDragAction(CaptureKeyAction action) => Enum.IsDefined(action)
-        && action is not (CaptureKeyAction.HighlightWindow or CaptureKeyAction.SelectDesktop);
+        && !IsWindowSelection(action)
+        && action is not (CaptureKeyAction.SelectDesktop or CaptureKeyAction.SelectControlPush or CaptureKeyAction.SelectControlToggle);
+
+    internal static bool IsControlSelection(CaptureKeyAction action) => action is CaptureKeyAction.SelectControl
+        or CaptureKeyAction.SelectControlPush or CaptureKeyAction.SelectControlToggle;
+
+    internal static bool IsWindowSelection(CaptureKeyAction action) => action is CaptureKeyAction.HighlightWindow
+        or CaptureKeyAction.HighlightWindowPush or CaptureKeyAction.HighlightWindowToggle;
+
+    internal static bool IsModeToggle(CaptureKeyAction action) =>
+        action is CaptureKeyAction.SelectControlToggle or CaptureKeyAction.HighlightWindowToggle;
+
+    internal static CaptureKeyAction BeforeActivation(CaptureKeyAction action, CaptureActivation control, CaptureActivation window) => action switch
+    {
+        CaptureKeyAction.SelectControl => control == CaptureActivation.Toggle ? CaptureKeyAction.SelectControlToggle : CaptureKeyAction.SelectControlPush,
+        CaptureKeyAction.HighlightWindow => window == CaptureActivation.Toggle ? CaptureKeyAction.HighlightWindowToggle : CaptureKeyAction.HighlightWindowPush,
+        _ => action
+    };
+
+    internal CaptureKeyMap WithBeforeActivations(CaptureActivation control, CaptureActivation window)
+    {
+        CaptureKeyAction Resolve(CaptureKeyAction action) => BeforeActivation(action, control, window);
+        return this with
+        {
+            Ctrl = Resolve(Ctrl), Shift = Resolve(Shift), Alt = Resolve(Alt), Win = Resolve(Win),
+            CtrlShift = Resolve(CtrlShift), CtrlAlt = Resolve(CtrlAlt), CtrlWin = Resolve(CtrlWin),
+            ShiftAlt = Resolve(ShiftAlt), ShiftWin = Resolve(ShiftWin), AltWin = Resolve(AltWin)
+        };
+    }
 
     internal static IEnumerable<CaptureModifiers> Combinations =>
     [
@@ -64,6 +93,10 @@ internal sealed record CaptureKeyMap(
         CaptureKeyAction.FromCenter => "起点を中心にする",
         CaptureKeyAction.FromCenterWithAspectRatio => "中心基準＋比率固定",
         CaptureKeyAction.SelectControl => "コントロールを選択",
+        CaptureKeyAction.SelectControlPush => "コントロール選択／プッシュ",
+        CaptureKeyAction.SelectControlToggle => "コントロール選択／トグル",
+        CaptureKeyAction.HighlightWindowPush => "ウィンドウ撮影／プッシュ",
+        CaptureKeyAction.HighlightWindowToggle => "ウィンドウ撮影／トグル",
         CaptureKeyAction.SelectDesktop => "デスクトップの選択",
         _ => "なし"
     };

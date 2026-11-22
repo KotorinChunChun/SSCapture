@@ -114,6 +114,8 @@ if ($process.ExitCode -eq 2) {
 | `--settings-export <path>` | 保存済み設定を、新規のUTF-8 JSONに書き出します。 |
 | `--settings-import <path> --check` | JSONの形式・設定・参照を検証し、置換件数と端末固有の指定を表示します。 |
 | `--settings-import <path>` | 設定を置き換えます。常駐時は同じ実行ファイルの常駐アプリが適用します。 |
+
+旧設定のコントロール選択・ウィンドウ撮影のプッシュ／トグルは、読み込み時に1点目の修飾キーの各割り当てに引き継がれます。
 | `--startup-status` | 実行した導入先の自動起動状態をJSONで表示します。 |
 | `--startup-enable` | Windowsサインイン時の無表示起動を登録します。 |
 | `--startup-disable` | Windowsサインイン時のSSCaptureの自動起動を解除します。 |

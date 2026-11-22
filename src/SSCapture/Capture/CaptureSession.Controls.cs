@@ -99,7 +99,7 @@ internal sealed partial class SessionController
 
     private void UpdateControlShortcutMenu()
     {
-        CaptureModifiers before = CaptureKeyMap.Combinations.FirstOrDefault(keys => OutputSettings.CaptureBeforeKeys.Resolve(keys) == CaptureKeyAction.SelectControl);
+        CaptureModifiers before = CaptureKeyMap.Combinations.FirstOrDefault(keys => CaptureKeyMap.IsControlSelection(OutputSettings.CaptureBeforeKeys.Resolve(keys)));
         CaptureModifiers during = CaptureKeyMap.Combinations.FirstOrDefault(keys => OutputSettings.CaptureKeys.Resolve(keys) == CaptureKeyAction.SelectControl);
         string label = string.Join("／", new[]
         {

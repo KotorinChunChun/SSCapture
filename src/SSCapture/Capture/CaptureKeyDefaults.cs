@@ -46,6 +46,6 @@ internal sealed record CaptureKeyDefaults(CaptureKeyMap Drag, CaptureKeyMap Befo
         if (defaults?.Drag is null || defaults.Before is null || !Enum.IsDefined(defaults.Drag.SpaceCycle) || defaults.Mouse?.IsValid == false || CaptureKeyMap.Combinations.Any(key =>
             !CaptureKeyMap.IsDragAction(defaults.Drag.Resolve(key)) || !CaptureKeyMap.IsBeforeAction(defaults.Before.Resolve(key))))
             return null;
-        return defaults;
+        return defaults with { Before = defaults.Before.WithBeforeActivations(defaults.ControlActivation, defaults.WindowActivation) };
     }
 }

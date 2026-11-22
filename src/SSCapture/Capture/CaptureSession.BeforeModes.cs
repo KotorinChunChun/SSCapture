@@ -17,18 +17,18 @@ internal sealed partial class SessionController
         {
             var pending = pendingModeTap;
             pendingModeTap = null;
-            if (windowsTap && OutputSettings.CaptureBeforeKeys.Win == CaptureKeyAction.HighlightWindow
-                && OutputSettings.WindowActivation == CaptureActivation.Toggle)
-                return CaptureKeyAction.HighlightWindow;
-            return pending is { } tap && CaptureWindowsKey.IsStationaryTap(tap.Pointer, pointer, Environment.TickCount64 - tap.At, false)
-                ? tap.Action : CaptureKeyAction.None;
+            if (pending is { } tap && CaptureWindowsKey.IsStationaryTap(tap.Pointer, pointer, Environment.TickCount64 - tap.At, false))
+                return tap.Action;
+            if (windowsTap && OutputSettings.CaptureBeforeKeys.Win == CaptureKeyAction.HighlightWindowToggle)
+                return CaptureKeyAction.HighlightWindowToggle;
+            return CaptureKeyAction.None;
         }
-        if (pendingModeTap is { } previous && (previous.Keys != modifiers || previous.Pointer != pointer))
+        if (pendingModeTap is { } previous && (previous.Pointer != pointer || (modifiers & previous.Keys) != modifiers))
             pendingModeTap = null;
-        if ((modifiers & ~activeModifiers) != 0 && (modifiers & activeModifiers) == activeModifiers
-            && (action == CaptureKeyAction.SelectControl && OutputSettings.ControlActivation == CaptureActivation.Toggle
-                || action == CaptureKeyAction.HighlightWindow && modifiers != CaptureModifiers.Win && OutputSettings.WindowActivation == CaptureActivation.Toggle))
-            pendingModeTap = (action, modifiers, pointer, Environment.TickCount64);
+        // A combination stays armed until the last of its keys is released.
+        if ((modifiers & ~activeModifiers) != 0 && (modifiers & activeModifiers) == activeModifiers)
+            pendingModeTap = CaptureKeyMap.IsModeToggle(action) && !(action == CaptureKeyAction.HighlightWindowToggle && modifiers == CaptureModifiers.Win)
+                ? (action, modifiers, pointer, Environment.TickCount64) : null;
         return CaptureKeyAction.None;
     }
 
@@ -42,8 +42,7 @@ internal sealed partial class SessionController
         }
         if (HasPointerPress || gesture.IsPressed || suppressedButtons != MouseButtons.None) return;
         if (toggle) ToggleWindowCaptureMode(preferWgc: true);
-        if (windowPushReturn is null && beforeAction == CaptureKeyAction.HighlightWindow
-            && OutputSettings.WindowActivation == CaptureActivation.Push)
+        if (windowPushReturn is null && beforeAction == CaptureKeyAction.HighlightWindowPush)
         {
             windowPushReturn = (Mode, exclusiveWindow, modifiers);
             ChangeMode(CaptureMode.Window, preferWgc: true);
