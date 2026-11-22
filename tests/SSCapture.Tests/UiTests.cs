@@ -410,19 +410,30 @@ internal static partial class Program
             Equal(new CaptureMouseMap(CaptureClickAction.None, CaptureClickAction.None, CaptureClickAction.Desktop, CaptureClickAction.None,
                 CaptureClickAction.ToggleMagnifier), saved.CaptureMouse);
         });
-        Run("バージョン情報は実行版とGitHubのREADME・リリースへの入口を表示する", () =>
+        Run("バージョン情報は実行版・更新日・作者・概要と使い方・更新・報告への入口を表示する", () =>
         {
             using var form = NewSettings();
             form.SelectCategory("バージョン情報");
             Equal("バージョン情報", form.SelectedCategory);
             var version = (Label)form.Controls.Find("ProductVersion", true).Single();
-            Equal(WindowTitle.Create(), version.Text);
+            Equal(WindowTitle.Create() + " (beta)", version.Text);
+            string updatedOn = form.Controls.Find("ProductUpdatedOn", true).Single().Text;
+            Check(DateOnly.TryParseExact(updatedOn, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out _), "更新日が埋め込まれていない");
+            Equal("ことりちゅん", form.Controls.Find("ProductAuthor", true).Single().Text);
+            Equal("本ツールは、高機能な汎用スクリーンショット撮影ソフトです", form.Controls.Find("ProductSummary", true).Single().Text);
             var readme = (LinkLabel)form.Controls.Find("GitHubReadme", true).Single();
+            Equal("使い方", readme.Text);
             Equal("https://github.com/KotorinChunChun/SSCapture#readme", (string)readme.Links[0].LinkData!);
             var releases = (Button)form.Controls.Find("GitHubReleases", true).Single();
+            Equal("アップデート情報", releases.Text);
             Equal("https://github.com/KotorinChunChun/SSCapture/releases", (string)releases.Tag!);
+            var issues = (Button)form.Controls.Find("GitHubIssues", true).Single();
+            Equal("不具合を報告", issues.Text);
+            Equal("https://github.com/KotorinChunChun/SSCapture/issues", (string)issues.Tag!);
             var page = (TabPage)version.Parent!.Parent!;
-            Check(!Descendants(page).Any(control => control.Name == "ResetSettingsPage"), "情報ページに初期化ボタンがある");
+            Check(!Descendants(page).Any(control => control.Name == "ResetSettingsPage" || control.Text is "ライセンス" or "MIT"),
+                "情報ページに初期化ボタンまたはライセンス欄がある");
         });
         Run("設定タブの入力欄とボタンが表示領域に収まる", () =>
         {

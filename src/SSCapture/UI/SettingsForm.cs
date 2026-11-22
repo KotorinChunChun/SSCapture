@@ -613,27 +613,42 @@ internal sealed partial class SettingsForm : Form
     private void AddVersionPage(TabControl tabs)
     {
         const string projectUrl = "https://github.com/KotorinChunChun/SSCapture";
-        const string releasesUrl = projectUrl + "/releases";
-        var page = Page(tabs, "バージョン情報");
-        Add(page, "バージョン", new Label { Name = "ProductVersion", Text = WindowTitle.Create(), TextAlign = ContentAlignment.MiddleLeft }, 0);
-        Add(page, "ライセンス", new Label { Text = "MIT", TextAlign = ContentAlignment.MiddleLeft }, 1);
+        var attributes = typeof(SettingsForm).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().ToArray();
+        string? ReadMetadata(string key) => attributes.FirstOrDefault(attribute => attribute.Key == key)?.Value;
+        string? channel = ReadMetadata("ProductChannel");
+        string version = WindowTitle.Create() + (string.IsNullOrWhiteSpace(channel) ? "" : $" ({channel})");
 
-        var readme = new LinkLabel { Name = "GitHubReadme", Text = "GitHubのREADME", TextAlign = ContentAlignment.MiddleLeft };
+        var page = Page(tabs, "バージョン情報");
+        AddInfo("バージョン", "ProductVersion", version, 0);
+        AddInfo("更新日", "ProductUpdatedOn", ReadMetadata("ProductUpdatedOn") ?? "—", 1);
+        AddInfo("作者", "ProductAuthor", "ことりちゅん", 2);
+        AddInfo("概要", "ProductSummary", "本ツールは、高機能な汎用スクリーンショット撮影ソフトです", 3);
+
+        var readme = new LinkLabel { Name = "GitHubReadme", Text = "使い方", TextAlign = ContentAlignment.MiddleLeft };
         readme.Links.Add(0, readme.Text.Length, projectUrl + "#readme");
         readme.LinkClicked += (_, e) => OpenLink((string)e.Link!.LinkData!);
-
-        var releases = MakeButton("リリースを開く", "GitHubReleases");
-        releases.Width = 152;
-        releases.Tag = releasesUrl;
-        releases.Margin = new Padding(12, 0, 0, 0);
-        releases.Click += (_, _) => OpenLink(releasesUrl);
 
         var links = new FlowLayoutPanel { WrapContents = false, Padding = Padding.Empty };
         readme.AutoSize = true;
         readme.Margin = new Padding(0, 6, 0, 0);
-        links.Controls.AddRange([readme, releases]);
-        Add(page, "GitHub", links, 2);
-        page.RowStyles[2].Height = 46;
+        links.Controls.AddRange([readme,
+            LinkButton("アップデート情報", "GitHubReleases", projectUrl + "/releases"),
+            LinkButton("不具合を報告", "GitHubIssues", projectUrl + "/issues")]);
+        Add(page, "関連リンク", links, 4);
+        page.RowStyles[4].Height = 46;
+
+        void AddInfo(string label, string name, string value, int row) =>
+            Add(page, label, new Label { Name = name, Text = value, TextAlign = ContentAlignment.MiddleLeft }, row);
+
+        Button LinkButton(string text, string name, string url)
+        {
+            var button = MakeButton(text, name);
+            button.Width = 152;
+            button.Margin = new Padding(12, 0, 0, 0);
+            button.Tag = url;
+            button.Click += (_, _) => OpenLink(url);
+            return button;
+        }
 
         void OpenLink(string url)
         {

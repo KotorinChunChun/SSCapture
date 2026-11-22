@@ -89,6 +89,8 @@ pwsh -File scripts/test.ps1 -Interactive
 
 ## 発行と常駐版の更新
 
+設定の「バージョン情報」に表示する更新日は、`src/SSCapture/SSCapture.csproj` の `ProductUpdatedOn` に日本時間の日付を記録します。開発中のベータ版では `ProductChannel` を `beta` とし、GitHubのリリースタイトルとリリースノートの見出しにも `(beta)` を付けます。
+
 撮影・録画・OCRやファイル処理が完了してから、利用者がトレイの「終了」で常駐版を終了します。ビルドスクリプトはプロセスを自動停止しません。
 
 ```powershell

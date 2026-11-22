@@ -12,13 +12,19 @@
     <FileVersion>0.1.11.0</FileVersion>
     <InformationalVersion>0.1.11</InformationalVersion>
     <Version>0.1.11</Version>
+    <ProductChannel>beta</ProductChannel>
+    <ProductUpdatedOn>2026-11-22</ProductUpdatedOn>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AppHostDotNetSearch Condition="'$(SelfContained)' != 'true'">AppRelative;Global</AppHostDotNetSearch>
     <AppHostRelativeDotNet Condition="'$(SelfContained)' != 'true'">../../.tools/dotnet</AppHostRelativeDotNet>
     <AppHostDotNetSearch Condition="'$(SelfContained)' == 'true'">AppLocal</AppHostDotNetSearch>
   </PropertyGroup>
-  <ItemGroup><InternalsVisibleTo Include="SSCapture.Tests" /></ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SSCapture.Tests" />
+    <AssemblyMetadata Include="ProductChannel" Value="$(ProductChannel)" />
+    <AssemblyMetadata Include="ProductUpdatedOn" Value="$(ProductUpdatedOn)" />
+  </ItemGroup>
   <ItemGroup>
     <None Update="capture-key-defaults.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
     <EmbeddedResource Include="capture-key-defaults.json" LogicalName="capture-key-defaults.json" />
