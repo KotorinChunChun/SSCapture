@@ -64,7 +64,10 @@ internal static partial class Program
             Equal(OnForm(step).X, OnForm(zoom).X);
             Equal(OnForm(step).X, OnForm(display).X);
             Equal(OnForm(grid).X, OnForm(screenGuide).X);
-            Equal(OnForm(grid).X, OnForm(Box("StartWithWindows")).X);
+            // 要求18を優先し、自動起動のチェック欄は見出しと適用ボタンの右に置くため左端揃えの対象外とする。
+            Control startupLabel = form.Controls.Find("StartupLabel", true).Single(), startupApply = form.Controls.Find("ApplyStartup", true).Single();
+            Check(OnForm(startupLabel).X < OnForm(startupApply).X && OnForm(startupApply).X < OnForm(Box("StartWithWindows")).X,
+                "自動起動欄が「見出し・適用ボタン・チェック欄」の順に並んでいない");
             display.SelectedIndex = 1;
             Equal(screenGuide.Left, pointerGuide.Left);
             Equal(pointerGuide.Left, magnifier.Left);
