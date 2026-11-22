@@ -2,6 +2,12 @@ namespace SSCapture.Services;
 
 internal static class PresetSettings
 {
+    internal const string StandardInputKey = "standard-input";
+    internal const string StandardOutputKey = "standard-output";
+    internal const string PaintKey = "builtin-paint";
+    internal const string InitialWindowKey = "initial-input-window";
+    internal const string InitialFixedKey = "initial-input-fixed";
+
     internal static AppSettings EnsurePresets(this AppSettings settings)
     {
         settings = EnsureExternalApplications(settings);
@@ -10,29 +16,29 @@ internal static class PresetSettings
         var inputs = settings.SavedRegions.ToList();
         var outputs = settings.CapturePresets.ToList();
         var baseline = new AppSettings();
-        foreach (var (name, id, mode) in new[]
+        foreach (var (name, id, key, mode) in new[]
         {
-            ("ウィンドウ", "initial-input-window", CaptureMode.Window),
-            ("固定サイズ 1280×720", "initial-input-fixed", CaptureMode.FixedRegion),
-            ("矩形選択", "initial-input-rectangle", CaptureMode.Rectangle)
+            ("ウィンドウ", InitialWindowKey, InitialWindowKey, CaptureMode.Window),
+            ("固定サイズ 1280×720", InitialFixedKey, InitialFixedKey, CaptureMode.FixedRegion),
+            ("矩形選択", "initial-input-rectangle", StandardInputKey, CaptureMode.Rectangle)
         })
         {
             if (inputs.Count >= 3) break;
             if (inputs.Any(p => !p.UseFixedCoordinates && p.Mode == mode)) continue;
             inputs.Add(SavedRegion.FromSettings(UniqueName(name, inputs.Select(p => p.Name)), baseline with { DefaultMode = mode })
-                with { Id = UniqueId(id, inputs.Select(p => p.Id)) });
+                with { Id = UniqueId(id, inputs.Select(p => p.Id)), BuiltInKey = key });
         }
-        foreach (var (name, id, destination) in new[]
+        foreach (var (name, id, key, destination) in new[]
         {
-            ("ファイル保存", "initial-output-file", OutputDestination.File),
-            ("クリップボード＋ファイル", "initial-output-both", OutputDestination.Clipboard | OutputDestination.File),
-            ("クリップボード", "initial-output-clipboard", OutputDestination.Clipboard)
+            ("ファイル保存", "initial-output-file", "initial-output-file", OutputDestination.File),
+            ("クリップボード＋ファイル", "initial-output-both", "initial-output-both", OutputDestination.Clipboard | OutputDestination.File),
+            ("クリップボード", "initial-output-clipboard", StandardOutputKey, OutputDestination.Clipboard)
         })
         {
             if (outputs.Count >= 3) break;
             if (outputs.Any(p => p.Destination == destination)) continue;
             outputs.Add(CapturePreset.FromSettings(UniqueName(name, outputs.Select(p => p.Name)), baseline with { DefaultDestination = destination })
-                with { Id = UniqueId(id, outputs.Select(p => p.Id)) });
+                with { Id = UniqueId(id, outputs.Select(p => p.Id)), BuiltInKey = key });
         }
         // 削除した初期候補を次の起動で復活させない。既定や既存の登録内容には触れない。
         return PresetCaptureShortcut.Migrate(UpgradePresets(settings with { PresetSchemaVersion = 2, SavedRegions = inputs.ToArray(), CapturePresets = outputs.ToArray() }));
@@ -44,23 +50,24 @@ internal static class PresetSettings
         bool Untouched(SavedRegion p, CaptureMode mode, string name) => p.Name == name && !p.UseFixedCoordinates && p.Mode == mode &&
             p.Bounds == new Rectangle(0, 0, baseline.FixedWidth, baseline.FixedHeight) && p.Shortcut == "" &&
             p.FixedAnchor == CaptureAnchor.TopLeft && p.FreezeFrame && !p.IncludeCursor && p.PaddingPixels == 0;
-        var inputs = settings.SavedRegions.Where(p => !(p.Id == "initial-input-window" && !p.IsDefault && Untouched(p, CaptureMode.Window, "ウィンドウ")))
+        var inputs = settings.SavedRegions.Where(p => !(p.Id == InitialWindowKey && !p.IsDefault && Untouched(p, CaptureMode.Window, "ウィンドウ")))
             .Select(p =>
             {
-                if (p.Id == "standard-input" && Untouched(p, CaptureMode.Rectangle, "標準")) p = p with { Name = "囲った範囲" };
+                if (p.Id == StandardInputKey && Untouched(p, CaptureMode.Rectangle, "標準")) p = p with { Name = "囲った範囲" };
                 return p.ProfileVersion >= 2 ? p : p with { ProfileVersion = 2, RecordSystemAudio = settings.RecordSystemAudio,
                     RecordMicrophone = settings.RecordMicrophone, MicrophoneDeviceId = settings.MicrophoneDeviceId };
             }).ToList();
         foreach (Size size in new[] { new Size(1280, 720), new Size(1920, 1080), new Size(2560, 1440), new Size(3840, 2160) })
         {
             if (inputs.Count >= 50 || inputs.Any(p => !p.UseFixedCoordinates && p.Mode == CaptureMode.FixedRegion && p.Bounds.Size == size)) continue;
+            string id = $"initial-input-fixed-{size.Width}-{size.Height}";
             inputs.Add(SavedRegion.FromSettings(UniqueName($"固定サイズ {size.Width}×{size.Height}", inputs.Select(p => p.Name)),
                 baseline with { DefaultMode = CaptureMode.FixedRegion, FixedWidth = size.Width, FixedHeight = size.Height }) with
-                { Id = UniqueId($"initial-input-fixed-{size.Width}-{size.Height}", inputs.Select(p => p.Id)) });
+                { Id = UniqueId(id, inputs.Select(p => p.Id)), BuiltInKey = size == new Size(1280, 720) ? InitialFixedKey : id });
         }
-        var outputs = settings.CapturePresets.Select(p => p.Id == "standard-output" && p.Name == "標準" &&
+        var outputs = settings.CapturePresets.Select(p => p.Id == StandardOutputKey && p.Name == "標準" &&
             p == (CapturePreset.FromSettings("標準", baseline with { SelectedImageEditorId = p.ImageEditorId ?? "", SelectedVideoEditorId = p.VideoEditorId ?? "" })
-                with { Id = p.Id, IsDefault = p.IsDefault }) ? p with { Name = "クリップボード" } : p).ToArray();
+                with { Id = p.Id, IsDefault = p.IsDefault, BuiltInKey = p.BuiltInKey }) ? p with { Name = "クリップボード" } : p).ToArray();
         return settings with { PresetSchemaVersion = 3, SavedRegions = inputs.ToArray(), CapturePresets = outputs };
     }
     private static AppSettings EnsureExternalApplications(AppSettings settings)
@@ -77,7 +84,8 @@ internal static class PresetSettings
         bool initiallyEmpty = apps.Count == 0 && string.IsNullOrWhiteSpace(settings.ImageEditorPath);
         if (paint is null && apps.Count < 50)
         {
-            paint = new ExternalApplication { Id = UniqueId("builtin-paint", apps.Select(a => a.Id)),
+            paint = new ExternalApplication { Id = UniqueId(PaintKey, apps.Select(a => a.Id).Concat(settings.VideoEditors.Select(a => a.Id))),
+                BuiltInKey = PaintKey,
                 Name = UniqueName("ペイント", apps.Select(a => a.Name)), Executable = EditorExecutable.PaintPreset };
             apps.Add(paint);
         }
@@ -90,7 +98,11 @@ internal static class PresetSettings
         var inputs = settings.SavedRegions.Select(r => r.ProfileVersion >= 1 ? r : r with
         { ProfileVersion = 1, FreezeFrame = settings.FreezeFrame, IncludeCursor = settings.IncludeCursor,
             PaddingPixels = settings.ScreenshotPaddingPixels }).ToList();
-        var standard = SavedRegion.FromSettings("標準", settings) with { Id = UniqueId("standard-input", inputs.Select(p => p.Id)), IsDefault = true };
+        var baseline = new AppSettings();
+        var standard = SavedRegion.FromSettings("標準", settings) with { Id = UniqueId(StandardInputKey, inputs.Select(p => p.Id)), IsDefault = true };
+        // 旧設定の個別条件を取り込んだ登録は、初期値そのものから作った候補と区別する。
+        if (standard == SavedRegion.FromSettings(standard.Name, baseline) with { Id = standard.Id, IsDefault = true })
+            standard = standard with { BuiltInKey = StandardInputKey };
         inputs = inputs.Select(p => p with { IsDefault = false }).Prepend(standard).ToList();
         var outputs = settings.CapturePresets.Select(p => p with { IsDefault = false, ColorDepth = settings.ScreenshotColorDepth,
             OpenFolderAfterSave = settings.OpenFolderAfterSave, OcrSeparator = settings.OcrSeparator,
@@ -100,7 +112,13 @@ internal static class PresetSettings
             { PaddingPixels = old.PaddingPixels, Id = UniqueId("padding-" + old.Id, inputs.Select(p => p.Id)) });
         string name = "標準";
         for (int index = 2; outputs.Any(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)); index++) name = "標準 " + index;
-        outputs.Insert(0, CapturePreset.FromSettings(name, settings) with { IsDefault = true, Id = UniqueId("standard-output", outputs.Select(p => p.Id)) });
+        var standardOutput = CapturePreset.FromSettings(name, settings) with
+        { IsDefault = true, Id = UniqueId(StandardOutputKey, outputs.Select(p => p.Id)) };
+        string paintId = settings.ImageEditors.FirstOrDefault(app => app.BuiltInKey == PaintKey)?.Id ?? "";
+        if (standardOutput == CapturePreset.FromSettings(name, baseline with { SelectedImageEditorId = paintId })
+            with { Id = standardOutput.Id, IsDefault = true })
+            standardOutput = standardOutput with { BuiltInKey = StandardOutputKey };
+        outputs.Insert(0, standardOutput);
         return settings with { PresetSchemaVersion = 1, SavedRegions = inputs.ToArray(), CapturePresets = outputs.ToArray() };
     }
     internal static AppSettings ApplyDefaults(this AppSettings settings)
@@ -118,16 +136,17 @@ internal static class PresetSettings
                 FixedAnchor = settings.FixedCaptureAnchor, FreezeFrame = settings.FreezeFrame, IncludeCursor = settings.IncludeCursor,
                 SelectionMethod = settings.SelectionMethod, PaddingPixels = settings.ScreenshotPaddingPixels,
                 RecordSystemAudio = settings.RecordSystemAudio, RecordMicrophone = settings.RecordMicrophone, MicrophoneDeviceId = settings.MicrophoneDeviceId }).ToArray(),
-            CapturePresets = settings.CapturePresets.Select(p => !p.IsDefault ? p : CapturePreset.FromSettings(p.Name, settings) with { Id = p.Id, IsDefault = true }).ToArray()
+            CapturePresets = settings.CapturePresets.Select(p => !p.IsDefault ? p : CapturePreset.FromSettings(p.Name, settings) with
+            { Id = p.Id, IsDefault = true, BuiltInKey = p.BuiltInKey }).ToArray()
         };
     }
-    private static string UniqueId(string seed, IEnumerable<string> ids)
+    internal static string UniqueId(string seed, IEnumerable<string> ids)
     {
         var used = ids.ToHashSet(StringComparer.Ordinal); string result = seed;
         for (int index = 2; used.Contains(result); index++) result = seed + "-" + index;
         return result;
     }
-    private static string UniqueName(string seed, IEnumerable<string> names)
+    internal static string UniqueName(string seed, IEnumerable<string> names)
     {
         var used = names.ToHashSet(StringComparer.OrdinalIgnoreCase); string result = seed;
         for (int index = 2; used.Contains(result); index++) result = seed + " " + index;

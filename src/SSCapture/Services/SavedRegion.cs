@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace SSCapture.Services;
 
 internal sealed record DisplayLayout(string Identity, string Name, Rectangle Bounds, int DpiX, int DpiY);
@@ -5,6 +7,8 @@ internal sealed record DisplayLayout(string Identity, string Name, Rectangle Bou
 internal sealed record SavedRegion
 {
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BuiltInKey { get; init; }
     public string Name { get; init; } = "範囲";
     public string Shortcut { get; init; } = "";
     public bool IsDefault { get; init; }

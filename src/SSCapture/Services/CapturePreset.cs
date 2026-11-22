@@ -1,8 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace SSCapture.Services;
 
 internal sealed record CapturePreset
 {
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BuiltInKey { get; init; }
     public string Name { get; init; } = "";
     public bool IsDefault { get; init; }
     public ScreenshotColorDepth ColorDepth { get; init; }

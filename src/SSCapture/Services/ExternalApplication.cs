@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace SSCapture.Services;
 
 internal enum ExternalApplicationLaunch { Executable, SnippingToolPng }
@@ -5,6 +7,8 @@ internal enum ExternalApplicationLaunch { Executable, SnippingToolPng }
 internal sealed record ExternalApplication
 {
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BuiltInKey { get; init; }
     public string Name { get; init; } = "";
     public string Executable { get; init; } = "";
     public ExternalApplicationLaunch Launch { get; init; }

@@ -13,6 +13,11 @@ internal static partial class Program
         if (args.FirstOrDefault() == "--handoff-test-worker") return HoldTestHandoff(args[1]);
         if (args is ["--browser-job-tests", var jobs]) return RunBrowserJobTests(jobs);
         if (args is ["--browser-job-probe", var role, var fixture]) return RunBrowserJobProbe(role, fixture);
+        if (args is ["--standard-reset-tests"])
+        {
+            StandardRegistrationResetTests();
+            Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
+        }
         if (args.FirstOrDefault() == "--browser-control-smoke" && args is not ["--browser-control-smoke", "--interactive", _, _])
         {
             Console.Error.WriteLine("専用デスクトップで --browser-control-smoke --interactive <ブラウザーexe> <検証フォルダー> を指定してください。");
@@ -125,6 +130,7 @@ internal static partial class Program
         CaptureMenuEditingTests();
         PresetConsolidationTests();
         PresetUpgradeTests();
+        StandardRegistrationResetTests();
         PresetShortcutTests();
         AutoSaveBindingTests();
         RecipeTests();
