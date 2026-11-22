@@ -17,7 +17,7 @@ Windows 11用の汎用スクリーンショットツールです。Windows標準
 ドラッグすることで複数モニター、複数ウィンドウ、複数コントロールの撮影なども柔軟に選択できます。
 
 ```mermaid
-flowchart LR
+flowchart TB
     area["任意範囲撮影(Alt:境界スナップ可)"] --> output["クリップボード／ファイル保存"]
     monitor["Shift:モニタ撮影"] --> output
     window["Win:ウィンドウ撮影(子ウィンドウ対応)"] --> output
@@ -32,7 +32,7 @@ flowchart LR
 画像編集に関わる機能は、それに特化したツールを使って欲しいという思いもあり、敢えて実装していません。代わりに、かなり柔軟に他のツールへ作業が引き継げるような工夫をいくつも行っています。
 
 ```mermaid
-flowchart LR
+flowchart TB
     clipboard["クリップボード"] --> document["資料へ貼り付け"]
     clipboard --> currentFolder["開いているフォルダへ貼り付け"]
     file["ファイル保存"] --> editor["画像を編集"]
