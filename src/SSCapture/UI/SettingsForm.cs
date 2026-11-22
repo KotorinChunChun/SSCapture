@@ -334,8 +334,8 @@ internal sealed partial class SettingsForm : Form
         Add(guideOptions, "拡大鏡の拡大倍率（倍）", magnifierZoom, 4);
         Add(basic, "操作ガイド", guideOptions, 2);
 
-        startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration(), (int)basic.ColumnStyles[0].Width + 3);
-        AddFullRow(basic, startupSettings, 3);
+        startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration());
+        Add(basic, "自動起動", startupSettings, 3);
         var transfer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = new Padding(0, 3, 0, 3) };
         var exportButton = MakeButton("設定をエクスポート", "ExportSettings");
         var importButton = MakeButton("設定をインポート", "ImportSettings");

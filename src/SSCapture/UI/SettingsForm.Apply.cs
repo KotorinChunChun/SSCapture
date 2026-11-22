@@ -26,18 +26,42 @@ internal sealed partial class SettingsForm
         actions.Controls.Add(apply);
         var revert = AddRevertButton(actions, restoreDraft);
 
+        bool applying = false;
         void Refresh()
         {
-            apply.Enabled = readDraft() != committed;
-            revert.Enabled = apply.Enabled || isBasic && startupSettings.HasDraft;
+            bool changed = !applying && (readDraft() != committed || isBasic && startupSettings.HasDraft);
+            apply.Enabled = revert.Enabled = changed;
         }
         if (isBasic) startupSettings.DraftChanged += (_, _) => Refresh();
-        apply.Click += (_, _) =>
+        apply.Click += async (_, _) =>
         {
+            if (applying) return;
             var next = readDraft();
-            if (next == committed) return;
-            var error = CommitEditorSettings(next);
-            SetStatus(error ?? "設定を適用しました。", error is not null);
+            bool settingsChanged = next != committed;
+            bool startupChanged = isBasic && startupSettings.HasDraft;
+            if (!settingsChanged && !startupChanged) return;
+
+            applying = true;
+            Refresh();
+            try
+            {
+                if (CommitEditorSettings(next) is { } saveError)
+                {
+                    SetStatus(saveError, true);
+                    return;
+                }
+                string? startupError = startupChanged ? await startupSettings.ApplyDraftAsync() : null;
+                if (IsDisposed) return;
+                if (startupError is null)
+                    SetStatus("設定を適用しました。");
+                else
+                    SetStatus((settingsChanged ? "基本設定を保存しました。 " : "") + "自動起動を変更できませんでした。 " + startupError, true);
+            }
+            finally
+            {
+                applying = false;
+                if (!IsDisposed) Refresh();
+            }
         };
 
         refreshSettingControls += Refresh;

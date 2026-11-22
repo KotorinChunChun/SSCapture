@@ -22,10 +22,9 @@ internal static partial class Program
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
             var basic = tabs.TabPages[0].Controls.OfType<TableLayoutPanel>().Single();
             string[] groups = basic.Controls.Cast<Control>()
-                .Where(control => control is Label or StartupSettingsControl)
+                .OfType<Label>()
                 .OrderBy(basic.GetRow)
-                .Select(control => control is StartupSettingsControl
-                    ? control.Controls.Find("StartupLabel", true).Single().Text : control.Text)
+                .Select(control => control.Text)
                 .ToArray();
             Check(groups.SequenceEqual(["選択範囲", "位置・寸法の補正", "操作ガイド", "自動起動"]), "基本のグループ順が異なる");
             Check(basic.Controls.Find("DefaultInputSummary", true).Length == 0 &&
@@ -64,10 +63,8 @@ internal static partial class Program
             Equal(OnForm(step).X, OnForm(zoom).X);
             Equal(OnForm(step).X, OnForm(display).X);
             Equal(OnForm(grid).X, OnForm(screenGuide).X);
-            // 要求18を優先し、自動起動のチェック欄は見出しと適用ボタンの右に置くため左端揃えの対象外とする。
-            Control startupLabel = form.Controls.Find("StartupLabel", true).Single(), startupApply = form.Controls.Find("ApplyStartup", true).Single();
-            Check(OnForm(startupLabel).X < OnForm(startupApply).X && OnForm(startupApply).X < OnForm(Box("StartWithWindows")).X,
-                "自動起動欄が「見出し・適用ボタン・チェック欄」の順に並んでいない");
+            Equal(OnForm(grid).X, OnForm(Box("StartWithWindows")).X);
+            Check(form.Controls.Find("ApplyStartup", true).Length == 0, "自動起動の専用ボタンが残っている");
             display.SelectedIndex = 1;
             Equal(screenGuide.Left, pointerGuide.Left);
             Equal(pointerGuide.Left, magnifier.Left);

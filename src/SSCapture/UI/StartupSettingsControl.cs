@@ -5,64 +5,95 @@ namespace SSCapture.UI;
 internal sealed class StartupSettingsControl : UserControl
 {
     readonly IStartupRegistration registration;
-    readonly CheckBox enabled = new() { Name = "StartWithWindows", Text = "Windowsサインイン時に自動起動（画面は表示しない）", AutoSize = true, Enabled = false };
-    readonly Button apply = new() { Name = "ApplyStartup", Text = "自動起動を適用", AutoSize = true, Enabled = false };
-    readonly Label state = new() { Name = "StartupState", Text = "確認中…", AutoSize = true, Margin = new Padding(16, 3, 3, 3), MaximumSize = new Size(850, 0) };
+    readonly CheckBox enabled = new() { Name = "StartWithWindows", Text = "Windowsサインイン時に自動起動（画面は表示しない）", AutoSize = true, Enabled = false, Anchor = AnchorStyles.Left };
+    readonly Label state = new() { Name = "StartupState", Text = "確認中…", AutoSize = true, Margin = new Padding(19, 3, 3, 3) };
     StartupRegistrationState? current;
     bool working;
     internal event EventHandler? DraftChanged;
-    internal bool HasDraft => current?.CanChange == true && enabled.Checked != current.Enabled;
+    internal bool HasDraft => !working && current?.CanChange == true && enabled.Checked != current.Enabled;
 
-    internal StartupSettingsControl(IStartupRegistration registration, int labelWidth = 177)
+    internal StartupSettingsControl(IStartupRegistration registration)
     {
         this.registration = registration;
-        Name = "StartupSettings"; Dock = DockStyle.Fill; Margin = new Padding(0, 3, 0, 3);
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Margin = Padding.Empty };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, labelWidth));
+        Name = "StartupSettings";
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        var commands = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Fill, Margin = Padding.Empty };
-        var title = new Label { Name = "StartupLabel", Text = "自動起動", AutoSize = true, Anchor = AnchorStyles.Left };
-        enabled.Anchor = AnchorStyles.Left;
-        ButtonTheme.Apply(apply, ButtonRole.StartupApply);
-        commands.Controls.AddRange([title, apply, enabled]);
-        layout.Controls.Add(commands, 0, 0);
-        layout.SetColumnSpan(commands, 2);
-        layout.Controls.Add(state, 1, 1);
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.Controls.Add(enabled, 0, 0);
+        layout.Controls.Add(state, 0, 1);
         Controls.Add(layout);
-        SizeChanged += (_, _) => state.MaximumSize = new Size(Math.Max(1, ClientSize.Width - layout.GetColumnWidths().FirstOrDefault() - state.Margin.Horizontal), 0);
-        enabled.CheckedChanged += (_, _) => { apply.Enabled = !working && HasDraft; DraftChanged?.Invoke(this, EventArgs.Empty); };
-        apply.Click += async (_, _) => await ApplyAsync();
+        SizeChanged += (_, _) => state.MaximumSize = new Size(Math.Max(1, ClientSize.Width - state.Margin.Horizontal), 0);
+        enabled.CheckedChanged += (_, _) => DraftChanged?.Invoke(this, EventArgs.Empty);
     }
-    internal void ResetDraft() { if (current?.CanChange == true) enabled.Checked = false; }
-    internal void RevertDraft() { if (current is { } saved) enabled.Checked = saved.Enabled; }
+
+    internal void ResetDraft() { if (!working && current?.CanChange == true) enabled.Checked = false; }
+    internal void RevertDraft() { if (!working && current is { } saved) enabled.Checked = saved.Enabled; }
 
     internal async Task RefreshAsync()
     {
         if (working || IsDisposed) return;
-        working = true; apply.Enabled = enabled.Enabled = false;
+        working = true;
+        enabled.Enabled = false;
+        try { await ReadStateAsync(); }
+        finally { EndWork(); }
+    }
+
+    internal async Task<string?> ApplyDraftAsync()
+    {
+        if (IsDisposed || !HasDraft) return null;
+        bool requested = enabled.Checked;
+        working = true;
+        enabled.Enabled = false;
+        try
+        {
+            string? error;
+            try { error = await registration.SetAsync(requested); }
+            catch (Exception ex) { error = ex.Message; }
+            if (IsDisposed) return error;
+
+            string? readError = await ReadStateAsync();
+            if (IsDisposed) return error ?? readError;
+            error ??= readError;
+            if (error is null && current?.Enabled != requested)
+                error = "指定した自動起動の状態を確認できませんでした。";
+            if (error is not null && current?.CanChange == true)
+                enabled.Checked = requested;
+            return error;
+        }
+        finally { EndWork(); }
+    }
+
+    private async Task<string?> ReadStateAsync()
+    {
         try
         {
             var next = await registration.ReadAsync();
-            if (IsDisposed) return;
-            current = next; enabled.Checked = next.Enabled; enabled.Enabled = next.CanChange; state.Text = next.Detail;
+            if (!IsDisposed)
+            {
+                current = next;
+                enabled.Checked = next.Enabled;
+                state.Text = next.Detail;
+            }
+            return null;
         }
         catch (Exception ex)
         {
-            if (!IsDisposed) { current = null; state.Text = "自動起動を確認できません: " + ex.Message; }
+            string message = "自動起動を確認できません: " + ex.Message;
+            if (!IsDisposed)
+            {
+                current = null;
+                state.Text = message;
+            }
+            return message;
         }
-        finally { working = false; DraftChanged?.Invoke(this, EventArgs.Empty); }
     }
-    async Task ApplyAsync()
+
+    private void EndWork()
     {
-        if (working || current?.CanChange != true || enabled.Checked == current.Enabled) return;
-        working = true; apply.Enabled = enabled.Enabled = false;
-        string? error;
-        try { error = await registration.SetAsync(enabled.Checked); }
-        catch (Exception ex) { error = ex.Message; }
-        finally { working = false; DraftChanged?.Invoke(this, EventArgs.Empty); }
+        working = false;
         if (IsDisposed) return;
-        await RefreshAsync();
-        if (!IsDisposed && error != null) state.Text = "変更できませんでした: " + error;
+        enabled.Enabled = current?.CanChange == true;
+        DraftChanged?.Invoke(this, EventArgs.Empty);
     }
 }
