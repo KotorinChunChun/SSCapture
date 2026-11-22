@@ -86,7 +86,7 @@ internal static class InstantCapture
         CaptureWindow target = roots[0];
         if (recipe.TracksControl)
         {
-            const string unavailable = "再撮影する部品を特定できません。選び直してください。";
+            const string unavailable = "再撮影するコントロールを特定できません。選び直してください。";
             if (recipe.ControlIdentity is not { } identity) throw new InvalidOperationException(unavailable);
             var hit = await CaptureContextClient.Shared.FindControlAsync(new(target.Handle.ToInt64(), target.ProcessId,
                 PixelBounds.From(target.Bounds), null, identity));

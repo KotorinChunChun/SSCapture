@@ -9,20 +9,22 @@ internal sealed class CaptureKeyEditor : UserControl
     private readonly Dictionary<CaptureModifiers, ComboBox> commands = [];
     private readonly Dictionary<MouseButtons, ComboBox> clicks = [];
     private readonly CheckBox? space;
+    private readonly ComboBox? controlActivation, windowActivation;
 
     private sealed record Choice(CaptureKeyAction Action, string Text)
     {
         public override string ToString() => Text;
     }
 
-    internal CaptureKeyEditor(CaptureKeyMap map, CaptureMouseMap mouse, bool beforeSelection)
+    internal CaptureKeyEditor(CaptureKeyMap map, CaptureMouseMap mouse, bool beforeSelection,
+        CaptureActivation initialControlActivation = CaptureActivation.Push, CaptureActivation initialWindowActivation = CaptureActivation.Push)
     {
         string prefix = beforeSelection ? "CaptureBeforeKeys" : "CaptureKeys";
         Name = prefix + "Editor";
         Dock = DockStyle.Fill;
         AutoScroll = true;
         var table = new TableLayoutPanel { Name = prefix + "Grid", ColumnCount = 5,
-            RowCount = beforeSelection ? 8 : 9, Dock = DockStyle.Top };
+            RowCount = beforeSelection ? 10 : 9, Dock = DockStyle.Top };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         for (int column = 0; column < Modifiers.Length; column++)
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
@@ -33,7 +35,6 @@ internal sealed class CaptureKeyEditor : UserControl
             .Where(action => beforeSelection ? CaptureKeyMap.IsBeforeAction(action) : action != CaptureKeyAction.HighlightWindow)
             .Select(action => new Choice(action, action switch
             {
-                CaptureKeyAction.SelectControl => "部品を選択（長押し）",
                 CaptureKeyAction.SwitchAnchor when beforeSelection => "基点切替（固定サイズ）",
                 _ => CaptureKeyMap.Describe(action)
             })).ToArray();
@@ -74,6 +75,8 @@ internal sealed class CaptureKeyEditor : UserControl
 
         if (beforeSelection)
         {
+            controlActivation = AddActivation(clickRow++, "ControlActivation", "コントロール選択", initialControlActivation);
+            windowActivation = AddActivation(clickRow++, "WindowActivation", "ウィンドウ撮影", initialWindowActivation);
             AddClick(MouseButtons.Left, clickRow, "BeforeLeft", "左クリック", "ウィンドウ撮影／ドラッグ開始（固定サイズでは確定）", mouse.BeforeLeft);
             AddClick(MouseButtons.Right, clickRow + 1, "BeforeRight", "右クリック", "撮影メニューを開く", mouse.BeforeRight);
             AddClick(MouseButtons.Middle, clickRow + 2, "BeforeMiddle", "中クリック", "ポインタ下のモニターを撮影", mouse.BeforeMiddle);
@@ -87,6 +90,14 @@ internal sealed class CaptureKeyEditor : UserControl
         SizeRows(table);
         table.FontChanged += (_, _) => SizeRows(table);
         table.DpiChangedAfterParent += (_, _) => SizeRows(table);
+
+        ComboBox AddActivation(int row, string name, string label, CaptureActivation activation)
+        {
+            table.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left }, 0, row);
+            var combo = AddChoice(table, 1, row, name, label, ["押している間だけ（プッシュ）", "単押しで切り替え（トグル）"], (int)activation);
+            table.SetColumnSpan(combo, 4);
+            return combo;
+        }
 
         void AddClick(MouseButtons button, int row, string name, string label, string action, bool assigned, bool enabled = true)
         {
@@ -105,6 +116,8 @@ internal sealed class CaptureKeyEditor : UserControl
         ActionAt(CaptureModifiers.Shift | CaptureModifiers.Win), ActionAt(CaptureModifiers.Alt | CaptureModifiers.Win), space?.Checked ?? false);
 
     internal bool IsClickEnabled(MouseButtons button) => clicks[button].SelectedIndex == 1;
+    internal CaptureActivation ControlActivation => (CaptureActivation)(controlActivation?.SelectedIndex ?? 0);
+    internal CaptureActivation WindowActivation => (CaptureActivation)(windowActivation?.SelectedIndex ?? 0);
 
     private CaptureKeyAction ActionAt(CaptureModifiers keys) => ((Choice)commands[keys].SelectedItem!).Action;
 

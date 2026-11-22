@@ -103,6 +103,7 @@ internal sealed partial class SessionController
     private readonly Func<CaptureWindow, IReadOnlyList<CaptureWindow>> findWindowGroup;
     private bool exclusiveWindow;
     private WindowCapturePreview? windowPreview;
+    private bool windowPreviewIsControl;
     private readonly HashSet<CaptureOverlay> auxiliaryOverlays = [];
     private CaptureTargetDrag? targetDrag;
     private readonly bool captureWindowsKey;
@@ -172,7 +173,10 @@ internal sealed partial class SessionController
         {
             if (SelectingControl)
             {
-                string controlOperation = ControlBounds.IsEmpty ? "対象のコントロールが見つかりません" : "左ボタンを離して部品を撮影";
+                string controlOperation = ControlBounds.IsEmpty ? "対象のコントロールが見つかりません"
+                    : UsesControlPreview && !ControlPreviewReady ? windowPreview?.Frame.IsFaulted == true
+                        ? "コントロールのプレビューを取得できません" : "コントロールをプレビュー中"
+                    : "左ボタンを離してコントロールを撮影";
                 return (ModifierHint is null ? "" : ModifierHint + "\n") + controlOperation + "　" +
                     SelectionGuideText.CancelHint(OutputSettings.CaptureMouse.DragRight);
             }
@@ -607,7 +611,8 @@ internal sealed partial class SessionController
 
     private void ChangeMode(CaptureMode mode, bool preferWgc)
     {
-        if (completed || mode == Mode) return;
+        bool isolated = mode == CaptureMode.Window && preferWgc && options.Intent == CaptureIntent.Screenshot && findWindow is not null;
+        if (completed || mode == Mode && isolated == exclusiveWindow) return;
         try
         {
             if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
@@ -617,7 +622,7 @@ internal sealed partial class SessionController
             gesture.Reset();
             ReleasePointer();
             Mode = mode;
-            exclusiveWindow = preferWgc && options.Intent == CaptureIntent.Screenshot && findWindow is not null;
+            exclusiveWindow = isolated;
             gesture = CreateGesture(mode, grid20);
             if (mode == CaptureMode.FixedRegion && selectedInputBounds is Rectangle fixedBounds && fixedBounds.Size == activeFixedSize)
                 gesture.FixedPosition = fixedBounds;
@@ -664,7 +669,8 @@ internal sealed partial class SessionController
             dismiss: () => ChangeGuideVisibility(false), spaceEnabled: OutputSettings.CaptureKeys.SpaceEnabled,
             workingArea: Screen.GetWorkingArea(owner.MonitorBounds), beforeKeys: OutputSettings.CaptureBeforeKeys,
             dragKeys: OutputSettings.CaptureKeys, mouse: OutputSettings.CaptureMouse, canCrossMonitors: CanGuideCrossMonitors,
-            selectionMethod: OutputSettings.SelectionMethod);
+            selectionMethod: OutputSettings.SelectionMethod,
+            controlActivation: OutputSettings.ControlActivation, windowActivation: OutputSettings.WindowActivation);
         guide.SetShared(OutputSettings.ShareCapturePresentation);
         guide.Show(owner);
         UpdateGuidePointer();
@@ -858,6 +864,11 @@ internal sealed partial class SessionController
         bool dragging = gesture.IsPressed;
         var bindings = dragging ? OutputSettings.CaptureKeys : OutputSettings.CaptureBeforeKeys;
         CaptureKeyAction action = ResolveCaptureAction(bindings, modifiers, dragging);
+        CaptureKeyAction beforeAction = OutputSettings.CaptureBeforeKeys.Resolve(modifiers);
+        CaptureKeyAction modeTap = TakeBeforeModeTap(pointer, modifiers, beforeAction, windowsTap);
+        if (modeTap != CaptureKeyAction.None) hasSelectionInput = true;
+        if (modeTap == CaptureKeyAction.SelectControl) controlToggled = !controlToggled;
+        UpdateBeforeWindowMode(modifiers, beforeAction, modeTap == CaptureKeyAction.HighlightWindow);
         UpdateAltSnapTap(pointer, modifiers);
         bool movingWhileIdle = !HasPointerPress && !dragging && selectionBounds is not null && Snapshot.Monitors.Count > 1
             && modifiers == CaptureModifiers.Win && action is (CaptureKeyAction.HighlightWindow or CaptureKeyAction.CrossMonitor);
@@ -867,11 +878,9 @@ internal sealed partial class SessionController
         if (SelectionGuideText.Applies(effect, Mode, dragging, CanGuideCrossMonitors))
             hint = $"{CaptureKeyMap.Label(modifiers)} : {CaptureKeyMap.Describe(effect)}";
         if (!HasPointerPress && modifiers == CaptureModifiers.Win && action == CaptureKeyAction.HighlightWindow
-            && (windowsKey?.CanTap ?? true))
+            && OutputSettings.WindowActivation == CaptureActivation.Toggle && (windowsKey?.CanTap ?? true))
             hint += "\n" + CaptureKeyMap.Label(CaptureModifiers.Win) + (HighlightWindow
                 ? "を離すと元の撮影モードに戻る" : "を離すとウィンドウ撮影モードに変更");
-        bool hintChanged = ModifierHint != hint;
-        ModifierHint = hint;
         CaptureKeyAction pressedAction = windowsTap && !HasPointerPress && !dragging ? bindings.Win
             : (modifiers & ~activeModifiers) != 0 && modifiers != CaptureModifiers.Win ? action : CaptureKeyAction.None;
         if (changed)
@@ -880,8 +889,17 @@ internal sealed partial class SessionController
             activeDrag = dragging;
             if (modifiers != CaptureModifiers.None) hasSelectionInput = true;
         }
-        UpdateControlSelection(action == CaptureKeyAction.SelectControl && options.Intent == CaptureIntent.Screenshot
-            && !FreeMiddleDrag && !HasWindowDrag && suppressedButtons == MouseButtons.None, pointer);
+        if (!dragging && (controlToggled || beforeAction == CaptureKeyAction.SelectControl && OutputSettings.ControlActivation == CaptureActivation.Push))
+            hint = "コントロールを選択";
+        else if (!dragging && windowPushReturn is not null)
+            hint = "ウィンドウ撮影中\nキーを離すと元の撮影モードに戻る" +
+                (movingWhileIdle ? "\nWin : 別モニタへの移動を許可" : "");
+        bool hintChanged = ModifierHint != hint;
+        ModifierHint = hint;
+        bool selectControl = dragging ? action == CaptureKeyAction.SelectControl
+            : controlToggled || beforeAction == CaptureKeyAction.SelectControl && OutputSettings.ControlActivation == CaptureActivation.Push;
+        UpdateControlSelection(selectControl && options.Intent == CaptureIntent.Screenshot
+            && !FreeMiddleDrag && !HasWindowDrag && suppressedButtons == MouseButtons.None, pointer, preview: !dragging);
         bool snap = altSnapEnabled || action == CaptureKeyAction.Snap;
         bool height = action == CaptureKeyAction.LockHeight;
         bool width = action == CaptureKeyAction.LockWidth;
@@ -900,12 +918,7 @@ internal sealed partial class SessionController
             || rectangleAction != lastRectangleAction)
             MoveTo(pointer, snap, height, width, rectangleAction);
         if (pressedAction == CaptureKeyAction.SwitchAnchor) SwitchSelectionAnchor();
-        if (pressedAction == CaptureKeyAction.HighlightWindow)
-        {
-            ToggleWindowCaptureMode(preferWgc: windowsTap);
-            hasSelectionInput = true;
-        }
-        if (changed || hintChanged || pressedAction == CaptureKeyAction.HighlightWindow) RefreshOverlays();
+        if (changed || hintChanged || modeTap != CaptureKeyAction.None) RefreshOverlays();
     }
 
     private void UpdateAltSnapTap(Point pointer, CaptureModifiers modifiers)
@@ -1012,14 +1025,17 @@ internal sealed partial class SessionController
     private async void UpdateWindowPreview()
     {
         if (completed || refreshing) return;
-        CaptureWindow? target = UsesWindowSource && pressedButton != MouseButtons.Middle && !HasWindowDrag
-            && (!SelectingControl || controlCandidate is not null)
-            ? controlCandidate?.Window ?? findWindow?.Invoke(targetDrag is { Path.Count: > 0 } ? targetDrag.Path[0] : Pointer) : null;
-        if (target == windowPreview?.Target && (windowPreview is null || windowPreview.IncludeCursor == OutputSettings.IncludeCursor)) return;
+        bool control = UsesControlPreview;
+        CaptureWindow? target = SelectingControl ? (control || UsesWindowSource ? controlCandidate?.Window : null)
+            : UsesWindowSource && pressedButton != MouseButtons.Middle && !HasWindowDrag
+                ? findWindow?.Invoke(targetDrag is { Path.Count: > 0 } ? targetDrag.Path[0] : Pointer) : null;
+        if (target == windowPreview?.Target && (windowPreview is null ||
+            windowPreview.IncludeCursor == OutputSettings.IncludeCursor && windowPreviewIsControl == control)) return;
         ClearWindowPreview();
         if (target is null) return;
 
-        var pending = windowPreview = new WindowCapturePreview(target, OutputSettings.IncludeCursor, findWindowGroup(target));
+        windowPreviewIsControl = control;
+        var pending = windowPreview = new WindowCapturePreview(target, OutputSettings.IncludeCursor, control ? [target] : findWindowGroup(target));
         try { await pending.Frame; }
         catch (Exception) when (pending.Frame.IsCanceled || pending.Frame.IsFaulted) { }
         if (ReferenceEquals(windowPreview, pending)) RefreshOverlays();
@@ -1029,6 +1045,7 @@ internal sealed partial class SessionController
     {
         WindowCapturePreview? old = windowPreview;
         windowPreview = null;
+        windowPreviewIsControl = false;
         old?.Dispose();
     }
 
@@ -1162,6 +1179,8 @@ internal sealed partial class SessionController
         hasSelectionInput = true;
         suppressedButtons |= pressedButton;
         if (SelectingControl) controlHoldCancelled = true;
+        controlToggled = false;
+        pendingModeTap = null;
         ExitControlSelection();
         waitingForSecondPoint = false;
         gesture.Reset();
@@ -1179,6 +1198,9 @@ internal sealed partial class SessionController
             if (completed) return;
             menuPointer = gesture.RawCurrent;
             menuTransition = true;
+            controlToggled = false;
+            pendingModeTap = null;
+            RestoreWindowPush();
             ExitControlSelection();
             gesture.Reset();
             ReleasePointer();
@@ -1317,7 +1339,7 @@ internal sealed partial class SessionController
         IReadOnlyList<CaptureWindow>? roots = selection.Composite?.WindowRoots;
         CaptureWindow? target = control?.Window ?? roots?.FirstOrDefault() ?? (selection.WindowHitPoint is Point hit ? findWindow?.Invoke(hit) : null);
         if (selection.WindowHitPoint is Point hitPoint) selection = selection with { WindowTitle = target?.Title ?? readTitle?.Invoke(hitPoint) };
-        bool useWindowSource = UsesWindowSource && !entireMonitor;
+        bool useWindowSource = (control?.Isolated ?? UsesWindowSource) && !entireMonitor;
         bool singleWindow = roots is null && selection.WindowHitPoint is not null && (Mode == CaptureMode.Rectangle || HighlightWindow);
         bool groupWindows = control is null && target is not null && HighlightWindow && !entireMonitor && options.Intent == CaptureIntent.Screenshot
             && (useWindowSource || !singleWindow);
@@ -1373,7 +1395,7 @@ internal sealed partial class SessionController
                     {
                         using var raw = capture.Image;
                         result = CaptureGeometry.Crop(raw, capture.Bounds, selection.Bounds, 1);
-                        if (result is null) throw new InvalidOperationException("選択した部品がウィンドウ画像の外にあります。選び直してください。");
+                        if (result is null) throw new InvalidOperationException("選択したコントロールがウィンドウ画像の外にあります。選び直してください。");
                         metadata = capture.Metadata?.WithCrop(selection.Bounds).WithPadding(OutputSettings.ScreenshotPaddingPixels);
                     }
                     else

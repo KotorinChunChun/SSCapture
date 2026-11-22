@@ -3,12 +3,16 @@ using System.Text.Json.Serialization;
 
 namespace SSCapture.Capture;
 
-internal sealed record CaptureKeyDefaults(CaptureKeyMap Drag, CaptureKeyMap Before)
+internal enum CaptureActivation { Push, Toggle }
+
+internal sealed record CaptureKeyDefaults(CaptureKeyMap Drag, CaptureKeyMap Before,
+    CaptureActivation ControlActivation = CaptureActivation.Push, CaptureActivation WindowActivation = CaptureActivation.Push)
 {
     internal const string FileName = "capture-key-defaults.json";
     private static readonly JsonSerializerOptions Options = new()
     {
-        Converters = { new JsonStringEnumConverter<CaptureKeyAction>(allowIntegerValues: false) }
+        Converters = { new JsonStringEnumConverter<CaptureKeyAction>(allowIntegerValues: false),
+            new JsonStringEnumConverter<CaptureActivation>(allowIntegerValues: false) }
     };
     private static readonly Lazy<CaptureKeyDefaults> Defaults = new(() => Load(AppContext.BaseDirectory));
     internal static CaptureKeyDefaults Current => Defaults.Value;

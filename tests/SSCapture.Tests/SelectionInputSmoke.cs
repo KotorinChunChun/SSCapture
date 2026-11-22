@@ -366,7 +366,8 @@ internal static partial class Program
                         host.BackColor = Color.Lime;
                         host.Refresh();
                         await Down(overlay, 120, 80); input.LeftUp();
-                    }, token, windows: [target.Bounds], findWindow: point => target.Bounds.Contains(point) ? target : null, showGuide: false);
+                    }, token, windows: [target.Bounds], findWindow: point => target.Bounds.Contains(point) ? target : null, showGuide: false,
+                        settings: new() { WindowActivation = CaptureActivation.Toggle });
                     var source = (CaptureReplaySource.Windows)result.Selection!.ReplaySource!;
                     Check(source.Isolated, "WGCの撮影方式が失われた");
                     Equal(target, source.Targets.Single());
@@ -497,7 +498,8 @@ internal static partial class Program
                         input.LeftUp();
                     }, token, windows: targets.Select(window => window.Bounds).ToArray(), showGuide: false, dimBackground: !owned,
                         findWindow: point => targets.FirstOrDefault(window => window.Bounds.Contains(point)),
-                        findWindowGroup: window => CaptureWindowGroups.ForegroundGroup(window, targets));
+                        findWindowGroup: window => CaptureWindowGroups.ForegroundGroup(window, targets),
+                        settings: new() { WindowActivation = CaptureActivation.Toggle });
                     Rectangle resultBounds = result.Selection!.Bounds;
                     int PixelAt(int x, int y) => result.Image!.GetPixel(P(x, y).X - resultBounds.X, P(x, y).Y - resultBounds.Y).ToArgb();
                     Equal(Color.White.ToArgb(), PixelAt(180, 200));

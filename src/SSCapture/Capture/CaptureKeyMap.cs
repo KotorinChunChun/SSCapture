@@ -58,7 +58,7 @@ internal sealed record CaptureKeyMap(
         CaptureKeyAction.LockAspectRatio => "縦横比を固定",
         CaptureKeyAction.FromCenter => "起点を中心にする",
         CaptureKeyAction.FromCenterWithAspectRatio => "中心基準＋比率固定",
-        CaptureKeyAction.SelectControl => "押している間だけポインタ下の部品を選択",
+        CaptureKeyAction.SelectControl => "コントロールを選択",
         _ => "なし"
     };
 

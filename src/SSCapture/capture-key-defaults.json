@@ -11,7 +11,10 @@
     "SpaceEnabled": true
   },
   "Before": {
+    "Ctrl": "SelectControl",
     "Alt": "Snap",
     "Win": "HighlightWindow"
-  }
+  },
+  "ControlActivation": "Push",
+  "WindowActivation": "Push"
 }

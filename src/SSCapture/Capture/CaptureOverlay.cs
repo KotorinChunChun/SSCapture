@@ -176,7 +176,7 @@ internal sealed class CaptureOverlay : Form
             source.Offset(MonitorBounds.X - frame.Bounds.X, MonitorBounds.Y - frame.Bounds.Y);
             graphics.DrawImage(frame.Image, bright, source, GraphicsUnit.Pixel);
         }
-        else if (session.DimCaptureBackground && !shared) DrawSnapshot(graphics, bright);
+        else if (session.DimCaptureBackground && !shared && !session.UsesControlPreview) DrawSnapshot(graphics, bright);
         if (!shared)
             foreach (Rectangle window in session.WindowDragHighlights)
                 DrawSnapshot(graphics, Rectangle.Intersect(Local(window), dirty));

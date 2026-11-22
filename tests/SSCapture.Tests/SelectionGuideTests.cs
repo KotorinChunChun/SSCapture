@@ -138,8 +138,8 @@ internal static partial class Program
             using var guide = new SelectionGuideForm(new(0, 0, 1280, 720), CaptureIntent.Screenshot, () => { },
                 mouse: new(BeforeRight: false, DragRight: false), canCrossMonitors: true);
             string Read() => guide.Controls["SelectionHelp"]!.Text;
-            Check(Read().Contains("Windows キーを短押し") && Read().Contains("Windows キーを押しながら"), "Windowsキーの短押しと長押しがない");
-            Check(!Read().Contains("右クリック") && !Read().Contains("Ctrl"), "無効または別段階の操作を案内");
+            Check(Read().Contains("Windows キーを押しながら") && Read().Contains("Ctrlを押しながら　コントロールを選択"), "押している間の案内がない");
+            Check(!Read().Contains("右クリック") && !Read().Contains("起点を中心"), "無効または別段階の操作を案内");
             _ = guide.Handle;
             guide.Location = new Point(-900, 100);
             Point moved = guide.Location;

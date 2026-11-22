@@ -46,6 +46,7 @@ internal static partial class Program
             Equal(CaptureKeyAction.CrossMonitor, new AppSettings().CaptureKeys.Win);
             foreach (var keys in CaptureKeyMap.Combinations)
                 Equal(keys switch { CaptureModifiers.Win => CaptureKeyAction.HighlightWindow, CaptureModifiers.Alt => CaptureKeyAction.Snap,
+                    CaptureModifiers.Ctrl => CaptureKeyAction.SelectControl,
                     _ => CaptureKeyAction.None }, loaded.CaptureBeforeKeys.Resolve(keys));
             Check(!loaded.CaptureBeforeKeys.SpaceEnabled, "撮影範囲設定前にSpaceが有効");
             Equal(new CaptureMouseMap(true, true, true, true), loaded.CaptureMouse);
@@ -97,7 +98,8 @@ internal static partial class Program
             Rectangle front = new(100, 100, 140, 160), back = new(10, 10, 300, 300);
             var snapshot = new DesktopSnapshot(new Bitmap(600, 400), monitor, [monitor]);
             var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
-                LimitToStartingMonitor: false), snapshot, [front, back], findWindow: _ => null);
+                LimitToStartingMonitor: false, OutputSettings: new() { WindowActivation = CaptureActivation.Toggle,
+                    CaptureBeforeKeys = new(Win: CaptureKeyAction.HighlightWindow) }), snapshot, [front, back], findWindow: _ => null);
             try
             {
                 session.ApplyPointerInput(new(110, 110), CaptureModifiers.Win);
@@ -117,6 +119,55 @@ internal static partial class Program
                 session.ChangeMode(CaptureMode.Window);
                 Check(session.SelectionMenu.Command("VisibleWindowCapture").Checked, "Winでの撮影方式が通常のモード切替に持ち越された");
                 Equal(back, session.HighlightedWindow);
+            }
+            finally { session.Cancel(); }
+        });
+        Run("選択前のCtrlとWinは既定で保持中のみ有効でグリッドは20pxのOFF", () =>
+        {
+            var settings = new AppSettings();
+            Equal(CaptureActivation.Push, settings.ControlActivation);
+            Equal(CaptureActivation.Push, settings.WindowActivation);
+            Equal(20, settings.GridStepPixels);
+            Check(!settings.Grid20, "初期状態でグリッドがON");
+            Rectangle monitor = new(0, 0, 400, 300);
+            var session = new SessionController(new(CaptureMode.FixedRegion, CaptureIntent.Screenshot, OutputDestination.None,
+                FixedSize: new(100, 80)), new DesktopSnapshot(new Bitmap(400, 300), monitor, [monitor]), [], findWindow: _ => null);
+            try
+            {
+                Point point = new(80, 60);
+                session.ApplyPointerInput(point, CaptureModifiers.Ctrl);
+                Check(session.SelectingControl && session.UsesControlPreview, "Ctrl押下でコントロール選択に入らない");
+                session.ApplyPointerInput(point, CaptureModifiers.None);
+                Check(!session.SelectingControl, "Ctrlを離してもモードが戻らない");
+                session.ApplyPointerInput(point, CaptureModifiers.Win);
+                Equal(CaptureMode.Window, session.Mode);
+                Check(session.SelectionMenu.Command("IsolatedWindowCapture").Checked, "Win押下でWGCを選択しない");
+                session.ApplyPointerInput(point, CaptureModifiers.None, windowsTap: true);
+                Equal(CaptureMode.FixedRegion, session.Mode);
+                Equal(new Rectangle(80, 60, 100, 80), session.Selection);
+            }
+            finally { session.Cancel(); }
+        });
+        Run("Ctrlトグルは単押しの解放で切り替わり、組み合わせでは開始しない", () =>
+        {
+            Rectangle monitor = new(0, 0, 400, 300);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.None,
+                OutputSettings: new() { ControlActivation = CaptureActivation.Toggle }),
+                new DesktopSnapshot(new Bitmap(400, 300), monitor, [monitor]), []);
+            Point point = new(80, 60);
+            try
+            {
+                session.ApplyPointerInput(point, CaptureModifiers.Ctrl);
+                Check(!session.SelectingControl, "押した瞬間にトグルした");
+                session.ApplyPointerInput(point, CaptureModifiers.Ctrl | CaptureModifiers.Shift);
+                session.ApplyPointerInput(point, CaptureModifiers.None);
+                Check(!session.SelectingControl, "Ctrl＋Shiftからトグルした");
+                session.ApplyPointerInput(point, CaptureModifiers.Ctrl);
+                session.ApplyPointerInput(point, CaptureModifiers.None);
+                Check(session.SelectingControl, "Ctrl解放でトグルしない");
+                session.ApplyPointerInput(point, CaptureModifiers.Ctrl);
+                session.ApplyPointerInput(point, CaptureModifiers.None);
+                Check(!session.SelectingControl, "次のCtrl解放で戻らない");
             }
             finally { session.Cancel(); }
         });

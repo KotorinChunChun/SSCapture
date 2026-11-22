@@ -6,13 +6,17 @@ internal sealed partial class SessionController
 {
     private nint focusBeforeSelection;
     private bool selectingControl, controlPress, controlLookupRunning, controlHoldCancelled;
+    private bool previewControl;
     private int controlVersion, controlActivation;
     private (Point Point, CaptureWindow? Window)? controlRequest;
     private (CaptureWindow Window, Rectangle Bounds, ControlIdentity? Identity)? controlCandidate;
     internal Rectangle ControlBounds => controlCandidate?.Bounds ?? Rectangle.Empty;
     internal bool SelectingControl => selectingControl;
+    internal bool UsesControlPreview => selectingControl && previewControl;
+    private bool ControlPreviewReady => windowPreviewIsControl && controlCandidate is { } candidate
+        && windowPreview?.Target == candidate.Window && PreviewFrame is { } frame && frame.Bounds.Contains(candidate.Bounds);
 
-    private void UpdateControlSelection(bool enabled, Point pointer)
+    private void UpdateControlSelection(bool enabled, Point pointer, bool preview)
     {
         if (!enabled)
         {
@@ -24,6 +28,7 @@ internal sealed partial class SessionController
         if (!selectingControl)
         {
             selectingControl = true;
+            previewControl = preview;
             if (focusBeforeSelection != 0 && CaptureNative.OwnsForegroundWindow()
                 && CaptureNative.SetForegroundWindow(focusBeforeSelection))
             {
@@ -34,6 +39,9 @@ internal sealed partial class SessionController
             }
         }
         CaptureWindow? window = findWindow?.Invoke(pointer);
+        if (UsesControlPreview && controlCandidate is { } selected && selected.Bounds.Contains(pointer)
+            && window?.Handle != selected.Window.Handle)
+            return; // The preview stays selectable over the window that originally covered it.
         if (controlRequest is { } previous && previous.Point == pointer && previous.Window == window) return;
         controlRequest = (pointer, window);
         controlVersion++;
@@ -131,10 +139,11 @@ internal sealed partial class SessionController
         {
             try
             {
+                if (UsesControlPreview && !ControlPreviewReady) return;
                 Rectangle current = CaptureNative.RequireCaptureWindow(control.Window);
                 if (current != control.Window.Bounds || !current.Contains(control.Bounds))
                     throw new InvalidOperationException();
-                var source = new CaptureReplaySource.Control(control.Window, control.Identity, UsesWindowSource);
+                var source = new CaptureReplaySource.Control(control.Window, control.Identity, UsesControlPreview || UsesWindowSource);
                 CompleteSelection(new(control.Bounds, null, Destination, ControlSource: source));
                 return;
             }

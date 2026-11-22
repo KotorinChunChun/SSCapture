@@ -118,6 +118,8 @@ internal static partial class CaptureContextWorker
         nint FromPointWithCache(NativePoint point, nint cache); nint FocusedWithCache(nint cache);
         nint CreateTreeWalker(nint condition);
         ITreeWalker ControlViewWalker();
+        ITreeWalker ContentViewWalker();
+        ITreeWalker RawViewWalker();
     }
     [ComImport, Guid("d22108aa-8ac5-49a5-837b-37bbb3d7591e"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IElement

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace SSCapture.Services;
 
@@ -16,24 +17,38 @@ internal static partial class CaptureContextWorker
         Rectangle window = new(viewport.X, viewport.Y, viewport.Width, viewport.Height);
         Point? pointer = lookup.Point is { } p ? new Point(p.X, p.Y) : null;
         if (pointer is Point point && !window.Contains(point)) return null;
+        var className = new StringBuilder(128);
+        GetClassName(handle, className, className.Capacity);
+        string windowClass = className.ToString();
+        bool browser = windowClass.StartsWith("Chrome_WidgetWin_", StringComparison.Ordinal) || windowClass == "MozillaWindowClass";
         IElement? root = null;
-        ITreeWalker? walker = null;
         try
         {
             root = automation.FromHandle(handle);
-            walker = automation.ControlViewWalker();
-            if (root is not null && walker is not null)
+            if (root is not null)
             {
-                int remaining = 220, matches = 0;
+                // Chromium exposes document layout and text through the accessibility provider.
+                // Raw View retains element and frame boundaries that Control View can omit.
+                if (browser) return Search(root, automation.RawViewWalker(), 1200, 48);
+                if (Search(root, automation.ControlViewWalker(), 220, 24) is { } hit) return hit;
+            }
+
+            ControlHit? Search(IElement start, ITreeWalker walker, int remaining, int depthLimit)
+            {
+                int matches = 0, bestDepth = -1;
                 ControlHit? best = null;
                 bool bestInteractive = false;
-                VisitChildren(root, 0);
-                if (lookup.Identity is not null) return remaining > 0 && matches == 1 ? best : null;
-                if (best is not null) return best;
+                try
+                {
+                    VisitChildren(start, 0);
+                    return lookup.Identity is not null && (remaining <= 0 || matches != 1) ? null : best;
+                }
+                finally { Marshal.ReleaseComObject(walker); }
 
                 void VisitChildren(IElement parent, int depth)
                 {
-                    if (depth > 24 || remaining <= 0 || matches >= 2) { remaining = 0; return; }
+                    if (remaining <= 0 || matches >= 2) return;
+                    if (depth > depthLimit) { if (lookup.Identity is not null) remaining = 0; return; }
                     IElement? child = walker.FirstChild(parent);
                     try
                     {
@@ -45,7 +60,9 @@ internal static partial class CaptureContextWorker
                             {
                                 int type = child.Property(30003) is int controlType ? controlType : 0;
                                 bool interactive = IsInteractiveControl(type);
-                                if (!bounds.IsEmpty && (interactive || bounds != window) && type != 50032 /* Window */)
+                                bool container = type == 50032 /* Window */ ||
+                                    browser && type is 0 or 50025 /* Custom */ or 50026 /* Group */ or 50030 /* Document */ or 50033 /* Pane */;
+                                if (!bounds.IsEmpty && (interactive || bounds != window) && !container)
                                 {
                                     string? id = child.Property(30011) as string;
                                     ControlIdentity? identity = string.IsNullOrEmpty(id) || id.Length > 160 ? null : new(id, type);
@@ -53,10 +70,11 @@ internal static partial class CaptureContextWorker
                                     {
                                         if (identity == wanted && ++matches == 1) best = new(PixelBounds.From(bounds), identity);
                                     }
-                                    else if (interactive || !bestInteractive)
+                                    else if ((interactive && !bestInteractive) || interactive == bestInteractive && depth > bestDepth)
                                     {
                                         best = new(PixelBounds.From(bounds), identity);
                                         bestInteractive = interactive;
+                                        bestDepth = depth;
                                     }
                                 }
                                 VisitChildren(child, depth + 1);
@@ -74,10 +92,9 @@ internal static partial class CaptureContextWorker
         catch (COMException) { }
         finally
         {
-            if (walker is not null) Marshal.ReleaseComObject(walker);
             if (root is not null) Marshal.ReleaseComObject(root);
         }
-        return pointer is Point location && lookup.Identity is null ? NativeChild(handle, window, location) : null;
+        return !browser && pointer is Point location && lookup.Identity is null ? NativeChild(handle, window, location) : null;
     }
 
     private static Rectangle ReadControlBounds(IElement control, Rectangle window)

@@ -128,7 +128,8 @@ internal sealed class SettingsForm : Form
         recording2 = KeyField(keys, "録画 2", "RecordingShortcut2", settings.RecordingShortcut2, 3);
         lastRegionKey = KeyField(keys, "前回の範囲", "LastRegionShortcut", settings.LastRegionShortcut, 4);
         lastRecipeKey = KeyField(keys, "直前の設定で再撮影", "LastRecipeShortcut", settings.LastRecipeShortcut, 5);
-        captureBeforeKeys = new CaptureKeyEditor(settings.CaptureBeforeKeys, settings.CaptureMouse, beforeSelection: true);
+        captureBeforeKeys = new CaptureKeyEditor(settings.CaptureBeforeKeys, settings.CaptureMouse, beforeSelection: true,
+            settings.ControlActivation, settings.WindowActivation);
         captureKeys = new CaptureKeyEditor(settings.CaptureKeys, settings.CaptureMouse, beforeSelection: false);
         var beforePage = new TabPage("撮影範囲設定前の操作") { BackColor = BackColor, Padding = new Padding(8) };
         var dragPage = new TabPage("撮影ドラッグ中の操作") { BackColor = BackColor, Padding = new Padding(8) };
@@ -546,6 +547,8 @@ internal sealed class SettingsForm : Form
                 LastRegionShortcut = lastRegionKey.Value, LastRecipeShortcut = lastRecipeKey.Value, KeepHistory = keepHistory.Checked,
                 CaptureKeys = captureKeys.Value,
                 CaptureBeforeKeys = captureBeforeKeys.Value,
+                ControlActivation = captureBeforeKeys.ControlActivation,
+                WindowActivation = captureBeforeKeys.WindowActivation,
                 CaptureMouse = new CaptureMouseMap(
                     BeforeLeft: captureBeforeKeys.IsClickEnabled(MouseButtons.Left),
                     BeforeRight: captureBeforeKeys.IsClickEnabled(MouseButtons.Right),

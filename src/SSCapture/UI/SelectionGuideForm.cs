@@ -20,13 +20,15 @@ internal sealed class SelectionGuideForm : Form
     private readonly CaptureMouseMap mouse;
     private readonly bool spaceEnabled;
     private readonly CaptureSelectionMethod selectionMethod;
+    private readonly CaptureActivation controlActivation, windowActivation;
     private bool dragging, canCrossMonitors;
     private readonly Label help;
     internal SelectionGuideForm(Rectangle monitor, CaptureIntent intent, Action cancel, Size? fixedSize = null,
         Func<Keys, bool>? handleKey = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft, Action? modifiersChanged = null,
         CaptureMode mode = CaptureMode.Rectangle, Action? dismiss = null, bool spaceEnabled = true, Rectangle? workingArea = null,
         CaptureKeyMap? beforeKeys = null, CaptureKeyMap? dragKeys = null, CaptureMouseMap? mouse = null,
-        bool canCrossMonitors = false, CaptureSelectionMethod selectionMethod = CaptureSelectionMethod.Drag)
+        bool canCrossMonitors = false, CaptureSelectionMethod selectionMethod = CaptureSelectionMethod.Drag,
+        CaptureActivation controlActivation = CaptureActivation.Push, CaptureActivation windowActivation = CaptureActivation.Push)
     {
         this.cancel = cancel;
         this.handleKey = handleKey;
@@ -44,6 +46,8 @@ internal sealed class SelectionGuideForm : Form
         this.mouse = mouse ?? new CaptureMouseMap();
         this.spaceEnabled = spaceEnabled;
         this.selectionMethod = selectionMethod;
+        this.controlActivation = controlActivation;
+        this.windowActivation = windowActivation;
         this.canCrossMonitors = canCrossMonitors;
         Name = "SelectionGuide";
         Text = WindowTitle.Create(intent == CaptureIntent.Recording ? "録画範囲の選択" : "撮影範囲の選択");
@@ -136,7 +140,7 @@ internal sealed class SelectionGuideForm : Form
     private void UpdateText()
     {
         help.Text = SelectionGuideText.Create(mode, intent, fixedSize, currentAnchor,
-            dragging ? dragKeys : beforeKeys, mouse, dragging, spaceEnabled, canCrossMonitors, selectionMethod);
+            dragging ? dragKeys : beforeKeys, mouse, dragging, spaceEnabled, canCrossMonitors, selectionMethod, controlActivation, windowActivation);
         ResizeToText();
     }
 

@@ -50,10 +50,12 @@ internal sealed record AppSettings
     public WindowCrop WindowCrop { get; init; }
     public bool Grid20 { get; init; }
     public int SnapDistancePixels { get; init; } = Capture.SelectionSnap.Distance;
-    internal const int DefaultGridStepPixels = 1;
+    internal const int DefaultGridStepPixels = 20;
     public int GridStepPixels { get; init; } = DefaultGridStepPixels;
     public Capture.CaptureKeyMap CaptureKeys { get; init; } = Capture.CaptureKeyDefaults.Current.Drag;
     public Capture.CaptureKeyMap CaptureBeforeKeys { get; init; } = Capture.CaptureKeyMap.BeforeDefaults;
+    public Capture.CaptureActivation ControlActivation { get; init; } = Capture.CaptureKeyDefaults.Current.ControlActivation;
+    public Capture.CaptureActivation WindowActivation { get; init; } = Capture.CaptureKeyDefaults.Current.WindowActivation;
     public Capture.CaptureMouseMap CaptureMouse { get; init; } = new();
     public bool ShowSelectionGuide { get; init; } = true;
     public bool ShowPointerGuide { get; init; } = true;
@@ -111,6 +113,8 @@ internal sealed record AppSettings
             throw new ArgumentException("撮影中のキー割り当てが正しくありません。");
         if (CaptureBeforeKeys is null || Capture.CaptureKeyMap.Combinations.Any(keys => !Capture.CaptureKeyMap.IsBeforeAction(CaptureBeforeKeys.Resolve(keys))))
             throw new ArgumentException("撮影範囲設定前のキー割り当てが正しくありません。");
+        if (!Enum.IsDefined(ControlActivation) || !Enum.IsDefined(WindowActivation))
+            throw new ArgumentException("撮影範囲設定前の切り替え方式が正しくありません。");
         if (CaptureMouse is null) throw new ArgumentException("撮影中のマウス割り当てが正しくありません。");
         if (SnapDistancePixels is < 1 or > 32768 || GridStepPixels is < 1 or > 32768)
             throw new ArgumentException("ウィンドウスナップ距離とグリッド間隔は1～32768pxで指定してください。");

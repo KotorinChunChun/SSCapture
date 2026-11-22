@@ -6,7 +6,8 @@ internal static class SelectionGuideText
 {
     internal static string Create(CaptureMode mode, CaptureIntent intent, Size? fixedSize, CaptureAnchor anchor,
         CaptureKeyMap keys, CaptureMouseMap mouse, bool dragging, bool spaceEnabled, bool canCrossMonitors,
-        CaptureSelectionMethod selectionMethod = CaptureSelectionMethod.Drag)
+        CaptureSelectionMethod selectionMethod = CaptureSelectionMethod.Drag,
+        CaptureActivation controlActivation = CaptureActivation.Push, CaptureActivation windowActivation = CaptureActivation.Push)
     {
         string esc = KeyDisplay.Key(Keys.Escape);
         var lines = new List<string>();
@@ -50,15 +51,19 @@ internal static class SelectionGuideText
             if (action == CaptureKeyAction.SelectControl && intent != CaptureIntent.Screenshot) continue;
             if (!Applies(action, mode, dragging, canCrossMonitors)) continue;
             string label = CaptureKeyMap.Label(chord);
-            if (chord == CaptureModifiers.Win && action == CaptureKeyAction.HighlightWindow)
+            if (!dragging && action is CaptureKeyAction.HighlightWindow or CaptureKeyAction.SelectControl)
             {
-                modifiers.Add($"{label}を短押し　ウィンドウ撮影に切り替え");
-                if (canCrossMonitors) modifiers.Add($"{label}を押しながら　別のモニターへ移動");
+                var activation = action == CaptureKeyAction.HighlightWindow ? windowActivation : controlActivation;
+                modifiers.Add($"{label}{(activation == CaptureActivation.Push ? "を押しながら" : "を短押し")}　{CaptureKeyMap.Describe(action)}");
+                if (canCrossMonitors && chord == CaptureModifiers.Win && action == CaptureKeyAction.HighlightWindow)
+                    modifiers.Add($"{label}を押しながら　別のモニターへ移動");
             }
             else if (!dragging && chord == CaptureModifiers.Alt && action == CaptureKeyAction.Snap)
                 modifiers.Add($"{label}を短押し　スナップのON/OFF");
             else if (action == CaptureKeyAction.CrossMonitor)
                 modifiers.Add($"{label}を押しながら　別のモニターへ移動");
+            else if (action == CaptureKeyAction.SelectControl)
+                modifiers.Add($"{label}を押しながら　コントロールを選択");
             else
             {
                 bool combinesCenterAndRatio = action == CaptureKeyAction.FromCenterWithAspectRatio
