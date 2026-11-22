@@ -12,6 +12,7 @@ internal abstract record CaptureReplaySource
     {
         internal int? TargetMargin { get; init; }
     }
+    internal sealed record ControlGroup(IReadOnlyList<CaptureControlTarget> Targets, bool Isolated) : CaptureReplaySource;
     internal sealed record Monitors(IReadOnlyList<Rectangle> Bounds) : CaptureReplaySource;
 }
 
@@ -65,12 +66,8 @@ internal sealed class CaptureTargetDrag(Func<CaptureWindow, IReadOnlyList<Captur
         path.Add(point);
 
         // A fast mouse can skip an entire window or a thin section of a monitor between messages.
-        long dx = (long)point.X - start.X, dy = (long)point.Y - start.Y;
-        long steps = Math.Max(1, Math.Max(Math.Abs(dx), Math.Abs(dy)));
-        for (long sample = path.Count == 1 ? 0 : 1; sample <= steps; sample++)
+        foreach (Point through in Trace(start, point, includeStart: path.Count == 1))
         {
-            Point through = new((int)(start.X + Math.Round((double)dx * sample / steps)),
-                (int)(start.Y + Math.Round((double)dy * sample / steps)));
             if (hitWindow is not null)
             {
                 if (hitWindow(through) is { } window && windows.TryAdd(window.Handle, window))
@@ -85,5 +82,14 @@ internal sealed class CaptureTargetDrag(Func<CaptureWindow, IReadOnlyList<Captur
                 foreach (Rectangle monitor in monitorBounds)
                     if (monitor.Contains(through)) monitors.Add(monitor);
         }
+    }
+
+    internal static IEnumerable<Point> Trace(Point start, Point end, bool includeStart)
+    {
+        long dx = (long)end.X - start.X, dy = (long)end.Y - start.Y;
+        long steps = Math.Max(1, Math.Max(Math.Abs(dx), Math.Abs(dy)));
+        for (long step = includeStart ? 0 : 1; step <= steps; step++)
+            yield return new((int)(start.X + Math.Round((double)dx * step / steps)),
+                (int)(start.Y + Math.Round((double)dy * step / steps)));
     }
 }

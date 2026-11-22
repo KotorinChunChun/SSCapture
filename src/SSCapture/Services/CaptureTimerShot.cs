@@ -53,7 +53,7 @@ internal sealed class CaptureTimerShot
         IReadOnlyList<DisplayLayout>? displays = null)
     {
         var recipe = LastCaptureRecipe.Create(0, selection.Bounds, selection.Polygon, settings,
-            displays ?? (selection.ReplaySource is CaptureReplaySource.Windows ? [] : RegionCoordinates.ReadDisplays()), selection.ReplaySource);
+            displays ?? (selection.ReplaySource is CaptureReplaySource.Windows or CaptureReplaySource.Control or CaptureReplaySource.ControlGroup ? [] : RegionCoordinates.ReadDisplays()), selection.ReplaySource);
         return new(settings, name, current => TakeTrackedAsync(recipe, current));
     }
 

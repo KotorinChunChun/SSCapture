@@ -7,6 +7,13 @@ internal sealed partial class SessionController
     private nint focusBeforeSelection;
     private bool selectingControl, controlPress, confirmingControl, controlHoldCancelled;
     private bool previewControl;
+    private CaptureControlDrag? controlDrag;
+    private Point controlDragStart;
+    private Size controlDragThreshold;
+    private CaptureControlTarget? startingControl;
+    private Task? controlDragLookup;
+    internal bool HasControlDrag => controlDrag is not null;
+    internal int SelectedControlCount => controlDrag?.Selected.Count ?? 0;
     private Task? controlLookup;
     private string? controlConfirmationError;
     private int controlVersion, controlActivation;
@@ -14,7 +21,7 @@ internal sealed partial class SessionController
     private (CaptureWindow Window, Rectangle Bounds, ControlIdentity? Identity)? controlCandidate;
     internal Rectangle ControlBounds => MarginSelection ?? controlCandidate?.Bounds ?? Rectangle.Empty;
     internal bool SelectingControl => selectingControl;
-    internal bool UsesControlPreview => selectingControl && previewControl;
+    internal bool UsesControlPreview => selectingControl && previewControl && !HasControlDrag;
     private bool ControlPreviewReady => windowPreviewIsControl && controlCandidate is { } candidate
         && windowPreview?.Target == candidate.Window && PreviewFrame is { } frame && frame.Bounds.Contains(candidate.Bounds);
 
@@ -41,6 +48,7 @@ internal sealed partial class SessionController
                 if (dragOwner is not null && !dragOwner.Capture) dragOwner.Capture = true;
             }
         }
+        if (HasControlDrag) return;
         CaptureWindow? window = findWindow?.Invoke(pointer);
         if (UsesControlPreview && controlCandidate is { } selected && selected.Bounds.Contains(pointer)
             && window?.Handle != selected.Window.Handle)
@@ -112,6 +120,9 @@ internal sealed partial class SessionController
         controlVersion++;
         controlRequest = null;
         controlCandidate = null;
+        controlDrag = null;
+        startingControl = null;
+        controlDragLookup = null;
         if (controlPress)
         {
             suppressedButtons |= pressedButton;
@@ -125,6 +136,99 @@ internal sealed partial class SessionController
             overlay?.Focus();
         }
         if (!completed) RefreshOverlays();
+    }
+
+    private void BeginControlPress(CaptureOverlay overlay)
+    {
+        controlPress = true;
+        controlDragStart = Pointer;
+        controlDragThreshold = CaptureNative.DragThreshold(overlay.DeviceDpi);
+        startingControl = UsesControlPreview && controlCandidate is { } target && target.Bounds.Contains(Pointer)
+            && findWindow?.Invoke(Pointer)?.Handle != target.Window.Handle
+            ? new(target.Window, target.Bounds, target.Identity) : null;
+        overlay.Capture = true;
+    }
+
+    private void MoveControlDrag(Point pointer)
+    {
+        if (!controlPress) return;
+        if (controlDrag is null)
+        {
+            if (!SelectionGesture.ExceedsThreshold(controlDragStart, pointer, controlDragThreshold)) return;
+            controlDrag = new(controlDragStart);
+            controlRequest = null;
+            ResetTargetMargin();
+        }
+        controlDrag.Move(pointer, findWindow, startingControl);
+        startingControl = null;
+        if (controlDragLookup is not { IsCompleted: false } && controlDrag.NextWindow is not null)
+            controlDragLookup = ResolveControlDragAsync(controlDrag);
+    }
+
+    private async Task ResolveControlDragAsync(CaptureControlDrag drag)
+    {
+        if (controlLookup is { } hover) await hover;
+        while (!completed && ReferenceEquals(controlDrag, drag) && drag.NextWindow is { } window)
+        {
+            CaptureWindow observed = window;
+            ControlLayout? layout = null;
+            try
+            {
+                Rectangle actual = CaptureNative.RequireCaptureWindow(window);
+                if (!OutputSettings.FreezeFrame || window.Bounds == Rectangle.Intersect(actual, Snapshot.Bounds))
+                {
+                    observed = window with { Bounds = actual };
+                    layout = await CaptureContextClient.Shared.FindControlLayoutAsync(new(window.Handle.ToInt64(), window.ProcessId,
+                        PixelBounds.From(actual), null));
+                }
+            }
+            catch (InvalidOperationException) { }
+            if (completed || !ReferenceEquals(controlDrag, drag)) return;
+            drag.SetLayout(window, observed, layout, SelectionMonitors);
+            RefreshOverlays();
+        }
+    }
+
+    private async void ConfirmControlDrag(CaptureControlDrag drag)
+    {
+        controlPress = false;
+        ReleasePointer();
+        confirmingControl = true;
+        controlConfirmationError = null;
+        try
+        {
+            RefreshOverlays();
+            if (controlDragLookup is { } pending) await pending;
+            if (completed || !ReferenceEquals(controlDrag, drag)) return;
+            if (drag.LayoutUnavailable)
+                throw new InvalidOperationException("ドラッグ経路のコントロール情報を取得できませんでした。選び直してください。");
+            var targets = drag.Selected.ToArray();
+            if (targets.Length == 0) throw new InvalidOperationException("撮影できるコントロールが見つかりません。");
+            foreach (var window in targets.Select(target => target.Window).DistinctBy(window => window.Handle))
+                if (CaptureNative.RequireCaptureWindow(window) != window.Bounds)
+                    throw new InvalidOperationException("対象の位置が変わりました。もう一度選び直してください。");
+
+            var regions = targets.Select(target => target.Bounds).Distinct().ToArray();
+            var group = new CaptureReplaySource.ControlGroup(targets, previewControl || UsesWindowSource);
+            CompleteSelection(new(regions.Aggregate(Rectangle.Union), null, Destination,
+                WindowTitle: $"コントロール {targets.Length} 件", Composite: new(Regions: regions), ReplaySource: group));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException)
+        {
+            if (!completed && ReferenceEquals(controlDrag, drag)) controlConfirmationError = ex.Message;
+        }
+        finally
+        {
+            if (!completed && ReferenceEquals(controlDrag, drag))
+            {
+                confirmingControl = false;
+                controlDrag = null;
+                controlDragLookup = null;
+                controlCandidate = null;
+                controlRequest = null;
+                RefreshOverlays();
+            }
+        }
     }
 
     private async void ConfirmControl(Point pointer)

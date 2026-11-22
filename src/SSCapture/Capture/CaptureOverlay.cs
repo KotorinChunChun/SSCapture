@@ -189,7 +189,7 @@ internal sealed class CaptureOverlay : Form
                     mask.Exclude(path);
                 }
                 else if (!session.HighlightWindow) mask.Exclude(selection);
-                foreach (Rectangle window in session.WindowDragHighlights) mask.Exclude(Local(window));
+                foreach (Rectangle window in session.TargetDragHighlights) mask.Exclude(Local(window));
                 graphics.FillRegion(dim, mask);
             }
             else graphics.FillRectangle(dim, dirty);
@@ -205,10 +205,10 @@ internal sealed class CaptureOverlay : Form
         }
         else if (session.DimCaptureBackground && !shared && !session.UsesControlPreview) DrawSnapshot(graphics, bright);
         if (!shared)
-            foreach (Rectangle window in session.WindowDragHighlights)
+            foreach (Rectangle window in session.TargetDragHighlights)
                 DrawSnapshot(graphics, Rectangle.Intersect(Local(window), dirty));
         DrawSelection(graphics, selection, dirty, shared);
-        DrawWindowTrail(graphics, dirty);
+        DrawTargetTrail(graphics, dirty);
         if (visual.DimensionsText is string dimensions)
             DrawPointerLabel(graphics, dimensions, visual.Dimensions, shared);
         if (visual.HintText is string hint)
@@ -276,7 +276,7 @@ internal sealed class CaptureOverlay : Form
         if (old.TrailPoints > next.TrailPoints) dirty.Union(Inflate(old.TrailBounds));
         else if (old.TrailPoints < next.TrailPoints)
         {
-            var path = session.WindowDragPath;
+            var path = session.TargetDragPath;
             for (int index = Math.Max(1, old.TrailPoints); index < path.Count; index++)
                 dirty.Union(Inflate(SegmentBounds(path[index - 1], path[index])));
         }
@@ -331,8 +331,8 @@ internal sealed class CaptureOverlay : Form
         magnifierQuadrant = lens.Quadrant;
         return new(session.Snapshot, session.Mode, session.DimCaptureBackground, session.HighlightWindow, selection,
             session.HighlightForOverlay(MonitorBounds), session.PreviewFrame, session.FixedSelectionValid, session.Points.Count,
-            dimensionsBounds, dimensions, hintBounds, hint, session.SelectionError, session.WindowDragPath.Count, session.WindowDragBounds,
-            session.WindowDragHighlights, lens.Bounds, lens.Bounds.IsEmpty ? Point.Empty : session.MagnifierSample,
+            dimensionsBounds, dimensions, hintBounds, hint, session.SelectionError, session.TargetDragPath.Count, session.TargetDragBounds,
+            session.TargetDragHighlights, lens.Bounds, lens.Bounds.IsEmpty ? Point.Empty : session.MagnifierSample,
             lens.Bounds.IsEmpty ? Rectangle.Empty : session.MagnifierSelection,
             !lens.Bounds.IsEmpty && session.MagnifierMarksOrigin, dotCount, zoom, session.OutputSettings.ShareCapturePresentation);
     }
@@ -340,9 +340,9 @@ internal sealed class CaptureOverlay : Form
     private static Rectangle SegmentBounds(Point start, Point end) => Rectangle.FromLTRB(
         Math.Min(start.X, end.X), Math.Min(start.Y, end.Y), Math.Max(start.X, end.X) + 1, Math.Max(start.Y, end.Y) + 1);
 
-    private void DrawWindowTrail(Graphics graphics, Rectangle dirty)
+    private void DrawTargetTrail(Graphics graphics, Rectangle dirty)
     {
-        var path = session.WindowDragPath;
+        var path = session.TargetDragPath;
         if (path.Count < 2) return;
         Point origin = MonitorBounds.Location;
         using var border = new Pen(Color.FromArgb(55, 195, 255), 2);

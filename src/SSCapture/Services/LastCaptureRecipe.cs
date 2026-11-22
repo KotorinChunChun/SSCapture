@@ -18,6 +18,7 @@ internal sealed class LastCaptureRecipe
     internal bool UseIsolatedWindow { get; }
     internal bool TracksControl { get; }
     internal ControlIdentity? ControlIdentity { get; }
+    internal IReadOnlyList<(int WindowIndex, ControlIdentity? Identity)>? ControlGroup { get; }
     internal bool IncludeOwnedWindows { get; }
     internal bool IsSingleWindowSelection { get; }
     internal int? TargetMargin { get; }
@@ -60,6 +61,14 @@ internal sealed class LastCaptureRecipe
             TracksControl = true;
             ControlIdentity = control.Identity;
             TargetMargin = control.TargetMargin;
+        }
+        if (source is CaptureReplaySource.ControlGroup controls)
+        {
+            var parents = controls.Targets.Select(target => target.Window).DistinctBy(window => window.Handle).ToArray();
+            windows = parents.Select(window => new CaptureWindowIdentity(window, processStart(window.ProcessId))).ToArray();
+            UseIsolatedWindow = controls.Isolated;
+            ControlGroup = Array.AsReadOnly(controls.Targets.Select(target =>
+                (Array.FindIndex(parents, parent => parent.Handle == target.Window.Handle), target.Identity)).ToArray());
         }
         Polygon = polygon is null ? null : Array.AsReadOnly(polygon.ToArray());
         this.settings = CaptureSettingsSnapshot.Copy(settings);

@@ -130,6 +130,80 @@ internal static partial class Program
         throw new InvalidOperationException(error);
     }
 
+    private static int RunControlDragSmoke()
+    {
+        using var host = new Form { Text = WindowTitle.Create("コントロール合成の検証"),
+            StartPosition = FormStartPosition.Manual, Location = Screen.PrimaryScreen!.WorkingArea.Location + new Size(90, 90),
+            ClientSize = new Size(420, 220) };
+        var first = new Button { Name = "DragFirst", Text = "先頭", Bounds = new(30, 70, 80, 45) };
+        var between = new Button { Name = "DragBetween", Text = "途中", Bounds = new(165, 70, 45, 45) };
+        var last = new Button { Name = "DragLast", Text = "終点", Bounds = new(280, 70, 85, 45) };
+        var outside = new Button { Name = "DragOutside", Text = "経路外", Bounds = new(165, 150, 45, 40) };
+        host.Controls.AddRange([first, between, last, outside]);
+        Exception? error = null;
+        host.Shown += (_, _) => host.BeginInvoke((Action)(async () =>
+        {
+            try
+            {
+                Rectangle area = host.RectangleToScreen(host.ClientRectangle);
+                var window = CaptureNative.CaptureWindows(area).Single(item => item.Handle == host.Handle);
+                Rectangle a = first.RectangleToScreen(first.ClientRectangle);
+                Rectangle b = between.RectangleToScreen(between.ClientRectangle);
+                Rectangle c = last.RectangleToScreen(last.ClientRectangle);
+                Point start = a.Location + new Size(10, 10), end = c.Location + new Size(10, 10);
+                int clicked = 0;
+                foreach (Control button in host.Controls) button.Click += (_, _) => clicked++;
+                var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
+                    ShowSelectionGuide: false), new DesktopSnapshot(new Bitmap(area.Width, area.Height), area, [area]),
+                    [window.Bounds], initialPointer: start, findWindow: point => area.Contains(point) ? window : null);
+                using var overlay = new CaptureOverlay(session, area);
+                try
+                {
+                    _ = overlay.Handle;
+                    session.MouseDown(overlay, MouseButtons.Left, start, Keys.Control);
+                    session.Move(true, end, Keys.Control);
+                    await WaitUntil(() => session.SelectedControlCount == 3, "実UIAでドラッグが通過した3件を取得できません。");
+                    Check(session.TargetDragPath.SequenceEqual([start, end]), "ポインタの軌跡が一致しません。");
+                    session.AbortSelection();
+                    Check(!session.HasControlDrag && session.SelectedControlCount == 0 && !session.Completion.IsCompleted,
+                        "取消後も軌跡または選択が残りました。");
+                    session.MouseUp(MouseButtons.Left, end, Keys.None);
+                    session.Move(true, start, Keys.None);
+                    session.MouseDown(overlay, MouseButtons.Left, start, Keys.Control);
+                    session.MouseUp(MouseButtons.Left, end, Keys.Control);
+                    using var result = await session.Completion.WaitAsync(TimeSpan.FromSeconds(8));
+                    Equal(Rectangle.Union(a, c), result.Selection!.Bounds);
+                    Check(result.Selection.Composite!.Regions!.ToHashSet().SetEquals([a, b, c]), "撮影結果に経路外のコントロールが入りました。");
+                    Equal(0, result.Image!.GetPixel(a.Width + 4, 10).A);
+                    Check(result.Image.GetPixel(b.X - a.X + 4, 10).A > 0, "途中のコントロールが透過しています。");
+                    Check(result.Selection.ReplaySource is CaptureReplaySource.ControlGroup { Isolated: true }, "WGC合成の対象が保持されていません。");
+                    var group = (CaptureReplaySource.ControlGroup)result.Selection.ReplaySource!;
+                    Check(group.Targets.All(target => target.Identity is not null), "再撮影で使うUIA識別子を取得できません。");
+                    var settings = result.OutputSettings!;
+                    var recipe = LastCaptureRecipe.Create(1, result.Selection.Bounds, null, settings, [], group);
+                    host.Location += new Size(31, 24);
+                    NativeSmokeInput.FocusFixture(host.Handle);
+                    CaptureNative.SynchronizeDesktop();
+                    var replay = await InstantCapture.TakeReplayWindowsAsync(recipe, settings);
+                    using var replayImage = replay.Image;
+                    var after = Rectangle.Union(first.RectangleToScreen(first.ClientRectangle),
+                        last.RectangleToScreen(last.ClientRectangle));
+                    Equal(after, replay.Bounds);
+                    Equal(0, replayImage.GetPixel(a.Width + 4, 10).A);
+                    Equal(0, clicked);
+                }
+                finally { session.Cancel(); }
+                Console.WriteLine("CONTROL PASS ドラッグ軌跡・UIAの3対象・WGC合成・透過・取消・移動後の再撮影");
+            }
+            catch (Exception ex) { error = ex; }
+            finally { host.Close(); }
+        }));
+        Application.Run(host);
+        if (error is null) return 0;
+        Console.Error.WriteLine(error);
+        return 1;
+    }
+
     private static int RunQuickControlOutputSmoke()
     {
         using var host = new Form

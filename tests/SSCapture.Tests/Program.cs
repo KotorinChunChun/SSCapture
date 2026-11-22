@@ -91,6 +91,7 @@ internal static partial class Program
         if (args.Contains("--selection-guide-preview")) return SelectionGuidePreview(args[1]);
         if (args.Contains("--overlay-placement-smoke")) return RunOverlayPlacementSmoke();
         if (args.Contains("--presentation-smoke")) return RunPresentationSmoke(useNativeInput: !args.Contains("--no-native-input"));
+        if (args.Contains("--control-drag-smoke")) return RunControlDragSmoke();
         if (args.Contains("--control-capture-smoke")) return RunControlCaptureSmoke();
         if (args.Contains("--control-quick-output-smoke")) return RunQuickControlOutputSmoke();
         if (args is ["--browser-control-smoke", "--interactive", var browser, var scratch]) return RunBrowserControlSmoke(browser, scratch);

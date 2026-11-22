@@ -59,7 +59,7 @@ internal sealed partial class SessionController
 
     private MarginTarget? ReadMarginTarget()
     {
-        if (completed || refreshing || menuOpen || menuTransition || options.Intent != CaptureIntent.Screenshot) return null;
+        if (completed || refreshing || menuOpen || menuTransition || HasControlDrag || options.Intent != CaptureIntent.Screenshot) return null;
         if (SelectingControl)
         {
             if (controlCandidate is not { } control) return null;

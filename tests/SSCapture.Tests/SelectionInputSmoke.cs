@@ -485,7 +485,7 @@ internal static partial class Program
                         {
                             await Move(overlay, 450, 220);
                             Equal(Rectangle.Empty, session.DisplaySelection);
-                            Check(session.WindowDragPath.Count >= 2, "軌跡が記録されていない");
+                            Check(session.TargetDragPath.Count >= 2, "軌跡が記録されていない");
                             using var rendered = new Bitmap(bounds.Width, bounds.Height);
                             overlay.DrawToBitmap(rendered, new(Point.Empty, bounds.Size));
                             Equal(Color.FromArgb(55, 195, 255).ToArgb(), rendered.GetPixel(250, 220).ToArgb());

@@ -32,7 +32,10 @@ internal static partial class CaptureContextWorker
                         ContextRequest request = JsonSerializer.Deserialize<ContextRequest>(line)!;
                         if (request.Control is ControlLookup lookup)
                         {
-                            Console.WriteLine(JsonSerializer.Serialize(LookupControl(automation, lookup), JsonLineOptions));
+                            string response = request.ReadControlLayout
+                                ? JsonSerializer.Serialize(ReadControlLayout(automation, lookup), JsonLineOptions)
+                                : JsonSerializer.Serialize(LookupControl(automation, lookup), JsonLineOptions);
+                            Console.WriteLine(response);
                             continue;
                         }
                         PixelPoint point = request.Point ?? throw new InvalidDataException("UIA座標がありません。");
@@ -140,7 +143,7 @@ internal static partial class CaptureContextWorker
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetWindowRect(nint window, out NativeRect rect);
 }
 
-internal sealed record ContextRequest(PixelPoint? Point, int ParentProcessId, ControlLookup? Control = null);
+internal sealed record ContextRequest(PixelPoint? Point, int ParentProcessId, ControlLookup? Control = null, bool ReadControlLayout = false);
 
 internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory = null, int? originatingProcessId = null) : IDisposable
 {
@@ -161,9 +164,16 @@ internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory 
         return response.Value;
     }
 
-    private async Task<(T? Value, string? Error)> RequestAsync<T>(ContextRequest request, int timeoutMilliseconds) where T : class
+    internal async Task<ControlLayout?> FindControlLayoutAsync(ControlLookup lookup)
     {
-        if (!await gate.WaitAsync(0)) return (null, "workerBusy");
+        var response = await RequestAsync<ControlLayout>(new(null, originatingProcessId ?? Environment.ProcessId, lookup, ReadControlLayout: true),
+            1500, responseLimit: 2 * 1024 * 1024, waitForWorker: true);
+        return response.Value;
+    }
+
+    private async Task<(T? Value, string? Error)> RequestAsync<T>(ContextRequest request, int timeoutMilliseconds, int responseLimit = 65536, bool waitForWorker = false) where T : class
+    {
+        if (!await gate.WaitAsync(waitForWorker ? timeoutMilliseconds : 0)) return (null, "workerBusy");
         try
         {
             // 初回はCLR/COM起動分を含む500ms、継続時は250ms。プロバイダー単体は200ms。
@@ -185,7 +195,7 @@ internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory 
             }
             await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(request).AsMemory(), timeout.Token);
             await process.StandardInput.FlushAsync(timeout.Token);
-            string line = await ReadBoundedAsync(process.StandardOutput, 65536, timeout.Token);
+            string line = await ReadBoundedAsync(process.StandardOutput, responseLimit, timeout.Token);
             return (JsonSerializer.Deserialize<T>(line, CaptureMetadata.JsonOptions), null);
         }
         catch (OperationCanceledException) { DisposeProcess(); return (null, "timeout"); }

@@ -84,6 +84,8 @@ internal static class InstantCapture
         var windows = CaptureNative.CaptureWindows(monitors.Aggregate(Rectangle.Union));
         CaptureWindow[] roots = recipe.ResolveWindows(windows, requireOriginalWindow: requireOriginalWindow);
         CaptureWindow target = roots[0];
+        if (recipe.ControlGroup is { } controlGroup)
+            return await TakeReplayControlsAsync(controlGroup, roots, monitors, recipe.UseIsolatedWindow, settings);
         if (recipe.TracksControl)
         {
             const string unavailable = "再撮影するコントロールを特定できません。選び直してください。";
@@ -137,6 +139,44 @@ internal static class InstantCapture
         if (regions.Length == 1) return new(capture.Image, bounds, capture.Metadata, title, source);
         using var raw = capture.Image;
         return new(CaptureGeometry.ComposeRegions(raw, bounds, bounds, regions), bounds, capture.Metadata, title, source);
+    }
+
+    private static async Task<WindowReplayFrame> TakeReplayControlsAsync(
+        IReadOnlyList<(int WindowIndex, ControlIdentity? Identity)> group, CaptureWindow[] windows,
+        IReadOnlyList<Rectangle> monitors, bool isolated, AppSettings settings)
+    {
+        const string unavailable = "再撮影するコントロールを特定できません。選び直してください。";
+        if (group.Count == 0 || group.Any(target => target.Identity is null) || group.Distinct().Count() != group.Count)
+            throw new InvalidOperationException(unavailable);
+
+        var observed = windows.Select(window => window with { Bounds = CaptureNative.RequireCaptureWindow(window) }).ToArray();
+        var targets = new List<CaptureControlTarget>(group.Count);
+        foreach (var target in group)
+        {
+            var window = observed[target.WindowIndex];
+            var hit = await CaptureContextClient.Shared.FindControlAsync(new(window.Handle.ToInt64(), window.ProcessId,
+                PixelBounds.From(window.Bounds), null, target.Identity));
+            if (hit is not { Bounds: var pixels }) throw new InvalidOperationException(unavailable);
+            var bounds = new Rectangle(pixels.X, pixels.Y, pixels.Width, pixels.Height);
+            if (!window.Bounds.Contains(bounds) || !CaptureGeometry.IsFullyCovered(bounds, monitors))
+                throw new InvalidOperationException(unavailable);
+            targets.Add(new(window, bounds, target.Identity));
+        }
+        if (observed.Any(window => CaptureNative.RequireCaptureWindow(window) != window.Bounds))
+            throw new InvalidOperationException(unavailable);
+
+        var regions = targets.Select(target => target.Bounds).Distinct().ToArray();
+        Rectangle canvas = regions.Aggregate(Rectangle.Union);
+        var source = new CaptureReplaySource.ControlGroup(targets, isolated);
+        string title = $"コントロール {targets.Count} 件";
+        if (isolated)
+        {
+            var capture = await IsolatedWindowCapture.TakeControlsAsync(targets, settings);
+            return new(capture.Image, canvas, capture.Metadata, title, source);
+        }
+        var desktop = await TakeWithContextAsync(canvas, settings);
+        using var raw = desktop.Image;
+        return new(CaptureGeometry.ComposeRegions(raw, canvas, canvas, regions), canvas, desktop.Metadata, title, source);
     }
 
     internal static Rectangle ResolveDesktopMargin(Rectangle original, int margin, IReadOnlyList<Rectangle> monitors, int minimumSize) =>

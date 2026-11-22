@@ -64,6 +64,7 @@ internal static class SelectionGuideText
             {
                 var activation = action == CaptureKeyAction.HighlightWindow ? windowActivation : controlActivation;
                 modifiers.Add($"{label}{(activation == CaptureActivation.Push ? "を押しながら" : "を短押し")}　{CaptureKeyMap.Describe(action)}");
+                if (action == CaptureKeyAction.SelectControl) modifiers.Add("コントロールをドラッグ　複数を合成");
             }
             else if (!dragging && chord == CaptureModifiers.Alt && action == CaptureKeyAction.Snap)
                 modifiers.Add($"{label}を短押し　スナップのON/OFF");

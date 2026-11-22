@@ -38,7 +38,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         if (captureSucceeded is not null && captureBounds is Rectangle recordedBounds)
         {
             try { recipe = LastCaptureRecipe.Create(sequence, recordedBounds, capturePolygon, settings with { DefaultDestination = destination },
-                replaySource is CaptureReplaySource.Windows or CaptureReplaySource.Control ? [] : (readCaptureLayout ?? RegionCoordinates.ReadDisplays)(), replaySource); }
+                replaySource is CaptureReplaySource.Windows or CaptureReplaySource.Control or CaptureReplaySource.ControlGroup ? [] : (readCaptureLayout ?? RegionCoordinates.ReadDisplays)(), replaySource); }
             catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException) { /* 再撮影できない最新範囲は成功時に無効化し、旧範囲と取り違えない。 */ }
         }
         ValidateDestination(destination);

@@ -15,7 +15,7 @@ internal sealed partial class SessionController
         {
             if (!OutputSettings.ShowPointerGuide || PointerLabelsSuppressed) return null;
             if (MarginSelection is Rectangle adjusted) return adjusted;
-            if (SelectingControl) return controlCandidate?.Bounds;
+            if (SelectingControl) return HasControlDrag ? null : controlCandidate?.Bounds;
             if (SelectingDesktop || HighlightWindow) return null;
             return (Mode == CaptureMode.FixedRegion ? FixedSelectionValid : gesture.HasDragged)
                 && CaptureGeometry.IsUsable(Selection) ? Selection : null;
@@ -24,6 +24,7 @@ internal sealed partial class SessionController
 
     private IEnumerable<string> CaptureTargetHints()
     {
+        if (HasControlDrag) yield break;
         if (SelectingControl)
         {
             if (controlCandidate is { } control)

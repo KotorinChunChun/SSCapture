@@ -158,9 +158,9 @@ internal sealed partial class SessionController
     private bool FreeDesktopDrag => desktopPress && options.Intent == CaptureIntent.Screenshot;
     internal bool IsSecondaryPress(MouseButtons button) => HasPointerPress && button != pressedButton;
     private bool HasWindowDrag => HasPointerPress && !desktopPress && HighlightWindow && gesture.HasDragged && targetDrag is not null;
-    internal IReadOnlyList<Point> WindowDragPath => HasWindowDrag ? targetDrag!.Path : [];
-    internal Rectangle WindowDragBounds => HasWindowDrag ? targetDrag!.TrailBounds : Rectangle.Empty;
-    internal IReadOnlyList<Rectangle> WindowDragHighlights => DimCaptureBackground && HasWindowDrag ? targetDrag!.BrightWindows : [];
+    internal IReadOnlyList<Point> TargetDragPath => controlDrag?.Path ?? (HasWindowDrag ? targetDrag!.Path : []);
+    internal Rectangle TargetDragBounds => controlDrag?.TrailBounds ?? (HasWindowDrag ? targetDrag!.TrailBounds : Rectangle.Empty);
+    internal IReadOnlyList<Rectangle> TargetDragHighlights => !DimCaptureBackground ? [] : controlDrag?.Highlights ?? (HasWindowDrag ? targetDrag!.BrightWindows : []);
     internal bool PointerLabelsSuppressed => menuOpen || menuTransition;
     internal string? PointerHint
     {
@@ -176,6 +176,11 @@ internal sealed partial class SessionController
     {
         get
         {
+            if (HasControlDrag)
+            {
+                string status = confirmingControl ? "コントロールを取得中" : $"ドラッグ：複数コントロールを合成（{SelectedControlCount} 件）";
+                return $"{status}　{SelectionGuideText.CancelHint(OutputSettings.CaptureMouse, pressedButton)}";
+            }
             if (SelectingControl)
             {
                 string controlOperation = controlConfirmationError ?? (confirmingControl ? "コントロールを取得中"
@@ -184,7 +189,7 @@ internal sealed partial class SessionController
                         ? "コントロールのプレビューを取得できません" : "コントロールをプレビュー中"
                     : "ボタンを離してコントロールを撮影");
                 return (ModifierHint is null ? "" : ModifierHint + "\n") + controlOperation + "　" +
-                    SelectionGuideText.CancelHint(OutputSettings.CaptureMouse, pressedButton);
+                    SelectionGuideText.CancelHint(OutputSettings.CaptureMouse, pressedButton) + "\nドラッグ：複数コントロールを合成";
             }
             if (TwoPointSelection && !SelectingDesktop)
             {
@@ -223,9 +228,9 @@ internal sealed partial class SessionController
         : SelectingDesktop ? gesture.MonitorAt(Pointer)
         : HasWindowDrag ? Rectangle.Empty : UsesWindowSource ? PreviewFrame?.Bounds ?? Rectangle.Empty
         : HighlightWindow ? gesture.WindowAt(Pointer) : TwoPointSelection ? Rectangle.Empty : gesture.PressedWindow;
-    internal Rectangle HighlightForOverlay(Rectangle monitor) => SelectingControl ? ControlBounds : MarginSelection is Rectangle adjusted ? adjusted : FreeDesktopDrag
+    internal Rectangle HighlightForOverlay(Rectangle monitor) => SelectingControl ? HasControlDrag ? Rectangle.Empty : ControlBounds : MarginSelection is Rectangle adjusted ? adjusted : FreeDesktopDrag
         ? targetDrag?.Monitors.Contains(monitor) == true ? monitor : Rectangle.Empty : HighlightedWindow;
-    internal Rectangle DisplaySelection => SelectingControl ? ControlBounds : MarginSelection ??
+    internal Rectangle DisplaySelection => SelectingControl ? HasControlDrag ? Rectangle.Empty : ControlBounds : MarginSelection ??
         (SelectingDesktop || HasWindowDrag ? Rectangle.Empty : PreviewFrame?.Bounds ?? Selection);
 
     internal CaptureMode Mode { get; private set; }
@@ -234,7 +239,7 @@ internal sealed partial class SessionController
     internal CaptureAspectRatio AspectRatio { get; private set; }
     internal DesktopSnapshot Snapshot { get; private set; }
     internal Task<CaptureOutcome> Completion => completion.Task;
-    internal bool Dragging => gesture.IsPressed;
+    internal bool Dragging => gesture.IsPressed || HasControlDrag;
     internal Point Current => gesture.Current;
     internal Rectangle Selection => gesture.Selection;
     internal List<Point> Points => gesture.Points;
@@ -712,9 +717,9 @@ internal sealed partial class SessionController
     private void UpdateGuidePointer()
     {
         if (!ShowSelectionGuide || guide is null) return;
-        guide.UpdateOperations(gesture.IsPressed, CanGuideCrossMonitors);
+        guide.UpdateOperations(Dragging, CanGuideCrossMonitors);
         guide.UpdatePointer(gesture.RawCurrent, gesture.IsPressed && gesture.HasDragged
-            || FreeDesktopDrag && targetDrag?.Path.Count > 1);
+            || HasControlDrag || FreeDesktopDrag && targetDrag?.Path.Count > 1);
     }
 
     internal void CaptureDesktop(Point point)
@@ -824,6 +829,7 @@ internal sealed partial class SessionController
         if (precisePointer != physicalPosition) precisePointer = null;
         bool precise = precisePointer.HasValue;
         gesture.Move(physicalPosition, snap && !precise, lockHeight, lockWidth, rectangleAction, precise);
+        MoveControlDrag(gesture.RawCurrent);
         targetDrag?.Move(physicalPosition, Snapshot.Monitors, FreeDesktopDrag ? null : findWindow);
         RefreshOverlays();
     }
@@ -897,7 +903,7 @@ internal sealed partial class SessionController
     {
         if (confirmingControl) return;
         windowsKey?.ObservePointer(pointer);
-        bool dragging = gesture.IsPressed;
+        bool dragging = Dragging;
         var bindings = dragging ? OutputSettings.CaptureKeys : OutputSettings.CaptureBeforeKeys;
         CaptureKeyAction action = ResolveCaptureAction(bindings, modifiers, dragging);
         CaptureKeyAction beforeAction = OutputSettings.CaptureBeforeKeys.Resolve(modifiers);
@@ -935,7 +941,7 @@ internal sealed partial class SessionController
         ModifierHint = hint;
         bool selectControl = dragging ? action == CaptureKeyAction.SelectControl
             : controlToggled || beforeAction == CaptureKeyAction.SelectControl && OutputSettings.ControlActivation == CaptureActivation.Push;
-        UpdateControlSelection(selectControl && options.Intent == CaptureIntent.Screenshot
+        UpdateControlSelection((selectControl || HasControlDrag) && options.Intent == CaptureIntent.Screenshot
             && !SelectingDesktop && !HasWindowDrag && suppressedButtons == MouseButtons.None, pointer, preview: !dragging);
         bool snap = altSnapEnabled || action == CaptureKeyAction.Snap;
         bool height = action == CaptureKeyAction.LockHeight;
@@ -1150,8 +1156,7 @@ internal sealed partial class SessionController
         altSnapPress = null;
         if (!desktopPress && SelectingControl)
         {
-            controlPress = true;
-            overlay.Capture = true;
+            BeginControlPress(overlay);
             return;
         }
         if (FreeDesktopDrag || !desktopPress && options.Intent == CaptureIntent.Screenshot && HighlightWindow && findWindow is not null)
@@ -1187,7 +1192,8 @@ internal sealed partial class SessionController
         if (completed || pressedButton != button) return;
         if (!desktopPress && SelectingControl)
         {
-            ConfirmControl(Pointer);
+            if (controlDrag is { } drag) ConfirmControlDrag(drag);
+            else ConfirmControl(Pointer);
             return;
         }
         if (!desktopPress && TwoPointSelection)
@@ -1399,12 +1405,13 @@ internal sealed partial class SessionController
     {
         if (completed || refreshing) return;
         CaptureReplaySource.Control? control = selection.ControlSource;
+        var controlGroup = selection.ReplaySource as CaptureReplaySource.ControlGroup;
         IReadOnlyList<CaptureWindow>? roots = selection.Composite?.WindowRoots;
         CaptureWindow? target = control?.Window ?? roots?.FirstOrDefault() ?? (selection.WindowHitPoint is Point hit ? findWindow?.Invoke(hit) : null);
         if (selection.WindowHitPoint is Point hitPoint) selection = selection with { WindowTitle = target?.Title ?? readTitle?.Invoke(hitPoint) };
-        bool useWindowSource = (control?.Isolated ?? UsesWindowSource) && !entireMonitor;
+        bool useWindowSource = (controlGroup?.Isolated ?? control?.Isolated ?? UsesWindowSource) && !entireMonitor;
         bool singleWindow = roots is null && selection.WindowHitPoint is not null && (Mode == CaptureMode.Rectangle || HighlightWindow);
-        bool groupWindows = control is null && selection.TargetMargin is null && target is not null && HighlightWindow && !entireMonitor && options.Intent == CaptureIntent.Screenshot
+        bool groupWindows = control is null && controlGroup is null && selection.TargetMargin is null && target is not null && HighlightWindow && !entireMonitor && options.Intent == CaptureIntent.Screenshot
             && (useWindowSource || !singleWindow);
         CaptureWindow[] group = groupWindows ? [.. (roots ?? [target!]).SelectMany(findWindowGroup)
             .DistinctBy(window => window.Handle).OrderBy(window => window.ZOrder)] : [];
@@ -1422,11 +1429,11 @@ internal sealed partial class SessionController
             && selection.Composite is null && selectionBounds is Rectangle bounds && (!bounds.Contains(selection.Bounds)
             || selection.Polygon?.Any(point => !bounds.Contains(point)) == true)) return;
         Size fixedSize = activeFixedSize;
-        if (control is null && Mode == CaptureMode.FixedRegion && !entireMonitor && (selection.Polygon is not null
+        if (control is null && controlGroup is null && Mode == CaptureMode.FixedRegion && !entireMonitor && (selection.Polygon is not null
             || selection.Bounds.Size != fixedSize || !CaptureGeometry.IsFullyCovered(selection.Bounds, SelectionMonitors))) return;
         if (options.Intent == CaptureIntent.Screenshot)
         {
-            if (entireMonitor || Mode == CaptureMode.FullScreen)
+            if (controlGroup is null && (entireMonitor || Mode == CaptureMode.FullScreen))
             {
                 IReadOnlyList<Rectangle> monitors = selection.Composite?.Regions ??
                     Snapshot.Monitors.Where(selection.Bounds.Contains).ToArray();
@@ -1452,7 +1459,14 @@ internal sealed partial class SessionController
                 CaptureNative.SynchronizeDesktop();
             if (!options.SelectionOnly && (options.Intent == CaptureIntent.Screenshot || options.IncludeRecordingImage))
             {
-                if (useWindowSource)
+                if (controlGroup is { Isolated: true })
+                {
+                    var capture = await IsolatedWindowCapture.TakeControlsAsync(controlGroup.Targets,
+                        OutputSettings with { DefaultDestination = Destination }, Snapshot.Context?.FocusedElement);
+                    result = capture.Image;
+                    metadata = capture.Metadata;
+                }
+                else if (useWindowSource)
                 {
                     if (target is null) throw new InvalidOperationException("WGCで撮影するウィンドウを選択してください。");
                     var capture = await IsolatedWindowCapture.TakeAsync(target, OutputSettings with { DefaultDestination = Destination },
@@ -1483,9 +1497,10 @@ internal sealed partial class SessionController
                 }
                 // A display-layout change must not silently shift the chosen physical region.
                 if (!useWindowSource && (!frame.Bounds.Contains(selection.Bounds)
-                    || targetOffset is > 0 && !CaptureGeometry.IsFullyCovered(selection.Bounds, frame.Monitors)))
+                    || targetOffset is > 0 && !CaptureGeometry.IsFullyCovered(selection.Bounds, frame.Monitors)
+                    || controlGroup is not null && controlGroup.Targets.Any(hit => !CaptureGeometry.IsFullyCovered(hit.Bounds, frame.Monitors))))
                     throw new InvalidOperationException("選択中にディスプレイ領域が変わりました。もう一度撮影してください。");
-                if (Mode == CaptureMode.FixedRegion && !entireMonitor && !CaptureGeometry.IsFullyCovered(selection.Bounds, frame.Monitors))
+                if (controlGroup is null && Mode == CaptureMode.FixedRegion && !entireMonitor && !CaptureGeometry.IsFullyCovered(selection.Bounds, frame.Monitors))
                     throw new InvalidOperationException("選択中にディスプレイ配置が変わりました。もう一度撮影してください。");
                 result ??= selection.Composite?.Regions is { } regions
                     ? CaptureGeometry.ComposeRegions(frame.Image, frame.Bounds, selection.Bounds, regions)
