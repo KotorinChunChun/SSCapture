@@ -26,7 +26,9 @@ internal static partial class Program
                 .Select(control => control is StartupSettingsControl
                     ? control.Controls.Find("StartupLabel", true).Single().Text : control.Text)
                 .ToArray();
-            Check(groups.SequenceEqual(["選択範囲", "位置・寸法の補正", "操作ガイド", "既定プリセット", "自動起動"]), "基本のグループ順が異なる");
+            Check(groups.SequenceEqual(["選択範囲", "位置・寸法の補正", "操作ガイド", "自動起動"]), "基本のグループ順が異なる");
+            Check(basic.Controls.Find("DefaultInputSummary", true).Length == 0 &&
+                basic.Controls.Find("DefaultOutputSummary", true).Length == 0, "基本に既定プリセットの概要が残っている");
 
             CheckBox Box(string name) => (CheckBox)form.Controls.Find(name, true).Single();
             Equal("開始したモニター内で選択する", Box("LimitToStartingMonitor").Text);
@@ -327,9 +329,27 @@ internal static partial class Program
                 }
                 else CheckFields(page);
             }
+            void CheckShortcutHeaders(DataGridView grid)
+            {
+                Font normal = grid.Font;
+                using var larger = new Font(normal.FontFamily, normal.SizeInPoints + 4);
+                foreach (Font font in new[] { normal, larger })
+                {
+                    grid.Font = font;
+                    foreach (DataGridViewColumn column in grid.Columns)
+                    {
+                        int textHeight = TextRenderer.MeasureText(column.HeaderText, font).Height;
+                        Check(grid.ColumnHeadersHeight >= textHeight + 8,
+                            $"列見出し「{column.HeaderText}」の高さ不足: {grid.ColumnHeadersHeight} / 文字{textHeight}");
+                    }
+                }
+                grid.Font = normal;
+            }
             void CheckFields(TabPage page)
             {
                 LayoutTree(form);
+                if (page.Controls.Find("PresetCaptureShortcuts", true).SingleOrDefault() is DataGridView grid)
+                    CheckShortcutHeaders(grid);
                 foreach (var input in Descendants(page).Where(c => c is TextBox or ComboBox && c.Parent is not UpDownBase))
                 {
                     bool captureGrid = input.Parent!.Name is "CaptureBeforeKeysGrid" or "CaptureKeysGrid";
@@ -368,7 +388,7 @@ internal static partial class Program
             layout.Dock = DockStyle.None;
             layout.Size = new Size(240, 180);
             LayoutTree(form);
-            Check(form.Controls.Find("DefaultInputSummary", true).Single().Width < 420, "Dock断線を寸法検査で検出できない");
+            Check(categories.Parent!.ClientSize.Width < 420, "Dock断線を寸法検査で検出できない");
         });
         Run("撮影モード5種と未接続マイクIDが設定に保持される", () =>
         {

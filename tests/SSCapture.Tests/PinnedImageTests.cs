@@ -185,12 +185,12 @@ internal static partial class Program
             catch (IOException) { }
             Equal(1, pins); File.Delete(blocked); await router.RetryFailedAsync(); Equal(1, pins);
         })));
-        Run("出力プリセットでピン留めを保存し既定概要へ反映できる", () => WithOutputDirectory(directory =>
+        Run("ピン留めを既定の出力プリセットに保存できる", () => WithOutputDirectory(directory =>
         {
             var settings = new AppSettings { DefaultDestination = OutputDestination.Pinned }.ApplyDefaults(); settings.Validate();
             var store = new SettingsStore(Path.Combine(directory, "settings.json")); store.Save(settings);
             var read = store.Load(out var warning); Check(warning is null, warning ?? ""); Equal(OutputDestination.Pinned, read.DefaultDestination);
-            Check(SettingsForm.OutputSummary(CapturePreset.FromSettings("ピン", read)).Contains("ピン留め"), "既定概要に出力がない");
+            Equal(OutputDestination.Pinned, read.CapturePresets.Single(preset => preset.IsDefault).Destination);
         }));
         Run("ピン留めだけでも手動保存のフォルダと命名を登録時に検証", () =>
         {

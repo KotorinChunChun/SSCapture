@@ -72,7 +72,8 @@ internal static partial class Program
             RecordingClick(form.Controls.Find("SaveSettings", true).Single());
             Equal(1, saves);
             Equal(0, startup.Writes);
-            Check(message.Parent!.ClientRectangle.Contains(message.Bounds), "説明が親領域外");
+            Check(message.Parent!.ClientRectangle.Contains(message.Bounds), "状態メッセージが表示領域外");
+            Check(message.Left >= label.Parent!.Left + label.Left + 12, "状態メッセージが字下げされていない");
             Check(apply.Height >= apply.Font.Height + 4, "適用ボタンがつぶれている");
         });
         Run("自動起動CLIは状態を読むだけでは書き込まず、明示した変更のみ適用する", () =>

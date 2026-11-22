@@ -9,7 +9,12 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
     {
         Name = "PresetCaptureShortcuts", Dock = DockStyle.Fill, ReadOnly = true, RowHeadersVisible = false,
         SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false, AllowUserToAddRows = false,
-        AllowUserToDeleteRows = false, AllowUserToResizeRows = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
+        AllowUserToDeleteRows = false, AllowUserToResizeRows = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+        ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
+        ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+        {
+            Alignment = DataGridViewContentAlignment.MiddleLeft, Padding = new Padding(0, 4, 0, 4)
+        }
     };
     private readonly HotkeyEditor key = new("PresetCaptureShortcut", "") { Dock = DockStyle.Fill, AccessibleName = "ショートカットキー" };
     private readonly ComboBox intent = PresetChoice("ShortcutCaptureIntent", "撮影種別");

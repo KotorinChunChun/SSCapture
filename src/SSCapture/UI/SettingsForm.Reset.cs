@@ -79,7 +79,6 @@ internal sealed partial class SettingsForm
         if (error is not null) { SetStatus(error, true); return; }
         reload();
         RefreshPresetShortcutChoices();
-        refreshDefaultSummaries();
         SetStatus("標準プリセットを初期設定に戻しました。");
     }
 

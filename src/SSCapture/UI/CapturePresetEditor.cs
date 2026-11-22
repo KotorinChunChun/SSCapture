@@ -34,15 +34,6 @@ internal sealed class CapturePresetEditor : UserControl
         finally { filling = false; }
     }
     internal CapturePreset[] Presets => list.Items.Cast<CapturePreset>().ToArray();
-    internal bool SelectDefault()
-    {
-        if (list.SelectedItem is CapturePreset { IsDefault: true }) return true;
-        StoreCurrent(); if (Error is not null) return false;
-        int index = Array.FindIndex(Presets, p => p.IsDefault);
-        if (index < 0) return false;
-        list.SelectedIndex = index; return true;
-    }
-
     internal bool SelectPreset(string? id)
     {
         if (id is null) return false;

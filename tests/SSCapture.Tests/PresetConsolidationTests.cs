@@ -33,56 +33,9 @@ internal static partial class Program
             using var tips = new ToolTip(); SettingsHelp.Apply(form, tips);
             Check((tips.GetToolTip(check) ?? "").Contains("位置が未指定"), "無効理由の説明がない");
         });
-        Run("既定入力の概要リンクは編集中の名前と余白を再読込しない", () =>
-        {
-            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
-            form.Controls.Find("RegionName", true).Single().Text = "編集中の既定";
-            ((NumericUpDown)form.Controls.Find("ScreenshotPaddingPixels", true).Single()).Value = 23;
-            ConsolidationClick(form, "DefaultInputSummary");
-            Equal("編集中の既定", form.Controls.Find("RegionName", true).Single().Text);
-            Equal(23m, ((NumericUpDown)form.Controls.Find("ScreenshotPaddingPixels", true).Single()).Value);
-        });
-        Run("別の入力から既定への概要移動は編集を確定して自動保存する", () =>
-        {
-            int saves = 0; using var form = new SettingsForm(new AppSettings(), _ => { saves++; return null; }, () => { }, () => []);
-            var editor = (RegionManagerForm)form.Controls.Find("RegionManagerForm", true).Single();
-            var list = (ListBox)form.Controls.Find("SavedRegions", true).Single(); list.SelectedIndex = 1;
-            string id = ((SavedRegion)list.SelectedItem!).Id;
-            form.Controls.Find("RegionName", true).Single().Text = "別入力の編集";
-            ConsolidationClick(form, "DefaultInputSummary");
-            Equal("別入力の編集", editor.Regions.Single(p => p.Id == id).Name);
-            Check(((SavedRegion)list.SelectedItem!).IsDefault, "既定へ移動しない"); Check(saves > 0, "確定した入力を自動保存しない");
-        });
-        Run("出力概要への移動は既定の未保存編集と別出力の編集を保持", () =>
-        {
-            int saves = 0; using var form = new SettingsForm(new AppSettings(), _ => { saves++; return null; }, () => { }, () => []);
-            var editor = (CapturePresetEditor)form.Controls.Find("CapturePresetEditor", true).Single();
-            var list = (ListBox)form.Controls.Find("CapturePresetList", true).Single();
-            form.Controls.Find("CapturePresetName", true).Single().Text = "既定を編集中";
-            ConsolidationClick(form, "DefaultOutputSummary"); Equal("既定を編集中", form.Controls.Find("CapturePresetName", true).Single().Text);
-            list.SelectedIndex = 1; string id = ((CapturePreset)list.SelectedItem!).Id;
-            form.Controls.Find("CapturePresetName", true).Single().Text = "別出力の編集";
-            ConsolidationClick(form, "DefaultOutputSummary");
-            Equal("別出力の編集", editor.Presets.Single(p => p.Id == id).Name); Check(((CapturePreset)list.SelectedItem!).IsDefault, "既定に戻らない"); Check(saves > 0, "確定した出力を自動保存しない");
-        });
-        Run("不正な編集中の値がある概要移動は拒否して入力を残す", () =>
-        {
-            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
-            var list = (ListBox)form.Controls.Find("SavedRegions", true).Single(); list.SelectedIndex = 1;
-            form.Controls.Find("RegionName", true).Single().Text = "";
-            ConsolidationClick(form, "DefaultInputSummary"); Equal(1, list.SelectedIndex); Equal("", form.Controls.Find("RegionName", true).Single().Text);
-            Check(form.Controls.Find("Status", true).Single().Text.Contains("切り替えられません"), "拒否理由がない");
-            var outputList = (ListBox)form.Controls.Find("CapturePresetList", true).Single(); outputList.SelectedIndex = 1;
-            form.Controls.Find("CapturePresetName", true).Single().Text = "";
-            ConsolidationClick(form, "DefaultOutputSummary"); Equal(1, outputList.SelectedIndex); Equal("", form.Controls.Find("CapturePresetName", true).Single().Text);
-        });
-        Run("概要は日本語で無関係な固定寸法・保存先と旧余白説明を表示しない", () =>
+        Run("白い余白は入力プリセットで変更することを出力側の説明に表示する", () =>
         {
             var settings = new AppSettings().ApplyDefaults();
-            string input = SettingsForm.InputSummary(settings.SavedRegions.Single(p => p.IsDefault));
-            Check(!input.Contains("1280") && !input.Contains("True") && !input.Contains("False"), "矩形へ固定寸法か生の真偽値が出た");
-            string output = SettingsForm.OutputSummary(settings.CapturePresets.Single(p => p.IsDefault));
-            Check(output.Contains("クリップボード") && output.Contains("原色") && !output.Contains("Original") && !output.Contains(settings.SaveDirectory), "コピーだけに未使用保存先が出た");
             using var form = new SettingsForm(settings, _ => null, () => { }, () => []); using var tips = new ToolTip(); SettingsHelp.Apply(form, tips);
             var help = tips.GetToolTip(form.Controls.Find("CapturePresetEditor", true).Single()) ?? "";
             Check(help.Contains("白い余白は入力プリセット") && !help.Contains("登録・更新"), "旧説明のまま");
@@ -181,7 +134,7 @@ internal static partial class Program
             Check(input.Contains(form.Controls.Find("SystemAudio", true).Single()), "録画音声が入力にない");
             Equal("取得条件,座標・寸法,録画・音声", string.Join(',', ((TabControl)form.Controls.Find("InputPresetSections", true).Single()).TabPages.Cast<TabPage>().Select(p => p.Text)));
         });
-        Run("入力の複製・既定・削除保護と基本概要からの編集", () =>
+        Run("入力の複製・既定・削除保護と保存", () =>
         {
             AppSettings? saved = null;
             using var form = new SettingsForm(new AppSettings(), s => { saved = s; return null; }, () => { }, () => []);
@@ -191,7 +144,7 @@ internal static partial class Program
             ConsolidationClick(form, "DefaultInputPreset"); Equal(6, editor.Regions.Length); Equal(1, editor.Regions.Count(p => p.IsDefault));
             ConsolidationClick(form, "DeleteRegion"); Equal(6, editor.Regions.Length);
             SaveConsolidation(form); Check(saved is not null, "保存しない"); Equal(CaptureMode.Window, saved!.DefaultMode);
-            ConsolidationClick(form, "DefaultInputSummary"); Equal("入力プリセット", ((TabControl)form.Controls.Find("SettingsTabs", true).Single()).SelectedTab!.Text);
+            Equal("ウィンドウ用", saved.SavedRegions.Single(p => p.IsDefault).Name);
             Equal("ウィンドウ用", form.Controls.Find("RegionName", true).Single().Text);
         });
         Run("出力の複製・既定は減色と命名を切り替え入力余白を維持", () =>
@@ -205,7 +158,7 @@ internal static partial class Program
             ConsolidationClick(form, "DefaultCapturePreset"); ConsolidationClick(form, "DeleteCapturePreset"); Equal(4, editor.Presets.Length);
             SaveConsolidation(form); Check(saved is not null, "出力の既定が保存されない");
             Equal(ScreenshotColorDepth.Indexed4, saved!.ScreenshotColorDepth); Equal("sample.{ext}", saved.FileNamePattern); Equal(12, saved.ScreenshotPaddingPixels);
-            ConsolidationClick(form, "DefaultOutputSummary"); Equal("16色", form.Controls.Find("CapturePresetName", true).Single().Text);
+            Equal("16色", saved.CapturePresets.Single(p => p.IsDefault).Name);
         });
         Run("スナップ数値と共通表示設定を保存してプリセットと独立維持", () =>
         {

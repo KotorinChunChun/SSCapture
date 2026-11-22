@@ -32,15 +32,6 @@ internal sealed class RegionManagerForm : Form
     private ComboBox? microphone;
     private ToolStripMenuItem? addLastCommand;
     internal SavedRegion[] Regions => regions.Select(Clone).ToArray();
-    internal bool SelectDefault()
-    {
-        if (editing?.IsDefault == true) return true;
-        if (!StoreCurrent()) return false;
-        var preset = regions.FirstOrDefault(p => p.IsDefault);
-        if (preset is null) return false;
-        ReloadList(preset.Id); return true;
-    }
-
     internal bool SelectPreset(string? id)
     {
         if (id is null) return false;

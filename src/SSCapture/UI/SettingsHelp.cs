@@ -120,8 +120,6 @@ internal static class SettingsHelp
         if (name == "GridEnabled") return "矩形選択の幅と高さをグリッド間隔に揃えます。\nOFFでも、ショートカットで「一時グリッドスナップ」に割り当てたキーを押している間は使えます。";
         if (name == "ShowSelectionGuide") return "画面右下に操作一覧のウィンドウを表示します。ドラッグ中にポインタが近づくと一時的に隠れます。";
         if (name == "ShowPointerGuide") return "現在の操作、押しているキーの効果、取り消し方法と撮影対象をポインタの近くに表示します。";
-        if (name == "DefaultInputSummary") return "既定の入力プリセットの概要です。クリックすると、そのプリセットを選択した編集ページへ移動します。";
-        if (name == "DefaultOutputSummary") return "既定の出力プリセットの概要です。クリックすると、そのプリセットを選択した編集ページへ移動します。";
         if (name == "InputFixedCoordinates") return "ONは登録した位置へ固定枠を表示します。OFFは撮影モードに従い位置や範囲を選びます。再撮影キーはONなら即時撮影、OFFなら選択開始です。";
         if (name.Contains("InputPreset", StringComparison.Ordinal)) return "入力プリセットを追加・複製し、通常撮影の既定を選べます。録画音声も含めて変更確定時に自動保存します。暗転・モニタ制限は基本設定です。";
         if (name is "AddCapturePreset" or "DeleteCapturePreset" or "DefaultCapturePreset" or "CapturePresetName") return "出力プリセットを追加・削除し、既定を選びます。変更確定時に自動保存します。追加は新規・直前の出力設定・選択を複製から選べます。";

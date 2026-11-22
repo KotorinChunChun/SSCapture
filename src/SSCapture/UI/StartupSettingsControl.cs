@@ -7,7 +7,7 @@ internal sealed class StartupSettingsControl : UserControl
     readonly IStartupRegistration registration;
     readonly CheckBox enabled = new() { Name = "StartWithWindows", Text = "Windowsサインイン時に自動起動（画面は表示しない）", AutoSize = true, Enabled = false };
     readonly Button apply = new() { Name = "ApplyStartup", Text = "自動起動を適用", AutoSize = true, Enabled = false };
-    readonly Label state = new() { Name = "StartupState", Text = "確認中…", AutoSize = true, MaximumSize = new Size(850, 0) };
+    readonly Label state = new() { Name = "StartupState", Text = "確認中…", AutoSize = true, Margin = new Padding(16, 3, 3, 3), MaximumSize = new Size(850, 0) };
     StartupRegistrationState? current;
     bool working;
     internal StartupSettingsControl(IStartupRegistration registration)
@@ -22,7 +22,7 @@ internal sealed class StartupSettingsControl : UserControl
         commands.Controls.AddRange([title, apply, enabled]);
         layout.Controls.AddRange([commands, state]);
         Controls.Add(layout);
-        SizeChanged += (_, _) => state.MaximumSize = new Size(Math.Max(1, ClientSize.Width - 12), 0);
+        SizeChanged += (_, _) => state.MaximumSize = new Size(Math.Max(1, ClientSize.Width - state.Margin.Horizontal), 0);
         enabled.CheckedChanged += (_, _) => apply.Enabled = !working && current?.CanChange == true && enabled.Checked != current.Enabled;
         apply.Click += async (_, _) => await ApplyAsync();
     }

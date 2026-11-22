@@ -43,7 +43,6 @@ internal sealed partial class SettingsForm : Form
     private readonly ComboBox guideDisplay;
     private readonly StartupSettingsControl startupSettings;
     private readonly CaptureCommandControl captureCommand;
-    private readonly Action refreshDefaultSummaries;
 
     public SettingsForm(AppSettings settings, Func<AppSettings, string?> onSave, Action openFolder,
         Func<IReadOnlyList<MicrophoneInfo>>? listMicrophones = null, Action? openRegions = null, Action? openHistory = null,
@@ -289,8 +288,8 @@ internal sealed partial class SettingsForm : Form
         }
         // 旧単独ページを廃止し、プリセットの編集欄だけを公開する。
         basic.Controls.Clear();
-        basic.RowStyles.Clear(); basic.RowCount = 6;
-        foreach (int height in new[] { 108, 120, 108, 150, 84, 46 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        basic.RowStyles.Clear(); basic.RowCount = 5;
+        foreach (int height in new[] { 108, 120, 108, 84, 46 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
         basic.Dock = DockStyle.Top;
         basic.AutoSize = true;
         basic.AutoSizeMode = AutoSizeMode.GrowAndShrink;
@@ -326,13 +325,8 @@ internal sealed partial class SettingsForm : Form
         AddFullRow(guideOptions, magnifierEnabled, 2);
         Add(basic, "操作ガイド", guideOptions, 2);
 
-        var presetSummaries = BasicFields(72, 72);
-        var inputSummary = MakeButton("", "DefaultInputSummary", ButtonRole.Secondary); inputSummary.AutoSize = false; inputSummary.Height = 68;
-        var outputSummary = MakeButton("", "DefaultOutputSummary", ButtonRole.Secondary); outputSummary.AutoSize = false; outputSummary.Height = 68;
-        Add(presetSummaries, "入力", inputSummary, 0); Add(presetSummaries, "出力", outputSummary, 1);
-        Add(basic, "既定プリセット", presetSummaries, 3);
         startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration());
-        AddFullRow(basic, startupSettings, 4);
+        AddFullRow(basic, startupSettings, 3);
         var transfer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
         var exportButton = MakeButton("設定をエクスポート", "ExportSettings");
         var importButton = MakeButton("設定をインポート", "ImportSettings");
@@ -353,29 +347,19 @@ internal sealed partial class SettingsForm : Form
             if (importSettings!(candidate) is { } error) SetStatus(error, true);
         };
         transfer.Controls.AddRange([exportButton, importButton]);
-        AddFullRow(basic, transfer, 5);
+        AddFullRow(basic, transfer, 4);
         foreach (Label label in basic.Controls.OfType<Label>())
         {
             label.Anchor = AnchorStyles.Top | AnchorStyles.Left;
             label.Margin = new Padding(3, 7, 3, 0);
         }
         Shown += async (_, _) => await startupSettings.RefreshAsync();
-        inputSummary.Click += (_, _) => { if (inputPresetEditor.SelectDefault()) SelectCategory("入力プリセット"); else SetStatus("入力プリセットを切り替えられません。入力内容と入力プリセット内のメッセージを確認してください。", true); };
-        outputSummary.Click += (_, _) => { if (presetEditor.SelectDefault()) SelectCategory("出力プリセット"); else SetStatus(presetEditor.Error ?? "出力プリセットの入力内容を確認してください。", true); };
-        void UpdateSummary()
-        {
-            var input = inputPresetEditor.Regions.FirstOrDefault(p => p.IsDefault); var output = presetEditor.Presets.FirstOrDefault(p => p.IsDefault);
-            inputSummary.Text = input is null ? "既定を選択してください" : InputSummary(input);
-            outputSummary.Text = output is null ? "既定を選択してください" : OutputSummary(output);
-        }
         oneOcrDirectory.Parent!.Controls.Remove(oneOcrDirectory); presetEditor.AddSharedOcr(oneOcrDirectory);
         foreach (var removed in new[] { (TabPage)inputs.Parent!, (TabPage)naming.Parent!, (TabPage)metadataPage.Parent!, (TabPage)audio.Parent! }) { tabs.TabPages.Remove(removed); removed.Dispose(); }
         directory = (TextBox)presetEditor.Controls.Find("SaveDirectory", true).Single(); fileNamePattern = (TextBox)presetEditor.Controls.Find("FileNamePattern", true).Single(); ocrSeparator = (TextBox)presetEditor.Controls.Find("OcrSeparator", true).Single();
         clipboardOutput = (CheckBox)presetEditor.Controls.Find("ClipboardOutput", true).Single(); fileOutput = (CheckBox)presetEditor.Controls.Find("FileOutput", true).Single(); externalOutput = (CheckBox)presetEditor.Controls.Find("ExternalOutput", true).Single();
         openFolderAfterSave = (CheckBox)presetEditor.Controls.Find("OpenFolderAfterSave", true).Single(); screenshotColorDepth = (ComboBox)presetEditor.Controls.Find("ScreenshotColorDepth", true).Single(); metadataMode = (ComboBox)presetEditor.Controls.Find("MetadataMode", true).Single();
         screenshotPadding = (NumericUpDown)inputPresetEditor.Controls.Find("ScreenshotPaddingPixels", true).Single();
-        refreshDefaultSummaries = UpdateSummary;
-        tabs.SelectedIndexChanged += (_, _) => UpdateSummary(); UpdateSummary();
         var commandPage = new TabPage("撮影コマンド") { BackColor = BackColor, Padding = new Padding(8) };
         captureCommand = new CaptureCommandControl(() => committed, SetStatus);
         commandPage.Controls.Add(captureCommand); tabs.TabPages.Add(commandPage);
@@ -595,24 +579,6 @@ internal sealed partial class SettingsForm : Form
         ShowMagnifier = magnifierEnabled.Checked, ShareCapturePresentation = shareCapturePresentation.Checked,
         SnapDistancePixels = (int)snapDistance.Value, GridStepPixels = (int)gridStep.Value
     };
-    internal static string InputSummary(SavedRegion preset)
-    {
-        string size = preset.UseFixedCoordinates || preset.Mode == CaptureMode.FixedRegion ? $" / {preset.Bounds.Width}×{preset.Bounds.Height}px" : "";
-        string mode = preset.UseFixedCoordinates ? $"固定位置とサイズ（{preset.Bounds.X}, {preset.Bounds.Y}）" : ModeName(preset.Mode);
-        return $"{preset.Name} / {mode}{size}\n画面固定={(preset.FreezeFrame ? "ON" : "OFF")} / マウスカーソル={(preset.IncludeCursor ? "含む" : "含めない")} / 余白={preset.PaddingPixels}px　［編集］";
-    }
-    internal static string OutputSummary(CapturePreset preset)
-    {
-        var destinations = new List<string>();
-        if (preset.Destination.HasFlag(OutputDestination.Clipboard)) destinations.Add("クリップボード");
-        if (preset.Destination.HasFlag(OutputDestination.File)) destinations.Add("ファイル");
-        if (preset.Destination.HasFlag(OutputDestination.ExternalApp)) destinations.Add("外部アプリ");
-        if (preset.Destination.HasFlag(OutputDestination.Pinned)) destinations.Add("ピン留め");
-        string output = destinations.Count > 0 ? string.Join("＋", destinations) : "出力なし";
-        string color = preset.ColorDepth switch { ScreenshotColorDepth.Indexed8 => "256色", ScreenshotColorDepth.Indexed4 => "16色", _ => "原色（減色なし）" };
-        string file = preset.Destination.HasFlag(OutputDestination.File) ? $"\n{preset.SaveDirectory}\n{preset.FileNamePattern}" : "";
-        return $"{preset.Name} / {output} / {color}{file}　［編集］";
-    }
     private string NotificationAppId() => (notificationApplication?.SelectedItem as NotificationAppItem)?.Id ?? committed.NotificationApplicationId;
     private sealed record NotificationAppItem(string Id, string Label) { public override string ToString() => Label; }
     private static NumericUpDown PixelField(TableLayoutPanel table, string label, string name, int value, int row)
