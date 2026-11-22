@@ -79,7 +79,7 @@ internal static partial class Program
         Run("基本設定の白余白は整数pxで保存し初期値を復元", () =>
         {
             AppSettings? saved = null;
-            using var form = new SettingsForm(new AppSettings { ScreenshotPaddingPixels = 12 }, next => { saved = next; return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings { ScreenshotPaddingPixels = 12 }, next => { saved = next; return null; }, _ => { }, () => []);
             var input = (NumericUpDown)form.Controls.Find("ScreenshotPaddingPixels", true).Single();
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
             Equal("基本", tabs.TabPages[0].Text);
@@ -89,7 +89,7 @@ internal static partial class Program
             foreach (int pixels in new[] { 0, 20, 4096 })
             {
                 input.Value = pixels;
-                typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, null);
+                ConsolidationClick(form, "SaveRegion");
                 Equal(pixels, saved!.ScreenshotPaddingPixels);
             }
             form.Size = form.MinimumSize;

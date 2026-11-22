@@ -272,7 +272,7 @@ internal static partial class Program
                 SavedRegions = [SavedRegion.FromSettings("既定入力", defaults) with { IsDefault = true }, input],
                 CapturePresets = [CapturePreset.FromSettings("既定出力", defaults) with { IsDefault = true }, output]
             };
-            using var settingsForm = new SettingsForm(settings, _ => null, () => { }, listMicrophones: () => [], listDisplays: () => []);
+            using var settingsForm = new SettingsForm(settings, _ => null, _ => { }, listMicrophones: () => [], listDisplays: () => []);
             Control Find(string name) => settingsForm.Controls.Find(name, true).Single();
             var tabs = (TabControl)Find("SettingsTabs");
 

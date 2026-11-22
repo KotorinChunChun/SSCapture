@@ -14,7 +14,7 @@ internal static partial class Program
         {
             AppSettings? saved = null;
             using var form = new SettingsForm(new AppSettings { ShowSelectionGuide = true, ShowPointerGuide = true },
-                settings => { saved = settings; return null; }, () => { }, () => []);
+                settings => { saved = settings; return null; }, _ => { }, () => []);
             form.Size = form.MinimumSize;
             _ = form.Handle;
             LayoutTree(form);
@@ -64,18 +64,86 @@ internal static partial class Program
                 "グリッド間隔またはウィンドウスナップ距離の説明がない");
             screenGuide.Checked = false;
             step.Value = 10;
-            SaveConsolidation(form);
+            ApplySettingsPage(form, "基本");
             Check(saved is { ShowSelectionGuide: false, ShowPointerGuide: true, Grid20: false, GridStepPixels: 10,
                 SelectionGuideDisplay: SelectionGuideDisplay.Main }, "ガイド、表示先またはグリッド間隔が保存されない");
             screenGuide.Checked = true;
             pointerGuide.Checked = false;
-            SaveConsolidation(form);
+            ApplySettingsPage(form, "基本");
             Check(saved is { ShowSelectionGuide: true, ShowPointerGuide: false }, "ポインタ横だけOFFにできない");
+        });
+        Run("適用は必要なページだけにあり変更と適用結果に応じて有効になる", () =>
+        {
+            var saved = new List<AppSettings>();
+            var initial = new AppSettings();
+            bool reject = false;
+            using var form = new SettingsForm(initial, next =>
+            {
+                if (reject) return "適用を拒否した";
+                saved.Add(next);
+                return null;
+            }, _ => { }, () => []);
+            var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
+            var close = form.Controls.Find("CloseSettings", true).Single();
+            Equal(1, close.Parent!.Controls.Count);
+            foreach (string category in new[] { "入力プリセット", "コマンド生成" })
+                Check(tabs.TabPages.Cast<TabPage>().Single(page => page.Text == category).Controls.Find("ApplyPageSettings", true).Length == 0,
+                    category + "に適用がある");
+
+            var basic = SettingsApplyButton(form, "基本");
+            var notice = SettingsApplyButton(form, "通知");
+            var external = SettingsApplyButton(form, "外部アプリ");
+            var before = SettingsApplyButton(form, "ショートカット", "撮影範囲設定前");
+            var instant = SettingsApplyButton(form, "ショートカット", "即時撮影キー");
+            var drag = SettingsApplyButton(form, "ショートカット", "撮影ドラッグ中");
+            Check(new[] { basic, notice, external, before, instant, drag }.All(button => button.Text == "適用" && !button.Enabled),
+                "未変更なのに適用できる");
+            var dim = (CheckBox)form.Controls.Find("DimCaptureBackground", true).Single();
+            var duration = (NumericUpDown)form.Controls.Find("NotificationDurationSeconds", true).Single();
+            dim.Checked = !initial.DimCaptureBackground;
+            duration.Text = "19";
+            Check(basic.Enabled && notice.Enabled, "編集中のチェックまたは秒数で適用が有効にならない");
+            ApplySettingsPage(form, "通知");
+            Check(basic.Enabled && !notice.Enabled, "通知の適用で基本の下書きまで確定した");
+            Equal(19, saved.Single().NotificationDurationSeconds);
+            Equal(initial.DimCaptureBackground, saved.Single().DimCaptureBackground);
+            dim.Checked = initial.DimCaptureBackground;
+            Check(!basic.Enabled, "変更を戻した後も適用できる");
+            dim.Checked = !initial.DimCaptureBackground;
+            reject = true;
+            ApplySettingsPage(form, "基本");
+            Check(basic.Enabled, "失敗後に再適用できない");
+            Equal(1, saved.Count);
+            reject = false;
+            ApplySettingsPage(form, "基本");
+            Check(!basic.Enabled, "適用後も有効のまま");
+            Equal(!initial.DimCaptureBackground, saved.Last().DimCaptureBackground);
+        });
+        Run("保存先は保存・OCRの選択中プリセットにだけ連動して開く", () =>
+        {
+            string? opened = null;
+            using var form = new SettingsForm(new AppSettings(), _ => null, path => opened = path, () => []);
+            var folder = (Button)form.Controls.Find("OpenFolder", true).Single();
+            var sections = (TabControl)form.Controls.Find("OutputPresetSections", true).Single();
+            var naming = sections.TabPages.Cast<TabPage>().Single(page => page.Text == "保存・OCR");
+            Check(naming.Contains(folder), "保存先ボタンが保存・OCRにない");
+            Check(!folder.Enabled, "クリップボードのみでも保存先を開ける");
+            var list = (ListBox)form.Controls.Find("CapturePresetList", true).Single();
+            list.SelectedItem = list.Items.Cast<CapturePreset>().First(preset => !preset.IsDefault && preset.Destination.HasFlag(OutputDestination.File));
+            var field = (TextBox)form.Controls.Find("SaveDirectory", true).Single();
+            field.Text = "relative";
+            Check(!folder.Enabled, "相対パスで保存先が有効");
+            field.Text = @"C:\検証\選択したプリセット";
+            Check(folder.Enabled, "保存先を指定しても開けない");
+            RecordingClick(folder);
+            Equal(field.Text, opened);
+            list.SelectedIndex = 0;
+            Check(!folder.Enabled, "別のプリセットに移っても保存先が有効");
         });
         Run("設定の結果は発生時刻を保持し60秒で消え新しい結果で期限を更新", () =>
         {
             var clock = new DateTimeOffset(2026, 10, 10, 21, 0, 0, TimeSpan.FromHours(9));
-            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => [], now: () => clock);
+            using var form = new SettingsForm(new AppSettings(), _ => null, _ => { }, () => [], now: () => clock);
             var result = (TextBox)form.Controls.Find("Status", true).Single();
             var timer = (System.Windows.Forms.Timer)typeof(SettingsForm).GetField("statusTimer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(form)!;
             void Tick() => typeof(System.Windows.Forms.Timer).GetMethod("OnTick", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(timer, [EventArgs.Empty]);
@@ -99,13 +167,13 @@ internal static partial class Program
             var occurredAt = new DateTimeOffset(2026, 10, 10, 21, 0, 0, TimeSpan.FromHours(9));
             var stored = new StatusMessage("保存しました: C:\\Captures\\結果.png", true, occurredAt);
             var clock = occurredAt.AddSeconds(30);
-            using var reopened = new SettingsForm(new AppSettings(), _ => null, () => { }, () => [], now: () => clock);
+            using var reopened = new SettingsForm(new AppSettings(), _ => null, _ => { }, () => [], now: () => clock);
             reopened.SetStatus(stored);
             var result = (TextBox)reopened.Controls.Find("Status", true).Single();
             Equal(stored.DisplayText, result.Text);
             clock = occurredAt.AddMinutes(1);
             reopened.SetStatus(stored); Equal("", result.Text);
-            using var later = new SettingsForm(new AppSettings(), _ => null, () => { }, () => [], now: () => clock);
+            using var later = new SettingsForm(new AppSettings(), _ => null, _ => { }, () => [], now: () => clock);
             later.SetStatus(stored); Equal("", later.Controls.Find("Status", true).Single().Text);
         });
         Run("設定の長い複数行結果は省略せずボタンと重ならない", () =>
@@ -121,8 +189,8 @@ internal static partial class Program
             Check(result.Text.EndsWith(text.ReplaceLineEndings("\r\n"), StringComparison.Ordinal), "本文が省略された");
             Check(result.Width >= 1000 && result.Height >= result.Font.Height * 3, "結果表示の領域不足");
             Check(result.Parent!.ClientRectangle.Contains(result.Bounds), "結果が親領域外");
-            var saveButton = form.Controls.Find("SaveSettings", true).Single();
-            Check(result.Bottom <= saveButton.Parent!.Top, "結果とボタンが重なる");
+            var closeButton = form.Controls.Find("CloseSettings", true).Single();
+            Check(result.Bottom <= closeButton.Parent!.Top, "結果とボタンが重なる");
             Check(result.SelectionStart == 0, "新しい結果の先頭が見えない");
             var originalSize = result.Size;
             result.Dock = DockStyle.None; result.Size = new Size(240, 20); LayoutTree(form);
@@ -133,7 +201,7 @@ internal static partial class Program
         {
             AppSettings? saved = null;
             using var form = new SettingsForm(new AppSettings { NotificationDisplay = NotificationDisplay.Display10,
-                NotificationDurationSeconds = 12, PlayCaptureSound = false }, value => { saved = value; return null; }, () => { }, () => []);
+                NotificationDurationSeconds = 12, PlayCaptureSound = false }, value => { saved = value; return null; }, _ => { }, () => []);
             var display = (ComboBox)form.Controls.Find("NotificationDisplay", true).Single();
             var corner = (ComboBox)form.Controls.Find("NotificationCorner", true).Single();
             var duration = (NumericUpDown)form.Controls.Find("NotificationDurationSeconds", true).Single();
@@ -148,7 +216,7 @@ internal static partial class Program
             display.SelectedIndex = (int)NotificationDisplay.Main;
             ((CheckBox)form.Controls.Find("PlayCaptureSound", true).Single()).Checked = true;
             corner.SelectedIndex = (int)NotificationCorner.BottomLeft;
-            typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, null);
+            ApplySettingsPage(form, "通知");
             Check(saved is not null && !saved.ShowCaptureNotification && saved.PlayCaptureSound, "表示と音が独立して保存されない");
             Equal(NotificationCorner.BottomLeft, saved!.NotificationCorner);
             Equal(NotificationDisplay.Main, saved.NotificationDisplay); Equal(0, saved.NotificationDurationSeconds);
@@ -157,7 +225,7 @@ internal static partial class Program
             foreach (var target in Enum.GetValues<NotificationDisplay>())
             {
                 display.SelectedIndex = (int)target;
-                typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, null);
+                ApplySettingsPage(form, "通知");
                 Equal(target, saved.NotificationDisplay); Equal(3600, saved.NotificationDurationSeconds);
                 Check(saved.ShowCaptureNotification && !saved.PlayCaptureSound, "表示ON・音OFFを保持できない");
             }
@@ -182,7 +250,7 @@ internal static partial class Program
         Run("固定ピクセル・基点・カーソル・履歴・再撮影キーの設定を保存", () =>
         {
             AppSettings? saved = null;
-            using var form = new SettingsForm(new AppSettings { FixedCaptureAnchor = CaptureAnchor.TopRight }, value => { saved = value; return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings { FixedCaptureAnchor = CaptureAnchor.TopRight }, value => { saved = value; return null; }, _ => { }, () => []);
             ((NumericUpDown)form.Controls.Find("FixedWidth", true).Single()).Value = 321;
             ((NumericUpDown)form.Controls.Find("FixedHeight", true).Single()).Value = 123;
             var anchor = (ComboBox)form.Controls.Find("FixedCaptureAnchor", true).Single();
@@ -192,7 +260,8 @@ internal static partial class Program
             ((CheckBox)form.Controls.Find("IncludeCursor", true).Single()).Checked = true;
             ((CheckBox)form.Controls.Find("KeepHistory", true).Single()).Checked = false;
             ((HotkeyEditor)form.Controls.Find("LastRecipeShortcut", true).Single()).Value = "Ctrl+F11";
-            typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, null);
+            ApplySettingsPage(form, "履歴");
+            ConsolidationClick(form, "SavePresetCaptureShortcuts");
             Check(saved is not null, "設定未保存"); Equal(321, saved!.FixedWidth); Equal(123, saved.FixedHeight);
             Check(saved.IncludeCursor && !saved.KeepHistory, "チェック項目が反映されない");
             Equal(CaptureAnchor.BottomRight, saved.FixedCaptureAnchor);
@@ -233,7 +302,7 @@ internal static partial class Program
             {
                 CaptureKeys = new CaptureKeyMap(Win: CaptureKeyAction.CrossMonitor, ShiftWin: CaptureKeyAction.Snap),
                 CaptureMouse = new CaptureMouseMap(BeforeMiddle: false)
-            }, value => { saved = value; return null; }, () => { }, () => []);
+            }, value => { saved = value; return null; }, _ => { }, () => []);
             var groups = (TabControl)form.Controls.Find("ShortcutGroups", true).Single();
             Check(groups.TabPages.Cast<TabPage>().Select(page => page.Text).SequenceEqual(
                 ["PC作業中", "即時撮影キー", "撮影範囲設定前", "撮影ドラッグ中"]), "ショートカットの分類が不正");
@@ -296,7 +365,8 @@ internal static partial class Program
             Choice("CaptureMouseDragRight").SelectedIndex = 0;
             ((CheckBox)groups.Controls.Find("CaptureKeysSpace", true).Single()).Checked = false;
 
-            typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, null);
+            ApplySettingsPage(form, "ショートカット", "撮影範囲設定前");
+            ApplySettingsPage(form, "ショートカット", "撮影ドラッグ中");
             Check(saved is not null, "ショートカット設定が保存されない");
             Equal(CaptureKeyMap.BeforeDefaults with { CtrlAlt = CaptureKeyAction.SwitchAnchor }, saved!.CaptureBeforeKeys);
             Equal(new CaptureKeyMap(Win: CaptureKeyAction.CrossMonitor, ShiftWin: CaptureKeyAction.Snap), saved.CaptureKeys);
@@ -381,7 +451,7 @@ internal static partial class Program
                     Check(label.Width >= preferred.Width && label.Height >= preferred.Height, $"項目名 {label.Text} が切れる: {label.Size} preferred={preferred}");
                 }
             }
-            foreach (string name in new[] { "SaveSettings", "CloseSettings", "OpenFolder" })
+            foreach (string name in new[] { "CloseSettings" })
             {
                 var button = form.Controls.Find(name, true).Single();
                 Check(button.Width >= 90 && button.Height >= 32, $"{name} サイズ不正");
@@ -610,7 +680,7 @@ internal static partial class Program
         typeof(Form).GetMethod("OnFormClosing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, [closing]);
         return closing;
     }
-    private static SettingsForm NewSettings(AppSettings? settings = null) => new(settings ?? new AppSettings(), _ => null, () => { }, () => [new MicrophoneInfo("test-mic", "テストマイク")]);
+    private static SettingsForm NewSettings(AppSettings? settings = null) => new(settings ?? new AppSettings(), _ => null, _ => { }, () => [new MicrophoneInfo("test-mic", "テストマイク")]);
     private static IEnumerable<Control> Descendants(Control root)
     {
         foreach (Control child in root.Controls)

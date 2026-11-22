@@ -69,7 +69,7 @@ internal static partial class Program
         Run("入出力プリセットのEnter確定は別々に保存し不正な下書きは保持する", () =>
         {
             var writes = new List<AppSettings>();
-            using var form = new SettingsForm(new AppSettings(), settings => { writes.Add(settings); return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings(), settings => { writes.Add(settings); return null; }, _ => { }, () => []);
             var input = form.Controls.Find("RegionName", true).Single();
             var output = form.Controls.Find("CapturePresetName", true).Single();
             input.Text = "Enterで入力確定"; Equal(0, writes.Count);

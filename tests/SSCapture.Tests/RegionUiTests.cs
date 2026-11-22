@@ -16,16 +16,15 @@ internal static partial class Program
         Run("入力プリセット設定は出力と隣接し一覧登録後に設定保存へ渡る", () =>
         {
             AppSettings? saved = null;
-            using var settings = new SettingsForm(new AppSettings { SavedRegions = [initial] }, next => { saved = next; return null; }, () => { }, () => [], regionDisplays: () => displays);
+            using var settings = new SettingsForm(new AppSettings { SavedRegions = [initial] }, next => { saved = next; return null; }, _ => { }, () => [], regionDisplays: () => displays);
             var categories = (ListBox)settings.Controls.Find("SettingsCategories", true).Single();
-            Equal("入力プリセット", ((TabPage)categories.Items[1]!).Text); Equal("出力プリセット", ((TabPage)categories.Items[2]!).Text);
+            Equal("入力プリセット", ((TabPage)categories.Items[2]!).Text); Equal("出力プリセット", ((TabPage)categories.Items[3]!).Text);
             settings.SelectCategory("入力プリセット");
             var editor = (RegionManagerForm)settings.Controls.Find("RegionManagerForm", true).Single();
             var presetList = (ListBox)editor.Controls.Find("SavedRegions", true).Single();
             presetList.SelectedItem = presetList.Items.Cast<SavedRegion>().Single(p => p.Id == initial.Id);
             ((TextBox)editor.Controls.Find("RegionName", true).Single()).Text = "変更済み";
             Call(editor, "SaveRegion"); Check(saved is not null, "確定した入力を自動保存しない");
-            typeof(SettingsForm).GetMethod("SaveSettings", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settings, null);
             Equal("変更済み", saved!.SavedRegions.Single(p => p.Id == initial.Id).Name);
         });
 

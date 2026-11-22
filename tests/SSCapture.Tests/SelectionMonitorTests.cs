@@ -122,14 +122,14 @@ internal static partial class Program
             foreach (bool limited in new[] { false, true })
             {
                 AppSettings? saved = null;
-                using var form = new SettingsForm(new AppSettings { LimitToStartingMonitor = limited }, s => { saved = s; return null; }, () => { }, () => []);
+                using var form = new SettingsForm(new AppSettings { LimitToStartingMonitor = limited }, s => { saved = s; return null; }, _ => { }, () => []);
                 var toggle = (CheckBox)form.Controls.Find("LimitToStartingMonitor", true).Single();
                 Equal(limited, toggle.Checked);
                 _ = form.Handle; foreach (Control child in Descendants(form)) _ = child.Handle; LayoutTree(form);
                 Check(toggle.Parent!.ClientRectangle.Contains(toggle.Bounds) && toggle.Height >= toggle.PreferredSize.Height,
                     "開始画面限定チェックが見切れる");
                 toggle.Checked = !limited;
-                typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, null);
+                ApplySettingsPage(form, "基本");
                 Check(saved is not null, "設定が保存されない");
                 Equal(!limited, saved!.LimitToStartingMonitor);
             }

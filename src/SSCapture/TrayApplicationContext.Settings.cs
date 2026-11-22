@@ -160,14 +160,16 @@ internal sealed partial class TrayApplicationContext
         tray.Text = recorder?.IsPaused == true ? "SSCapture — 録画一時停止中" : recorder?.IsRecording == true ? "SSCapture — 録画中" : pause.Checked ? "SSCapture — ショートカット停止中" : "SSCapture";
     }
 
-    private void OpenFolder()
+    private void OpenFolder() => OpenFolder(settings.SaveDirectory);
+
+    private void OpenFolder(string directory)
     {
         try
         {
-            Directory.CreateDirectory(settings.SaveDirectory);
-            Process.Start(new ProcessStartInfo(settings.SaveDirectory) { UseShellExecute = true });
+            Directory.CreateDirectory(directory);
+            Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
             Report("保存先を開けません: " + ex.Message, true);
         }

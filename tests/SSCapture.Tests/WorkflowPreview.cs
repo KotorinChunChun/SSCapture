@@ -16,7 +16,7 @@ internal static partial class Program
         }
         if (kind == "startup-settings")
         {
-            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => [], startupRegistration: new FakeStartup());
+            using var form = new SettingsForm(new AppSettings(), _ => null, _ => { }, () => [], startupRegistration: new FakeStartup());
             form.Shown += (_, _) =>
             {
                 var work = Screen.FromControl(form).WorkingArea;
@@ -38,7 +38,7 @@ internal static partial class Program
         }
         if (kind == "settings-status")
         {
-            using var form = new SettingsForm(new AppSettings { SaveDirectory = @"C:\Captures" }, _ => null, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings { SaveDirectory = @"C:\Captures" }, _ => null, _ => { }, () => []);
             using var checkTimer = new System.Windows.Forms.Timer { Interval = 100 };
             var elapsed = new System.Diagnostics.Stopwatch();
             bool checkedBefore = false, checkedAfter = false;

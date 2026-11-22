@@ -107,7 +107,7 @@ internal sealed class CapturePresetEditor : UserControl
         pattern = new TextBox { Name = "FileNamePattern" }; Add(naming, "命名パターン", pattern, 1);
         separator = new TextBox { Name = "OcrSeparator" }; Add(naming, "OCR区切り", separator, 2);
         openFolder = Toggle("保存フォルダを開く", "OpenFolderAfterSave"); Add(naming, "保存後", openFolder, 3);
-        var help = new Label { Text = "{yyyymmdd} 年月日 / {hhmmss} 時分秒 / {ext} png・mp4\n{ocr} OCR文字列 / {region} 範囲名 / {#}・{##} 連番", Dock = DockStyle.Fill }; naming.Controls.Add(help, 0, 5); naming.SetColumnSpan(help, 2); naming.SetRowSpan(help, 2);
+        var help = new Label { Text = "{yyyymmdd} 年月日 / {hhmmss} 時分秒 / {ext} png・mp4\n{ocr} OCR文字列 / {region} 範囲名 / {#}・{##} 連番", Dock = DockStyle.Fill }; naming.Controls.Add(help, 0, 6); naming.SetColumnSpan(help, 2); naming.SetRowSpan(help, 2);
         metadataMode = new ComboBox { Name = "MetadataMode", DropDownStyle = ComboBoxStyle.DropDownList }; metadataMode.Items.AddRange(["記録しない", "PNG内XMP", "別JSON", "PNG内XMPと別JSON"]); Add(metadata, "保存形式", metadataMode, 0);
         var warning = new Label { Dock = DockStyle.Fill, Text = "静止画のファイル保存時に座標・UIA・exe/class/titleを記録します。\n共有時はウィンドウ名やパスにご注意ください。\nパスワードの名前・値の本文・UI全体のツリーは採取しません。\n画像とUIAは同時刻ではなく、未取得時は理由を記録します。" }; metadata.Controls.Add(warning, 0, 1); metadata.SetColumnSpan(warning, 2); metadata.SetRowSpan(warning, 4);
         var add = SettingsForm.MakeButton("追加 ▼", "AddCapturePreset");
@@ -174,7 +174,32 @@ internal sealed class CapturePresetEditor : UserControl
     }
 
     private AppSettings CurrentSettings() => IsHandleCreated ? readSettings() : initialSettings;
-    internal void AddSharedOcr(Control control) => Add(naming, "OCRエンジン（共通）", control, 4);
+    internal FlowLayoutPanel AddSaveTools(Control ocrDirectory, Action<string> openDirectory)
+    {
+        Add(naming, "OCRエンジン（共通）", ocrDirectory, 4);
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Margin = new Padding(3, 0, 0, 0), WrapContents = false };
+        naming.RowStyles[5].Height = SettingsEditorActions.Height;
+        naming.Controls.Add(actions, 1, 5);
+        var folder = SettingsForm.MakeButton("保存先を開く", "OpenFolder");
+        folder.Width = 144;
+        folder.Margin = new Padding(0, 4, 8, 4);
+        folder.CausesValidation = false;
+        actions.Controls.Add(folder);
+
+        string? FolderPath()
+        {
+            if (!file.Checked && !pinned.Checked) return null;
+            string path = Environment.ExpandEnvironmentVariables(directory.Text.Trim().Trim('"'));
+            return Path.IsPathFullyQualified(path) && path.IndexOfAny(Path.GetInvalidPathChars()) < 0 ? path : null;
+        }
+        void UpdateFolder() => folder.Enabled = FolderPath() is not null;
+        file.CheckedChanged += (_, _) => UpdateFolder();
+        pinned.CheckedChanged += (_, _) => UpdateFolder();
+        directory.TextChanged += (_, _) => UpdateFolder();
+        folder.Click += (_, _) => { if (FolderPath() is { } path) openDirectory(path); };
+        UpdateFolder();
+        return actions;
+    }
     private void UpdateFileFields()
     {
         metadataMode.Enabled = openFolder.Enabled = file.Checked;

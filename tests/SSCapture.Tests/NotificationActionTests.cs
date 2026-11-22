@@ -183,7 +183,7 @@ internal static partial class Program
         }));
         Run("通知の設定画面は9候補と編集アプリだけを表示し旧クリック選択を除去", () =>
         {
-            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings(), _ => null, _ => { }, () => []);
             Equal(9, ((ComboBox)form.Controls.Find("NotificationCorner", true).Single()).Items.Count);
             Check(!form.Controls.Find("NotificationClickAction", true).Any(), "旧本文クリック設定が残る");
             Check(form.Controls.Find("NotificationApplication", true).Single().Enabled, "アプリ選択が無効");

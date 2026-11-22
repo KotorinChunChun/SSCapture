@@ -24,7 +24,7 @@ internal static partial class Program
         });
         Run("位置未指定の範囲確認は無効・座標指定で有効に戻る", () =>
         {
-            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings(), _ => null, _ => { }, () => []);
             var check = form.Controls.Find("PreviewRegion", true).Single();
             Check(!check.Enabled, "位置未指定なのに確認できる");
             var mode = (ComboBox)form.Controls.Find("CaptureMode", true).Single();
@@ -36,13 +36,13 @@ internal static partial class Program
         Run("白い余白は入力プリセットで変更することを出力側の説明に表示する", () =>
         {
             var settings = new AppSettings().ApplyDefaults();
-            using var form = new SettingsForm(settings, _ => null, () => { }, () => []); using var tips = new ToolTip(); SettingsHelp.Apply(form, tips);
+            using var form = new SettingsForm(settings, _ => null, _ => { }, () => []); using var tips = new ToolTip(); SettingsHelp.Apply(form, tips);
             var help = tips.GetToolTip(form.Controls.Find("CapturePresetEditor", true).Single()) ?? "";
             Check(help.Contains("白い余白は入力プリセット") && !help.Contains("登録・更新"), "旧説明のまま");
         });
         Run("4画面の登録ボタンの並び・寸法と入出力の一覧幅を統一する", () =>
         {
-            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings(), _ => null, _ => { }, () => []);
             form.Size = form.MinimumSize;
             _ = form.Handle;
             foreach (Control child in Descendants(form)) _ = child.Handle;
@@ -150,7 +150,7 @@ internal static partial class Program
         Run("初期3候補は設定一覧と撮影中メニューの双方から選択可能", () =>
         {
             var settings = new AppSettings().ApplyDefaults();
-            using var form = new SettingsForm(settings, _ => null, () => { }, () => []);
+            using var form = new SettingsForm(settings, _ => null, _ => { }, () => []);
             Equal(5, ((ListBox)form.Controls.Find("SavedRegions", true).Single()).Items.Count);
             Equal(3, ((ListBox)form.Controls.Find("CapturePresetList", true).Single()).Items.Count);
             Check(((CheckBox)form.Controls.Find("DimCaptureBackground", true).Single()).Checked, "新規設定UIが暗転OFF");
@@ -160,9 +160,9 @@ internal static partial class Program
         });
         Run("統合画面は9分類と内部区分で旧入力・命名ページを重複表示しない", () =>
         {
-            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings(), _ => null, _ => { }, () => []);
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
-            Equal("基本,入力プリセット,出力プリセット,外部アプリ,ショートカット,コマンド生成,通知,履歴", string.Join(',', tabs.TabPages.Cast<TabPage>().Select(p => p.Text)));
+            Equal("基本,通知,入力プリセット,出力プリセット,ショートカット,外部アプリ,コマンド生成,履歴", string.Join(',', tabs.TabPages.Cast<TabPage>().Select(p => p.Text)));
             var input = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "入力プリセット"); var output = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "出力プリセット");
             Check(input.Contains(form.Controls.Find("ScreenshotPaddingPixels", true).Single()), "入力に余白がない");
             Check(output.Contains(form.Controls.Find("ScreenshotColorDepth", true).Single()), "出力に減色がない");
@@ -174,26 +174,26 @@ internal static partial class Program
         Run("入力の複製・既定・削除保護と保存", () =>
         {
             AppSettings? saved = null;
-            using var form = new SettingsForm(new AppSettings(), s => { saved = s; return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings(), s => { saved = s; return null; }, _ => { }, () => []);
             var editor = (RegionManagerForm)form.Controls.Find("RegionManagerForm", true).Single();
             ConsolidationClick(form, "DuplicateInputPreset"); form.Controls.Find("RegionName", true).Single().Text = "ウィンドウ用";
             ((ComboBox)form.Controls.Find("CaptureMode", true).Single()).SelectedIndex = (int)CaptureMode.Window;
             ConsolidationClick(form, "DefaultInputPreset"); Equal(6, editor.Regions.Length); Equal(1, editor.Regions.Count(p => p.IsDefault));
             ConsolidationClick(form, "DeleteRegion"); Equal(6, editor.Regions.Length);
-            SaveConsolidation(form); Check(saved is not null, "保存しない"); Equal(CaptureMode.Window, saved!.DefaultMode);
+            Check(saved is not null, "保存しない"); Equal(CaptureMode.Window, saved!.DefaultMode);
             Equal("ウィンドウ用", saved.SavedRegions.Single(p => p.IsDefault).Name);
             Equal("ウィンドウ用", form.Controls.Find("RegionName", true).Single().Text);
         });
         Run("出力の複製・既定は減色と命名を切り替え入力余白を維持", () =>
         {
             AppSettings? saved = null;
-            using var form = new SettingsForm(new AppSettings { ScreenshotPaddingPixels = 12 }, s => { saved = s; return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings { ScreenshotPaddingPixels = 12 }, s => { saved = s; return null; }, _ => { }, () => []);
             var editor = (CapturePresetEditor)form.Controls.Find("CapturePresetEditor", true).Single();
             ConsolidationClick(form, "DuplicateCapturePreset"); form.Controls.Find("CapturePresetName", true).Single().Text = "16色";
             ((ComboBox)form.Controls.Find("ScreenshotColorDepth", true).Single()).SelectedIndex = (int)ScreenshotColorDepth.Indexed4;
             form.Controls.Find("FileNamePattern", true).Single().Text = "sample.{ext}";
             ConsolidationClick(form, "DefaultCapturePreset"); ConsolidationClick(form, "DeleteCapturePreset"); Equal(4, editor.Presets.Length);
-            SaveConsolidation(form); Check(saved is not null, "出力の既定が保存されない");
+            Check(saved is not null, "出力の既定が保存されない");
             Equal(ScreenshotColorDepth.Indexed4, saved!.ScreenshotColorDepth); Equal("sample.{ext}", saved.FileNamePattern); Equal(12, saved.ScreenshotPaddingPixels);
             Equal("16色", saved.CapturePresets.Single(p => p.IsDefault).Name);
         });
@@ -201,7 +201,7 @@ internal static partial class Program
         {
             var initial = new AppSettings().ApplyDefaults();
             AppSettings saved = initial;
-            using var form = new SettingsForm(initial, next => { saved = next; return null; }, () => { }, () => []);
+            using var form = new SettingsForm(initial, next => { saved = next; return null; }, _ => { }, () => []);
             form.SelectCategory("外部アプリ");
             ((CheckBox)form.Controls.Find("DimCaptureBackground", true).Single()).Checked = !initial.DimCaptureBackground;
             string originalId = initial.ImageEditors.Single().Id;
@@ -219,11 +219,11 @@ internal static partial class Program
         Run("スナップ数値と共通表示設定を保存してプリセットと独立維持", () =>
         {
             AppSettings? saved = null;
-            using var form = new SettingsForm(new AppSettings(), s => { saved = s; return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings(), s => { saved = s; return null; }, _ => { }, () => []);
             ((NumericUpDown)form.Controls.Find("SnapDistancePixels", true).Single()).Value = 5;
             ((NumericUpDown)form.Controls.Find("GridStepPixels", true).Single()).Value = 7;
             ((CheckBox)form.Controls.Find("GridEnabled", true).Single()).Checked = true;
-            SaveConsolidation(form); Equal(5, saved!.SnapDistancePixels); Equal(7, saved.GridStepPixels); Check(saved.Grid20, "刻み設定が反映されない");
+            ApplySettingsPage(form, "基本"); Equal(5, saved!.SnapDistancePixels); Equal(7, saved.GridStepPixels); Check(saved.Grid20, "刻み設定が反映されない");
             saved.Validate();
         });
         Run("入力と出力の一時差分とリセットは相互に影響しない", () =>
@@ -339,5 +339,21 @@ internal static partial class Program
         else
             Descendants(form).Where(c => c.ContextMenuStrip is not null).SelectMany(c => c.ContextMenuStrip!.Items.OfType<ToolStripMenuItem>()).Single(i => i.Name == name).PerformClick();
     }
-    private static void SaveConsolidation(SettingsForm form) => typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, null);
+    private static Button SettingsApplyButton(SettingsForm form, string category, string? section = null)
+    {
+        var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
+        var page = tabs.TabPages.Cast<TabPage>().Single(tab => tab.Text == category);
+        if (section is not null)
+        {
+            var groups = (TabControl)page.Controls.Find("ShortcutGroups", true).Single();
+            page = groups.TabPages.Cast<TabPage>().Single(tab => tab.Text == section);
+        }
+        return (Button)page.Controls.Find("ApplyPageSettings", true).Single();
+    }
+
+    private static void ApplySettingsPage(SettingsForm form, string page, string? section = null)
+    {
+        var button = SettingsApplyButton(form, page, section);
+        if (button.Enabled) RecordingClick(button);
+    }
 }

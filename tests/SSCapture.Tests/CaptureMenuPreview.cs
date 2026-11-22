@@ -26,7 +26,7 @@ internal static partial class Program
         configure.Click += (_, _) =>
         {
             settingsForm?.Dispose();
-            settingsForm = new SettingsForm(settings, next => { next.Validate(); settings = next; new SettingsStore(Path.Combine(directory, "settings.json")).Save(next); Log("settings-saved"); return null; }, () => { }, () => []);
+            settingsForm = new SettingsForm(settings, next => { next.Validate(); settings = next; new SettingsStore(Path.Combine(directory, "settings.json")).Save(next); Log("settings-saved"); return null; }, _ => { }, () => []);
             settingsForm.StartPosition = FormStartPosition.Manual; settingsForm.Bounds = host.Bounds; settingsForm.Show(); settingsForm.Activate();
         };
         SessionController? session = null; int acquired = 0;

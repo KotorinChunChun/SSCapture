@@ -108,13 +108,13 @@ internal static partial class Program
             var loaded = store.Load(out var warning); Equal<string?>(null, warning); Equal("a", loaded.SelectedImageEditorId);
             Equal("編集を保持", loaded.CapturePresets.Single(p => p.IsDefault).Name);
         }));
-        Run("設定全体の保存で画像動画の選択を保持し別プリセットの編集は変えない", () =>
+        Run("外部アプリの適用で画像動画の選択を保持し別プリセットの下書きは変えない", () =>
         {
             var a = new ExternalApplication { Id = "a", Name = "A", Executable = @"C:\a.exe" };
             var b = a with { Id = "b", Name = "B", Executable = @"C:\b.exe" };
             var settings = new AppSettings { ImageEditors = [a, b], VideoEditors = [a, b], SelectedImageEditorId = "a", SelectedVideoEditorId = "a" }.ApplyDefaults();
             AppSettings? saved = null;
-            using var form = new SettingsForm(settings, next => { saved = next; return null; }, () => { }, () => []);
+            using var form = new SettingsForm(settings, next => { saved = next; return null; }, _ => { }, () => []);
             var appTable = (DataGridView)form.Controls.Find("ImageEditorList", true).Single();
             Equal("プリセット経由", appTable.Rows[0].Cells[1].Value);
             var list = (ListBox)form.Controls.Find("CapturePresetList", true).Single(); list.SelectedIndex = 1;
@@ -124,15 +124,23 @@ internal static partial class Program
             ((ComboBox)form.Controls.Find("VideoSelectedEditor", true).Single()).SelectedIndex = 2;
             Check(appTable.Rows[1].Cells[2].Value is string usage && usage.StartsWith("★ ", StringComparison.Ordinal), "既定出力の変更を表に反映しない");
             Equal("別出力を編集中", form.Controls.Find("CapturePresetName", true).Single().Text);
-            SaveConsolidation(form); Check(saved is not null, "設定を保存しない");
+            form.SelectCategory("外部アプリ");
+            var pending = saved;
+            typeof(Form).GetMethod("OnFormClosing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .Invoke(form, [new FormClosingEventArgs(CloseReason.UserClosing, false)]);
+            Equal(pending, saved);
+            ApplySettingsPage(form, "外部アプリ"); Check(saved is not null, "外部アプリを適用しない");
             Equal("b", saved!.SelectedImageEditorId); Equal("b", saved.SelectedVideoEditorId);
+            Check(saved.CapturePresets.All(p => p.Name != "別出力を編集中"), "未確定の別出力まで適用された");
+            Equal("別出力を編集中", form.Controls.Find("CapturePresetName", true).Single().Text);
+            ConsolidationClick(form, "StoreCapturePreset");
             Equal(nonDefaultApp ?? "", saved.CapturePresets.Single(p => p.Name == "別出力を編集中").ImageEditorId ?? "");
             list.SelectedIndex = 0;
             var image = (ComboBox)form.Controls.Find("PresetImageEditor", true).Single();
             image.SelectedIndex = 1; Equal("a", ((ExternalApplicationsEditor)form.Controls.Find("ImageApplicationsEditor", true).Single()).SelectedId);
             typeof(Control).GetMethod("OnEnter", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(image, [EventArgs.Empty]);
             Equal("a", ((ExternalApplicationsEditor)form.Controls.Find("ImageApplicationsEditor", true).Single()).SelectedId);
-            SaveConsolidation(form); Equal("a", saved!.SelectedImageEditorId); Equal("b", saved.SelectedVideoEditorId);
+            ConsolidationClick(form, "StoreCapturePreset"); Equal("a", saved!.SelectedImageEditorId); Equal("b", saved.SelectedVideoEditorId);
         });
         Run("Schema2の外部アプリは原本退避後に1回だけ移行し欠損exeを保持", () => WithServiceDirectory(directory =>
         {

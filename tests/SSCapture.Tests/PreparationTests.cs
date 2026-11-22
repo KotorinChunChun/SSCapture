@@ -41,7 +41,7 @@ internal static partial class Program
         });
         Run("撮影後は設定の同じ画面と編集中の値を再表示する", () =>
         {
-            using var settings = new SettingsForm(new AppSettings { ShowSelectionGuide = false, ShowPointerGuide = true }, _ => null, () => { });
+            using var settings = new SettingsForm(new AppSettings { ShowSelectionGuide = false, ShowPointerGuide = true }, _ => null, _ => { });
             settings.Show(); settings.SelectCategory("基本");
             var pointer = (CheckBox)settings.Controls.Find("ShowPointerGuide", true).Single();
             var screen = (CheckBox)settings.Controls.Find("ShowSelectionGuide", true).Single();
@@ -61,13 +61,13 @@ internal static partial class Program
         {
             AppSettings? saved = null;
             var original = new AppSettings { Grid20 = false, ShowSelectionGuide = true };
-            using var form = new SettingsForm(original, next => { saved = next; return null; }, () => { });
+            using var form = new SettingsForm(original, next => { saved = next; return null; }, _ => { });
             var grid = (CheckBox)form.Controls.Find("GridEnabled", true).Single();
             var pointer = (CheckBox)form.Controls.Find("ShowPointerGuide", true).Single();
             pointer.Checked = false;
             form.UpdateCapturePreferences(original with { Grid20 = true, ShowSelectionGuide = false });
             Check(grid.Checked && !pointer.Checked, "撮影中の変更または編集中の値が欠落した");
-            SaveConsolidation(form);
+            ApplySettingsPage(form, "基本");
             Check(saved is { Grid20: true, ShowSelectionGuide: false, ShowPointerGuide: false }, "古い値で撮影中の変更を上書きした");
         });
         Run("設定画面を隠した後のフォーカス移動中も撮影画面だけがWinを受け取れる", () =>
@@ -103,7 +103,7 @@ internal static partial class Program
     {
         var original = new AppSettings { ShowSelectionGuide = false, ShowPointerGuide = true };
         AppSettings? saved = null;
-        using var settings = new SettingsForm(original, value => { saved = value; return null; }, () => { });
+        using var settings = new SettingsForm(original, value => { saved = value; return null; }, _ => { });
         Exception? failure = null;
         settings.Shown += (_, _) => settings.BeginInvoke((Action)(async () =>
         {
@@ -114,7 +114,7 @@ internal static partial class Program
                 NativeSmokeInput.RequireForeground(settings.Handle);
                 var guide = (CheckBox)settings.Controls.Find("ShowPointerGuide", true).Single();
                 guide.Checked = false;
-                SaveConsolidation(settings);
+                ApplySettingsPage(settings, "基本");
                 Check(saved is { ShowPointerGuide: false }, "設定を保存できない");
                 Point location = Screen.FromControl(settings).WorkingArea.Location + new Size(80, 80);
                 Rectangle bounds = new(location, new Size(360, 240));
@@ -168,7 +168,7 @@ internal static partial class Program
             try
             {
                 pattern.Update();
-                using var settings = new SettingsForm(new AppSettings(), _ => null, () => { });
+                using var settings = new SettingsForm(new AppSettings(), _ => null, _ => { });
                 settings.StartPosition = FormStartPosition.Manual; settings.Location = new Point(target.Left + 12, target.Top + 12);
                 settings.TopMost = true; settings.Show(); settings.Update(); CaptureNative.SynchronizeDesktop();
                 CaptureUiPreparation.Prepare([settings], () => { });

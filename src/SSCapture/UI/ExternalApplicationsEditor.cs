@@ -169,7 +169,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
         if (editingId is not null) SelectRow(editingId);
         else if (applications.Count > 0) SelectRow(applications[0].Id);
         else { appName.Clear(); SetLaunch(ExternalApplicationLaunch.Executable, "", EditorArguments.Default); }
-        status.Text = "変更しました。設定の保存で確定します。";
+        status.Text = "変更しました。［適用］で確定します。";
     }
     private void Refresh(string id, bool notifySelection = true)
     {

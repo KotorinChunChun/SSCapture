@@ -44,7 +44,7 @@ internal static partial class Program
                 return null;
             }
             catch (Exception error) { return error.Message; }
-        }, () => { }, () => []);
+        }, _ => { }, () => []);
         form.Text = WindowTitle.Create("減色・余白の操作確認");
         var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
         var page = new TabPage("出力プレビュー");

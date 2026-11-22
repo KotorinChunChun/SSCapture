@@ -137,9 +137,9 @@ internal static partial class Program
         Run("暗転UIは最小設定画面に収まり独立して保存", () =>
         {
             AppSettings? result = null;
-            using var form = new SettingsForm(new AppSettings(), next => { result = next; return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings { DimCaptureBackground = false }, next => { result = next; return null; }, _ => { }, () => []);
             var field = (CheckBox)form.Controls.Find("DimCaptureBackground", true).Single(); field.Checked = true;
-            typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, null);
+            ApplySettingsPage(form, "基本");
             Check(result!.DimCaptureBackground && result.FreezeFrame, "画面固定と連動した");
             form.Size = form.MinimumSize; _ = form.Handle;
             foreach (var child in Descendants(form)) _ = child.Handle;

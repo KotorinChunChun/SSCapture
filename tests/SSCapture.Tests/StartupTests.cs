@@ -47,7 +47,7 @@ internal static partial class Program
         {
             var startup = new FakeStartup();
             int saves = 0;
-            using var form = new SettingsForm(new AppSettings(), _ => { saves++; return null; }, () => { }, () => [], startupRegistration: startup);
+            using var form = new SettingsForm(new AppSettings(), _ => { saves++; return null; }, _ => { }, () => [], startupRegistration: startup);
             form.Size = form.MinimumSize;
             _ = form.Handle; foreach (var control in Descendants(form)) _ = control.Handle;
             LayoutTree(form);
@@ -69,7 +69,9 @@ internal static partial class Program
             Check(label.Right <= apply.Left && apply.Left - label.Right <= 12 && apply.Right <= check.Left && apply.TabStop,
                 "見出しの隣にキーボードで選べる適用ボタンがない");
             ((CheckBox)check).Checked = true;
-            RecordingClick(form.Controls.Find("SaveSettings", true).Single());
+            Check(!SettingsApplyButton(form, "基本").Enabled, "自動起動だけの変更で基本の適用が有効になった");
+            ((CheckBox)form.Controls.Find("DimCaptureBackground", true).Single()).Checked = false;
+            ApplySettingsPage(form, "基本");
             Equal(1, saves);
             Equal(0, startup.Writes);
             Check(message.Parent!.ClientRectangle.Contains(message.Bounds), "状態メッセージが表示領域外");

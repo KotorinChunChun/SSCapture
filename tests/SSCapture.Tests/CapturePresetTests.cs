@@ -79,14 +79,13 @@ internal static partial class Program
         Run("設定フォーム内でプリセットを登録し保存コールバックに渡す", () =>
         {
             AppSettings? saved = null;
-            using var form = new SettingsForm(new AppSettings { ScreenshotPaddingPixels = 10 }, s => { saved = s; return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings { ScreenshotPaddingPixels = 10 }, s => { saved = s; return null; }, _ => { }, () => []);
             var editor = (CapturePresetEditor)form.Controls.Find("CapturePresetEditor", true).Single();
             form.Controls.Find("CapturePresetName", true).Single().Text = "資料";
             editor.StoreCurrent(); Equal(3, editor.Presets.Length);
             Check(form.Controls.Find("PresetPaddingPixels", true).Length == 0, "出力側に重複余白がある");
             ((ComboBox)form.Controls.Find("ScreenshotColorDepth", true).Single()).SelectedIndex = (int)ScreenshotColorDepth.Indexed4;
             editor.StoreCurrent(); Equal(3, editor.Presets.Length); Equal(ScreenshotColorDepth.Indexed4, editor.Presets[0].ColorDepth);
-            typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(form, null);
             Equal(3, saved!.CapturePresets.Length); Equal(ScreenshotColorDepth.Indexed4, saved.CapturePresets[0].ColorDepth);
             Equal(10, saved.ScreenshotPaddingPixels);
         });

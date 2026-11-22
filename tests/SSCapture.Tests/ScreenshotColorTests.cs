@@ -147,14 +147,13 @@ internal static partial class Program
         Run("基本タブの減色選択と保存・最小画面で見切れなし", () =>
         {
             AppSettings? saved = null;
-            using var form = new SettingsForm(new AppSettings(), next => { saved = next; return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings(), next => { saved = next; return null; }, _ => { }, () => []);
             var field = (ComboBox)form.Controls.Find("ScreenshotColorDepth", true).Single();
             Equal(3, field.Items.Count);
             Equal(0, field.SelectedIndex);
             foreach (int index in new[] { 1, 2, 0 })
             {
                 field.SelectedIndex = index;
-                typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, null);
                 Equal((ScreenshotColorDepth)index, saved!.ScreenshotColorDepth);
             }
             form.Size = form.MinimumSize; _ = form.Handle;

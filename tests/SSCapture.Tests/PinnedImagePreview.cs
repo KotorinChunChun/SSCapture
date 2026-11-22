@@ -54,7 +54,7 @@ internal static partial class Program
         Button("非表示／再表示", "PreviewTogglePins", () => { pins.ToggleVisibility(); Log("visibility", new { pins.Count, pins.Hidden }); });
         Button("設定", "PreviewSettings", () =>
         {
-            var form = new SettingsForm(settings, next => { settings = next; Log("settings-saved"); return null; }, () => { }, () => []);
+            var form = new SettingsForm(settings, next => { settings = next; Log("settings-saved"); return null; }, _ => { }, () => []);
             form.StartPosition = FormStartPosition.Manual; form.Bounds = right;
             form.FormClosed += (_, _) => form.Dispose(); form.Show(); form.SelectCategory("コマンド生成");
         });

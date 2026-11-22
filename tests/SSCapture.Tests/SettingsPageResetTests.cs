@@ -12,7 +12,7 @@ internal static partial class Program
             var initial = new AppSettings { GridStepPixels = 27, ShowMagnifier = true, KeepHistory = false,
                 NotificationDurationSeconds = 17, SelectionGuideDisplay = SelectionGuideDisplay.Main };
             var saved = new List<AppSettings>();
-            using var form = new SettingsForm(initial, next => { saved.Add(next); return null; }, () => { }, () => []);
+            using var form = new SettingsForm(initial, next => { saved.Add(next); return null; }, _ => { }, () => []);
             _ = form.Handle;
             var pages = Field<TabControl>(form, "SettingsTabs").TabPages.Cast<TabPage>()
                 .Where(page => page.Text != "ショートカット").Concat(Field<TabControl>(form, "ShortcutGroups").TabPages.Cast<TabPage>());
@@ -34,7 +34,9 @@ internal static partial class Program
             form.ResetSelectedPage();
             Equal(0, saved.Count);
             Check(Field<CheckBox>(form, "KeepHistory").Checked, "履歴の設定が初期値に戻っていない");
-            SaveConsolidation(form);
+            ApplySettingsPage(form, "履歴");
+            Equal(27, saved.Last().GridStepPixels);
+            ApplySettingsPage(form, "基本");
             Check(saved.Last() is { GridStepPixels: 20, KeepHistory: true, NotificationDurationSeconds: 17 }, "下書きの保存に失敗");
         });
 
@@ -50,7 +52,7 @@ internal static partial class Program
             {
                 saved.Add(next);
                 return reject ? "検証用の保存エラー" : null;
-            }, () => { }, () => []);
+            }, _ => { }, () => []);
             _ = form.Handle;
             form.SelectCategory("入力プリセット");
             var editor = FindRegionEditor(form);
@@ -80,7 +82,7 @@ internal static partial class Program
             var currentRows = new PresetCaptureShortcut[] { new("Ctrl+F11") };
             using var form = new SettingsForm(defaults with { InstantShortcuts = instant, PresetCaptureShortcuts = currentRows,
                 ScreenshotShortcut1 = "", ScreenshotShortcut2 = "", RecordingShortcut1 = "", RecordingShortcut2 = "", LastRecipeShortcut = "Ctrl+F12" },
-                _ => throw new InvalidOperationException("ショートカットを自動保存した"), () => { }, () => []);
+                _ => throw new InvalidOperationException("ショートカットを自動保存した"), _ => { }, () => []);
             _ = form.Handle;
             form.SelectCategory("ショートカット");
             var tabs = Field<TabControl>(form, "ShortcutGroups");

@@ -48,7 +48,7 @@ internal static class Program
         ConfigureUi();
         if (args.Contains("--ui-preview"))
         {
-            using var preview = new UI.SettingsForm(new Services.AppSettings(), _ => null, () => { });
+            using var preview = new UI.SettingsForm(new Services.AppSettings(), _ => null, _ => { });
             Application.Run(preview);
             return;
         }

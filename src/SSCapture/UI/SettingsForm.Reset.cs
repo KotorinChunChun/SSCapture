@@ -4,7 +4,7 @@ namespace SSCapture.UI;
 
 internal sealed partial class SettingsForm
 {
-    private void AddResetButton(TabPage page)
+    private void AddPageActions(TabPage page)
     {
         var actions = new FlowLayoutPanel { Name = "PageResetActions", Dock = DockStyle.Bottom,
             Height = SettingsEditorActions.Height, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Margin = Padding.Empty };
@@ -14,6 +14,7 @@ internal sealed partial class SettingsForm
         reset.CausesValidation = false;
         reset.Click += (_, _) => ResetSelectedPage();
         actions.Controls.Add(reset);
+        if (PageDraft(page) is { } readDraft) AddApplyButton(actions, page, readDraft);
         page.Controls.Add(actions);
     }
 
@@ -72,7 +73,9 @@ internal sealed partial class SettingsForm
                 default:
                     return;
             }
-            SetStatus("初期値を設定しました。保存で確定します。");
+            refreshSettingControls?.Invoke();
+            string button = SelectedCategory == "ショートカット" && shortcutTabs.SelectedTab == workShortcutPage ? "保存" : "適用";
+            SetStatus($"初期値を設定しました。{button}で確定します。");
         }
         catch (ArgumentException ex)
         {

@@ -175,7 +175,7 @@ internal static partial class Program
                 if (next.PresetCaptureShortcuts!.Any(p => p.Key == "Ctrl+F7")) return "試験用の保存エラー";
                 persisted = next;
                 return null;
-            }, () => { }, () => []);
+            }, _ => { }, () => []);
             T Find<T>(string name) where T : Control => (T)form.Controls.Find(name, true).Single();
             void Click(string name) => CaptureCommandClick(form, name);
             string Category() => ((TabPage)Find<ListBox>("SettingsCategories").SelectedItem!).Text;
@@ -189,11 +189,11 @@ internal static partial class Program
             Equal(input.Name, (string?)grid.Rows[0].Cells[2].Value);
             var key = Find<HotkeyEditor>("PresetCaptureShortcut");
             key.Value = "Ctrl+F7";
-            SaveConsolidation(form);
+            Click("SavePresetCaptureShortcuts");
             Equal("Ctrl+F6", persisted.PresetCaptureShortcuts!.Single().Key);
             Equal("Ctrl+F7", key.Value);
             key.Value = "Ctrl+F8";
-            SaveConsolidation(form);
+            Click("SavePresetCaptureShortcuts");
             Equal("Ctrl+F8", persisted.PresetCaptureShortcuts!.Single().Key);
             Find<ListBox>("CapturePresetList").SelectedIndex = Array.FindIndex(defaults.CapturePresets, p => p.Id == output.Id);
             Click("DeleteCapturePreset");
@@ -201,7 +201,7 @@ internal static partial class Program
             Click("OpenOutputPresetShortcuts");
             Equal(output.Name, (string?)grid.Rows[0].Cells[3].Value);
             Click("DeletePresetCaptureShortcut");
-            SaveConsolidation(form);
+            Click("SavePresetCaptureShortcuts");
             Equal(0, persisted.PresetCaptureShortcuts!.Length);
             Click("DeleteRegion");
             Check(persisted.SavedRegions.All(p => p.Id != input.Id), "割当削除後も入力を削除できない");
@@ -229,6 +229,39 @@ internal static partial class Program
             Click("SavePresetCaptureShortcuts");
             Equal(recording with { Key = "Ctrl+F10" }, persisted.PresetCaptureShortcuts![1]);
             Equal(previousDim, persisted.DimCaptureBackground);
+        });
+        Run("割り当て表示は入力と出力の直接指定・既定経由・確定した変更に追従する", () =>
+        {
+            var defaults = new AppSettings().ApplyDefaults();
+            var input = defaults.SavedRegions.First(preset => !preset.IsDefault);
+            var output = defaults.CapturePresets.First(preset => !preset.IsDefault);
+            var settings = defaults with { PresetCaptureShortcuts = [new("Ctrl+F6"), new("Ctrl+F7", input.Id, output.Id)] };
+            using var form = new SettingsForm(settings, _ => null, _ => { }, () => []);
+            var inputLink = form.Controls.Find("OpenInputPresetShortcuts", true).Single();
+            var outputLink = form.Controls.Find("OpenOutputPresetShortcuts", true).Single();
+            Equal("Ctrl＋F6", inputLink.Text);
+            Equal("Ctrl＋F6", outputLink.Text);
+            var inputs = (ListBox)form.Controls.Find("SavedRegions", true).Single();
+            var outputs = (ListBox)form.Controls.Find("CapturePresetList", true).Single();
+            inputs.SelectedItem = inputs.Items.Cast<SavedRegion>().Single(preset => preset.Id == input.Id);
+            outputs.SelectedItem = outputs.Items.Cast<CapturePreset>().Single(preset => preset.Id == output.Id);
+            Equal("Ctrl＋F7", inputLink.Text);
+            Equal("Ctrl＋F7", outputLink.Text);
+
+            CaptureCommandClick(form, "OpenInputPresetShortcuts");
+            var key = (HotkeyEditor)form.Controls.Find("PresetCaptureShortcut", true).Single();
+            Equal("Ctrl+F7", key.Value);
+            key.Value = "Ctrl+F8";
+            Equal("Ctrl＋F7", inputLink.Text);
+            CaptureCommandClick(form, "SavePresetCaptureShortcuts");
+            Equal("Ctrl＋F8", inputLink.Text);
+            Equal("Ctrl＋F8", outputLink.Text);
+
+            CaptureCommandClick(form, "DefaultInputPreset");
+            Equal("Ctrl＋F6、Ctrl＋F8", inputLink.Text);
+            Equal("Ctrl＋F8", outputLink.Text);
+            inputs.SelectedItem = inputs.Items.Cast<SavedRegion>().First(preset => !preset.IsDefault);
+            Equal("割り当てなし", inputLink.Text);
         });
     }
 }

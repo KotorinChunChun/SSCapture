@@ -34,19 +34,19 @@ internal static partial class Program
         Run("プリセットの自動保存は基本の下書きを確定せず後の保存でも巻き戻さない", () =>
         {
             var writes = new List<AppSettings>();
-            using var form = new SettingsForm(new AppSettings(), value => { writes.Add(value); return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings(), value => { writes.Add(value); return null; }, _ => { }, () => []);
             ((CheckBox)form.Controls.Find("DimCaptureBackground", true).Single()).Checked = false;
             ((CheckBox)form.Controls.Find("FreezeFrame", true).Single()).Checked = false;
             Check(writes.Count > 0 && writes[^1].DimCaptureBackground && !writes[^1].FreezeFrame, "基本の下書きまで自動保存した");
             ((ComboBox)form.Controls.Find("ScreenshotColorDepth", true).Single()).SelectedIndex = (int)ScreenshotColorDepth.Indexed4;
             Check(!writes[^1].FreezeFrame && writes[^1].DimCaptureBackground, "出力保存で入力を巻き戻した");
-            SaveConsolidation(form);
-            Check(!writes[^1].DimCaptureBackground && !writes[^1].FreezeFrame && writes[^1].ScreenshotColorDepth == ScreenshotColorDepth.Indexed4, "全体保存でプリセットを巻き戻した");
+            ApplySettingsPage(form, "基本");
+            Check(!writes[^1].DimCaptureBackground && !writes[^1].FreezeFrame && writes[^1].ScreenshotColorDepth == ScreenshotColorDepth.Indexed4, "基本の適用でプリセットを巻き戻した");
         });
         Run("名前の入力途中は未保存・確定値だけ保存し不正値で選択を移さない", () =>
         {
             var writes = new List<AppSettings>();
-            using var form = new SettingsForm(new AppSettings(), value => { writes.Add(value); return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings(), value => { writes.Add(value); return null; }, _ => { }, () => []);
             var name = form.Controls.Find("RegionName", true).Single(); name.Text = "確定後の名前"; Equal(0, writes.Count);
             CommitPresetField(name); Equal("確定後の名前", writes[^1].SavedRegions.Single(p => p.IsDefault).Name);
             int count = writes.Count; name.Text = "";
@@ -56,7 +56,7 @@ internal static partial class Program
         Run("自動保存失敗は旧一覧とディスク相当を保持し下書きを消さない", () =>
         {
             AppSettings? stored = null; bool fail = true;
-            using var form = new SettingsForm(new AppSettings(), value => { if (fail) return "保存失敗の注入"; stored = value; return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings(), value => { if (fail) return "保存失敗の注入"; stored = value; return null; }, _ => { }, () => []);
             var name = form.Controls.Find("RegionName", true).Single(); name.Text = "失敗時の下書き"; CommitPresetField(name);
             Check(stored is null && name.Text == "失敗時の下書き", "失敗時に保存または下書き消去");
             Check(((RegionManagerForm)form.Controls.Find("RegionManagerForm", true).Single()).Regions.All(p => p.Name != name.Text), "失敗した値を一覧に採用");
@@ -65,7 +65,7 @@ internal static partial class Program
         Run("録画音声は入力ごとに切替し未接続マイクも保持する", () =>
         {
             AppSettings? stored = null;
-            using var form = new SettingsForm(new AppSettings { MicrophoneDeviceId = "missing" }, value => { stored = value; return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings { MicrophoneDeviceId = "missing" }, value => { stored = value; return null; }, _ => { }, () => []);
             ((CheckBox)form.Controls.Find("SystemAudio", true).Single()).Checked = true;
             Check(stored!.SavedRegions.Single(p => p.IsDefault).RecordSystemAudio, "入力にPC音声を保存しない");
             Equal("missing", stored.SavedRegions.Single(p => p.IsDefault).MicrophoneDeviceId);
@@ -74,11 +74,11 @@ internal static partial class Program
         });
         Run("入出力はプリセット単位の保存・追加・複製・削除と既定指定を使う", () =>
         {
-            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings(), _ => null, _ => { }, () => []);
             foreach (string category in new[] { "入力プリセット", "出力プリセット" })
             {
                 form.SelectCategory(category);
-                Check(!form.Controls.Find("SaveSettings", true).Single().Visible && form.AcceptButton is null, "全体保存がプリセットに残る");
+                Check(form.Controls.Find("SaveSettings", true).Length == 0 && form.AcceptButton is null, "全体保存がプリセットに残る");
             }
             Equal("保存", form.Controls.Find("SaveRegion", true).Single().Text);
             Equal("保存", form.Controls.Find("StoreCapturePreset", true).Single().Text);

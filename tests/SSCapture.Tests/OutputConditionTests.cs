@@ -17,7 +17,7 @@ internal static partial class Program
                     FileNamePattern = "{unknown}", OneOcrDirectory = "relative" };
                 bool rejected = false; try { settings.Validate(); } catch (ArgumentException) { rejected = true; }
                 Equal(destination.HasFlag(OutputDestination.File), rejected);
-                using var form = new SettingsForm(settings, _ => null, () => { }, () => [], listDisplays: () => []);
+                using var form = new SettingsForm(settings, _ => null, _ => { }, () => [], listDisplays: () => []);
                 foreach (string name in new[] { "SaveDirectory", "FileNamePattern", "OcrSeparator", "OneOCRDirectory", "OpenFolderAfterSave" })
                 {
                     var fields = form.Controls.Find(name, true);

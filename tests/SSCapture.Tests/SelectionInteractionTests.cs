@@ -344,7 +344,7 @@ internal static partial class Program
         });
         Run("全設定の入力・ボタン・行ラベルにツールチップを付ける", () =>
         {
-            using var form = new UI.SettingsForm(new Services.AppSettings(), _ => null, () => { }, () => []);
+            using var form = new UI.SettingsForm(new Services.AppSettings(), _ => null, _ => { }, () => []);
             var tips = (ToolTip)typeof(UI.SettingsForm).GetField("settingTips", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(form)!;
             foreach (Control control in Descendants(form).Where(c => c is TextBox or ComboBox or CheckBox or NumericUpDown or Button))
             {

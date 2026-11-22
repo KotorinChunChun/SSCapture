@@ -151,7 +151,7 @@ internal static partial class Program
         Run("即時設定はRDPの画面番号対応を示し再表示で構成を更新する", () =>
         {
             IReadOnlyList<DisplayTarget> displays = [new(@"\\.\DISPLAY97", new(0, 0, 2560, 1440), true)];
-            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => [], listDisplays: () => displays);
+            using var form = new SettingsForm(new AppSettings(), _ => null, _ => { }, () => [], listDisplays: () => displays);
             Equal("画面1（主）", form.Controls.Find("InstantDisplayLabel1", true).Single().Text);
             Equal("画面2（未接続）", form.Controls.Find("InstantDisplayLabel2", true).Single().Text);
             Check(form.Controls.Find("InstantDisplays", true).Single().Text.Contains("画面1（主）: DISPLAY97 (2560×1440)", StringComparison.Ordinal), "主画面番号とデバイス名の対応がない");
@@ -164,7 +164,7 @@ internal static partial class Program
         Run("即時キー10件はスクロールして到達し変更を保存", () =>
         {
             AppSettings? saved = null;
-            using var form = new SettingsForm(new AppSettings(), next => { saved = next; return null; }, () => { }, () => []);
+            using var form = new SettingsForm(new AppSettings(), next => { saved = next; return null; }, _ => { }, () => []);
             _ = form.Handle; foreach (Control child in Descendants(form)) _ = child.Handle;
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
             tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "ショートカット");
@@ -176,7 +176,7 @@ internal static partial class Program
             Check(last.Width >= 400 && last.Height >= 32, "入力領域不足");
             Check(last.RectangleToScreen(last.ClientRectangle).IntersectsWith(tabs.SelectedTab.RectangleToScreen(tabs.SelectedTab.ClientRectangle)), "10番がスクロールできない");
             ((ComboBox)last.Controls.Find("InstantShortcut10Key", true).Single()).SelectedIndex = 0;
-            typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(form, null);
+            ApplySettingsPage(form, "ショートカット", "即時撮影キー");
             Check(saved is not null, "保存されない"); Equal("", saved!.InstantShortcuts[9]);
             table.Dock = DockStyle.None; table.Width = 240; LayoutTree(form);
             Check(last.Width < 400, "Dock断線検出不可");

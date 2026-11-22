@@ -8,8 +8,6 @@ namespace SSCapture.UI;
 internal sealed partial class SettingsForm : Form
 {
     private AppSettings committed;
-    private bool manualSave;
-    private Action? refreshSaveButton;
     private readonly TextBox directory, imageEditor, videoEditor, imageArguments, videoArguments, fileNamePattern, ocrSeparator, oneOcrDirectory;
     private readonly HotkeyEditor lastRecipeKey;
     private readonly CaptureKeyEditor captureBeforeKeys, captureKeys;
@@ -44,7 +42,7 @@ internal sealed partial class SettingsForm : Form
     private readonly StartupSettingsControl startupSettings;
     private readonly CaptureCommandControl captureCommand;
 
-    public SettingsForm(AppSettings settings, Func<AppSettings, string?> onSave, Action openFolder,
+    public SettingsForm(AppSettings settings, Func<AppSettings, string?> onSave, Action<string> openFolder,
         Func<IReadOnlyList<MicrophoneInfo>>? listMicrophones = null, Action? openRegions = null, Action? openHistory = null,
         Func<DateTimeOffset>? now = null, Func<IReadOnlyList<DisplayTarget>>? listDisplays = null,
         SavedRegion? lastRegion = null, Func<Size?, CaptureAnchor, Task<Rectangle?>>? selectInputRegion = null,
@@ -356,7 +354,9 @@ internal sealed partial class SettingsForm : Form
             label.Margin = new Padding(3, 7, 3, 0);
         }
         Shown += async (_, _) => await startupSettings.RefreshAsync();
-        oneOcrDirectory.Parent!.Controls.Remove(oneOcrDirectory); presetEditor.AddSharedOcr(oneOcrDirectory);
+        oneOcrDirectory.Parent!.Controls.Remove(oneOcrDirectory);
+        var outputActions = presetEditor.AddSaveTools(oneOcrDirectory, openFolder);
+        AddApplyButton(outputActions, oneOcrDirectory, () => committed with { OneOcrDirectory = Expand(oneOcrDirectory.Text) });
         foreach (var removed in new[] { (TabPage)inputs.Parent!, (TabPage)naming.Parent!, (TabPage)metadataPage.Parent!, (TabPage)audio.Parent! }) { tabs.TabPages.Remove(removed); removed.Dispose(); }
         directory = (TextBox)presetEditor.Controls.Find("SaveDirectory", true).Single(); fileNamePattern = (TextBox)presetEditor.Controls.Find("FileNamePattern", true).Single(); ocrSeparator = (TextBox)presetEditor.Controls.Find("OcrSeparator", true).Single();
         clipboardOutput = (CheckBox)presetEditor.Controls.Find("ClipboardOutput", true).Single(); fileOutput = (CheckBox)presetEditor.Controls.Find("FileOutput", true).Single(); externalOutput = (CheckBox)presetEditor.Controls.Find("ExternalOutput", true).Single();
@@ -365,16 +365,16 @@ internal sealed partial class SettingsForm : Form
         var commandPage = new TabPage("コマンド生成") { BackColor = BackColor, Padding = new Padding(8) };
         captureCommand = new CaptureCommandControl(() => committed, SetStatus);
         commandPage.Controls.Add(captureCommand); tabs.TabPages.Add(commandPage);
-        string[] order = ["基本", "入力プリセット", "出力プリセット", "外部アプリ", "ショートカット", "コマンド生成", "通知", "履歴"];
+        string[] order = ["基本", "通知", "入力プリセット", "出力プリセット", "ショートカット", "外部アプリ", "コマンド生成", "履歴"];
         var ordered = order.Select(title => tabs.TabPages.Cast<TabPage>().Single(p => p.Text == title)).ToArray();
         tabs.TabPages.Clear(); tabs.TabPages.AddRange(ordered);
         foreach (var page in ordered)
         {
             if (page == shortcutPage)
             {
-                foreach (TabPage group in shortcutTabs.TabPages) AddResetButton(group);
+                foreach (TabPage group in shortcutTabs.TabPages) AddPageActions(group);
             }
-            else AddResetButton(page);
+            else AddPageActions(page);
         }
         status = new TextBox { Name = "Status", Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
             WordWrap = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None,
@@ -382,42 +382,27 @@ internal sealed partial class SettingsForm : Form
         layout.Controls.Add(status, 0, 1);
         statusTimer.Tick += (_, _) => ExpireStatus();
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Margin = Padding.Empty };
-        var saveButton = MakeButton("保存", "SaveSettings", ButtonRole.Primary);
-        saveButton.Click += (_, _) => SaveSettings();
         var closeButton = MakeButton("閉じる", "CloseSettings", ButtonRole.Neutral);
         closeButton.Click += (_, _) => Close();
-        var folderButton = MakeButton("保存先を開く", "OpenFolder", ButtonRole.Secondary);
-        folderButton.Width = 144;
-        folderButton.Click += (_, _) => openFolder();
-        buttons.Controls.AddRange([saveButton, closeButton, folderButton]);
+        buttons.Controls.Add(closeButton);
         layout.Controls.Add(buttons, 0, 2);
-        AcceptButton = saveButton;
         CancelButton = closeButton;
         if (deviceError is not null) SetStatus(deviceError, true);
         categories.DisplayMember = nameof(TabPage.Text); categories.Items.AddRange(tabs.TabPages.Cast<TabPage>().Cast<object>().ToArray()); categories.SelectedIndex = 0;
         categories.SelectedIndexChanged += (_, _) => { if (categories.SelectedIndex >= 0) tabs.SelectedIndex = categories.SelectedIndex; };
         tabs.SelectedIndexChanged += (_, _) => { if (categories.SelectedIndex != tabs.SelectedIndex) categories.SelectedIndex = tabs.SelectedIndex; };
-        var pinnedOutput = (CheckBox)presetEditor.Controls.Find("PinnedOutput", true).Single();
-        void UpdateFileFields()
-        {
-            metadataMode.Enabled = openFolderAfterSave.Enabled = fileOutput.Checked;
-            folderButton.Enabled = directory.Enabled = fileOutput.Checked || pinnedOutput.Checked;
-        }
-        fileOutput.CheckedChanged += (_, _) => UpdateFileFields(); pinnedOutput.CheckedChanged += (_, _) => UpdateFileFields(); UpdateFileFields();
         SettingsHelp.Apply(this, settingTips);
+        BindPresetShortcutLinks();
         inputPresetEditor.EnableAutoSave();
         presetEditor.EnableAutoSave(CommitOutputs);
-        void UpdateSaveButton()
-        {
-            bool presetPageSelected = tabs.SelectedTab?.Text is "入力プリセット" or "出力プリセット";
-            saveButton.Visible = !presetPageSelected; AcceptButton = presetPageSelected ? null : saveButton;
-        }
-        tabs.SelectedIndexChanged += (_, _) => UpdateSaveButton(); UpdateSaveButton();
-        refreshSaveButton = UpdateSaveButton;
         FormClosing += (_, e) =>
         {
-            if (!inputPresetEditor.StoreCurrent()) { e.Cancel = true; SelectCategory("入力プリセット"); return; }
-            presetEditor.StoreCurrent(); if (presetEditor.Error is not null) { e.Cancel = true; SelectCategory("出力プリセット"); }
+            if (SelectedCategory == "入力プリセット") e.Cancel = !inputPresetEditor.StoreCurrent();
+            if (SelectedCategory == "出力プリセット")
+            {
+                presetEditor.StoreCurrent();
+                e.Cancel = presetEditor.Error is not null;
+            }
         };
         Shown += (_, _) => { var work = Screen.FromControl(this).WorkingArea; MinimumSize = new Size(Math.Min(MinimumSize.Width, work.Width), Math.Min(MinimumSize.Height, work.Height)); if (Width > work.Width || Height > work.Height) Bounds = new Rectangle(work.Location, new Size(Math.Min(Width, work.Width), Math.Min(Height, work.Height))); };
     }
@@ -428,7 +413,7 @@ internal sealed partial class SettingsForm : Form
     internal void SelectCategory(string title)
     {
         for (int index = 0; index < categories.Items.Count; index++)
-            if (((TabPage)categories.Items[index]!).Text == title) { categories.SelectedIndex = index; refreshSaveButton?.Invoke(); return; }
+            if (((TabPage)categories.Items[index]!).Text == title) { categories.SelectedIndex = index; return; }
     }
 
     internal void ShowCaptureSettings(CaptureSettingsLink link)
@@ -495,24 +480,6 @@ internal sealed partial class SettingsForm : Form
         if (disposing) { statusTimer.Dispose(); settingTips.Dispose(); }
         base.Dispose(disposing);
     }
-    private void SaveSettings()
-    {
-        manualSave = true;
-        try
-        {
-            if (!inputPresetEditor.StoreCurrent()) throw new ArgumentException("入力プリセットの内容を確認してください。");
-            presetEditor.StoreCurrent();
-            if (presetEditor.Error is string presetError) throw new ArgumentException(presetError);
-            var next = ReadSettings();
-            next.Validate();
-            string? error = save(next);
-            if (error is null) committed = next;
-            SetStatus(error ?? "設定を保存しました。", error is not null);
-        }
-        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
-        { SetStatus("保存できませんでした: " + ex.Message, true); }
-        finally { manualSave = false; }
-    }
     private void SaveWorkingShortcuts()
     {
         var error = CommitEditorSettings(committed with
@@ -523,20 +490,8 @@ internal sealed partial class SettingsForm : Form
         SetStatus(error ?? "PC作業中のショートカットを保存しました。", error is not null);
     }
 
-    private string? CommitExternalApplications(CaptureIntent intent, ExternalApplication[] apps, string id)
-    {
-        bool image = intent == CaptureIntent.Screenshot;
-        var presets = committed.CapturePresets.Select(preset => !preset.IsDefault ? preset :
-            image ? preset with { ImageEditorId = id } : preset with { VideoEditorId = id }).ToArray();
-        var selected = apps.FirstOrDefault(app => app.Id == id);
-        string executable = selected?.Executable ?? "";
-        string arguments = selected?.Arguments ?? EditorArguments.Default;
-        var next = image
-            ? committed with { ImageEditors = apps, ImageEditorPath = executable, ImageEditorArguments = arguments, CapturePresets = presets }
-            : committed with { VideoEditors = apps, VideoEditorPath = executable, VideoEditorArguments = arguments, CapturePresets = presets };
-        return CommitEditorSettings(next);
-    }
-
+    private string? CommitExternalApplications(CaptureIntent intent, ExternalApplication[] apps, string id) =>
+        CommitEditorSettings(WithExternalApplications(committed, intent, apps, id));
     private string? CommitInputs(SavedRegion[] regions)
     {
         foreach (var removed in committed.SavedRegions.Where(old => regions.All(p => p.Id != old.Id)))
@@ -556,50 +511,24 @@ internal sealed partial class SettingsForm : Form
         ?? PresetCaptureShortcut.ReferenceError(committed.PresetCaptureShortcuts ?? [], id, input);
     private string? CommitEditorSettings(AppSettings next)
     {
-        if (manualSave) return null;
+        if (next == committed) return null;
         try
         {
-            next = next.ApplyDefaults(); next.Validate();
-            string? error = save(next); if (error is null) committed = next;
+            if (next.OneOcrDirectory != committed.OneOcrDirectory && next.OneOcrDirectory.Length != 0
+                && (!Path.IsPathFullyQualified(next.OneOcrDirectory) || next.OneOcrDirectory.IndexOfAny(Path.GetInvalidPathChars()) >= 0))
+                return "OCRエンジンの場所はフォルダーの絶対パスで指定してください。";
+            next = next.ApplyDefaults();
+            next.Validate();
+            string? error = save(next);
+            if (error is null)
+            {
+                committed = next;
+                refreshSettingControls?.Invoke();
+            }
             return error;
         }
         catch (Exception ex) { return "保存できません: " + ex.Message; }
     }
-    private AppSettings ReadSettings() => (committed with
-            {
-                OneOcrDirectory = Expand(oneOcrDirectory.Text),
-                DimCaptureBackground = dimCaptureBackground.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
-                Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked, ShowPointerGuide = pointerGuideEnabled.Checked,
-                SelectionGuideDisplay = (SelectionGuideDisplay)guideDisplay.SelectedIndex,
-                ShowMagnifier = magnifierEnabled.Checked, ShareCapturePresentation = shareCapturePresentation.Checked,
-                SnapDistancePixels = (int)snapDistance.Value, GridStepPixels = (int)gridStep.Value,
-                CapturePresets = presetEditor.Presets,
-                SavedRegions = inputPresetEditor.Regions,
-                PresetCaptureShortcuts = presetShortcutEditor.Rows,
-                LastRecipeShortcut = lastRecipeKey.Value, KeepHistory = keepHistory.Checked,
-                CaptureKeys = captureKeys.Value,
-                CaptureBeforeKeys = captureBeforeKeys.Value,
-                ControlActivation = captureBeforeKeys.ControlActivation,
-                WindowActivation = captureBeforeKeys.WindowActivation,
-                CaptureMouse = new CaptureMouseMap(
-                    BeforeLeft: captureBeforeKeys.IsClickEnabled(MouseButtons.Left),
-                    BeforeRight: captureBeforeKeys.IsClickEnabled(MouseButtons.Right),
-                    BeforeMiddle: captureBeforeKeys.IsClickEnabled(MouseButtons.Middle),
-                    DragRight: captureKeys.IsClickEnabled(MouseButtons.Right)),
-                NotificationDurationSeconds = (int)notificationDuration.Value, PlayCaptureSound = playCaptureSound.Checked,
-                HoldNotificationWhileApproaching = holdNotification.Checked,
-                NotificationApplicationId = NotificationAppId(),
-                NotificationDisplay = ((NotificationDisplayItem)notificationDisplay.SelectedItem!).Value,
-                NotificationCorner = ((CornerItem)notificationCorner.SelectedItem!).Value,
-                InstantShortcuts = instantKeys.Select(key => key.Value).ToArray(),
-                RecordSystemAudio = systemAudio.Checked, RecordMicrophone = micAudio.Checked,
-                MicrophoneDeviceId = ((MicrophoneInfo)microphone.SelectedItem!).Id,
-                ImageEditorPath = imageApps.SelectedApplication?.Executable ?? "", VideoEditorPath = videoApps.SelectedApplication?.Executable ?? "",
-                ImageEditorArguments = imageApps.SelectedApplication?.Arguments ?? EditorArguments.Default,
-                VideoEditorArguments = videoApps.SelectedApplication?.Arguments ?? EditorArguments.Default
-                , ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications,
-                SelectedImageEditorId = imageApps.SelectedId, SelectedVideoEditorId = videoApps.SelectedId
-            }).ApplyDefaults();
     private static string Expand(string text) => Environment.ExpandEnvironmentVariables(text.Trim().Trim('"'));
     private AppSettings CurrentSelectionSettings() => committed with
     {
@@ -607,7 +536,7 @@ internal sealed partial class SettingsForm : Form
         Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked, ShowPointerGuide = pointerGuideEnabled.Checked,
         SelectionGuideDisplay = (SelectionGuideDisplay)guideDisplay.SelectedIndex,
         ShowMagnifier = magnifierEnabled.Checked, ShareCapturePresentation = shareCapturePresentation.Checked,
-        SnapDistancePixels = (int)snapDistance.Value, GridStepPixels = (int)gridStep.Value
+        SnapDistancePixels = SettingNumber(snapDistance), GridStepPixels = SettingNumber(gridStep)
     };
     private string NotificationAppId() => (notificationApplication?.SelectedItem as NotificationAppItem)?.Id ?? committed.NotificationApplicationId;
     private sealed record NotificationAppItem(string Id, string Label) { public override string ToString() => Label; }
@@ -638,6 +567,7 @@ internal sealed partial class SettingsForm : Form
         if (gridEnabled.Checked == committed.Grid20) gridEnabled.Checked = latest.Grid20;
         if (guideEnabled.Checked == committed.ShowSelectionGuide) guideEnabled.Checked = latest.ShowSelectionGuide;
         committed = committed with { Grid20 = latest.Grid20, ShowSelectionGuide = latest.ShowSelectionGuide };
+        refreshSettingControls?.Invoke();
     }
 
     private static HotkeyEditor KeyField(TableLayoutPanel table, string label, string name, string value, int row)

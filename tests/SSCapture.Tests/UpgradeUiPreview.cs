@@ -55,7 +55,7 @@ internal static partial class Program
         {
             if (settingsForm is null || settingsForm.IsDisposed)
             {
-                settingsForm = new SettingsForm(settings, next => { next.Validate(); settings = next; new SettingsStore(Path.Combine(directory, "preview-settings.json")).Save(next); Log("settings-saved"); return null; }, () => { }, () => []);
+                settingsForm = new SettingsForm(settings, next => { next.Validate(); settings = next; new SettingsStore(Path.Combine(directory, "preview-settings.json")).Save(next); Log("settings-saved"); return null; }, _ => { }, () => []);
                 settingsForm.StartPosition = FormStartPosition.Manual; settingsForm.Bounds = host.Bounds;
             }
             settingsForm.Show(); settingsForm.Activate();
