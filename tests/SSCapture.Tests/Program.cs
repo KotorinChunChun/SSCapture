@@ -11,6 +11,13 @@ internal static partial class Program
         if (args.Contains("--context-stall")) { Console.WriteLine("ready"); Console.In.ReadLine(); Thread.Sleep(30000); return 0; }
         if (args.FirstOrDefault() == "--editor-received") { File.WriteAllText(Path.Combine(args[3], "editor-" + args[1] + ".json"), System.Text.Json.JsonSerializer.Serialize(new { application = args[1], image = args[2] })); return 0; }
         if (args.FirstOrDefault() == "--handoff-test-worker") return HoldTestHandoff(args[1]);
+        if (args is ["--browser-job-tests", var jobs]) return RunBrowserJobTests(jobs);
+        if (args is ["--browser-job-probe", var role, var fixture]) return RunBrowserJobProbe(role, fixture);
+        if (args.FirstOrDefault() == "--browser-control-smoke" && args is not ["--browser-control-smoke", "--interactive", _, _])
+        {
+            Console.Error.WriteLine("専用デスクトップで --browser-control-smoke --interactive <ブラウザーexe> <検証フォルダー> を指定してください。");
+            return 2;
+        }
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         if (args.FirstOrDefault() == "--notification-drag-preview") return NotificationDragPreview(args[1]);
@@ -65,7 +72,7 @@ internal static partial class Program
         if (args.Contains("--overlay-placement-smoke")) return RunOverlayPlacementSmoke();
         if (args.Contains("--presentation-smoke")) return RunPresentationSmoke();
         if (args.Contains("--control-capture-smoke")) return RunControlCaptureSmoke();
-        if (args is ["--browser-control-smoke", var browser, var scratch]) return RunBrowserControlSmoke(browser, scratch);
+        if (args is ["--browser-control-smoke", "--interactive", var browser, var scratch]) return RunBrowserControlSmoke(browser, scratch);
         if (args.Length == 2 && args[0] == "--timer-native-smoke") return RunTimerNativeSmoke(args[1]);
         if (args.Contains("--selection-monitor-smoke")) return RunSelectionMonitorSmoke();
         if (args.Contains("--window-hit-smoke")) return RunWindowHitSmoke();

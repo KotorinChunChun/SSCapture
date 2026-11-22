@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using SSCapture.Capture;
 using SSCapture.Services;
@@ -18,19 +17,19 @@ internal static partial class Program
             <button id="RootButton" style="width:190px;height:75px"><span>Save item</span></button>
             <iframe title="Embedded page" srcdoc="<button id='NestedButton' style='width:170px;height:65px'><span>Open details</span></button>"></iframe></div>
             """);
-        var startup = new ProcessStartInfo(browser) { UseShellExecute = false };
-        foreach (string argument in new[] { "--user-data-dir=" + Path.Combine(directory, "profile"), "--no-first-run",
-            "--no-default-browser-check", "--disable-extensions", "--new-window", new Uri(page).AbsoluteUri })
-            startup.ArgumentList.Add(argument);
-        using var process = Process.Start(startup);
-        CaptureWindow? target = null;
         try
         {
+            using var browserJob = new BrowserFixtureJob();
+            browserJob.Start(browser, ["--user-data-dir=" + Path.Combine(directory, "profile"), "--guest",
+                "--no-first-run", "--no-default-browser-check", "--disable-sync", "--disable-background-mode",
+                "--disable-extensions", "--new-window", new Uri(page).AbsoluteUri], directory);
+            CaptureWindow? target = null;
             Rectangle desktop = CaptureNative.MonitorBounds().Aggregate(Rectangle.Union);
             for (int i = 0; i < 60 && target is null; i++)
             {
                 Thread.Sleep(125);
-                target = CaptureNative.CaptureWindows(desktop).FirstOrDefault(window => window.Title.Contains(marker, StringComparison.Ordinal));
+                target = CaptureNative.CaptureWindows(desktop).FirstOrDefault(window => window.Title.Contains(marker, StringComparison.Ordinal)
+                    && browserJob.Contains((int)window.ProcessId));
             }
             if (target is null) throw new InvalidOperationException("ブラウザーの検証ページを開けませんでした。");
             NativeSmokeInput.FocusFixture(target.Handle);
@@ -65,15 +64,6 @@ internal static partial class Program
             }
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
-        finally
-        {
-            if (target is not null)
-            {
-                try { using var owner = Process.GetProcessById((int)target.ProcessId); owner.CloseMainWindow(); }
-                catch (ArgumentException) { }
-            }
-        }
-
     }
 
     [DllImport("user32.dll")]

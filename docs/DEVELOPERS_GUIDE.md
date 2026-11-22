@@ -60,6 +60,12 @@ dotnet $test --recording-desktop-smoke artifacts/app/tools/ffmpeg.exe artifacts/
 
 ほかに `Command`、`Pinned`、`Preset`、`Recipe`、`Snap`、`Menu` を指定できます。通知からExplorerやOfficeへの実際のドロップと、他アプリが前面にある場合のフォーカスは実機で確認します。
 
+### ブラウザー内のコントロール検証
+
+後片付けの回帰は `dotnet $test --browser-job-tests "$run/browser-jobs"` で実行できます。テスト用の親子プロセスで、通常終了、例外、ランナーの強制終了後に残存プロセスがないことを確認します。
+
+実ブラウザーでDOMを確認する場合は、利用者が明示した専用デスクトップで `dotnet $test --browser-control-smoke --interactive $browser "$run/browser-ui"` を実行します。`$browser` にはChromeまたはEdgeの実行ファイルの絶対パスを指定します。実行ごとに新しいゲスト用プロファイルを作り、初回案内を抑制します。Windowsのジョブでテストのブラウザーと子プロセスをまとめて終了し、通常の終了時にはジョブ内の残存数がゼロになるまで確認します。 [Windowsのジョブオブジェクト](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)
+
 ### 撮影CLIの保存を検証する
 
 `pwsh -File scripts/test.ps1 -Suite Command` では合成画像を使い、座標、入力プリセットの余白、出力プリセットの保存フォルダー、完成パスと終了コードを検証できます。
