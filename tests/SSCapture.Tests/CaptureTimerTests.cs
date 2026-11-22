@@ -35,6 +35,22 @@ internal static partial class Program
             CaptureCommandReject(() => CaptureCommandLine.Parse(["--delay-seconds", "5"]));
             CaptureCommandReject(() => CaptureCommandLine.Parse(["--capture-region", "1", "--delay-seconds", "1", "2", "3", "4"]));
         });
+        Run("プリセット撮影と定期撮影のCLIを往復し、出力の明示指定を優先する", () =>
+        {
+            var settings = new AppSettings().ApplyDefaults();
+            var input = settings.SavedRegions.Single(preset => preset.IsDefault);
+            var output = settings.CapturePresets.Single(preset => preset.IsDefault);
+            var request = CaptureCommandLine.Parse(["--capture-preset", "--input-preset", input.Id, "--interval-seconds", "3", "--count", "2"]);
+            Check(request.UsePresetMode, "入力プリセット方式を読み取れない");
+            Equal<CaptureSchedule?>(new CaptureSchedule.Periodic(3, 2), request.Schedule);
+            Check(CaptureCommandLine.Generate(@"C:\SSCapture.exe", request).Contains("'--capture-preset' '--input-preset'"),
+                "生成コマンドで入力プリセット方式が失われた");
+            var implicitOutput = CaptureCommandLine.Resolve(request, settings);
+            Equal(input.Id, implicitOutput.InputPreset.Id);
+            Equal(OutputDestination.File, implicitOutput.Settings.DefaultDestination);
+            var explicitOutput = CaptureCommandLine.Resolve(request with { OutputPresetId = output.Id }, settings);
+            Equal(output.Destination, explicitOutput.Settings.DefaultDestination);
+        });
         Run("時限の指定秒数は単調時計、指定日時はオフセット時刻を使う", () =>
         {
             var clock = new TimerTestClock();

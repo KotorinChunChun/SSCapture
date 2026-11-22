@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace SSCapture.Capture;
 
-internal sealed class CapturePresentation : Form
+internal sealed class CapturePresentation : NativeWindow, IDisposable
 {
     private readonly Rectangle bounds;
     private nint memoryDc;
@@ -12,30 +12,18 @@ internal sealed class CapturePresentation : Form
     private nint oldBitmap;
     private Bitmap? bitmap;
     private Graphics? drawing;
+    internal bool Visible { get; private set; }
 
     internal CapturePresentation(Rectangle bounds)
     {
         this.bounds = bounds;
-        AutoScaleMode = AutoScaleMode.None;
-        FormBorderStyle = FormBorderStyle.None;
-        StartPosition = FormStartPosition.Manual;
-        Bounds = bounds;
-        ShowInTaskbar = false;
-        TopMost = true;
-        Text = WindowTitle.Create("撮影操作の共有");
-    }
-
-    protected override bool ShowWithoutActivation => true;
-
-    protected override CreateParams CreateParams
-    {
-        get
+        CreateHandle(new CreateParams
         {
-            CreateParams parameters = base.CreateParams;
-            parameters.Style = unchecked((int)0x80000000); // WS_POPUP
-            parameters.ExStyle = CaptureNative.WsExToolWindow | 0x00080000 | 0x00000020 | 0x08000000 | 0x8;
-            return parameters;
-        }
+            Caption = WindowTitle.Create("撮影操作の共有"),
+            X = bounds.X, Y = bounds.Y, Width = bounds.Width, Height = bounds.Height,
+            Style = unchecked((int)0x80000000), // WS_POPUP
+            ExStyle = CaptureNative.WsExToolWindow | 0x00080000 | 0x00000020 | 0x08000000 | 0x8
+        });
     }
 
     protected override void WndProc(ref Message message)
@@ -73,8 +61,9 @@ internal sealed class CapturePresentation : Form
         if (!UpdateLayeredWindowIndirect(Handle, ref update)) return false;
         if (!Visible)
         {
-            Show();
-            CaptureNative.RaiseWithoutActivation(Handle);
+            // Avoid WinForms' active-window bookkeeping for a purely visual layer.
+            if (!CaptureNative.SetWindowPos(Handle, -1, 0, 0, 0, 0, 0x0053)) return false;
+            Visible = true;
         }
         return true;
     }
@@ -105,10 +94,18 @@ internal sealed class CapturePresentation : Form
         oldBitmap = dib = memoryDc = 0;
     }
 
-    protected override void Dispose(bool disposing)
+    internal void Hide()
     {
-        if (disposing) ReleaseSurface();
-        base.Dispose(disposing);
+        if (!Visible) return;
+        _ = ShowWindow(Handle, 0);
+        Visible = false;
+    }
+
+    public void Dispose()
+    {
+        Hide();
+        ReleaseSurface();
+        DestroyHandle();
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -148,4 +145,6 @@ internal sealed class CapturePresentation : Form
     [DllImport("gdi32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool DeleteDC(nint dc);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool UpdateLayeredWindowIndirect(nint window, ref LayeredUpdate update);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(nint window, int command);
 }

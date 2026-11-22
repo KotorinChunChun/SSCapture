@@ -66,7 +66,7 @@ internal static class SettingsTransfer
 
     internal static void Export(string path, AppSettings settings)
     {
-        settings = settings.UpdateDefaultProjections();
+        settings = settings.ApplyDefaults();
         settings.Validate();
         AtomicFile.Write(path, stream => JsonSerializer.Serialize(stream,
             new { Format, FormatVersion, Settings = settings }, ExportOptions), overwrite: false);
@@ -87,9 +87,11 @@ internal static class SettingsTransfer
             preview.AppendLine("適用すると、この実行中に保持した撮影履歴が消去されます。");
         foreach (var app in candidate.ImageEditors.Concat(candidate.VideoEditors))
         {
-            bool available = IsEditorAvailable(app.Executable);
-            preview.AppendLine($"外部アプリ「{app.Name}」 [{(available ? "確認済み" : "未確認・外部アプリで再指定")}]")
-                .AppendLine($"  実行先  {app.Executable}").AppendLine($"  引数  {app.Arguments}");
+            bool executable = app.Launch == ExternalApplicationLaunch.Executable;
+            bool available = executable ? IsEditorAvailable(app.Executable) : new ExternalEditor().CanOpen(app);
+            preview.AppendLine($"外部アプリ「{app.Name}」 [{(available ? "確認済み" : "未確認・外部アプリで再指定")}]");
+            if (executable) preview.AppendLine($"  実行先  {app.Executable}").AppendLine($"  引数  {app.Arguments}");
+            else preview.AppendLine("  起動方法  PNGの関連付け");
         }
 
         foreach (var preset in candidate.CapturePresets)

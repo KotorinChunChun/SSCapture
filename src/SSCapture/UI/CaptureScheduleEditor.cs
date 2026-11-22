@@ -64,8 +64,11 @@ internal sealed class CaptureScheduleEditor : TableLayoutPanel
 
     private void Row(string text, Control value, int index)
     {
-        labels[index] = new Label { Text = text, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new(3, 6, 12, 6) };
-        Controls.Add(labels[index], 0, index);
+        var label = new Label { Text = text, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new(3, 6, 12, 6) };
+        labels[index] = label;
+        label.MinimumSize = label.GetPreferredSize(Size.Empty);
+        label.FontChanged += (_, _) => label.MinimumSize = label.GetPreferredSize(Size.Empty);
+        Controls.Add(label, 0, index);
         Controls.Add(value, 1, index);
     }
 

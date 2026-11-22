@@ -31,8 +31,12 @@ internal sealed class CaptureKeyEditor : UserControl
 
         Choice[] choices = Enum.GetValues<CaptureKeyAction>()
             .Where(action => beforeSelection ? CaptureKeyMap.IsBeforeAction(action) : action != CaptureKeyAction.HighlightWindow)
-            .Select(action => new Choice(action, beforeSelection && action == CaptureKeyAction.SwitchAnchor
-                ? "基点切替（固定サイズ）" : CaptureKeyMap.Describe(action))).ToArray();
+            .Select(action => new Choice(action, action switch
+            {
+                CaptureKeyAction.SelectControl => "部品を選択（長押し）",
+                CaptureKeyAction.SwitchAnchor when beforeSelection => "基点切替（固定サイズ）",
+                _ => CaptureKeyMap.Describe(action)
+            })).ToArray();
 
         for (int index = 0; index < Modifiers.Length; index++)
         {

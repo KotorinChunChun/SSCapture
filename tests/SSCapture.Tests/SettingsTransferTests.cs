@@ -27,13 +27,17 @@ internal static partial class Program
 
             var displays = new[] { new DisplayLayout("old-display", "旧ディスプレイ", new Rectangle(0, 0, 800, 600), 96, 96) };
             var region = RegionCoordinates.FromBounds("移行する範囲", new Rectangle(10, 20, 50, 80), displays) with
-            { Id = "keep-input-id", RecordMicrophone = true, MicrophoneDeviceId = "old-mic" };
+            { Id = "keep-input-id", RecordMicrophone = true, MicrophoneDeviceId = "old-mic",
+                SelectionMethod = Capture.CaptureSelectionMethod.TwoClicks };
             var app = new ExternalApplication { Id = "keep-editor-id", Name = "移行する編集アプリ", Executable = @"C:\旧端末\editor.exe" };
             var input = legacy with
             {
                 SavedRegions = [.. legacy.SavedRegions, region], ImageEditors = [app], CapturePresets = legacy.CapturePresets
-                    .Select(p => p with { ImageEditorId = app.Id }).ToArray(), SelectedImageEditorId = app.Id,
-                GridStepPixels = 5, ShowPointerGuide = false, KeepHistory = false, NotificationDisplay = NotificationDisplay.Display10
+                    .Select(p => p with { ImageEditorId = app.Id, WindowCrop = new(1, 2, 3, 4) }).ToArray(), SelectedImageEditorId = app.Id,
+                PresetCaptureShortcuts = [new("Ctrl+Alt+F6", region.Id, legacy.CapturePresets.Single(p => p.IsDefault).Id)],
+                GridStepPixels = 5, ShowPointerGuide = false, KeepHistory = false, NotificationDisplay = NotificationDisplay.Display10,
+                ShowMagnifier = true, ShareCapturePresentation = true,
+                CaptureBeforeKeys = new(Ctrl: Capture.CaptureKeyAction.SelectControl)
             };
             var export = Path.Combine(directory, "export.json");
             SettingsTransfer.Export(export, input);
@@ -47,6 +51,11 @@ internal static partial class Program
 
             var clone = SettingsTransfer.Read(export);
             Equal(region.Id, clone.SavedRegions.Last().Id);
+            Equal(Capture.CaptureSelectionMethod.TwoClicks, clone.SavedRegions.Last().SelectionMethod);
+            Equal(input.PresetCaptureShortcuts!.Single(), clone.PresetCaptureShortcuts!.Single());
+            Equal(new WindowCrop(1, 2, 3, 4), clone.CapturePresets.Single(p => p.IsDefault).WindowCrop);
+            Check(clone.ShowMagnifier && clone.ShareCapturePresentation, "拡大鏡・配信表示の設定が失われた");
+            Equal(Capture.CaptureKeyAction.SelectControl, clone.CaptureBeforeKeys.Ctrl);
             Equal(app.Id, clone.SelectedImageEditorId);
             Equal(input.CapturePresets.Single(p => p.IsDefault).Id, clone.CapturePresets.Single(p => p.IsDefault).Id);
             Equal(input.FileNamePattern, clone.FileNamePattern);

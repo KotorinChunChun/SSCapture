@@ -11,7 +11,8 @@ internal sealed class SettingsStore(string path)
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter<CaptureMode>(), new JsonStringEnumConverter<OutputDestination>(),
             new JsonStringEnumConverter<NotificationCorner>(), new JsonStringEnumConverter<NotificationDisplay>(),
-            new JsonStringEnumConverter<CaptureAnchor>(), new JsonStringEnumConverter<Capture.CaptureKeyAction>() }
+            new JsonStringEnumConverter<CaptureAnchor>(), new JsonStringEnumConverter<Capture.CaptureKeyAction>(),
+            new JsonStringEnumConverter<Capture.CaptureSelectionMethod>() }
     };
     private static readonly JsonSerializerOptions StrictReadOptions = new(Options) { RespectNullableAnnotations = true };
     private readonly string filePath = Path.GetFullPath(path);

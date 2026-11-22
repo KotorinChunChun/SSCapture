@@ -334,10 +334,21 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
 
     private sealed class CaptureSubmenu(Func<Keys, bool> handleKey) : ToolStripDropDownMenu
     {
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            _ = CaptureNative.SetWindowDisplayAffinity(Handle, CaptureNative.ExcludeFromCapture);
+        }
         protected override bool ProcessCmdKey(ref Message message, Keys keyData) =>
             handleKey(keyData) || base.ProcessCmdKey(ref message, keyData);
         protected override bool ProcessDialogKey(Keys keyData) =>
             handleKey(keyData) || base.ProcessDialogKey(keyData);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        _ = CaptureNative.SetWindowDisplayAffinity(Handle, CaptureNative.ExcludeFromCapture);
     }
 
     protected override bool ProcessCmdKey(ref Message m, Keys keyData) => HandleCommandKey(keyData) || base.ProcessCmdKey(ref m, keyData);

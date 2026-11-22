@@ -1016,11 +1016,13 @@ internal sealed partial class SessionController
         if (menuTransition && !menuOpen)
         {
             if (menuClosedByCommand && menuOwner is { } owner)
-                RestoreAfterMenu(owner, menuGeneration);
+                RestoreAfterMenu(owner, menuGeneration, fromOverlayPress: true);
             else
             {
                 // WinForms can pass the outside press to the overlay after closing the menu.
                 if (overlay != dragOwner && !overlay.IsDisposed) overlay.Capture = false;
+                if (menuOwner is { } outsideOwner)
+                    RestoreAfterMenu(outsideOwner, menuGeneration, fromOverlayPress: true);
                 return;
             }
         }
@@ -1192,11 +1194,12 @@ internal sealed partial class SessionController
         owner.BeginInvoke((Action)(() => RestoreAfterMenu(owner, generation)));
     }
 
-    private void RestoreAfterMenu(CaptureOverlay owner, int generation)
+    private void RestoreAfterMenu(CaptureOverlay owner, int generation, bool fromOverlayPress = false)
     {
         if (completed || refreshing || menuOpen || !menuTransition
             || generation != menuGeneration || owner != menuOwner || owner.IsDisposed) return;
-        if (!CaptureNative.OwnsForegroundWindow() && !(menuClosedByCommand && CaptureNative.ForegroundTransition))
+        if (!fromOverlayPress && !CaptureNative.OwnsForegroundWindow()
+            && !(menuClosedByCommand && CaptureNative.ForegroundTransition))
         {
             Cancel();
             return;

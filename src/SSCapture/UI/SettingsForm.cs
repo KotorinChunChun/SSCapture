@@ -61,8 +61,8 @@ internal sealed class SettingsForm : Form
         Font = new Font("Yu Gothic UI", 12F);
         BackColor = Color.FromArgb(247, 249, 251);
         ForeColor = Color.FromArgb(28, 37, 47);
-        ClientSize = new Size(1280, 820);
-        MinimumSize = SizeFromClientSize(new Size(1200, 720));
+        ClientSize = new Size(1280, 860);
+        MinimumSize = SizeFromClientSize(new Size(1200, 800));
         StartPosition = FormStartPosition.CenterScreen;
         Icon = AppIcon.Create();
         var layout = new TableLayoutPanel { Name = "SettingsLayout", Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 1, RowCount = 3 };
@@ -276,8 +276,11 @@ internal sealed class SettingsForm : Form
         // 旧単独ページを廃止し、プリセットの編集欄だけを公開する。
         basic.Controls.Clear();
         basic.RowStyles.Clear(); basic.RowCount = 6;
-        foreach (int height in new[] { 108, 120, 72, 168, 96 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
-        basic.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        foreach (int height in new[] { 108, 120, 72, 150, 84, 46 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        basic.Dock = DockStyle.Top;
+        basic.AutoSize = true;
+        basic.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        ((TabPage)basic.Parent!).AutoScroll = true;
 
         var selectionOptions = BasicFields(34, 34, 34);
         limitToStartingMonitor = BasicCheckBox("LimitToStartingMonitor", "開始したモニター内で選択する", settings.LimitToStartingMonitor);
@@ -302,9 +305,9 @@ internal sealed class SettingsForm : Form
         guideOptions.Controls.AddRange([guideEnabled, pointerGuideEnabled, magnifierEnabled]);
         Add(basic, "操作ガイド", guideOptions, 2);
 
-        var presetSummaries = BasicFields(80, 80);
-        var inputSummary = MakeButton("", "DefaultInputSummary", ButtonRole.Secondary); inputSummary.AutoSize = false; inputSummary.Height = 76;
-        var outputSummary = MakeButton("", "DefaultOutputSummary", ButtonRole.Secondary); outputSummary.AutoSize = false; outputSummary.Height = 76;
+        var presetSummaries = BasicFields(72, 72);
+        var inputSummary = MakeButton("", "DefaultInputSummary", ButtonRole.Secondary); inputSummary.AutoSize = false; inputSummary.Height = 68;
+        var outputSummary = MakeButton("", "DefaultOutputSummary", ButtonRole.Secondary); outputSummary.AutoSize = false; outputSummary.Height = 68;
         Add(presetSummaries, "入力", inputSummary, 0); Add(presetSummaries, "出力", outputSummary, 1);
         Add(basic, "既定プリセット", presetSummaries, 3);
         var startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration());

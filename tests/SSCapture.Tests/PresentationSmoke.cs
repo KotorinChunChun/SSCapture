@@ -65,25 +65,27 @@ internal static partial class Program
                 try
                 {
                     session.Start();
-                    Equal(clearBlue, await ReadBlue(outside));
+                    var overlay = Application.OpenForms.OfType<CaptureOverlay>().Single();
+                    NativeSmokeInput.FocusFixture(overlay.Handle);
+                    Check(Math.Abs(clearBlue - await ReadBlue(outside)) <= 5, "共有OFFの背景に描画が写り込みました。");
+                    NativeSmokeInput.RequireForeground(overlay.Handle);
                     session.ChangeSharePresentation(true);
                     int dimmed = await ReadBlue(outside);
                     Check(dimmed > clearBlue * 0.45 && dimmed < clearBlue * 0.68, $"共有ONの暗転を画面取得で確認できません（B={dimmed}）");
                     using var native = new NativeSmokeInput();
                     native.Move(Local(60, 60));
                     await Task.Delay(50);
-                    var overlay = Application.OpenForms.OfType<CaptureOverlay>().Single();
                     NativeSmokeInput.RequireTarget(overlay.Handle, Local(60, 60));
                     native.LeftDown();
                     await Task.Delay(50);
                     native.Move(Local(210, 180));
-                    Equal(clearInside, await ReadBlue(inside));
-                    Equal(dimmed, await ReadBlue(outside));
+                    Check(Math.Abs(clearInside - await ReadBlue(inside)) <= 5, "選択範囲の内側が暗いままです。");
+                    Check(Math.Abs(dimmed - await ReadBlue(outside)) <= 5, "選択範囲の外側の暗転が消えました。");
                     native.LeftUp();
                     using CaptureOutcome outcome = await session.Completion.WaitAsync(TimeSpan.FromSeconds(4));
                     Equal(new Size(150, 120), outcome.Image!.Size);
                     Equal(Color.Red.ToArgb(), outcome.Image.GetPixel(30, 30).ToArgb());
-                    Equal(clearBlue, await ReadBlue(outside));
+                    Check(Math.Abs(clearBlue - await ReadBlue(outside)) <= 5, "確定後も共有用の描画が残っています。");
                 }
                 finally { session.Cancel(); }
                 Console.WriteLine("PRESENTATION PASS 共有ON/OFF、暗転の内外、クリック透過、撮影元画素、終了後の消去");

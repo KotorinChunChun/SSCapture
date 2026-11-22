@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
+using SSCapture.Services;
 
 namespace SSCapture.Tests;
 
@@ -8,9 +9,9 @@ internal static partial class Program
 {
     private static int OpenStoreEditorSmoke(string[] args)
     {
-        if (args.Length != 3 || args[1] is not ("photos" or "clipchamp"))
+        if (args.Length != 3 || args[1] is not ("photos" or "clipchamp" or "snipping" or "screenpresso"))
         {
-            Console.Error.WriteLine("使い方: --store-editor-open photos|clipchamp <検証用ファイル>");
+            Console.Error.WriteLine("使い方: --store-editor-open photos|clipchamp|snipping|screenpresso <検証用ファイル>");
             return 2;
         }
 
@@ -18,10 +19,18 @@ internal static partial class Program
         {
             string path = Path.GetFullPath(args[2]);
             if (!File.Exists(path)) throw new FileNotFoundException("検証用ファイルが見つかりません。", path);
-            string appId = args[1] == "photos"
-                ? "Microsoft.Windows.Photos_8wekyb3d8bbwe!App"
-                : "Clipchamp.Clipchamp_yxz26nhyzhsrt!App";
-            OpenStoreFile(appId, path);
+            if (args[1] is "snipping" or "screenpresso")
+            {
+                bool snipping = args[1] == "snipping";
+                var app = new ExternalApplication { Name = snipping ? "Snipping Tool" : "Screenpresso",
+                    Launch = snipping ? ExternalApplicationLaunch.SnippingToolPng : ExternalApplicationLaunch.ScreenpressoPng };
+                new ExternalEditor().Resolve(app)(path);
+            }
+            else
+            {
+                string appId = args[1] == "photos" ? "Microsoft.Windows.Photos_8wekyb3d8bbwe!App" : "Clipchamp.Clipchamp_yxz26nhyzhsrt!App";
+                OpenStoreFile(appId, path);
+            }
             Console.WriteLine($"HANDED OFF {args[1]}");
             return 0;
         }
