@@ -21,7 +21,7 @@ internal static partial class Program
                 _ = overlay.Handle;
                 Check(session.PointerHint is null, "未選択のウィンドウ名が表示された");
                 session.MouseDown(overlay, MouseButtons.Left, new(-300, -50));
-                Equal("ウィンドウを撮影　Esc / 右クリックで取り消し\nテストウィンドウ（" + process.ProcessName + "）", session.PointerHint);
+                Equal("ウィンドウを撮影　Esc / 右クリックで取り消し\nテストウィンドウ（" + process.ProcessName + "）\n座標（-340, -80　180 × 120）　余白0px", session.PointerHint);
                 session.MoveTo(new(-211, 27));
                 Equal("選択範囲を撮影　Esc / 右クリックで取り消し\n座標（-300, -50　89 × 77）", session.PointerHint);
                 session.AbortSelection();

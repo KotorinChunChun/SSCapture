@@ -285,7 +285,7 @@ internal static partial class Program
             settingsForm.ShowCaptureSettings(new(CaptureSettingsDestination.Shortcut, ShortcutControlName: "CaptureKeysSpace"));
             Equal("ショートカット", tabs.SelectedTab!.Text);
             var shortcutTabs = (TabControl)Find("ShortcutGroups");
-            Equal("撮影ドラッグ中の操作", shortcutTabs.SelectedTab!.Text);
+            Equal("撮影ドラッグ中", shortcutTabs.SelectedTab!.Text);
         });
         Run("操作ガイドと録画音声のチェックは各項目が独立し今回の撮影設定へ渡る", () =>
         {

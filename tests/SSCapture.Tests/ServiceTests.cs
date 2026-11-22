@@ -219,8 +219,8 @@ internal static partial class Program
             Equal<HotkeyBinding?>(null, HotkeyBinding.Parse("  "));
             Equal<HotkeyBinding?>(null, HotkeyBinding.Parse(null));
             HotkeyAssignment[] defaults = HotkeyBinding.ReadAssignments(new AppSettings());
-            Equal(14, defaults.Length);
-            Equal(13, defaults.Count(item => item.Intent == CaptureIntent.Screenshot));
+            Equal(13, defaults.Length);
+            Equal(12, defaults.Count(item => item.Intent == CaptureIntent.Screenshot));
             Equal(1, defaults.Count(item => item.Intent == CaptureIntent.Recording));
         });
         Run("不正キー・Escape・修飾単独・重複修飾を拒否", () =>

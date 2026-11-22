@@ -58,9 +58,11 @@ internal static partial class Program
             var message = form.Controls.Find("StartupState", true).Single();
             var screenGuide = form.Controls.Find("ShowSelectionGuide", true).Single();
             var pointerGuide = form.Controls.Find("ShowPointerGuide", true).Single();
-            Check(screenGuide.Parent!.ClientRectangle.Contains(screenGuide.Bounds)
-                && pointerGuide.Parent!.ClientRectangle.Contains(pointerGuide.Bounds) && screenGuide.Right <= pointerGuide.Left,
-                "ガイドのチェック欄が切れるか重なる");
+            var magnifier = form.Controls.Find("ShowMagnifier", true).Single();
+            var display = form.Controls.Find("SelectionGuideDisplay", true).Single();
+            Check(new[] { screenGuide, pointerGuide, magnifier, display }.All(field => field.Parent!.ClientRectangle.Contains(field.Bounds))
+                && screenGuide.Right <= display.Left && screenGuide.Bottom <= pointerGuide.Top && pointerGuide.Bottom <= magnifier.Top,
+                "ガイドのチェック欄や表示先が切れるか重なる");
             Check(editor.Parent!.ClientRectangle.Contains(editor.Bounds), "自動起動欄が親領域外");
             Check(check.Parent!.ClientRectangle.Contains(check.Bounds) && apply.Parent!.ClientRectangle.Contains(apply.Bounds), "自動起動ボタンが親領域外");
             var label = form.Controls.Find("StartupLabel", true).Single();
