@@ -6,6 +6,8 @@ Windows 11用の汎用スクリーンショットツールです。Windows標準
 
 [撮影中の画面例と操作ガイド](docs/usage.md#撮影中の画面)
 
+インストールは [Releases](https://github.com/KotorinChunChun/SSCapture/releases) から行ってください。
+
 ## 想定活用フロー
 
 ### インプット
@@ -117,7 +119,7 @@ CapchunScreenのウィンドウ取得はWGC（Windows Graphics Capture）を使�
 
 一方、ダイアログやメニューを含む複数ウィンドウをまとめて撮影したい場合や、見えている画面の任意の領域を囲みたい場合は、本ツールをおすすめします。用途が重なる部分は、操作感や好みで選んでください。
 
-## GitHub開発版インストーラー
+## インストール方法
 
 [Releases](https://github.com/KotorinChunChun/SSCapture/releases)でWindows 11 x64向けのランタイム同梱インストーラーを配布します。未署名の開発版です。設定・保存した撮影結果は削除時も保持します。
 
