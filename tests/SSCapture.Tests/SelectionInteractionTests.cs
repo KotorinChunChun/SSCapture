@@ -94,12 +94,17 @@ internal static partial class Program
             try
             {
                 _ = overlay.Handle;
+                Check(session.MagnifierMarksOrigin, "起点を選ぶ前に赤枠がない");
                 Click(new(240, 180));
                 Check(!session.Completion.IsCompleted && session.Dragging, "1点目で選択を終えた");
+                Check(session.MagnifierMarksOrigin, "起点を決めた直後に赤枠が消えた");
+                Equal(new Point(240, 180), session.MagnifierSample);
                 Click(new(240, 180));
                 Check(!session.Completion.IsCompleted, "ゼロ寸法を確定した");
                 session.MoveTo(new(40, 50));
                 Equal(new Rectangle(40, 50, 200, 130), session.DisplaySelection);
+                Check(!session.MagnifierMarksOrigin, "終点でも起点用の赤枠が表示された");
+                Equal(new Point(40, 50), session.MagnifierSample);
                 Click(new(40, 50));
                 using var result = session.Completion.GetAwaiter().GetResult();
                 Equal(new Rectangle(40, 50, 200, 130), result.Selection!.Bounds);

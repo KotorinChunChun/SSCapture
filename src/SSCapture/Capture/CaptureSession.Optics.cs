@@ -24,9 +24,12 @@ internal sealed partial class SessionController
         }
     }
 
-    internal Point MagnifierSample => !SelectingControl && pressedButton != MouseButtons.Middle
+    internal bool MagnifierMarksOrigin => Mode == CaptureMode.Rectangle && !gesture.HasDragged
+        && !SelectingControl && pressedButton != MouseButtons.Middle && !targetWheelUsed;
+
+    internal Point MagnifierSample => MagnifierMarksOrigin || (!SelectingControl && pressedButton != MouseButtons.Middle
         && (Mode == CaptureMode.Rectangle || Mode == CaptureMode.FixedRegion && gesture.FixedPosition is null)
-        && MarginSelection is null ? gesture.MagnifierPoint : Pointer;
+        && MarginSelection is null) ? gesture.MagnifierPoint : Pointer;
 
     internal Rectangle MagnifierSelection => pressedButton == MouseButtons.Middle ? gesture.MonitorAt(Pointer)
         : UsesWindowSource && !SelectingControl && PreviewFrame is null ? Rectangle.Empty : DisplaySelection;

@@ -71,7 +71,7 @@ internal static class CaptureMagnifier
     }
 
     internal static void Draw(Graphics graphics, Rectangle lens, Bitmap frame, Rectangle frameBounds, Point sample,
-        Rectangle selection = default, IReadOnlyList<Point>? polygon = null)
+        Rectangle selection = default, IReadOnlyList<Point>? polygon = null, bool markOrigin = false)
     {
         const int pixels = Radius * 2 + 1;
         Rectangle requested = new(sample.X - Radius, sample.Y - Radius, pixels, pixels);
@@ -89,7 +89,7 @@ internal static class CaptureMagnifier
             graphics.Restore(state);
         }
 
-        if (selection.Width > 0 && selection.Height > 0)
+        if (!markOrigin && selection.Width > 0 && selection.Height > 0)
         {
             using var shape = polygon is { Count: >= 3 } ? new GraphicsPath(FillMode.Alternate) : null;
             if (shape is not null) shape.AddPolygon(polygon!.ToArray());
@@ -115,6 +115,7 @@ internal static class CaptureMagnifier
         }
         graphics.DrawRectangle(Pens.Black, lens.X, lens.Y, lens.Width - 1, lens.Height - 1);
         int centerX = lens.X + Radius * Scale, centerY = lens.Y + Radius * Scale;
-        graphics.DrawRectangle(Pens.White, centerX + 1, centerY + 1, Scale - 3, Scale - 3);
+        if (markOrigin) graphics.DrawRectangle(Pens.Red, centerX, centerY, Scale - 1, Scale - 1);
+        else graphics.DrawRectangle(Pens.White, centerX + 1, centerY + 1, Scale - 3, Scale - 3);
     }
 }
