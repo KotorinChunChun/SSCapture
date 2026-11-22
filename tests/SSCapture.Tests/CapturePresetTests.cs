@@ -67,12 +67,13 @@ internal static partial class Program
             using var menu = new CaptureContextMenu(OutputDestination.Clipboard, _ => { }, () => { }, () => { },
                 defaultPadding: 7, changePadding: p => padding = p, presets: [preset], applyPreset: p => selected = p);
             var margins = (ToolStripMenuItem)menu.Command("ScreenshotPaddingMenu")!;
-            Equal("画像の余白（7px）", margins.Text); Equal(4, margins.DropDownItems.Count);
+            Equal("白い余白（7px）", margins.Text); Equal(4, margins.DropDownItems.Count);
             Equal("0px,10px,20px,50px", string.Join(",", margins.DropDownItems.Cast<ToolStripItem>().Select(i => i.Text)));
             ((ToolStripMenuItem)margins.DropDownItems[2]).PerformClick(); Equal(20, padding);
             ((ToolStripMenuItem)margins.DropDownItems[3]).PerformClick(); Equal(50, padding);
-            menu.SetPadding(50); Equal("画像の余白（50px）", margins.Text);
+            menu.SetPadding(50); Equal("白い余白（50px）", margins.Text);
             ((ToolStripMenuItem)margins.DropDownItems[0]).PerformClick(); Equal(0, padding);
+            Check(menu.Command("CaptureOutputGroup").DropDownItems.Contains(margins), "白い余白が出力メニューにない");
             var presets = (ToolStripMenuItem)menu.Command("CapturePresetMenu")!;
             ((ToolStripMenuItem)presets.DropDownItems[0]).PerformClick(); Equal(preset.Id, selected!.Id);
         });
@@ -83,11 +84,16 @@ internal static partial class Program
             var editor = (CapturePresetEditor)form.Controls.Find("CapturePresetEditor", true).Single();
             form.Controls.Find("CapturePresetName", true).Single().Text = "資料";
             editor.StoreCurrent(); Equal(3, editor.Presets.Length);
-            Check(form.Controls.Find("PresetPaddingPixels", true).Length == 0, "出力側に重複余白がある");
+            Equal(1, form.Controls.Find("WhitePaddingPixels", true).Length);
             ((ComboBox)form.Controls.Find("ScreenshotColorDepth", true).Single()).SelectedIndex = (int)ScreenshotColorDepth.Indexed4;
             editor.StoreCurrent(); Equal(3, editor.Presets.Length); Equal(ScreenshotColorDepth.Indexed4, editor.Presets[0].ColorDepth);
             Equal(3, saved!.CapturePresets.Length); Equal(ScreenshotColorDepth.Indexed4, saved.CapturePresets[0].ColorDepth);
             Equal(10, saved.ScreenshotPaddingPixels);
+            form.Controls.Find("WhitePaddingPixels", true).Single().Text = "0";
+            editor.StoreCurrent();
+            Equal<int?>(0, saved.CapturePresets[0].WhitePaddingPixels);
+            Equal(0, saved.ApplyDefaults().ScreenshotPaddingPixels);
+            Equal(10, saved.SavedRegions.Single(p => p.IsDefault).PaddingPixels);
         });
         Run("プリセットは選択結果から共通出力まで適用され余白と命名を共有", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {

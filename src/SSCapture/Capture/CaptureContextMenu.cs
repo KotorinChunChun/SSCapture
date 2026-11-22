@@ -127,7 +127,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         }
         if (changePadding is not null)
         {
-            var parent = Menu("画像の余白", "ScreenshotPaddingMenu", range.DropDownItems);
+            var parent = Menu("白い余白", "ScreenshotPaddingMenu", output.DropDownItems);
             foreach (int pixels in new[] { 0, 10, 20, 50 }) paddings[pixels] = Item($"{pixels}px", "Padding" + pixels, () => changePadding(pixels), parent.DropDownItems);
             SetPadding(defaultPadding);
         }
@@ -289,7 +289,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     internal void SetGuide(bool enabled) { var item = AllCommands.FirstOrDefault(i => i.Name == "ShowSelectionGuide"); if (item is not null) item.Checked = enabled; }
     internal void SetRatio(CaptureAspectRatio ratio) { foreach (var pair in ratios) pair.Value.Checked = pair.Key == ratio; }
     internal void SetPadding(int pixels)
-    { foreach (var pair in paddings) pair.Value.Checked = pair.Key == pixels; var parent = AllCommands.FirstOrDefault(i => i.Name == "ScreenshotPaddingMenu"); if (parent is not null) parent.Text = $"画像の余白（{pixels}px）"; }
+    { foreach (var pair in paddings) pair.Value.Checked = pair.Key == pixels; var parent = AllCommands.FirstOrDefault(i => i.Name == "ScreenshotPaddingMenu"); if (parent is not null) parent.Text = $"白い余白（{pixels}px）"; }
     internal void SetDestination(OutputDestination selected)
     { currentDestination = selected; foreach (var pair in destinations) pair.Value.Checked = selected.HasFlag(pair.Key); var item = AllCommands.FirstOrDefault(i => i.Name == "MetadataModeMenu"); if (item is not null) item.Enabled = selected.HasFlag(OutputDestination.File); }
     internal void UpdateEditing(AppSettings settings, Size size, CaptureAnchor anchor, bool limited)

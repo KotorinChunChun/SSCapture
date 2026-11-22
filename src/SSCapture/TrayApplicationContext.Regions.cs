@@ -33,7 +33,8 @@ internal sealed partial class TrayApplicationContext
             PrepareCaptureUi();
             Rectangle bounds = RegionCoordinates.Resolve(region, RegionCoordinates.ReadDisplays());
             DateTimeOffset capturedAt = DateTimeOffset.Now;
-            var regionSettings = presetCapture?.Settings ?? (region.ProfileVersion >= 1 ? region.Apply(settings) : settings);
+            var regionSettings = presetCapture?.Settings ?? (region.ProfileVersion >= 1
+                ? ResolvedPresetCapture.Resolve(settings, region.Id, null).Settings : settings);
             var capture = await InstantCapture.TakeWithContextAsync(bounds, regionSettings);
             using var image = capture.Image;
             StoreStatus(await InstantCapture.DeliverAsync(image, regionSettings, capturedAt, output, regionName: region.Name, captureBounds: bounds, metadata: capture.Metadata, preserveOutputs: presetCapture is { LegacyInstantOutput: false }));

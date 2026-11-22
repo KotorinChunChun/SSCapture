@@ -11,7 +11,7 @@ internal sealed partial class SettingsForm : Form
     private readonly TextBox directory, imageEditor, videoEditor, imageArguments, videoArguments, fileNamePattern, ocrSeparator, oneOcrDirectory;
     private readonly HotkeyEditor lastRecipeKey;
     private readonly CaptureKeyEditor captureBeforeKeys, captureKeys;
-    private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration, screenshotPadding;
+    private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration;
     private readonly ComboBox screenshotColorDepth;
     private readonly ComboBox metadataMode;
     private readonly CheckBox dimCaptureBackground;
@@ -97,9 +97,6 @@ internal sealed partial class SettingsForm : Form
         { Text = text, Name = name, AutoSize = true, Checked = settings.DefaultDestination.HasFlag(value), Margin = new Padding(0, 3, 12, 0) };
         freeze = Toggle(basic, "撮影タイミング", "FreezeFrame", "撮影開始時の画面を固定", settings.FreezeFrame, 2);
         openFolderAfterSave = Toggle(basic, "保存後", "OpenFolderAfterSave", "保存フォルダを開く", settings.OpenFolderAfterSave, 3);
-        screenshotPadding = new NumericUpDown { Name = "ScreenshotPaddingPixels", Minimum = 0,
-            Maximum = ScreenshotPadding.MaximumPixels, DecimalPlaces = 0, Increment = 1, Value = settings.ScreenshotPaddingPixels };
-        Add(basic, "画像の余白 (px)", screenshotPadding, 5);
         screenshotColorDepth = Combo(basic, "静止画の減色", "ScreenshotColorDepth", 6);
         screenshotColorDepth.Items.AddRange(["減色なし", "256色（8ビット）", "16色（4ビット）"]);
         screenshotColorDepth.SelectedIndex = (int)settings.ScreenshotColorDepth;
@@ -371,7 +368,7 @@ internal sealed partial class SettingsForm : Form
         directory = (TextBox)presetEditor.Controls.Find("SaveDirectory", true).Single(); fileNamePattern = (TextBox)presetEditor.Controls.Find("FileNamePattern", true).Single(); ocrSeparator = (TextBox)presetEditor.Controls.Find("OcrSeparator", true).Single();
         clipboardOutput = (CheckBox)presetEditor.Controls.Find("ClipboardOutput", true).Single(); fileOutput = (CheckBox)presetEditor.Controls.Find("FileOutput", true).Single(); externalOutput = (CheckBox)presetEditor.Controls.Find("ExternalOutput", true).Single();
         openFolderAfterSave = (CheckBox)presetEditor.Controls.Find("OpenFolderAfterSave", true).Single(); screenshotColorDepth = (ComboBox)presetEditor.Controls.Find("ScreenshotColorDepth", true).Single(); metadataMode = (ComboBox)presetEditor.Controls.Find("MetadataMode", true).Single();
-        screenshotPadding = (NumericUpDown)inputPresetEditor.Controls.Find("ScreenshotPaddingPixels", true).Single();
+
         var commandPage = new TabPage("コマンド生成") { BackColor = BackColor, Padding = new Padding(8) };
         captureCommand = new CaptureCommandControl(() => committed, SetStatus);
         commandPage.Controls.Add(captureCommand); tabs.TabPages.Add(commandPage);

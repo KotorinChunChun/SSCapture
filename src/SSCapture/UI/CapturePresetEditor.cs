@@ -5,7 +5,7 @@ namespace SSCapture.UI;
 internal sealed class CapturePresetEditor : UserControl
 {
     private readonly ListBox list;
-    private readonly TextBox presetName, directory, pattern, separator;
+    private readonly TextBox presetName, directory, pattern, separator, whitePadding;
     private readonly CheckBox clipboard, file, external, pinned, openFolder;
     private readonly ComboBox imageApp, videoApp, metadataMode, color;
     private readonly NumericUpDown cropTop, cropBottom, cropLeft, cropRight;
@@ -96,6 +96,11 @@ internal sealed class CapturePresetEditor : UserControl
         output.SetColumnSpan(output.Controls[output.Controls.Count - 1], 2);
         output.Controls.Add(cropFields, 0, 5); output.SetColumnSpan(cropFields, 2);
         output.RowStyles[5].Height = 62;
+        whitePadding = new TextBox { Name = "WhitePaddingPixels", MaxLength = 4, PlaceholderText = "旧入力の値を引き継ぐ（未指定の場合は0）" };
+        Add(output, "白い余白（px）", whitePadding, 6);
+        var paddingHint = new ToolTip();
+        paddingHint.SetToolTip(whitePadding, "静止画の外側に上下左右同じ幅の白枠を追加します。0で余白なし。空欄は旧入力の余白を引き継ぎ、旧設定がなければ0pxです。");
+        Disposed += (_, _) => paddingHint.Dispose();
         NumericUpDown AddCrop(string title, string edge, int column)
         {
             cropFields.Controls.Add(new Label { Text = title, Anchor = AnchorStyles.Left, AutoSize = true }, column, 0);
@@ -119,10 +124,10 @@ internal sealed class CapturePresetEditor : UserControl
             item.Click += (_, _) => SaveNew(action);
             choices.Items.Add(item);
         }
-        Choice("新規", "NewCapturePreset", () => Fill(CapturePreset.FromSettings(UniqueName("出力プリセット"), CurrentSettings())));
+        Choice("新規", "NewCapturePreset", () => Fill(CapturePreset.FromSettings(UniqueName("出力プリセット"), CurrentSettings()) with { WhitePaddingPixels = 0 }));
         Choice("直前の出力設定", "PreviousCapturePreset", () =>
         {
-            if (PreviousOutput is not null) Fill(CapturePreset.FromSettings(UniqueName("直前の出力設定"), PreviousOutput));
+            if (PreviousOutput is not null) Fill(CapturePreset.FromSettings(UniqueName("直前の出力設定"), PreviousOutput) with { WhitePaddingPixels = PreviousOutput.ScreenshotPaddingPixels });
         });
         add.Click += (_, _) => { choices.Items[1].Enabled = PreviousOutput is not null; choices.Show(add, new Point(0, add.Height)); };
         Disposed += (_, _) => choices.Dispose();
@@ -212,6 +217,7 @@ internal sealed class CapturePresetEditor : UserControl
         try
         {
         RefreshApps(imageApp, CurrentSettings().ImageEditors, p.ImageEditorId); RefreshApps(videoApp, CurrentSettings().VideoEditors, p.VideoEditorId);
+        whitePadding.Text = p.WhitePaddingPixels?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "";
         cropTop.Value = p.WindowCrop.Top; cropBottom.Value = p.WindowCrop.Bottom;
         cropLeft.Value = p.WindowCrop.Left; cropRight.Value = p.WindowCrop.Right;
         presetName.Text = p.Name; directory.Text = p.SaveDirectory; pattern.Text = p.FileNamePattern; separator.Text = p.OcrSeparator; color.SelectedIndex = (int)p.ColorDepth; openFolder.Checked = p.OpenFolderAfterSave; metadataMode.SelectedIndex = (int)p.MetadataMode;
@@ -230,9 +236,17 @@ internal sealed class CapturePresetEditor : UserControl
         Id = editing?.Id ?? Guid.NewGuid().ToString("N"), IsDefault = editing?.IsDefault == true, Name = presetName.Text.Trim(), BuiltInKey = editing?.BuiltInKey,
         SaveDirectory = Environment.ExpandEnvironmentVariables(directory.Text.Trim().Trim('"')), FileNamePattern = pattern.Text, ColorDepth = (ScreenshotColorDepth)color.SelectedIndex, OpenFolderAfterSave = openFolder.Checked, OcrSeparator = separator.Text,
         ImageEditorId = (imageApp.SelectedItem as ExternalApplication)?.Id, VideoEditorId = (videoApp.SelectedItem as ExternalApplication)?.Id, MetadataMode = (CaptureMetadataMode)metadataMode.SelectedIndex,
+        WhitePaddingPixels = ReadPadding(), PaddingPixels = editing?.PaddingPixels ?? 0,
         WindowCrop = new((int)cropTop.Value, (int)cropBottom.Value, (int)cropLeft.Value, (int)cropRight.Value),
         Destination = (clipboard.Checked ? OutputDestination.Clipboard : 0) | (file.Checked ? OutputDestination.File : 0) | (external.Checked ? OutputDestination.ExternalApp : 0) | (pinned.Checked ? OutputDestination.Pinned : 0)
     };
+    private int? ReadPadding()
+    {
+        if (string.IsNullOrWhiteSpace(whitePadding.Text)) return null;
+        if (int.TryParse(whitePadding.Text, out int pixels) && pixels is >= 0 and <= ScreenshotPadding.MaximumPixels)
+            return pixels;
+        throw new ArgumentException("白い余白は0～4096pxで指定してください。");
+    }
     internal void StoreCurrent()
     {
         if (storing) return;

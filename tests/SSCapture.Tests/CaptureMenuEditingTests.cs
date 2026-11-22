@@ -58,9 +58,9 @@ internal static partial class Program
                 var menu = session.SelectionMenu;
                 Equal("InputPresetMenu,CapturePresetMenu,CaptureRangeGroup,CaptureOutputGroup,CaptureOperationGroup,CaptureSettingsMenu,CancelCapture",
                     string.Join(',', menu.Items.OfType<ToolStripMenuItem>().Select(i => i.Name)));
-                foreach (string name in new[] { "CaptureModeMenu", "FixedAnchorMenu", "ScreenshotPaddingMenu", "FreezeFrame", "IncludeCursor" })
+                foreach (string name in new[] { "CaptureModeMenu", "FixedAnchorMenu", "FreezeFrame", "IncludeCursor" })
                     Check(menu.Command("CaptureRangeGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
-                foreach (string name in new[] { "ScreenshotColorDepthMenu", "MetadataModeMenu" })
+                foreach (string name in new[] { "ScreenshotColorDepthMenu", "MetadataModeMenu", "ScreenshotPaddingMenu" })
                     Check(menu.Command("CaptureOutputGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
                 foreach (string name in new[] { "LimitToStartingMonitor", "DimCaptureBackground", "Grid20", "ShowSelectionGuide", "ShowPointerGuide" })
                     Check(menu.Command("CaptureOperationGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");

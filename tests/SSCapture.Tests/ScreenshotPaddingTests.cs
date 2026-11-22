@@ -76,28 +76,34 @@ internal static partial class Program
                 Equal(json, File.ReadAllText(path));
             }
         }));
-        Run("基本設定の白余白は整数pxで保存し初期値を復元", () =>
+        Run("出力プリセットの白い余白は整数pxで保存し空欄で旧設定を引き継ぐ", () =>
         {
             AppSettings? saved = null;
             using var form = new SettingsForm(new AppSettings { ScreenshotPaddingPixels = 12 }, next => { saved = next; return null; }, _ => { }, () => []);
-            var input = (NumericUpDown)form.Controls.Find("ScreenshotPaddingPixels", true).Single();
+            var input = (TextBox)form.Controls.Find("WhitePaddingPixels", true).Single();
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
             Equal("基本", tabs.TabPages[0].Text);
-            Check(tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "入力プリセット").Contains(input), "余白欄が入力プリセットにない");
-            Equal(12m, input.Value); Equal(0m, input.Minimum); Equal(4096m, input.Maximum);
-            Equal(0, input.DecimalPlaces); Equal(1m, input.Increment);
+            Check(tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "出力プリセット").Contains(input), "余白欄が出力プリセットにない");
+            Equal("", input.Text);
             foreach (int pixels in new[] { 0, 20, 4096 })
             {
-                input.Value = pixels;
-                ConsolidationClick(form, "SaveRegion");
+                input.Text = pixels.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                ConsolidationClick(form, "StoreCapturePreset");
                 Equal(pixels, saved!.ScreenshotPaddingPixels);
             }
+            input.Text = "4097";
+            ConsolidationClick(form, "StoreCapturePreset");
+            Equal(4096, saved!.ScreenshotPaddingPixels);
+            input.Clear();
+            ConsolidationClick(form, "StoreCapturePreset");
+            Equal(12, saved!.ScreenshotPaddingPixels);
+            form.SelectCategory("出力プリセット");
             form.Size = form.MinimumSize;
             _ = form.Handle; foreach (var child in Descendants(form)) _ = child.Handle;
             LayoutTree(form);
             Check(input.Height >= 24 && input.Parent!.ClientRectangle.Contains(input.Bounds), "余白欄が見切れる");
             var basic = (TableLayoutPanel)input.Parent!;
-            Equal(4, basic.GetRow(input));
+            Equal(6, basic.GetRow(input));
             form.Height += 500;
             LayoutTree(form);
             var label = basic.GetControlFromPosition(0, basic.GetRow(input))!;

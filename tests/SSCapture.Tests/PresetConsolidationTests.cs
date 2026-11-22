@@ -233,7 +233,7 @@ internal static partial class Program
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
             Equal("基本,通知,入力プリセット,出力プリセット,ショートカット,外部アプリ,コマンド生成,履歴", string.Join(',', tabs.TabPages.Cast<TabPage>().Select(p => p.Text)));
             var input = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "入力プリセット"); var output = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "出力プリセット");
-            Check(input.Contains(form.Controls.Find("ScreenshotPaddingPixels", true).Single()), "入力に余白がない");
+            Check(output.Contains(form.Controls.Find("WhitePaddingPixels", true).Single()), "出力に白い余白がない");
             Check(output.Contains(form.Controls.Find("ScreenshotColorDepth", true).Single()), "出力に減色がない");
             Check(tabs.TabPages[0].Contains(form.Controls.Find("LimitToStartingMonitor", true).Single()), "モニタ制限が基本にない");
             Check(!((RegionManagerForm)input.Controls[0]).AutoScroll, "入力にスクロールがある");
@@ -301,10 +301,10 @@ internal static partial class Program
             try
             {
                 Check(!session.InputPresetModified && !session.OutputPresetModified, "開始直後に変更扱い");
-                session.ChangePadding(10); session.ChangeColor(ScreenshotColorDepth.Indexed4);
+                session.ChangePadding(10); session.ChangeColor(ScreenshotColorDepth.Indexed4); session.ChangeAspectRatio(CaptureAspectRatio.Wide);
                 Check(session.InputPresetModified && session.OutputPresetModified, "差分が表示されない");
                 Check(session.SelectionMenu.Command("InputPresetMenu").Text!.Contains("変更あり"), "入力の変更表示がない");
-                session.ResetOutputPreset(); Equal(10, session.OutputSettings.ScreenshotPaddingPixels); Check(!session.OutputPresetModified && session.InputPresetModified, "出力復元が入力へ影響");
+                session.ResetOutputPreset(); Equal(0, session.OutputSettings.ScreenshotPaddingPixels); Check(!session.OutputPresetModified && session.InputPresetModified, "出力復元が入力へ影響");
                 session.ChangeColor(ScreenshotColorDepth.Indexed8); WaitHistory(session.ResetInputPresetAsync());
                 Check(!session.InputPresetModified && session.OutputPresetModified, "入力復元が出力へ影響");
                 Equal(ScreenshotColorDepth.Indexed8, session.OutputSettings.ScreenshotColorDepth);

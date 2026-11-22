@@ -87,7 +87,8 @@ internal sealed partial class TrayApplicationContext
         try
         {
             PrepareCaptureUi();
-            AppSettings startSettings = presetCapture?.Settings ?? inputPreset?.Apply(settings) ?? settings;
+            AppSettings startSettings = presetCapture?.Settings ?? (inputPreset is null
+                ? settings : ResolvedPresetCapture.Resolve(settings, inputPreset.Id, null).Settings);
             using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, startSettings.DefaultDestination, startSettings.FreezeFrame, IncludeRecordingImage: intent == CaptureIntent.Recording && (startSettings.DefaultDestination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(startSettings.FileNamePattern) || startSettings.CapturePresets.Any(p => p.Destination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(p.FileNamePattern))), IncludeCursor: startSettings.IncludeCursor, FixedSize: new Size(startSettings.FixedWidth, startSettings.FixedHeight), FixedAnchor: startSettings.FixedCaptureAnchor, LimitToStartingMonitor: startSettings.LimitToStartingMonitor, Grid20: startSettings.Grid20, ShowSelectionGuide: startSettings.ShowSelectionGuide, OutputSettings: startSettings, DimCaptureBackground: startSettings.DimCaptureBackground, InitialInputPreset: inputPreset ?? settings.SavedRegions.FirstOrDefault(p => p.IsDefault), InitialOutputPreset: presetCapture?.Output), SaveGrid20, SaveGuideVisibility);
             if (outcome.OpenSettings)
                 settingsLink = outcome.SettingsLink ?? new(CaptureSettingsDestination.General);

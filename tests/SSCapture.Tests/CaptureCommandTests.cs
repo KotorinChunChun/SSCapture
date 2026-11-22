@@ -56,6 +56,38 @@ internal static partial class Program
             Equal(OutputDestination.Clipboard, original.DefaultDestination); Check(!original.IncludeCursor, "既定入力を書き換えた");
             Check(!ReferenceEquals(original.SavedRegions, resolved.Settings.SavedRegions), "設定配列を共有した");
         });
+        Run("CLIの固定座標と入力プリセットで旧余白と出力の明示0を区別する", () => WithOutputDirectory(directory => RunOutputTask(async () =>
+        {
+            var defaults = CaptureCommandSettings();
+            var display = new DisplayLayout("fixture", "画面", new(0, 0, 800, 600), 96, 96);
+            Rectangle bounds = new(12, 18, 640, 480);
+            var input = RegionCoordinates.FromBounds("旧入力", bounds, [display]) with { PaddingPixels = 20 };
+            var inherited = CapturePreset.FromSettings("旧出力", defaults) with
+            {
+                Destination = OutputDestination.File | OutputDestination.Clipboard,
+                SaveDirectory = directory, FileNamePattern = "legacy.png"
+            };
+            var zero = inherited with { Id = "zero-padding", Name = "余白なし", FileNamePattern = "zero.png", WhitePaddingPixels = 0 };
+            var settings = defaults with { SavedRegions = [.. defaults.SavedRegions, input], CapturePresets = [.. defaults.CapturePresets, inherited, zero] };
+            var cases = new[] { (new CaptureCommandRequest(bounds, input.Id, inherited.Id), new Size(680, 520), "legacy.png"),
+                (new CaptureCommandRequest(InputPresetId: input.Id, OutputPresetId: zero.Id) { UsePresetMode = true }, new Size(640, 480), "zero.png") };
+            foreach (var (request, expected, file) in cases)
+            {
+                Size copied = default;
+                using var router = new OutputRouter(Path.Combine(directory, "work"), image => { copied = image.Size; return Task.CompletedTask; });
+                int result = await CaptureCommandRunner.ExecuteAsync(CaptureCommandLine.Resolve(request, settings), router,
+                    (region, _) =>
+                    {
+                        Equal(bounds, region);
+                        return Task.FromResult<(Bitmap, CaptureMetadata?)>((new Bitmap(region.Width, region.Height), null));
+                    }, readPresetDisplays: () => [display]);
+                Equal(0, result);
+                using var saved = new Bitmap(Path.Combine(directory, file));
+                Equal(expected, copied);
+                Equal(expected, saved.Size);
+                if (expected != bounds.Size) Equal(Color.White.ToArgb(), saved.GetPixel(0, 0).ToArgb());
+            }
+        })));
         Run("プリセット方式のCLIは固定位置を現在のモニター配置で直接撮り、固定サイズと全画面も維持", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {
             var original = CaptureCommandSettings();

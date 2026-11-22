@@ -342,15 +342,19 @@ internal sealed partial class SessionController
         UpdateMenu(); RefreshOverlays();
     }
 
+    private int? temporaryPadding;
+    private int EffectivePadding(Services.CapturePreset output, Services.SavedRegion input) =>
+        temporaryPadding ?? output.ResolvePadding(input.PaddingPixels);
+
     internal bool InputPresetModified => Mode != (selectedInput.UseFixedCoordinates ? CaptureMode.FixedRegion : selectedInput.Mode)
         || activeFixedSize != selectedInput.Bounds.Size || activeAnchor != selectedInput.FixedAnchor
         || OutputSettings.FreezeFrame != selectedInput.FreezeFrame || OutputSettings.IncludeCursor != selectedInput.IncludeCursor
-        || OutputSettings.ScreenshotPaddingPixels != selectedInput.PaddingPixels || OutputSettings.SelectionMethod != selectedInput.SelectionMethod
+        || OutputSettings.SelectionMethod != selectedInput.SelectionMethod
         || AspectRatio != CaptureAspectRatio.Free
         || OutputSettings.RecordSystemAudio != selectedInput.RecordSystemAudio || OutputSettings.RecordMicrophone != selectedInput.RecordMicrophone
         || OutputSettings.MicrophoneDeviceId != selectedInput.MicrophoneDeviceId
         || selectedInputBounds is Rectangle bounds && Selection != bounds;
-    internal bool OutputPresetModified => Destination != selectedOutput.Destination || OutputSettings.SaveDirectory != selectedOutput.SaveDirectory
+    internal bool OutputPresetModified => temporaryPadding.HasValue || Destination != selectedOutput.Destination || OutputSettings.SaveDirectory != selectedOutput.SaveDirectory
         || OutputSettings.FileNamePattern != selectedOutput.FileNamePattern || OutputSettings.OcrSeparator != selectedOutput.OcrSeparator
         || OutputSettings.ScreenshotColorDepth != selectedOutput.ColorDepth || OutputSettings.OpenFolderAfterSave != selectedOutput.OpenFolderAfterSave
         || OutputSettings.WindowCrop != selectedOutput.WindowCrop || OutputSettings.MetadataMode != selectedOutput.MetadataMode
@@ -386,7 +390,11 @@ internal sealed partial class SessionController
     }
     private void ChangeDestination(OutputDestination destination) { Destination = options.Intent == CaptureIntent.Recording ? destination & ~OutputDestination.Pinned : destination; SelectionMenu.SetDestination(Destination); UpdateMenu(); }
     internal Task ResetInputPresetAsync() => ApplyInputPresetAsync(selectedInput);
-    internal void ResetOutputPreset() => ApplyPreset(selectedOutput);
+    internal void ResetOutputPreset()
+    {
+        temporaryPadding = null;
+        ApplyPreset(selectedOutput);
+    }
     internal void ChangeOpenFolder(bool enabled) { OutputSettings = OutputSettings with { OpenFolderAfterSave = enabled }; UpdateMenu(); }
     internal void ChangeOutputDetails(string directory, string pattern, string separator)
     {
@@ -509,7 +517,7 @@ internal sealed partial class SessionController
             preset.Validate();
             if (!preset.UseFixedCoordinates)
             {
-                var next = preset.Apply(OutputSettings);
+                var next = preset.Apply(OutputSettings) with { ScreenshotPaddingPixels = EffectivePadding(selectedOutput, preset) };
                 if (next.FreezeFrame != OutputSettings.FreezeFrame || next.IncludeCursor != OutputSettings.IncludeCursor)
                 { await RefreshSnapshotAsync(next); if (SelectionError is not null || completed) return; }
                 else OutputSettings = next;
@@ -528,11 +536,11 @@ internal sealed partial class SessionController
             Rectangle bounds = Services.RegionCoordinates.Resolve(preset, displays);
             if (preset.ProfileVersion >= 1)
             {
-                var next = preset.Apply(OutputSettings);
+                var next = preset.Apply(OutputSettings) with { ScreenshotPaddingPixels = EffectivePadding(selectedOutput, preset) };
                 if (next.FreezeFrame != OutputSettings.FreezeFrame || next.IncludeCursor != OutputSettings.IncludeCursor)
                 { await RefreshSnapshotAsync(next); if (SelectionError is not null || completed) return; }
                 else OutputSettings = next;
-                activeAnchor = preset.FixedAnchor; SelectionMenu.SetPadding(next.ScreenshotPaddingPixels);
+                activeAnchor = preset.FixedAnchor;
             }
             SelectionError = null;
             bool grid = Grid20;
@@ -552,6 +560,8 @@ internal sealed partial class SessionController
                 pointer = new(Math.Clamp(pointer.X, pointerLimit.Left, pointerLimit.Right - 1), Math.Clamp(pointer.Y, pointerLimit.Top, pointerLimit.Bottom - 1));
             gesture.PlaceFixed(bounds, pointer);
             gesture.FixedPosition = bounds;
+            OutputSettings = OutputSettings with { ScreenshotPaddingPixels = EffectivePadding(selectedOutput, preset) };
+            SelectionMenu.SetPadding(OutputSettings.ScreenshotPaddingPixels);
             selectedInput = preset; selectedInputBounds = bounds; AspectRatio = CaptureAspectRatio.Free; gesture.AspectRatio = AspectRatio;
             lastPointerPosition = pointer;
             lastSnap = lastHeightLock = lastWidthLock = false;
@@ -583,6 +593,7 @@ internal sealed partial class SessionController
     internal void ChangePadding(int pixels)
     {
         if (pixels is < 0 or > SSCapture.Services.ScreenshotPadding.MaximumPixels) throw new ArgumentOutOfRangeException(nameof(pixels));
+        temporaryPadding = pixels;
         OutputSettings = OutputSettings with { ScreenshotPaddingPixels = pixels };
         SelectionMenu.SetPadding(pixels);
         UpdateMenu();
@@ -590,7 +601,7 @@ internal sealed partial class SessionController
 
     internal void ApplyPreset(SSCapture.Services.CapturePreset preset)
     {
-        OutputSettings = preset.Apply(OutputSettings);
+        OutputSettings = preset.Apply(OutputSettings) with { ScreenshotPaddingPixels = EffectivePadding(preset, selectedInput) };
         selectedOutput = preset;
         Destination = options.Intent == CaptureIntent.Recording ? OutputSettings.DefaultDestination & ~OutputDestination.Pinned : OutputSettings.DefaultDestination;
         SelectionMenu.SetDestination(Destination);

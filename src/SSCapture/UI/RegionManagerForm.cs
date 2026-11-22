@@ -20,7 +20,6 @@ internal sealed class RegionManagerForm : Form
     private readonly ComboBox captureMode;
     private readonly ComboBox selectionMethod;
     private readonly CheckBox coordinates, freezeFrame, includeCursor;
-    private readonly NumericUpDown padding;
     private readonly AppSettings? profileSettings;
     private SavedRegion? editing;
     private Rectangle loadedBounds;
@@ -204,11 +203,11 @@ internal sealed class RegionManagerForm : Form
         coordinates = new CheckBox { Name = "InputFixedCoordinates", Text = "登録した座標を使用する", AutoSize = true, Dock = DockStyle.Fill }; AddField(conditions, "位置", coordinates, 1);
         freezeFrame = new CheckBox { Name = "FreezeFrame", Text = "撮影開始時の画面を固定", AutoSize = true, Dock = DockStyle.Fill }; AddField(conditions, "撮影タイミング", freezeFrame, 2);
         includeCursor = new CheckBox { Name = "IncludeCursor", Text = "画像・動画に含める", AutoSize = true, Dock = DockStyle.Fill }; AddField(conditions, "マウスカーソル", includeCursor, 3);
-        padding = Number("ScreenshotPaddingPixels", 0, ScreenshotPadding.MaximumPixels); AddField(conditions, "画像の余白 (px)", padding, 4);
+
         selectionMethod = new ComboBox { Name = "SelectionMethod", Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
         selectionMethod.Items.AddRange(["ドラッグ", "2点クリック"]);
         selectionMethod.SelectedIndex = 0;
-        AddField(conditions, "選択方法", selectionMethod, 5);
+        AddField(conditions, "選択方法", selectionMethod, 4);
         void UpdateCoordinates()
         {
             x.Enabled = y.Enabled = previewBounds.Enabled = coordinates.Checked;
@@ -395,7 +394,7 @@ internal sealed class RegionManagerForm : Form
         {
             name.Text = ""; shortcut.Value = "";
             captureMode.SelectedIndex = (int)(profileSettings?.DefaultMode ?? CaptureMode.FixedRegion);
-            coordinates.Checked = profileSettings is null; freezeFrame.Checked = profileSettings?.FreezeFrame ?? true; includeCursor.Checked = profileSettings?.IncludeCursor ?? false; padding.Value = profileSettings?.ScreenshotPaddingPixels ?? 0;
+            coordinates.Checked = profileSettings is null; freezeFrame.Checked = profileSettings?.FreezeFrame ?? true; includeCursor.Checked = profileSettings?.IncludeCursor ?? false;
             selectionMethod.SelectedIndex = (int)(profileSettings?.SelectionMethod ?? SSCapture.Capture.CaptureSelectionMethod.Drag);
             if (systemAudio is not null && profileSettings is not null) LoadAudio(SavedRegion.FromSettings("新規", profileSettings));
             var connected = displays();
@@ -439,7 +438,7 @@ internal sealed class RegionManagerForm : Form
         updatingFields = true;
         automaticName = region.Name == RegionAutoName.Create(region.Shortcut, region.Bounds);
         name.Text = region.Name; shortcut.Value = region.Shortcut;
-        captureMode.SelectedIndex = profileSettings is not null && region.UseFixedCoordinates ? 5 : (int)region.Mode; coordinates.Checked = region.UseFixedCoordinates; freezeFrame.Checked = region.FreezeFrame; includeCursor.Checked = region.IncludeCursor; padding.Value = region.PaddingPixels; anchor.SelectedIndex = (int)region.FixedAnchor;
+        captureMode.SelectedIndex = profileSettings is not null && region.UseFixedCoordinates ? 5 : (int)region.Mode; coordinates.Checked = region.UseFixedCoordinates; freezeFrame.Checked = region.FreezeFrame; includeCursor.Checked = region.IncludeCursor; anchor.SelectedIndex = (int)region.FixedAnchor;
         selectionMethod.SelectedIndex = (int)region.SelectionMethod;
         LoadAudio(region);
         try
@@ -487,7 +486,7 @@ internal sealed class RegionManagerForm : Form
             : RegionCoordinates.FromBounds(name.Text.Trim(), bounds, displays(), editing?.Id, shortcut.Value);
         next = next with { Name = name.Text.Trim(), Shortcut = shortcut.Value, ProfileVersion = 2, UseFixedCoordinates = coordinates.Checked, BuiltInKey = editing?.BuiltInKey,
             Mode = captureMode.SelectedIndex == 5 ? CaptureMode.FixedRegion : (CaptureMode)captureMode.SelectedIndex, FixedAnchor = ((AnchorItem)anchor.SelectedItem!).Value,
-            FreezeFrame = freezeFrame.Checked, IncludeCursor = includeCursor.Checked, PaddingPixels = (int)padding.Value,
+            FreezeFrame = freezeFrame.Checked, IncludeCursor = includeCursor.Checked, PaddingPixels = editing?.PaddingPixels ?? 0,
             SelectionMethod = (Capture.CaptureSelectionMethod)selectionMethod.SelectedIndex,
             IsDefault = editing?.IsDefault == true || (profileSettings is not null && regions.Count == 0),
             RecordSystemAudio = systemAudio?.Checked ?? editing?.RecordSystemAudio ?? profileSettings?.RecordSystemAudio ?? false,

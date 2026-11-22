@@ -13,7 +13,12 @@ internal sealed record CapturePreset
     public bool OpenFolderAfterSave { get; init; }
     public string OcrSeparator { get; init; } = "_";
     public OutputDestination Destination { get; init; } = OutputDestination.Clipboard;
+    // 旧形式の読み込みと移行に使用する。
     public int PaddingPixels { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? WhitePaddingPixels { get; init; }
+
+    internal int ResolvePadding(int legacyInputPixels) => WhitePaddingPixels ?? legacyInputPixels;
     public WindowCrop WindowCrop { get; init; }
     public string SaveDirectory { get; init; } = new AppSettings().SaveDirectory;
     public string FileNamePattern { get; init; } = Services.FileNamePattern.Default;
@@ -25,6 +30,8 @@ internal sealed record CapturePreset
     {
         if (string.IsNullOrWhiteSpace(Id) || string.IsNullOrWhiteSpace(Name) || Name.Length > 80)
             throw new ArgumentException("出力プリセット名は1～80文字で指定してください。");
+        if (WhitePaddingPixels is < 0 or > ScreenshotPadding.MaximumPixels)
+            throw new ArgumentException("白い余白は0～4096pxで指定してください。");
         new AppSettings { DefaultDestination = Destination, ScreenshotPaddingPixels = PaddingPixels, WindowCrop = WindowCrop,
             SaveDirectory = SaveDirectory, FileNamePattern = FileNamePattern, MetadataMode = MetadataMode,
             ScreenshotColorDepth = ColorDepth, OcrSeparator = OcrSeparator }.Validate();
@@ -33,7 +40,7 @@ internal sealed record CapturePreset
     internal AppSettings Apply(AppSettings settings)
     {
         Validate();
-        return settings with { DefaultDestination = Destination,
+        return settings with { DefaultDestination = Destination, ScreenshotPaddingPixels = ResolvePadding(settings.ScreenshotPaddingPixels),
             SaveDirectory = SaveDirectory, FileNamePattern = FileNamePattern,
             WindowCrop = WindowCrop, ScreenshotColorDepth = ColorDepth, OpenFolderAfterSave = OpenFolderAfterSave, OcrSeparator = OcrSeparator,
             SelectedImageEditorId = ImageEditorId ?? "",

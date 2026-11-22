@@ -214,10 +214,10 @@ internal static class PresetSettings
             SavedRegions = settings.SavedRegions.Select(p => !p.IsDefault ? p : p with
             { Mode = settings.DefaultMode, Bounds = p.UseFixedCoordinates ? p.Bounds : new Rectangle(p.Bounds.Location, new(settings.FixedWidth, settings.FixedHeight)),
                 FixedAnchor = settings.FixedCaptureAnchor, FreezeFrame = settings.FreezeFrame, IncludeCursor = settings.IncludeCursor,
-                SelectionMethod = settings.SelectionMethod, PaddingPixels = settings.ScreenshotPaddingPixels,
+                SelectionMethod = settings.SelectionMethod,
                 RecordSystemAudio = settings.RecordSystemAudio, RecordMicrophone = settings.RecordMicrophone, MicrophoneDeviceId = settings.MicrophoneDeviceId }).ToArray(),
             CapturePresets = settings.CapturePresets.Select(p => !p.IsDefault ? p : CapturePreset.FromSettings(p.Name, settings) with
-            { Id = p.Id, IsDefault = true, BuiltInKey = p.BuiltInKey }).ToArray()
+            { Id = p.Id, IsDefault = true, BuiltInKey = p.BuiltInKey, PaddingPixels = p.PaddingPixels, WhitePaddingPixels = p.WhitePaddingPixels }).ToArray()
         };
     }
     internal static string UniqueId(string seed, IEnumerable<string> ids)
