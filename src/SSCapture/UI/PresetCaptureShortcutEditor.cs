@@ -60,7 +60,7 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
         var add = SettingsForm.MakeButton("追加", "AddPresetCaptureShortcut");
         add.Click += (_, _) =>
         {
-            rows.Add(new("", initialInput, initialOutput));
+            rows.Add(new("", initialInput, initialOutput) { SelectRangeWithDefaultInput = true });
             RefreshRows(rows.Count - 1);
             key.SelectNextControl(null, true, true, true, false);
         };
@@ -122,7 +122,7 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
             foreach (var row in rows)
             {
                 int rowIndex = list.Rows.Add(DisplayValues(row));
-                SetLegacyTooltip(list.Rows[rowIndex], row);
+                SetTooltips(list.Rows[rowIndex], row);
             }
             list.CurrentCell = index >= 0 ? list.Rows[index].Cells[0] : null;
             if (index < 0) list.ClearSelection();
@@ -154,17 +154,23 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
         string? outputId = (output.SelectedItem as PresetItem)?.Id;
         string? inputId = (input.SelectedItem as PresetItem)?.Id;
         var captureIntent = (CaptureIntent)intent.SelectedIndex;
-        var row = new PresetCaptureShortcut(key.Value, inputId, outputId,
-            previous.LegacyInstantOutput && captureIntent == CaptureIntent.Screenshot && inputId is not null && outputId is null,
-            captureIntent);
+        var row = previous with
+        {
+            Key = key.Value, InputPresetId = inputId, OutputPresetId = outputId, Intent = captureIntent,
+            LegacyInstantOutput = previous.LegacyInstantOutput && captureIntent == CaptureIntent.Screenshot && outputId is null
+                && (inputId is not null || !previous.SelectRangeWithDefaultInput)
+        };
         rows[selected] = row;
         var values = DisplayValues(row);
         for (int column = 0; column < values.Length; column++) list.Rows[selected].Cells[column].Value = values[column];
-        SetLegacyTooltip(list.Rows[selected], row);
+        SetTooltips(list.Rows[selected], row);
     }
 
-    private static void SetLegacyTooltip(DataGridViewRow displayRow, PresetCaptureShortcut row) =>
+    private static void SetTooltips(DataGridViewRow displayRow, PresetCaptureShortcut row)
+    {
+        displayRow.Cells[2].ToolTipText = row.UsesNormalSelection ? "既定が固定座標でも選択画面を開きます。" : "";
         displayRow.Cells[3].ToolTipText = row.LegacyInstantOutput ? "旧固定位置キーの即時出力（コピーとファイル保存）" : "";
+    }
 
     private object[] DisplayValues(PresetCaptureShortcut row) =>
         [KeyDisplay.Binding(row.Key), row.IntentLabel, FindItem(inputs, row.InputPresetId).Name, FindItem(outputs, row.OutputPresetId).Name];

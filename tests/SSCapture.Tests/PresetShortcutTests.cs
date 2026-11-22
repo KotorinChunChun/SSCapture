@@ -119,15 +119,18 @@ internal static partial class Program
             PresetCaptureShortcut[] expected =
             [
                 new("Ctrl+F9", fixedInput.Id, file.Id), new("Ctrl+F10", OutputPresetId: file.Id),
-                new("Ctrl+F5"), new("Ctrl+F6"), new("Ctrl+F7", Intent: CaptureIntent.Recording),
-                new("Ctrl+F8", Intent: CaptureIntent.Recording)
+                new("Ctrl+F5") { SelectRangeWithDefaultInput = true }, new("Ctrl+F6") { SelectRangeWithDefaultInput = true },
+                new("Ctrl+F7", Intent: CaptureIntent.Recording), new("Ctrl+F8", Intent: CaptureIntent.Recording)
             ];
             Check(loaded.PresetCaptureShortcuts!.SequenceEqual(expected), "既定参照・個別指定または撮影種別を移行できない");
             var keys = new HotkeyState(HotkeyBinding.ReadAssignments(loaded), KeyboardModifiers.LeftControl);
             Equal(new HotkeyDecision(true, true, CaptureIntent.Recording, PresetKey: "Ctrl+F7"), keys.Process((int)Keys.F7, true, true));
             Check(!keys.Process((int)Keys.F7, true, true).Capture && !keys.Process((int)Keys.F7, false, true).Capture, "連続イベントで録画が再発火");
             Check(keys.Process((int)Keys.F7, true, true).Capture, "次の押下が録画に届かない");
-            Check(expected[0].UsesDirectCapture(fixedInput) && !expected[2].UsesDirectCapture(fixedInput), "通常撮影と即時範囲撮影を区別できない");
+            Check(expected[0].UsesDirectCapture(fixedInput) && expected[1].UsesDirectCapture(fixedInput),
+                "旧プリセットの固定座標を即時撮影できない");
+            Check(!expected[2].UsesDirectCapture(fixedInput) && expected[2].UsesNormalSelection,
+                "旧通常キーで既定が固定座標のときに選択画面を使わない");
             var recording = expected[4];
             Check(!(recording with { InputPresetId = fixedInput.Id }).UsesDirectCapture(fixedInput), "録画を静止画として即時撮影する");
             var nextInput = loaded.SavedRegions.First(p => !p.IsDefault);
@@ -146,6 +149,9 @@ internal static partial class Program
                 Equal(explicitInput, resolved.Settings.RecordMicrophone);
                 Equal(explicitInput ? "fixture-mic" : "", resolved.Settings.MicrophoneDeviceId);
             }
+            var command = CaptureCommandLine.Resolve(new CaptureCommandRequest(), changed);
+            Equal(nextInput.Id, command.InputPreset.Id); Equal(file.Id, command.OutputPreset!.Id);
+            Equal<Rectangle?>(null, command.DirectBounds());
             store.Save(loaded);
             var reopened = store.Load(out warning);
             Equal<string?>(null, warning);
@@ -206,7 +212,8 @@ internal static partial class Program
             Find<ComboBox>("ShortcutInputPreset").SelectedIndex = 0;
             Find<ComboBox>("ShortcutOutputPreset").SelectedIndex = Array.FindIndex(defaults.CapturePresets, p => p.Id == output.Id) + 1;
             SaveConsolidation(form);
-            Equal(new PresetCaptureShortcut("Ctrl+F9", OutputPresetId: output.Id, Intent: CaptureIntent.Recording), persisted.PresetCaptureShortcuts!.Single());
+            Equal(new PresetCaptureShortcut("Ctrl+F9", OutputPresetId: output.Id, Intent: CaptureIntent.Recording)
+                { SelectRangeWithDefaultInput = true }, persisted.PresetCaptureShortcuts!.Single());
         });
     }
 }

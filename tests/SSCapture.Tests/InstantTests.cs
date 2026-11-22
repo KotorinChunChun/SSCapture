@@ -49,7 +49,7 @@ internal static partial class Program
             string path = Path.Combine(directory, "settings.json");
             File.WriteAllText(path, "{\"SchemaVersion\":2,\"ScreenshotShortcut1\":\"Win+Shift+1\",\"SaveDirectory\":\"C:\\\\captures\"}");
             var settings = new SettingsStore(path).Load(out var warning);
-            Equal<string?>(null, warning); Check(settings.PresetCaptureShortcuts!.Contains(new("Win+Shift+1")), "通常キーの移行に失敗");
+            Equal<string?>(null, warning); Check(settings.PresetCaptureShortcuts!.Any(row => row.Key == "Win+Shift+1" && row.UsesNormalSelection), "通常キーの移行に失敗");
             Equal("", settings.InstantShortcuts[0]); Equal("Win+Shift+0", settings.InstantShortcuts[9]);
         }));
         Run("即時画面番号は主画面から左・上の順で列挙順やDISPLAY番号に依存しない", () =>

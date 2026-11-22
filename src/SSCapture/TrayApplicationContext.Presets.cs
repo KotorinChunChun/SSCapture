@@ -29,7 +29,7 @@ internal sealed partial class TrayApplicationContext
             else
             {
                 await TakeCaptureAsync(capture.Settings.DefaultMode, row.Intent, capture.Input,
-                    showPreviousOnEscape: row.Intent == CaptureIntent.Screenshot && row.InputPresetId is null,
+                    showPreviousOnEscape: row.UsesNormalSelection,
                     presetCapture: capture);
             }
         }

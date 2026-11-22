@@ -109,7 +109,7 @@ internal static partial class Program
             Equal(CaptureMode.Rectangle, settings.DefaultMode); Equal(OutputDestination.Clipboard, settings.DefaultDestination);
             Check(settings.DimCaptureBackground && settings.FreezeFrame && !settings.IncludeCursor && !settings.Grid20, "標準入力の初期条件が異なる");
             Equal(0, settings.ScreenshotPaddingPixels); Equal(ScreenshotColorDepth.Original, settings.ScreenshotColorDepth);
-            Equal(CaptureMetadataMode.None, settings.MetadataMode); Check(settings.PresetCaptureShortcuts!.Contains(new("Win+Shift+S")), "通常キーの初期値がない");
+            Equal(CaptureMetadataMode.None, settings.MetadataMode); Check(settings.PresetCaptureShortcuts!.Any(row => row.Key == "Win+Shift+S" && row.UsesNormalSelection), "通常キーの初期値がない");
             Equal("Rectangle,FixedRegion,FixedRegion,FixedRegion,FixedRegion", string.Join(',', settings.SavedRegions.Select(p => p.Mode)));
             Check(settings.SavedRegions.All(p => !p.UseFixedCoordinates && p.FreezeFrame && p.PaddingPixels == 0 && !p.IncludeCursor && p.Shortcut == ""), "初期入力に座標・キー・加工が混入");
             Equal("1280x720,1920x1080,2560x1440,3840x2160", string.Join(',', settings.SavedRegions.Where(p => p.Mode == CaptureMode.FixedRegion).Select(p => $"{p.Bounds.Width}x{p.Bounds.Height}")));
