@@ -104,7 +104,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             var parent = Menu("縦横比", "AspectRatioMenu", range.DropDownItems);
             foreach (var value in Enum.GetValues<CaptureAspectRatio>()) ratios[value] = Item(AspectRatios.Label(value), "Ratio" + value, () => changeRatio(value), parent.DropDownItems);
         }
-        if (captureDesktop is not null) Item("対象画面全体 (中央クリック)", "CaptureDesktop", captureDesktop, range.DropDownItems);
+        if (captureDesktop is not null) Item("対象画面全体", "CaptureDesktop", captureDesktop, range.DropDownItems);
         foreach (var destination in new[] { OutputDestination.Clipboard, OutputDestination.File, OutputDestination.ExternalApp, OutputDestination.Pinned })
         {
             if (destination == OutputDestination.Pinned && editing is { Screenshot: false }) continue;

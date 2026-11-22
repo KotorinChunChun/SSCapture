@@ -25,13 +25,13 @@ internal sealed partial class SessionController
     }
 
     internal bool MagnifierMarksOrigin => Mode == CaptureMode.Rectangle && !gesture.HasDragged
-        && !SelectingControl && pressedButton != MouseButtons.Middle && !targetWheelUsed;
+        && !SelectingControl && !SelectingDesktop && !targetWheelUsed;
 
-    internal Point MagnifierSample => MagnifierMarksOrigin || (!SelectingControl && pressedButton != MouseButtons.Middle
+    internal Point MagnifierSample => MagnifierMarksOrigin || (!SelectingControl && !SelectingDesktop
         && (Mode == CaptureMode.Rectangle || Mode == CaptureMode.FixedRegion && gesture.FixedPosition is null)
         && MarginSelection is null) ? gesture.MagnifierPoint : Pointer;
 
-    internal Rectangle MagnifierSelection => pressedButton == MouseButtons.Middle ? gesture.MonitorAt(Pointer)
+    internal Rectangle MagnifierSelection => SelectingDesktop ? gesture.MonitorAt(Pointer)
         : UsesWindowSource && !SelectingControl && PreviewFrame is null ? Rectangle.Empty : DisplaySelection;
     internal IReadOnlyList<Point>? MagnifierPolygon => !SelectingControl && Mode == CaptureMode.Freeform
         && gesture.HasDragged ? Points : null;
@@ -69,7 +69,7 @@ internal sealed partial class SessionController
                 1, isolated, true, control.Identity);
         }
 
-        if (pressedButton == MouseButtons.Middle || HasWindowDrag || TwoPointSelection
+        if (SelectingDesktop || HasWindowDrag || TwoPointSelection
             || Mode is not (CaptureMode.Window or CaptureMode.Rectangle or CaptureMode.Freeform)
             || gesture.IsPressed && gesture.HasDragged) return null;
         Point point = gesture.WindowTargetPoint;

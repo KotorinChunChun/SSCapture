@@ -144,7 +144,7 @@ internal static partial class Program
         Run("右下ガイドは操作段階と実際の割り当て・クリック無効を反映", () =>
         {
             using var guide = new SelectionGuideForm(new(0, 0, 1280, 720), CaptureIntent.Screenshot, () => { },
-                mouse: new(BeforeRight: false, DragRight: false), canCrossMonitors: true);
+                mouse: new(BeforeRightAction: CaptureClickAction.None, DragRightAction: CaptureClickAction.None), canCrossMonitors: true);
             string Read() => guide.Controls["SelectionHelp"]!.Text;
             Check(Read().Contains("Windows キーを押しながら") && Read().Contains("Ctrlを押しながら　コントロールを選択"), "押している間の案内がない");
             Check(!Read().Contains("右クリック") && !Read().Contains("起点を中心"), "無効または別段階の操作を案内");
@@ -153,7 +153,7 @@ internal static partial class Program
             Point moved = guide.Location;
             guide.UpdateOperations(true, true);
             Equal(moved, guide.Location);
-            foreach (string match in new[] { "Shift　縦横比を固定", "Ctrl　起点を中心にする", "Ctrl＋Shift　両方を適用",
+            foreach (string match in new[] { "Windows キー　縦横比を固定", "Ctrl　起点を中心にする", "Ctrl＋Shift　中心基準＋比率固定",
                 "Windows キー＋Alt　一時グリッドスナップ", "Esc　選択だけ中断" })
                 Check(Read().Contains(match), "ドラッグ中の操作がない: " + match);
             Check(!Read().Contains("右クリック") && !Read().Contains("短押し"), "ドラッグ中に別段階の操作を案内");

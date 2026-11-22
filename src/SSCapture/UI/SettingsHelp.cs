@@ -50,7 +50,7 @@ internal static class SettingsHelp
         ["ExternalOutput"] = "ONのときは撮影結果を指定した画像・動画編集アプリへ渡します。対応する実行ファイルとパラメータを設定してください。即時撮影には適用しません。",
         ["FreezeFrame"] = "ONのときは撮影開始時の画面を保存・コピーします。OFFのときは範囲確定後、選択画面を閉じてから画面を取得します。選択中の背景はどちらも開始時の静止画です。選択を中断してやり直しても開始画像は保持します。録画映像は固定しません。",
         ["OpenFolderAfterSave"] = "ONのときはファイル保存に成功した後、保存先フォルダを開いて保存ファイルを選択します。ファイル保存がOFFのときと即時撮影では実行しません。",
-        ["LimitToStartingMonitor"] = "ONのときは、撮影開始時にポインタがあったモニター内で選択します。\nONのままでも「別モニタへの移動を許可」に割り当てたキー（既定はWin）を押しながらポインタを動かすと、別のモニターへ移動できます。\nOFFのときは、キーを押さずにモニターをまたいで選択できます。",
+        ["LimitToStartingMonitor"] = "ONのときは、撮影開始時にポインタがあったモニター内で選択します。\nONのままでも「別モニタへの移動を許可」に割り当てたキー（ドラッグ中の既定はShift）を押しながらポインタを動かすと、別のモニターへ移動できます。\nOFFのときは、キーを押さずにモニターをまたいで選択できます。",
         ["SelectionMethod"] = "矩形の始点と終点をドラッグで指定するか、左クリック2回で指定するかを選びます。",
         ["ShowMagnifier"] = "画素の間を中央にして拡大します。矩形の起点は赤い十字、終点は撮影範囲と範囲外の境界を赤線で示します。",
         ["MagnifierDotCount"] = "縦横それぞれに表示するドット数です。2～32の偶数から選びます。既定は10×10ドットです。",
@@ -80,6 +80,10 @@ internal static class SettingsHelp
         ["HoldNotificationWhileApproaching"] = "ONのとき、ポインタが通知へ近づく間や近接中は、表示残時間を設定秒数へ戻して維持します。OFFは通常の時間で消えます。",
         ["NotificationClickAction"] = "通知をクリックしたときの動作です。保存フォルダはファイル保存成功時だけ開けます。外部アプリは通知専用に選べます。",
         ["NotificationApplication"] = "通知の「外部アプリで編集」ボタンが使う登録アプリです。個別指定がない場合は撮影時の出力プリセットの画像/動画アプリを使います。未保存画像は押した時だけPNGを生成し、完成後に起動します。",
+        ["RevertPageSettings"] = "このページの未適用の編集を取り消し、保存済みの設定に戻します。",
+        ["CaptureMouseDragLeft"] = "左ボタンは通常、撮影対象の選択を続けるために押した状態なので、ドラッグ中の追加操作は割り当てられません。",
+        ["CaptureMouseDragLeftLabel"] = "左ボタンは通常、撮影対象の選択を続けるために押した状態なので、ドラッグ中の追加操作は割り当てられません。",
+        ["CaptureKeysSpace"] = "矩形では始点と終点を入れ替え、固定サイズでは基点を順に切り替えます。",
         ["ApplyPageSettings"] = "この欄の変更を以後の撮影に適用します。入力に問題がある場合は、画面下に理由を表示します。",
         ["CloseSettings"] = "設定画面を閉じます。未適用の設定や未登録の編集内容は引き継ぎません。アプリは常駐を続けます。",
         ["OpenFolder"] = "選択中の出力プリセットの「保存フォルダー」を開きます。ファイル保存またはピン留め表示を選び、フォルダーの絶対パスを指定してください。"
@@ -116,6 +120,8 @@ internal static class SettingsHelp
     {
         if (name.StartsWith("PresetCaptureFieldLabel", StringComparison.Ordinal))
             return Descriptions[name[^1] switch { '0' => "PresetCaptureShortcut", '1' => "ShortcutInputPreset", _ => "ShortcutOutputPreset" }];
+        if (name.StartsWith("Capture", StringComparison.Ordinal) && name.EndsWith("Mirror", StringComparison.Ordinal))
+            return "同じキーの組み合わせを表の右上側で変更できます。";
         if (name == "PreviewRegion") return "登録した位置と寸法の枠だけを表示します。位置が未指定の場合は利用できません。先に座標を指定するか範囲を選んでください。撮影や設定保存は行いません。";
         if (name == "ScreenshotPaddingPixels") return "選択範囲の外側へ上下左右同じ幅の白い余白を追加します。元画像の縮小や周囲の画面の撮り足しはしません。0～4096物理px、0は余白なし。静止画だけに適用し録画には適用しません。";
         if (name == "FileNamePattern") return "{yyyymmdd} 年月日 / {hhmmss} 時分秒 / {ext} 静止画png・録画mp4 / {ocr} OCR文字列 / {region} 範囲名 / {#}・{##} 連番。例: {yyyymmdd}_{hhmmss}.{ext}";

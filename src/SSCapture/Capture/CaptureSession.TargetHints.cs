@@ -16,7 +16,7 @@ internal sealed partial class SessionController
             if (!OutputSettings.ShowPointerGuide || PointerLabelsSuppressed) return null;
             if (MarginSelection is Rectangle adjusted) return adjusted;
             if (SelectingControl) return controlCandidate?.Bounds;
-            if (pressedButton == MouseButtons.Middle || HighlightWindow) return null;
+            if (SelectingDesktop || HighlightWindow) return null;
             return (Mode == CaptureMode.FixedRegion ? FixedSelectionValid : gesture.HasDragged)
                 && CaptureGeometry.IsUsable(Selection) ? Selection : null;
         }
@@ -34,9 +34,9 @@ internal sealed partial class SessionController
             yield break;
         }
 
-        if (pressedButton == MouseButtons.Middle)
+        if (SelectingDesktop)
         {
-            var monitors = FreeMiddleDrag && targetDrag is { Monitors.Count: > 0 }
+            var monitors = FreeDesktopDrag && targetDrag is { Monitors.Count: > 0 }
                 ? (IEnumerable<Rectangle>)targetDrag.Monitors : [gesture.MonitorAt(Pointer)];
             foreach (Rectangle monitor in monitors)
                 if (CaptureGeometry.IsUsable(monitor)) yield return DescribeMonitor(monitor);

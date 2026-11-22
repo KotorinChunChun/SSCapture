@@ -34,10 +34,10 @@ internal sealed partial class SessionController
 
     private void UpdateBeforeWindowMode(CaptureModifiers modifiers, CaptureKeyAction beforeAction, bool toggle)
     {
-        if (pressedButton == MouseButtons.Middle) return;
+        if (desktopPress) return;
         if (windowPushReturn is { } original && original.Keys != modifiers)
         {
-            if (pressedButton == MouseButtons.Left) AbortSelection();
+            if (HasPointerPress) AbortSelection();
             RestoreWindowPush();
         }
         if (HasPointerPress || gesture.IsPressed || suppressedButtons != MouseButtons.None) return;

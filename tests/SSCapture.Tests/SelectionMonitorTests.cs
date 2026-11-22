@@ -68,6 +68,26 @@ internal static partial class Program
             finally { session.Cancel(); }
             var next = MonitorSession(true); Equal(1, next.SelectionMonitors.Count); next.Cancel();
         });
+        Run("矩形ドラッグを始めてからShiftを押すと始点を保ってモニターをまたげる", () =>
+        {
+            var session = MonitorSession(true);
+            Rectangle first = SelectionTestMonitors[0];
+            using var overlay = new CaptureOverlay(session, first);
+            try
+            {
+                _ = overlay.Handle;
+                var start = new Point(-100, 20);
+                var target = new Point(100, 120);
+                session.MouseDown(overlay, MouseButtons.Left, start, Keys.None);
+                session.ApplyPointerInput(new(-20, 50), CaptureModifiers.None);
+                session.ApplyPointerInput(target, CaptureModifiers.Shift);
+                session.ApplyPointerInput(target, CaptureModifiers.None);
+                Equal(2, session.SelectionMonitors.Count);
+                Equal(new Rectangle(-100, 20, 200, 100), session.Selection);
+                Equal(Rectangle.Empty, session.HighlightedWindow);
+            }
+            finally { session.Cancel(); }
+        });
         Run("モニタ拡張はドラッグの始点と選択を維持する", () =>
         {
             var gesture = new SelectionGesture(CaptureMode.Rectangle, [SelectionTestMonitors[0]], []);
@@ -76,20 +96,23 @@ internal static partial class Program
             Equal(new Rectangle(-100, 20, 200, 100), gesture.Selection);
             Check(gesture.IsPressed && gesture.HasDragged, "ドラッグをリセットした");
         });
-        Run("ドラッグ前のWin長押しは移動先を撮影モニターにしウィンドウ撮影へ切り替えない", () =>
+        Run("ドラッグ前のShiftで移動先を選び、離すと元の撮影操作へ戻る", () =>
         {
             var session = MonitorSession(true);
             try
             {
                 Point start = new(-100, 20), gap = new(20, -50), destination = new(100, 120);
-                session.ApplyPointerInput(start, CaptureModifiers.Win);
-                session.ApplyPointerInput(gap, CaptureModifiers.Win);
+                session.ApplyPointerInput(start, CaptureModifiers.Shift);
+                session.ApplyPointerInput(gap, CaptureModifiers.Shift);
                 Equal(SelectionTestMonitors[0], session.SelectionMonitors.Single());
-                session.ApplyPointerInput(destination, CaptureModifiers.Win);
+                session.ApplyPointerInput(destination, CaptureModifiers.Shift);
                 Equal(SelectionTestMonitors[1], session.SelectionMonitors.Single());
                 Equal(destination, session.Pointer);
+                Equal(SelectionTestMonitors[1], session.HighlightedWindow);
+                Check(session.PointerHint?.Contains("デスクトップの選択", StringComparison.Ordinal) == true, "Shiftの効果が表示されない");
                 session.ApplyPointerInput(destination, CaptureModifiers.None);
                 Equal(CaptureMode.Rectangle, session.Mode);
+                Equal(Rectangle.Empty, session.HighlightedWindow);
                 Check(session.OutputSettings.LimitToStartingMonitor, "開始画面限定の設定を解除した");
                 session.MoveTo(start);
                 Equal(new Point(0, 20), session.Pointer);
@@ -261,11 +284,11 @@ internal static partial class Program
                 {
                     session.Start();
                     PumpOverlayMessages(TimeSpan.FromMilliseconds(100));
-                    session.ApplyPointerInput(start, CaptureModifiers.Win);
+                    session.ApplyPointerInput(start, CaptureModifiers.Shift);
                     Equal(originalClip, CursorConfinement.ReadBounds());
                     input.Move(target);
                     Equal(target, CaptureNative.CursorPosition());
-                    session.ApplyPointerInput(target, CaptureModifiers.Win);
+                    session.ApplyPointerInput(target, CaptureModifiers.Shift);
                     Equal(destination, Application.OpenForms.OfType<CaptureOverlay>().Single(o => o.Visible).MonitorBounds);
                     session.ApplyPointerInput(target, CaptureModifiers.None);
                     Equal(destination, CursorConfinement.ReadBounds());
@@ -290,16 +313,18 @@ internal static partial class Program
                     CaptureOverlay owner = Application.OpenForms.OfType<CaptureOverlay>().Single(o => o.Visible);
                     NativeSmokeInput.FocusFixture(owner.Handle);
                     NativeSmokeInput.RequireTarget(owner.Handle, start);
-                    input.MiddleDown();
+                    input.KeyDown(0xA0);
+                    input.LeftDown();
                     PumpOverlayMessages(TimeSpan.FromMilliseconds(120));
                     Equal(originalClip, CursorConfinement.ReadBounds());
                     input.Move(target);
                     PumpOverlayMessages(TimeSpan.FromMilliseconds(180));
                     Equal(target, middle.Pointer);
-                    Check(owner.Capture && CaptureNative.OwnsForegroundWindow(), "移動後に中ドラッグを保持できない");
-                    input.MiddleUp();
+                    Check(owner.Capture && CaptureNative.OwnsForegroundWindow(), "移動後にShift＋左ドラッグを保持できない");
+                    input.LeftUp();
+                    input.KeyUp(0xA0);
                     PumpOverlayMessages(TimeSpan.FromMilliseconds(180));
-                    Check(middle.Completion.IsCompletedSuccessfully, "実モニターをまたいだ中ドラッグが確定しない");
+                    Check(middle.Completion.IsCompletedSuccessfully, "実モニターをまたいだShift＋左ドラッグが確定しない");
                     using var outcome = middle.Completion.GetAwaiter().GetResult();
                     var regions = outcome.Selection!.Composite!.Regions!;
                     Check(regions.Contains(first) && regions.Contains(destination), "実モニターのどちらかが合成結果にない");
@@ -307,7 +332,7 @@ internal static partial class Program
                     Equal(originalClip, CursorConfinement.ReadBounds());
                 }
                 finally { input.ReleaseInjectedInput(); middle.Cancel(); }
-                Console.WriteLine($"PASS 実モニター間の中ドラッグと合成 {first} → {destination}");
+                Console.WriteLine($"PASS 実モニター間のShift＋左ドラッグと合成 {first} → {destination}");
             }
             return 0;
         }

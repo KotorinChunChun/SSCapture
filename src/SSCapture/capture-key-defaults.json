@@ -1,9 +1,9 @@
 {
   "Drag": {
     "Ctrl": "FromCenter",
-    "Shift": "LockAspectRatio",
+    "Shift": "CrossMonitor",
     "Alt": "Snap",
-    "Win": "CrossMonitor",
+    "Win": "LockAspectRatio",
     "CtrlShift": "FromCenterWithAspectRatio",
     "CtrlAlt": "LockWidth",
     "ShiftAlt": "LockHeight",
@@ -12,8 +12,16 @@
   },
   "Before": {
     "Ctrl": "SelectControl",
+    "Shift": "SelectDesktop",
     "Alt": "Snap",
     "Win": "HighlightWindow"
+  },
+  "Mouse": {
+    "BeforeLeftAction": "Select",
+    "BeforeRightAction": "Menu",
+    "BeforeMiddleAction": "None",
+    "DragRightAction": "Cancel",
+    "DragMiddleAction": "None"
   },
   "ControlActivation": "Push",
   "WindowActivation": "Push"

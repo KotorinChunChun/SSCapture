@@ -101,6 +101,8 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
         key.SelectNextControl(null, true, true, true, false);
     }
 
+    internal event EventHandler? DraftChanged;
+
     internal PresetCaptureShortcut[] Rows => rows.ToArray();
 
     internal void LoadRows(PresetCaptureShortcut[] replacements)
@@ -147,6 +149,7 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
         }
         finally { loading = false; }
         SelectRow(index);
+        DraftChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void SelectRow(int index)
@@ -182,6 +185,7 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
         var values = DisplayValues(row);
         for (int column = 0; column < values.Length; column++) list.Rows[selected].Cells[column].Value = values[column];
         SetTooltips(list.Rows[selected], row);
+        DraftChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private static void SetTooltips(DataGridViewRow displayRow, PresetCaptureShortcut row)

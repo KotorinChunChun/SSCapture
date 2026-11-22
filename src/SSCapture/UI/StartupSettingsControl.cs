@@ -10,23 +10,32 @@ internal sealed class StartupSettingsControl : UserControl
     readonly Label state = new() { Name = "StartupState", Text = "確認中…", AutoSize = true, Margin = new Padding(16, 3, 3, 3), MaximumSize = new Size(850, 0) };
     StartupRegistrationState? current;
     bool working;
-    internal StartupSettingsControl(IStartupRegistration registration)
+    internal event EventHandler? DraftChanged;
+    internal bool HasDraft => current?.CanChange == true && enabled.Checked != current.Enabled;
+
+    internal StartupSettingsControl(IStartupRegistration registration, int labelWidth = 177)
     {
         this.registration = registration;
-        Name = "StartupSettings"; Dock = DockStyle.Fill;
-        var layout = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = Padding.Empty };
-        var commands = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
+        Name = "StartupSettings"; Dock = DockStyle.Fill; Margin = new Padding(0, 3, 0, 3);
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Margin = Padding.Empty };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, labelWidth));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var commands = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Fill, Margin = Padding.Empty };
         var title = new Label { Name = "StartupLabel", Text = "自動起動", AutoSize = true, Anchor = AnchorStyles.Left };
         enabled.Anchor = AnchorStyles.Left;
         ButtonTheme.Apply(apply, ButtonRole.StartupApply);
-        commands.Controls.AddRange([title, apply, enabled]);
-        layout.Controls.AddRange([commands, state]);
+        commands.Controls.AddRange([enabled, apply]);
+        layout.Controls.Add(title, 0, 0);
+        layout.Controls.Add(commands, 1, 0);
+        layout.Controls.Add(state, 1, 1);
         Controls.Add(layout);
-        SizeChanged += (_, _) => state.MaximumSize = new Size(Math.Max(1, ClientSize.Width - state.Margin.Horizontal), 0);
-        enabled.CheckedChanged += (_, _) => apply.Enabled = !working && current?.CanChange == true && enabled.Checked != current.Enabled;
+        SizeChanged += (_, _) => state.MaximumSize = new Size(Math.Max(1, ClientSize.Width - layout.GetColumnWidths().FirstOrDefault() - state.Margin.Horizontal), 0);
+        enabled.CheckedChanged += (_, _) => { apply.Enabled = !working && HasDraft; DraftChanged?.Invoke(this, EventArgs.Empty); };
         apply.Click += async (_, _) => await ApplyAsync();
     }
-    internal void ResetDraft() => enabled.Checked = false;
+    internal void ResetDraft() { if (current?.CanChange == true) enabled.Checked = false; }
+    internal void RevertDraft() { if (current is { } saved) enabled.Checked = saved.Enabled; }
 
     internal async Task RefreshAsync()
     {
@@ -42,7 +51,7 @@ internal sealed class StartupSettingsControl : UserControl
         {
             if (!IsDisposed) { current = null; state.Text = "自動起動を確認できません: " + ex.Message; }
         }
-        finally { working = false; }
+        finally { working = false; DraftChanged?.Invoke(this, EventArgs.Empty); }
     }
     async Task ApplyAsync()
     {
@@ -51,7 +60,7 @@ internal sealed class StartupSettingsControl : UserControl
         string? error;
         try { error = await registration.SetAsync(enabled.Checked); }
         catch (Exception ex) { error = ex.Message; }
-        finally { working = false; }
+        finally { working = false; DraftChanged?.Invoke(this, EventArgs.Empty); }
         if (IsDisposed) return;
         await RefreshAsync();
         if (!IsDisposed && error != null) state.Text = "変更できませんでした: " + error;

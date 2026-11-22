@@ -100,7 +100,7 @@ internal static partial class Program
                     });
                 foreach (bool middle in new[] { false, true })
                 foreach (bool escape in new[] { false, true })
-                    await Test((middle ? "中押下" : "左単押下") + (escape ? "をEscで取り消す" : "を右クリックで取り消す"), async token =>
+                    await Test((middle ? "Shift＋左押下" : "左単押下") + (escape ? "をEscで取り消す" : "を右クリックで取り消す"), async token =>
                     {
                         using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, _) =>
                         {
@@ -109,7 +109,7 @@ internal static partial class Program
                             {
                                 await Move(overlay, 80, 80);
                                 NativeSmokeInput.RequireTarget(overlay.Handle, P(80, 80));
-                                input.MiddleDown(); await Task.Delay(100);
+                                await Key(overlay, 0xA0, true); input.LeftDown(); await Task.Delay(100);
                             }
                             else await Down(overlay);
                             string expected = middle ? "モニター全体を撮影" : "ウィンドウを撮影";
@@ -117,7 +117,7 @@ internal static partial class Program
                             Check(session.PointerHint?.StartsWith(firstLines, StringComparison.Ordinal) == true, "操作と取り消しの案内がない");
                             if (escape) { await Key(overlay, 0x1B, true); await Key(overlay, 0x1B, false); }
                             else { input.RightDown(); await Task.Delay(60); input.RightUp(); }
-                            if (middle) input.MiddleUp(); else input.LeftUp();
+                            if (middle) { input.LeftUp(); await Key(overlay, 0xA0, false); } else input.LeftUp();
                             await Task.Delay(100);
                             Check(session.PointerHint is null && !session.HasPointerPress && !session.Completion.IsCompleted,
                                 "取り消し後も表示が残るか、取り消した撮影が出力された");
@@ -261,7 +261,7 @@ internal static partial class Program
                     }, token, showGuide: false);
                     Equal(bounds, result.Selection!.Bounds);
                 });
-                await Test("中ボタンを押している間は明るいモニタ全体を撮影する", async token =>
+                await Test("Shiftを押している間は明るいモニタ全体を撮影する", async token =>
                 {
                     using var result = await CaptureSyntheticOutcome(CaptureMode.FixedRegion, bounds, input, async (overlay, ct) =>
                     {
@@ -271,12 +271,13 @@ internal static partial class Program
                         using var rendered = new Bitmap(bounds.Width, bounds.Height);
                         overlay.DrawToBitmap(rendered, new(Point.Empty, bounds.Size));
                         Check(rendered.GetPixel(260, 30).B < 200, "押下前の背景が暗転していない");
-                        input.MiddleDown(); await Task.Delay(60);
+                        await Key(overlay, 0xA0, true);
                         Equal(bounds, OverlaySession(overlay).HighlightedWindow);
                         Equal(Rectangle.Empty, OverlaySession(overlay).DisplaySelection);
                         overlay.DrawToBitmap(rendered, new(Point.Empty, bounds.Size));
                         Equal(Color.Blue.ToArgb(), rendered.GetPixel(260, 30).ToArgb());
-                        input.MiddleUp();
+                        input.LeftDown(); input.LeftUp();
+                        input.KeyUp(0xA0);
                     }, token, fixedSize: new(200, 120), showGuide: false, dimBackground: true);
                     Equal(bounds, result.Selection!.Bounds);
                 });
@@ -289,22 +290,22 @@ internal static partial class Program
                     }, token, fixedSize: new(200, 120), showGuide: false);
                     Equal(bounds, result.Selection!.Bounds);
                 });
-                await Test("開始モニター限定でも中ドラッグを解除し、往復で通過したモニターを合成する", async token =>
+                await Test("開始モニター限定でもShift＋左ドラッグで移動し、往復で通過したモニターを合成する", async token =>
                 {
                     using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, _) =>
                     {
                         await Move(overlay, 100, 110);
                         NativeSmokeInput.RequireTarget(overlay.Handle, P(100, 110));
-                        input.MiddleDown(); await Task.Delay(70);
+                        await Key(overlay, 0xA0, true); input.LeftDown(); await Task.Delay(70);
                         var session = OverlaySession(overlay);
-                        Check(session.PointerHint?.Contains("ドラッグ：複数デスクトップを合成", StringComparison.Ordinal) == true, "中ドラッグの案内がない");
+                        Check(session.PointerHint?.Contains("ドラッグ：複数デスクトップを合成", StringComparison.Ordinal) == true, "デスクトップ選択の案内がない");
                         await Move(overlay, 560, 110);
                         Equal(P(560, 110), session.Pointer);
                         CaptureOverlay second = Application.OpenForms.OfType<CaptureOverlay>().Single(form => form.MonitorBounds.Contains(P(560, 110)));
                         Check(second.Visible && session.HighlightForOverlay(second.MonitorBounds) == second.MonitorBounds, "通過したモニターが明るくならない");
-                        Check(overlay.Capture && CaptureNative.OwnsForegroundWindow(), "別モニターへ移動すると中ボタンを保持できない");
+                        Check(overlay.Capture && CaptureNative.OwnsForegroundWindow(), "別モニターへ移動すると左ボタンを保持できない");
                         input.Move(P(100, 110)); await Task.Delay(70);
-                        input.MiddleUp();
+                        input.LeftUp(); input.KeyUp(0xA0);
                     }, token, splitMonitors: true, limitToStart: true, showGuide: false, dimBackground: true);
                     Equal(bounds, result.Selection!.Bounds);
                     Equal(2, result.Selection.Composite!.Regions!.Count);

@@ -19,13 +19,19 @@ internal sealed partial class SettingsForm
         _ => null
     };
 
-    private void AddApplyButton(FlowLayoutPanel actions, Control editArea, Func<AppSettings> readDraft)
+    private void AddApplyButton(FlowLayoutPanel actions, Control editArea, Func<AppSettings> readDraft, Action restoreDraft, bool isBasic = false)
     {
         var apply = MakeButton("適用", "ApplyPageSettings", ButtonRole.Primary);
         apply.Margin = new Padding(0, 4, 8, 4);
         actions.Controls.Add(apply);
+        var revert = AddRevertButton(actions, restoreDraft);
 
-        void Refresh() => apply.Enabled = readDraft() != committed;
+        void Refresh()
+        {
+            apply.Enabled = readDraft() != committed;
+            revert.Enabled = apply.Enabled || isBasic && startupSettings.HasDraft;
+        }
+        if (isBasic) startupSettings.DraftChanged += (_, _) => Refresh();
         apply.Click += (_, _) =>
         {
             var next = readDraft();
@@ -61,6 +67,21 @@ internal sealed partial class SettingsForm
         }
     }
 
+    private Button AddRevertButton(FlowLayoutPanel actions, Action restoreDraft)
+    {
+        var revert = MakeButton("戻す", "RevertPageSettings", ButtonRole.Neutral);
+        revert.Margin = new Padding(0, 4, 8, 4);
+        revert.CausesValidation = false;
+        revert.Click += (_, _) =>
+        {
+            restoreDraft();
+            refreshSettingControls?.Invoke();
+            SetStatus("保存済みの設定に戻しました。");
+        };
+        actions.Controls.Add(revert);
+        return revert;
+    }
+
     private AppSettings ReadNotificationSettings() => committed with
     {
         NotificationDurationSeconds = SettingNumber(notificationDuration),
@@ -84,16 +105,20 @@ internal sealed partial class SettingsForm
         WindowActivation = captureBeforeKeys.WindowActivation,
         CaptureMouse = committed.CaptureMouse with
         {
-            BeforeLeft = captureBeforeKeys.IsClickEnabled(MouseButtons.Left),
-            BeforeRight = captureBeforeKeys.IsClickEnabled(MouseButtons.Right),
-            BeforeMiddle = captureBeforeKeys.IsClickEnabled(MouseButtons.Middle)
+            BeforeLeftAction = captureBeforeKeys.ClickAt(MouseButtons.Left),
+            BeforeRightAction = captureBeforeKeys.ClickAt(MouseButtons.Right),
+            BeforeMiddleAction = captureBeforeKeys.ClickAt(MouseButtons.Middle)
         }
     };
 
     private AppSettings ReadDragShortcuts() => committed with
     {
         CaptureKeys = captureKeys.Value,
-        CaptureMouse = committed.CaptureMouse with { DragRight = captureKeys.IsClickEnabled(MouseButtons.Right) }
+        CaptureMouse = committed.CaptureMouse with
+        {
+            DragRightAction = captureKeys.ClickAt(MouseButtons.Right),
+            DragMiddleAction = captureKeys.ClickAt(MouseButtons.Middle)
+        }
     };
 
     private AppSettings ReadExternalApplicationSettings()

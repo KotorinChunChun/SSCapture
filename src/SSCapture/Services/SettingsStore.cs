@@ -13,7 +13,7 @@ internal sealed class SettingsStore(string path)
             new JsonStringEnumConverter<CaptureIntent>(), new JsonStringEnumConverter<NotificationCorner>(), new JsonStringEnumConverter<NotificationDisplay>(),
             new JsonStringEnumConverter<SelectionGuideDisplay>(),
             new JsonStringEnumConverter<CaptureAnchor>(), new JsonStringEnumConverter<Capture.CaptureKeyAction>(),
-            new JsonStringEnumConverter<Capture.CaptureSelectionMethod>(), new JsonStringEnumConverter<Capture.CaptureActivation>() }
+            new JsonStringEnumConverter<Capture.CaptureClickAction>(), new JsonStringEnumConverter<Capture.CaptureSelectionMethod>(), new JsonStringEnumConverter<Capture.CaptureActivation>() }
     };
     private static readonly JsonSerializerOptions StrictReadOptions = new(Options) { RespectNullableAnnotations = true };
     private readonly string filePath = Path.GetFullPath(path);
@@ -72,6 +72,21 @@ internal sealed class SettingsStore(string path)
         }
         if (!root.TryGetProperty("SchemaVersion", out var editorVersion) || editorVersion.GetInt32() < 3)
             settings = settings.MigrateEditors();
+        if (root.TryGetProperty(nameof(AppSettings.CaptureMouse), out var mouse) && mouse.ValueKind == JsonValueKind.Object)
+        {
+            var map = settings.CaptureMouse;
+            settings = settings with { CaptureMouse = map with
+            {
+                BeforeLeftAction = ReadLegacyClick("BeforeLeft", nameof(map.BeforeLeftAction), map.BeforeLeftAction, Capture.CaptureClickAction.Select),
+                BeforeRightAction = ReadLegacyClick("BeforeRight", nameof(map.BeforeRightAction), map.BeforeRightAction, Capture.CaptureClickAction.Menu),
+                BeforeMiddleAction = ReadLegacyClick("BeforeMiddle", nameof(map.BeforeMiddleAction), map.BeforeMiddleAction, Capture.CaptureClickAction.Desktop),
+                DragRightAction = ReadLegacyClick("DragRight", nameof(map.DragRightAction), map.DragRightAction, Capture.CaptureClickAction.Cancel)
+            } };
+
+            Capture.CaptureClickAction ReadLegacyClick(string oldName, string newName, Capture.CaptureClickAction fallback,
+                Capture.CaptureClickAction enabled) => !mouse.TryGetProperty(newName, out _) && mouse.TryGetProperty(oldName, out var flag)
+                ? flag.GetBoolean() ? enabled : Capture.CaptureClickAction.None : fallback;
+        }
         settings = RemoveRetiredEditor(settings);
         settings.Validate();
         settings = settings.ApplyDefaults();

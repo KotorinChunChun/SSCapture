@@ -8,7 +8,7 @@ internal sealed class CaptureKeyEditor : UserControl
         [CaptureModifiers.Ctrl, CaptureModifiers.Shift, CaptureModifiers.Alt, CaptureModifiers.Win];
     private readonly Dictionary<CaptureModifiers, ComboBox> commands = [];
     private readonly Dictionary<MouseButtons, ComboBox> clicks = [];
-    private readonly CheckBox? space;
+    private readonly ComboBox? space;
     private readonly ComboBox? controlActivation, windowActivation;
 
     private sealed record Choice(CaptureKeyAction Action, string Text)
@@ -32,7 +32,7 @@ internal sealed class CaptureKeyEditor : UserControl
         Controls.Add(table);
 
         Choice[] choices = Enum.GetValues<CaptureKeyAction>()
-            .Where(action => beforeSelection ? CaptureKeyMap.IsBeforeAction(action) : action != CaptureKeyAction.HighlightWindow)
+            .Where(action => beforeSelection ? CaptureKeyMap.IsBeforeAction(action) : CaptureKeyMap.IsDragAction(action))
             .Select(action => new Choice(action, action switch
             {
                 CaptureKeyAction.SwitchAnchor when beforeSelection => "基点切替（固定サイズ）",
@@ -58,18 +58,16 @@ internal sealed class CaptureKeyEditor : UserControl
                 commands.Add(keys, primary);
                 if (column == row) continue;
 
-                var mirror = AddChoice(table, row + 1, column + 1, name + "Mirror", label, choices, primary.SelectedIndex);
+                var mirror = AddChoice(table, row + 1, column + 1, name + "Mirror", label, choices, primary.SelectedIndex, enabled: false);
                 primary.SelectedIndexChanged += (_, _) => mirror.SelectedIndex = primary.SelectedIndex;
-                mirror.SelectedIndexChanged += (_, _) => primary.SelectedIndex = mirror.SelectedIndex;
             }
         }
 
         int clickRow = 5;
         if (!beforeSelection)
         {
-            space = new CheckBox { Name = "CaptureKeysSpace", Text = "Spaceで基点を切り替える", AutoSize = true,
-                Anchor = AnchorStyles.Left, Checked = map.SpaceEnabled, Margin = new Padding(3, 6, 3, 6) };
-            table.Controls.Add(space, 1, clickRow++);
+            table.Controls.Add(new Label { Text = "Space", AutoSize = true, Anchor = AnchorStyles.Left }, 0, clickRow);
+            space = AddChoice(table, 1, clickRow++, "CaptureKeysSpace", "Space", ["なし", "基点を切り替える"], map.SpaceEnabled ? 1 : 0);
             table.SetColumnSpan(space, 4);
         }
 
@@ -77,15 +75,15 @@ internal sealed class CaptureKeyEditor : UserControl
         {
             controlActivation = AddActivation(clickRow++, "ControlActivation", "コントロール選択", initialControlActivation);
             windowActivation = AddActivation(clickRow++, "WindowActivation", "ウィンドウ撮影", initialWindowActivation);
-            AddClick(MouseButtons.Left, clickRow, "BeforeLeft", "左クリック", "ウィンドウ撮影／ドラッグ開始（固定サイズでは確定）", mouse.BeforeLeft);
-            AddClick(MouseButtons.Right, clickRow + 1, "BeforeRight", "右クリック", "撮影メニューを開く", mouse.BeforeRight);
-            AddClick(MouseButtons.Middle, clickRow + 2, "BeforeMiddle", "中クリック", "ポインタ下のモニターを撮影", mouse.BeforeMiddle);
+            AddClick(MouseButtons.Left, clickRow++, "BeforeLeft");
+            AddClick(MouseButtons.Right, clickRow++, "BeforeRight");
+            AddClick(MouseButtons.Middle, clickRow, "BeforeMiddle");
         }
         else
         {
-            AddClick(MouseButtons.Left, clickRow, "DragLeft", "左クリック", "使用不可", false, enabled: false);
-            AddClick(MouseButtons.Right, clickRow + 1, "DragRight", "右クリック", "ドラッグを中止", mouse.DragRight);
-            AddClick(MouseButtons.Middle, clickRow + 2, "DragMiddle", "中クリック", "なし", false, enabled: false);
+            AddClick(MouseButtons.Left, clickRow++, "DragLeft", enabled: false);
+            AddClick(MouseButtons.Right, clickRow++, "DragRight");
+            AddClick(MouseButtons.Middle, clickRow, "DragMiddle");
         }
         SizeRows(table);
         table.FontChanged += (_, _) => SizeRows(table);
@@ -99,43 +97,56 @@ internal sealed class CaptureKeyEditor : UserControl
             return combo;
         }
 
-        void AddClick(MouseButtons button, int row, string name, string label, string action, bool assigned, bool enabled = true)
+        void AddClick(MouseButtons button, int row, string name, bool enabled = true)
         {
-            table.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left }, 0, row);
+            string label = CaptureMouseMap.Label(button);
+            table.Controls.Add(new Label { Name = "CaptureMouse" + name + "Label", Text = label, AutoSize = true, Anchor = AnchorStyles.Left }, 0, row);
+            ClickChoice[] options = !enabled ? [new(CaptureClickAction.None, "使用不可")]
+                : Enum.GetValues<CaptureClickAction>()
+                    .Where(action => beforeSelection ? CaptureMouseMap.ValidBefore(action) : CaptureMouseMap.ValidDuring(action))
+                    .Select(action => new ClickChoice(action, action switch
+                    {
+                        CaptureClickAction.Select => "撮影対象を選択／確定",
+                        CaptureClickAction.Menu => "撮影メニューを開く",
+                        CaptureClickAction.Desktop => "ポインタ下のモニターを撮影",
+                        CaptureClickAction.Cancel => "ドラッグを中止",
+                        _ => "なし"
+                    })).ToArray();
+            var initial = beforeSelection ? mouse.Before(button) : mouse.During(button);
             var combo = AddChoice(table, 1, row, "CaptureMouse" + name, label,
-                enabled ? ["なし", action] : [action], assigned ? 1 : 0, enabled);
+                options, Array.FindIndex(options, choice => choice.Action == initial), enabled);
             table.SetColumnSpan(combo, 4);
             clicks.Add(button, combo);
         }
     }
 
+    private sealed record ClickChoice(CaptureClickAction Action, string Text)
+    {
+        public override string ToString() => Text;
+    }
+
     internal void ResetDraft(CaptureKeyMap map, CaptureMouseMap mouse, CaptureActivation controlMode, CaptureActivation windowMode)
     {
         foreach (var (keys, combo) in commands)
-            combo.SelectedItem = combo.Items.Cast<Choice>().First(choice => choice.Action == map.Resolve(keys));
+            combo.SelectedItem = combo.Items.Cast<Choice>().FirstOrDefault(choice => choice.Action == map.Resolve(keys)) ?? combo.Items[0];
 
-        if (space is not null)
+        if (space is not null) space.SelectedIndex = map.SpaceEnabled ? 1 : 0;
+        foreach (var (button, combo) in clicks)
         {
-            space.Checked = map.SpaceEnabled;
-            clicks[MouseButtons.Right].SelectedIndex = mouse.DragRight ? 1 : 0;
+            var action = space is null ? mouse.Before(button) : mouse.During(button);
+            combo.SelectedItem = combo.Items.Cast<ClickChoice>().First(choice => choice.Action == action);
         }
-        else
-        {
-            clicks[MouseButtons.Left].SelectedIndex = mouse.BeforeLeft ? 1 : 0;
-            clicks[MouseButtons.Right].SelectedIndex = mouse.BeforeRight ? 1 : 0;
-            clicks[MouseButtons.Middle].SelectedIndex = mouse.BeforeMiddle ? 1 : 0;
-            controlActivation!.SelectedIndex = (int)controlMode;
-            windowActivation!.SelectedIndex = (int)windowMode;
-        }
+        if (controlActivation is not null) controlActivation.SelectedIndex = (int)controlMode;
+        if (windowActivation is not null) windowActivation.SelectedIndex = (int)windowMode;
     }
 
     internal CaptureKeyMap Value => new(
         ActionAt(CaptureModifiers.Ctrl), ActionAt(CaptureModifiers.Shift), ActionAt(CaptureModifiers.Alt), ActionAt(CaptureModifiers.Win),
         ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Shift), ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Alt),
         ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Win), ActionAt(CaptureModifiers.Shift | CaptureModifiers.Alt),
-        ActionAt(CaptureModifiers.Shift | CaptureModifiers.Win), ActionAt(CaptureModifiers.Alt | CaptureModifiers.Win), space?.Checked ?? false);
+        ActionAt(CaptureModifiers.Shift | CaptureModifiers.Win), ActionAt(CaptureModifiers.Alt | CaptureModifiers.Win), space?.SelectedIndex == 1);
 
-    internal bool IsClickEnabled(MouseButtons button) => clicks[button].SelectedIndex == 1;
+    internal CaptureClickAction ClickAt(MouseButtons button) => ((ClickChoice)clicks[button].SelectedItem!).Action;
     internal CaptureActivation ControlActivation => (CaptureActivation)(controlActivation?.SelectedIndex ?? 0);
     internal CaptureActivation WindowActivation => (CaptureActivation)(windowActivation?.SelectedIndex ?? 0);
 

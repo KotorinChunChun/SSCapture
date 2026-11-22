@@ -159,9 +159,9 @@ internal sealed class ExternalApplicationsEditor : UserControl
         if (disposing) { newMenu.Dispose(); argumentTips.Dispose(); }
         base.Dispose(disposing);
     }
-    internal void LoadRestoredApplications(ExternalApplication[] restored)
+    internal void LoadRestoredApplications(ExternalApplication[] restored, string? restoreSelectedId = null)
     {
-        string selectedId = SelectedId;
+        string selectedId = restoreSelectedId ?? SelectedId;
         string? editingId = EditingApplication?.Id;
         applications.Clear();
         applications.AddRange(restored);
@@ -169,7 +169,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
         if (editingId is not null) SelectRow(editingId);
         else if (applications.Count > 0) SelectRow(applications[0].Id);
         else { appName.Clear(); SetLaunch(ExternalApplicationLaunch.Executable, "", EditorArguments.Default); }
-        status.Text = "変更しました。［適用］で確定します。";
+        status.Text = restoreSelectedId is null ? "変更しました。［適用］で確定します。" : "";
     }
     private void Refresh(string id, bool notifySelection = true)
     {

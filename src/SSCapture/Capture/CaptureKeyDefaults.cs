@@ -6,13 +6,15 @@ namespace SSCapture.Capture;
 internal enum CaptureActivation { Push, Toggle }
 
 internal sealed record CaptureKeyDefaults(CaptureKeyMap Drag, CaptureKeyMap Before,
-    CaptureActivation ControlActivation = CaptureActivation.Push, CaptureActivation WindowActivation = CaptureActivation.Push)
+    CaptureActivation ControlActivation = CaptureActivation.Push, CaptureActivation WindowActivation = CaptureActivation.Push,
+    CaptureMouseMap? Mouse = null)
 {
     internal const string FileName = "capture-key-defaults.json";
     private static readonly JsonSerializerOptions Options = new()
     {
         Converters = { new JsonStringEnumConverter<CaptureKeyAction>(allowIntegerValues: false),
-            new JsonStringEnumConverter<CaptureActivation>(allowIntegerValues: false) }
+            new JsonStringEnumConverter<CaptureActivation>(allowIntegerValues: false),
+            new JsonStringEnumConverter<CaptureClickAction>(allowIntegerValues: false) }
     };
     private static readonly Lazy<CaptureKeyDefaults> Defaults = new(() => Load(AppContext.BaseDirectory));
     internal static CaptureKeyDefaults Current => Defaults.Value;
@@ -40,8 +42,8 @@ internal sealed record CaptureKeyDefaults(CaptureKeyMap Drag, CaptureKeyMap Befo
     private static CaptureKeyDefaults? Read(Stream stream)
     {
         var defaults = JsonSerializer.Deserialize<CaptureKeyDefaults>(stream, Options);
-        if (defaults?.Drag is null || defaults.Before is null || CaptureKeyMap.Combinations.Any(key =>
-            defaults.Drag.Resolve(key) == CaptureKeyAction.HighlightWindow || !CaptureKeyMap.IsBeforeAction(defaults.Before.Resolve(key))))
+        if (defaults?.Drag is null || defaults.Before is null || defaults.Mouse?.IsValid == false || CaptureKeyMap.Combinations.Any(key =>
+            !CaptureKeyMap.IsDragAction(defaults.Drag.Resolve(key)) || !CaptureKeyMap.IsBeforeAction(defaults.Before.Resolve(key))))
             return null;
         return defaults;
     }

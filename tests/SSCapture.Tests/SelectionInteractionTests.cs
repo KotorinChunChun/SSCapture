@@ -32,7 +32,7 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("ポインタ横のガイドは中ドラッグで通過したモニターと名称を一度ずつ表示する", () =>
+        Run("ポインタ横のガイドはShiftから始めたドラッグで通過したモニターと名称を一度ずつ表示する", () =>
         {
             Rectangle left = new(-160, 0, 160, 120), right = new(0, 0, 160, 120);
             var snapshot = new DesktopSnapshot(new Bitmap(320, 120), Rectangle.Union(left, right), [left, right]);
@@ -43,11 +43,44 @@ internal static partial class Program
             try
             {
                 _ = overlay.Handle;
-                session.MouseDown(overlay, MouseButtons.Middle, new(-95, 30));
+                session.MouseDown(overlay, MouseButtons.Middle, new(-95, 30), Keys.None);
+                Check(!session.HasPointerPress, "既定の中クリックが撮影を始めた");
+                session.MouseDown(overlay, MouseButtons.Left, new(-95, 30), Keys.Shift);
                 Check(session.PointerHint?.EndsWith("\nデスクトップ 2（左の画面）", StringComparison.Ordinal) == true, "1台目のモニターが表示されない");
                 session.MoveTo(new(50, 30));
                 session.MoveTo(new(-95, 30));
                 Equal("モニター全体を撮影　Esc / 右クリックで取り消し\nドラッグ：複数デスクトップを合成\nデスクトップ 2（左の画面）\nデスクトップ 1（メイン画面）", session.PointerHint);
+                session.MouseUp(MouseButtons.Left, new(-95, 30), Keys.None);
+                Check(session.Completion.IsCompletedSuccessfully, "デスクトップ選択が確定しない");
+                using var result = session.Completion.Result;
+                Check(result.Selection?.Composite?.Regions?.SequenceEqual([left, right]) == true, "通過したモニターが合成対象にならない");
+            }
+            finally { session.Cancel(); }
+        });
+        Run("右で選択を始め、中でドラッグを中止する割り当てを実行できる", () =>
+        {
+            var session = RectangleSelectionSession(new Services.AppSettings
+            {
+                CaptureMouse = new CaptureMouseMap(BeforeRightAction: CaptureClickAction.Select,
+                    DragRightAction: CaptureClickAction.None, DragMiddleAction: CaptureClickAction.Cancel)
+            });
+            using var overlay = new CaptureOverlay(session, new(0, 0, 400, 300));
+            try
+            {
+                _ = overlay.Handle;
+                session.MouseDown(overlay, MouseButtons.Right, new(40, 50), Keys.None);
+                session.ApplyPointerInput(new(240, 180), CaptureModifiers.None);
+                Equal(new Rectangle(40, 50, 200, 130), session.Selection);
+                Check(session.PointerHint?.Contains("Esc / 中クリックで取り消し", StringComparison.Ordinal) == true, "中クリックの案内がない");
+                session.MouseDown(overlay, MouseButtons.Middle, new(240, 180), Keys.None);
+                Check(session.Selection.IsEmpty && !session.HasPointerPress && !session.Completion.IsCompleted, "中クリックで選択だけを中止しない");
+                session.MouseUp(MouseButtons.Middle);
+                session.MouseUp(MouseButtons.Right);
+                session.MouseDown(overlay, MouseButtons.Right, new(40, 50), Keys.None);
+                session.MouseUp(MouseButtons.Right, new(240, 180), Keys.None);
+                Check(session.Completion.IsCompletedSuccessfully, "右クリックで撮影が確定しない");
+                using var result = session.Completion.GetAwaiter().GetResult();
+                Equal(new Size(200, 130), result.Image!.Size);
             }
             finally { session.Cancel(); }
         });

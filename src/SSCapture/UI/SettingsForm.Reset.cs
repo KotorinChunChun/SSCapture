@@ -14,7 +14,22 @@ internal sealed partial class SettingsForm
         reset.CausesValidation = false;
         reset.Click += (_, _) => ResetSelectedPage();
         actions.Controls.Add(reset);
-        if (PageDraft(page) is { } readDraft) AddApplyButton(actions, page, readDraft);
+        if (PageDraft(page) is { } readDraft)
+            AddApplyButton(actions, page, readDraft, () => RestorePageDraft(page), isBasic: page.Text == "基本");
+        else if (page == workShortcutPage)
+        {
+            var revert = AddRevertButton(actions, () =>
+            {
+                lastRecipeKey.Value = committed.LastRecipeShortcut;
+                presetShortcutEditor.LoadRows(committed.PresetCaptureShortcuts ?? []);
+            });
+            void Refresh() => revert.Enabled = !presetShortcutEditor.Rows.SequenceEqual(committed.PresetCaptureShortcuts ?? [])
+                || lastRecipeKey.Value != committed.LastRecipeShortcut;
+            presetShortcutEditor.DraftChanged += (_, _) => Refresh();
+            lastRecipeKey.ValueChanged += (_, _) => Refresh();
+            refreshSettingControls += Refresh;
+            Refresh();
+        }
         page.Controls.Add(actions);
     }
 
@@ -44,15 +59,11 @@ internal sealed partial class SettingsForm
                     }
                     return;
                 case "基本":
-                    ResetBasicDraft(defaults);
+                    LoadBasicDraft(defaults);
+                    startupSettings.ResetDraft();
                     break;
                 case "通知":
-                    notificationDisplay.SelectedIndex = (int)defaults.NotificationDisplay;
-                    notificationCorner.SelectedIndex = (int)defaults.NotificationCorner;
-                    notificationDuration.Value = defaults.NotificationDurationSeconds;
-                    holdNotification.Checked = defaults.HoldNotificationWhileApproaching;
-                    playCaptureSound.Checked = defaults.PlayCaptureSound;
-                    notificationApplication.SelectedIndex = 0;
+                    LoadNotificationDraft(defaults);
                     break;
                 case "履歴":
                     keepHistory.Checked = defaults.KeepHistory;
@@ -98,7 +109,49 @@ internal sealed partial class SettingsForm
         SetStatus("標準プリセットを初期設定に戻しました。");
     }
 
-    private void ResetBasicDraft(AppSettings defaults)
+    private void RestorePageDraft(TabPage page)
+    {
+        switch (page.Text)
+        {
+            case "基本":
+                LoadBasicDraft(committed);
+                startupSettings.RevertDraft();
+                break;
+            case "通知":
+                LoadNotificationDraft(committed);
+                break;
+            case "履歴":
+                keepHistory.Checked = committed.KeepHistory;
+                break;
+            case "外部アプリ":
+                imageApps.LoadRestoredApplications(committed.ImageEditors, committed.SelectedImageEditorId);
+                videoApps.LoadRestoredApplications(committed.VideoEditors, committed.SelectedVideoEditorId);
+                presetEditor.RefreshApplications();
+                break;
+            case "即時撮影キー":
+                for (int index = 0; index < instantKeys.Length; index++) instantKeys[index].Value = committed.InstantShortcuts[index];
+                break;
+            case "撮影範囲設定前":
+                captureBeforeKeys.ResetDraft(committed.CaptureBeforeKeys, committed.CaptureMouse, committed.ControlActivation, committed.WindowActivation);
+                break;
+            case "撮影ドラッグ中":
+                captureKeys.ResetDraft(committed.CaptureKeys, committed.CaptureMouse, committed.ControlActivation, committed.WindowActivation);
+                break;
+        }
+    }
+
+    private void LoadNotificationDraft(AppSettings settings)
+    {
+        notificationDisplay.SelectedIndex = (int)settings.NotificationDisplay;
+        notificationCorner.SelectedIndex = (int)settings.NotificationCorner;
+        notificationDuration.Value = settings.NotificationDurationSeconds;
+        holdNotification.Checked = settings.HoldNotificationWhileApproaching;
+        playCaptureSound.Checked = settings.PlayCaptureSound;
+        notificationApplication.SelectedIndex = Enumerable.Range(0, notificationApplication.Items.Count)
+            .FirstOrDefault(index => ((NotificationAppItem)notificationApplication.Items[index]!).Id == settings.NotificationApplicationId);
+    }
+
+    private void LoadBasicDraft(AppSettings defaults)
     {
         limitToStartingMonitor.Checked = defaults.LimitToStartingMonitor;
         dimCaptureBackground.Checked = defaults.DimCaptureBackground;
@@ -112,7 +165,6 @@ internal sealed partial class SettingsForm
         magnifierEnabled.Checked = defaults.ShowMagnifier;
         magnifierDotCount.SelectedItem = defaults.MagnifierDotCount;
         magnifierZoom.Value = defaults.MagnifierZoom;
-        startupSettings.ResetDraft();
     }
 
     private void ResetShortcutDraft(AppSettings defaults)

@@ -335,9 +335,9 @@ internal sealed partial class SettingsForm : Form
         Add(guideOptions, "拡大鏡の拡大倍率（倍）", magnifierZoom, 4);
         Add(basic, "操作ガイド", guideOptions, 2);
 
-        startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration());
+        startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration(), (int)basic.ColumnStyles[0].Width + 3);
         AddFullRow(basic, startupSettings, 3);
-        var transfer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+        var transfer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = new Padding(0, 3, 0, 3) };
         var exportButton = MakeButton("設定をエクスポート", "ExportSettings");
         var importButton = MakeButton("設定をインポート", "ImportSettings");
         exportButton.AutoSize = importButton.AutoSize = true;
@@ -357,7 +357,7 @@ internal sealed partial class SettingsForm : Form
             if (importSettings!(candidate) is { } error) SetStatus(error, true);
         };
         transfer.Controls.AddRange([exportButton, importButton]);
-        AddFullRow(basic, transfer, 4);
+        basic.Controls.Add(transfer, 1, 4);
         foreach (Label label in basic.Controls.OfType<Label>())
         {
             label.Anchor = AnchorStyles.Top | AnchorStyles.Left;
@@ -366,7 +366,8 @@ internal sealed partial class SettingsForm : Form
         Shown += async (_, _) => await startupSettings.RefreshAsync();
         oneOcrDirectory.Parent!.Controls.Remove(oneOcrDirectory);
         var outputActions = presetEditor.AddSaveTools(oneOcrDirectory, openFolder);
-        AddApplyButton(outputActions, oneOcrDirectory, () => committed with { OneOcrDirectory = Expand(oneOcrDirectory.Text) });
+        AddApplyButton(outputActions, oneOcrDirectory, () => committed with { OneOcrDirectory = Expand(oneOcrDirectory.Text) },
+            () => oneOcrDirectory.Text = committed.OneOcrDirectory);
         foreach (var removed in new[] { (TabPage)inputs.Parent!, (TabPage)naming.Parent!, (TabPage)metadataPage.Parent!, (TabPage)audio.Parent! }) { tabs.TabPages.Remove(removed); removed.Dispose(); }
         directory = (TextBox)presetEditor.Controls.Find("SaveDirectory", true).Single(); fileNamePattern = (TextBox)presetEditor.Controls.Find("FileNamePattern", true).Single(); ocrSeparator = (TextBox)presetEditor.Controls.Find("OcrSeparator", true).Single();
         clipboardOutput = (CheckBox)presetEditor.Controls.Find("ClipboardOutput", true).Single(); fileOutput = (CheckBox)presetEditor.Controls.Find("FileOutput", true).Single(); externalOutput = (CheckBox)presetEditor.Controls.Find("ExternalOutput", true).Single();
@@ -557,7 +558,7 @@ internal sealed partial class SettingsForm : Form
     private static TableLayoutPanel BasicFields(params int[] heights)
     {
         var table = new TableLayoutPanel { ColumnCount = 2, RowCount = heights.Length };
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 280));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         foreach (int height in heights) table.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
         return table;

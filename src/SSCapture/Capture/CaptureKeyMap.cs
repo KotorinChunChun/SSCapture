@@ -3,7 +3,7 @@ namespace SSCapture.Capture;
 [Flags]
 internal enum CaptureModifiers { None = 0, Ctrl = 1, Shift = 2, Alt = 4, Win = 8 }
 
-internal enum CaptureKeyAction { None, LockWidth, LockHeight, Snap, CrossMonitor, HighlightWindow, SwitchAnchor, LockAspectRatio, FromCenter, FromCenterWithAspectRatio, Grid, SelectControl }
+internal enum CaptureKeyAction { None, LockWidth, LockHeight, Snap, CrossMonitor, HighlightWindow, SwitchAnchor, LockAspectRatio, FromCenter, FromCenterWithAspectRatio, Grid, SelectControl, SelectDesktop }
 
 internal sealed record CaptureKeyMap(
     CaptureKeyAction Ctrl = CaptureKeyAction.None,
@@ -21,7 +21,10 @@ internal sealed record CaptureKeyMap(
     internal static CaptureKeyMap BeforeDefaults => CaptureKeyDefaults.Current.Before;
 
     internal static bool IsBeforeAction(CaptureKeyAction action) => action is CaptureKeyAction.None or CaptureKeyAction.Snap
-        or CaptureKeyAction.CrossMonitor or CaptureKeyAction.SwitchAnchor or CaptureKeyAction.HighlightWindow or CaptureKeyAction.SelectControl;
+        or CaptureKeyAction.CrossMonitor or CaptureKeyAction.SwitchAnchor or CaptureKeyAction.HighlightWindow or CaptureKeyAction.SelectControl or CaptureKeyAction.SelectDesktop;
+
+    internal static bool IsDragAction(CaptureKeyAction action) => Enum.IsDefined(action)
+        && action is not (CaptureKeyAction.HighlightWindow or CaptureKeyAction.SelectDesktop);
 
     internal static IEnumerable<CaptureModifiers> Combinations =>
     [
@@ -59,6 +62,7 @@ internal sealed record CaptureKeyMap(
         CaptureKeyAction.FromCenter => "起点を中心にする",
         CaptureKeyAction.FromCenterWithAspectRatio => "中心基準＋比率固定",
         CaptureKeyAction.SelectControl => "コントロールを選択",
+        CaptureKeyAction.SelectDesktop => "デスクトップの選択",
         _ => "なし"
     };
 

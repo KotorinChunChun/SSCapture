@@ -55,7 +55,7 @@ internal sealed record AppSettings
     public Capture.CaptureKeyMap CaptureBeforeKeys { get; init; } = Capture.CaptureKeyMap.BeforeDefaults;
     public Capture.CaptureActivation ControlActivation { get; init; } = Capture.CaptureKeyDefaults.Current.ControlActivation;
     public Capture.CaptureActivation WindowActivation { get; init; } = Capture.CaptureKeyDefaults.Current.WindowActivation;
-    public Capture.CaptureMouseMap CaptureMouse { get; init; } = new();
+    public Capture.CaptureMouseMap CaptureMouse { get; init; } = Capture.CaptureKeyDefaults.Current.Mouse ?? new();
     public bool ShowSelectionGuide { get; init; } = true;
     public SelectionGuideDisplay SelectionGuideDisplay { get; init; }
     public bool ShowPointerGuide { get; init; } = true;
@@ -113,13 +113,13 @@ internal sealed record AppSettings
             throw new ArgumentException("矩形の選択方法が無効です。");
         if (!Enum.IsDefined(SelectionGuideDisplay))
             throw new ArgumentException("操作ガイドの表示先が正しくありません。");
-        if (CaptureKeys is null || Capture.CaptureKeyMap.Combinations.Any(keys => !Enum.IsDefined(CaptureKeys.Resolve(keys))))
+        if (CaptureKeys is null || Capture.CaptureKeyMap.Combinations.Any(keys => !Enum.IsDefined(CaptureKeys.Resolve(keys)) || CaptureKeys.Resolve(keys) == Capture.CaptureKeyAction.SelectDesktop))
             throw new ArgumentException("撮影中のキー割り当てが正しくありません。");
         if (CaptureBeforeKeys is null || Capture.CaptureKeyMap.Combinations.Any(keys => !Capture.CaptureKeyMap.IsBeforeAction(CaptureBeforeKeys.Resolve(keys))))
             throw new ArgumentException("撮影範囲設定前のキー割り当てが正しくありません。");
         if (!Enum.IsDefined(ControlActivation) || !Enum.IsDefined(WindowActivation))
             throw new ArgumentException("撮影範囲設定前の切り替え方式が正しくありません。");
-        if (CaptureMouse is null) throw new ArgumentException("撮影中のマウス割り当てが正しくありません。");
+        if (CaptureMouse?.IsValid != true) throw new ArgumentException("撮影中のマウス割り当てが正しくありません。");
         if (SnapDistancePixels is < 1 or > 32768 || GridStepPixels is < 1 or > 32768)
             throw new ArgumentException("ウィンドウスナップ距離とグリッド間隔は1～32768pxで指定してください。");
         if (MagnifierDotCount is < Capture.CaptureMagnifier.MinDotCount or > Capture.CaptureMagnifier.MaxDotCount || MagnifierDotCount % 2 != 0)

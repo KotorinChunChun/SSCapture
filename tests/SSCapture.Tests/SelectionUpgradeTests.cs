@@ -12,7 +12,7 @@ internal static partial class Program
         {
             var map = new CaptureKeyMap(Ctrl: CaptureKeyAction.Snap, Alt: CaptureKeyAction.Grid, CtrlAlt: CaptureKeyAction.LockHeight, SpaceEnabled: false);
             var beforeMap = CaptureKeyMap.BeforeDefaults with { CtrlAlt = CaptureKeyAction.CrossMonitor };
-            var mouse = new CaptureMouseMap(BeforeLeft: false, BeforeMiddle: false, DragRight: false);
+            var mouse = new CaptureMouseMap(BeforeLeftAction: CaptureClickAction.None, BeforeMiddleAction: CaptureClickAction.Menu, DragRightAction: CaptureClickAction.None);
             using var editor = new CaptureKeyEditor(map, mouse, beforeSelection: false);
             Equal(10, CaptureKeyMap.Combinations.Distinct().Count());
             Equal(map, editor.Value);
@@ -20,8 +20,9 @@ internal static partial class Program
             var mirror = (ComboBox)editor.Controls.Find("CaptureKeys5Mirror", true).Single();
             primary.SelectedIndex = (int)CaptureKeyAction.CrossMonitor;
             Equal(primary.SelectedIndex, mirror.SelectedIndex);
-            mirror.SelectedIndex = (int)CaptureKeyAction.Snap;
-            Equal(mirror.SelectedIndex, primary.SelectedIndex);
+            Check(!mirror.Enabled, "重複セルが編集可能");
+            primary.SelectedIndex = (int)CaptureKeyAction.Snap;
+            Equal(primary.SelectedIndex, mirror.SelectedIndex);
             var store = new SettingsStore(Path.Combine(directory, "settings.json"));
             store.Save(new AppSettings { CaptureKeys = editor.Value, CaptureBeforeKeys = beforeMap, CaptureMouse = mouse });
             var loaded = store.Load(out string? warning);
@@ -36,20 +37,21 @@ internal static partial class Program
             string path = Path.Combine(directory, "settings.json");
             File.WriteAllText(path, """
                 { "SchemaVersion": 3, "CaptureKeys": { "Ctrl": "Snap", "Win": "HighlightWindow",
-                  "CtrlShift": "HighlightWindow", "CtrlAlt": "LockHeight", "AltWin": "SwitchAnchor", "SpaceEnabled": false } }
+                  "CtrlShift": "HighlightWindow", "CtrlAlt": "LockHeight", "AltWin": "SwitchAnchor", "SpaceEnabled": false },
+                  "CaptureMouse": { "BeforeMiddle": true, "BeforeRight": false } }
                 """);
             var store = new SettingsStore(path);
             var loaded = store.Load(out string? warning);
             Check(warning is null, warning ?? "");
             Equal(CaptureKeyAction.HighlightWindow, loaded.CaptureKeys.Win);
             Equal(CaptureKeyAction.HighlightWindow, loaded.CaptureKeys.CtrlShift);
-            Equal(CaptureKeyAction.CrossMonitor, new AppSettings().CaptureKeys.Win);
+            Equal(CaptureKeyAction.CrossMonitor, new AppSettings().CaptureKeys.Shift);
             foreach (var keys in CaptureKeyMap.Combinations)
                 Equal(keys switch { CaptureModifiers.Win => CaptureKeyAction.HighlightWindow, CaptureModifiers.Alt => CaptureKeyAction.Snap,
-                    CaptureModifiers.Ctrl => CaptureKeyAction.SelectControl,
+                    CaptureModifiers.Ctrl => CaptureKeyAction.SelectControl, CaptureModifiers.Shift => CaptureKeyAction.SelectDesktop,
                     _ => CaptureKeyAction.None }, loaded.CaptureBeforeKeys.Resolve(keys));
             Check(!loaded.CaptureBeforeKeys.SpaceEnabled, "撮影範囲設定前にSpaceが有効");
-            Equal(new CaptureMouseMap(true, true, true, true), loaded.CaptureMouse);
+            Equal(new CaptureMouseMap(BeforeRightAction: CaptureClickAction.None, BeforeMiddleAction: CaptureClickAction.Desktop), loaded.CaptureMouse);
 
             using var editor = new CaptureKeyEditor(loaded.CaptureKeys, loaded.CaptureMouse, beforeSelection: false);
             var expected = loaded.CaptureKeys with { Win = CaptureKeyAction.None, CtrlShift = CaptureKeyAction.None };
@@ -60,7 +62,10 @@ internal static partial class Program
         {
             var bundled = CaptureKeyDefaults.Current.Drag;
             Equal(CaptureKeyAction.FromCenter, bundled.Ctrl);
-            Equal(CaptureKeyAction.LockAspectRatio, bundled.Shift);
+            Equal(CaptureKeyAction.CrossMonitor, bundled.Shift);
+            Equal(CaptureKeyAction.LockAspectRatio, bundled.Win);
+            Equal(CaptureKeyAction.SelectDesktop, CaptureKeyDefaults.Current.Before.Shift);
+            Equal(CaptureClickAction.None, new AppSettings().CaptureMouse.BeforeMiddleAction);
             Equal(CaptureKeyAction.FromCenterWithAspectRatio, bundled.CtrlShift);
             Equal(CaptureKeyAction.LockWidth, bundled.CtrlAlt);
             Equal(CaptureKeyAction.LockHeight, bundled.ShiftAlt);
@@ -75,7 +80,7 @@ internal static partial class Program
             saved.Save(new AppSettings { CaptureKeys = bundled with { Win = CaptureKeyAction.None } });
             Equal(CaptureKeyAction.None, saved.Load(out _).CaptureKeys.Win);
         }));
-        Run("Shiftは直前の縦横比、Ctrlは起点を中心、複合と離した後も正しい", () =>
+        Run("Winは直前の縦横比、Ctrlは起点を中心、複合と離した後も正しい", () =>
         {
             Rectangle desktop = new(-300, -200, 600, 400);
             var gesture = new SelectionGesture(CaptureMode.Rectangle, [desktop], []);

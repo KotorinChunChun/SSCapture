@@ -59,6 +59,12 @@ internal static partial class Program
             zoom.Value = 7;
             var display = (ComboBox)form.Controls.Find("SelectionGuideDisplay", true).Single();
             Equal(0, display.SelectedIndex);
+            Point OnForm(Control control) => form.PointToClient(control.Parent!.PointToScreen(control.Location));
+            Equal(OnForm(step).X, OnForm(dots).X);
+            Equal(OnForm(step).X, OnForm(zoom).X);
+            Equal(OnForm(step).X, OnForm(display).X);
+            Equal(OnForm(grid).X, OnForm(screenGuide).X);
+            Equal(OnForm(grid).X, OnForm(Box("StartWithWindows")).X);
             display.SelectedIndex = 1;
             Equal(screenGuide.Left, pointerGuide.Left);
             Equal(pointerGuide.Left, magnifier.Left);
@@ -69,7 +75,7 @@ internal static partial class Program
             using var tooltip = new ToolTip();
             SettingsHelp.Apply(form, tooltip);
             string Tip(Control control) => tooltip.GetToolTip(control) ?? "";
-            Check(Tip(Box("LimitToStartingMonitor")).Contains("既定はWin", StringComparison.Ordinal), "モニター移動の案内がない");
+            Check(Tip(Box("LimitToStartingMonitor")).Contains("既定はShift", StringComparison.Ordinal), "モニター移動の案内がない");
             Check(Tip(Box("DimCaptureBackground")).Contains("ウィンドウ選択中も", StringComparison.Ordinal), "暗転OFFの案内がない");
             Check(Tip(step).Contains("10px単位", StringComparison.Ordinal) && Tip(distance).Contains("端・角", StringComparison.Ordinal),
                 "グリッド間隔またはウィンドウスナップ距離の説明がない");
@@ -312,7 +318,7 @@ internal static partial class Program
             using var form = new SettingsForm(new AppSettings
             {
                 CaptureKeys = new CaptureKeyMap(Win: CaptureKeyAction.CrossMonitor, ShiftWin: CaptureKeyAction.Snap),
-                CaptureMouse = new CaptureMouseMap(BeforeMiddle: false)
+                CaptureMouse = new CaptureMouseMap()
             }, value => { saved = value; return null; }, _ => { }, () => []);
             var groups = (TabControl)form.Controls.Find("ShortcutGroups", true).Single();
             Check(groups.TabPages.Cast<TabPage>().Select(page => page.Text).SequenceEqual(
@@ -338,7 +344,7 @@ internal static partial class Program
                         var combo = (ComboBox)grid.GetControlFromPosition(column + 1, row + 1)!;
                         var keys = modifiers[row] | modifiers[column];
                         Equal(CaptureKeyMap.Label(keys), combo.AccessibleName);
-                        Check(combo.Enabled, "撮影キーの割り当て欄が無効です。");
+                        Equal(column >= row, combo.Enabled);
                     }
                 }
                 Equal(group == 3, page.Controls.Find("CaptureKeysSpace", true).Length == 1);
@@ -356,32 +362,38 @@ internal static partial class Program
             Check(!Choice("CaptureBeforeKeys9").Items.Cast<object>().Any(item => item.ToString() is "上下に変更" or "左右に変更"),
                 "撮影範囲設定前にドラッグの寸法固定がある");
             var beforeMirror = Choice("CaptureBeforeKeys5Mirror");
-            beforeMirror.SelectedIndex = beforeMirror.Items.Cast<object>().ToList().FindIndex(item => item.ToString() == "基点切替（固定サイズ）");
+            var beforePrimary = Choice("CaptureBeforeKeys5");
+            beforePrimary.SelectedIndex = beforePrimary.Items.Cast<object>().ToList().FindIndex(item => item.ToString() == "基点切替（固定サイズ）");
             Equal(beforeMirror.SelectedIndex, Choice("CaptureBeforeKeys5").SelectedIndex);
             Equal("なし", Choice("CaptureKeys5").Text);
 
-            Equal("ウィンドウ撮影／ドラッグ開始（固定サイズでは確定）", Choice("CaptureMouseBeforeLeft").Text);
+            Equal("撮影対象を選択／確定", Choice("CaptureMouseBeforeLeft").Text);
             Equal("撮影メニューを開く", Choice("CaptureMouseBeforeRight").Text);
             Equal("なし", Choice("CaptureMouseBeforeMiddle").Text);
             var dragLeft = Choice("CaptureMouseDragLeft");
             var dragMiddle = Choice("CaptureMouseDragMiddle");
-            Check(!dragLeft.Enabled && !dragMiddle.Enabled, "使用できないドラッグのクリック欄が有効");
+            Check(!dragLeft.Enabled && dragMiddle.Enabled, "ドラッグ中のクリック欄の有効状態が不正");
+            using var tips = new ToolTip();
+            SettingsHelp.Apply(form, tips);
+            Check(tips.GetToolTip(form.Controls.Find("CaptureMouseDragLeftLabel", true).Single())?.Contains("左ボタン") == true, "無効な理由がない");
+            Equal(Choice("CaptureMouseBeforeLeft").Items.Count, Choice("CaptureMouseBeforeMiddle").Items.Count);
+            Equal(Choice("CaptureMouseDragRight").Items.Count, dragMiddle.Items.Count);
             Equal("使用不可", dragLeft.Text);
             Equal("なし", dragMiddle.Text);
             Equal("ドラッグを中止", Choice("CaptureMouseDragRight").Text);
             Choice("CaptureMouseBeforeLeft").SelectedIndex = 0;
             Choice("CaptureMouseBeforeRight").SelectedIndex = 0;
-            Choice("CaptureMouseBeforeMiddle").SelectedIndex = 1;
+            Choice("CaptureMouseBeforeMiddle").SelectedIndex = 3;
             Equal("ポインタ下のモニターを撮影", Choice("CaptureMouseBeforeMiddle").Text);
             Choice("CaptureMouseDragRight").SelectedIndex = 0;
-            ((CheckBox)groups.Controls.Find("CaptureKeysSpace", true).Single()).Checked = false;
+            Choice("CaptureKeysSpace").SelectedIndex = 0;
 
             ApplySettingsPage(form, "ショートカット", "撮影範囲設定前");
             ApplySettingsPage(form, "ショートカット", "撮影ドラッグ中");
             Check(saved is not null, "ショートカット設定が保存されない");
             Equal(CaptureKeyMap.BeforeDefaults with { CtrlAlt = CaptureKeyAction.SwitchAnchor }, saved!.CaptureBeforeKeys);
             Equal(new CaptureKeyMap(Win: CaptureKeyAction.CrossMonitor, ShiftWin: CaptureKeyAction.Snap), saved.CaptureKeys);
-            Equal(new CaptureMouseMap(false, false, true, false), saved.CaptureMouse);
+            Equal(new CaptureMouseMap(CaptureClickAction.None, CaptureClickAction.None, CaptureClickAction.Desktop, CaptureClickAction.None), saved.CaptureMouse);
         });
         Run("設定10タブの入力欄とボタンが表示領域に収まる", () =>
         {

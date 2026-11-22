@@ -89,9 +89,6 @@ internal sealed class CaptureOverlay : Form
     protected override void WndProc(ref Message m)
     {
         if (m.Msg == 0x0021 && session.SelectingControl) { m.Result = 3; return; } // MA_NOACTIVATE
-        // WinFormsは別ボタンのUpでもマウスキャプチャを解放するため、未割当の操作は渡さない。
-        if ((session.Dragging && m.Msg is >= 0x0207 and <= 0x0209)
-            || (session.HasPointerPress && m.Msg is >= 0x0204 and <= 0x0206 && !session.OutputSettings.CaptureMouse.DragRight)) return;
         if (CaptureNative.IsModifierTransition(m.Msg, m.WParam))
         {
             session.AltKeyChanged();
@@ -110,13 +107,26 @@ internal sealed class CaptureOverlay : Form
             session.ApplicationDeactivated();
             if (IsDisposed) return;
         }
-        if (m.Msg is 0x0201 or 0x0202 or 0x0203) // WM_LBUTTONDOWN / UP / DBLCLK
+        if (m.Msg is >= 0x0201 and <= 0x0209) // WM_*BUTTONDOWN / UP / DBLCLK
         {
             int state = m.WParam.ToInt32();
             Keys? previous = mouseButtonModifiers;
             mouseButtonModifiers = ((state & 0x0008) != 0 ? Keys.Control : Keys.None)
                 | ((state & 0x0004) != 0 ? Keys.Shift : Keys.None);
-            try { base.WndProc(ref m); }
+            try
+            {
+                var button = m.Msg <= 0x0203 ? MouseButtons.Left : m.Msg <= 0x0206 ? MouseButtons.Right : MouseButtons.Middle;
+                // WinForms releases capture on a second button's mouse-up.
+                if (session.IsSecondaryPress(button))
+                {
+                    long packed = m.LParam.ToInt64();
+                    var point = new Point(MonitorBounds.X + unchecked((short)packed),
+                        MonitorBounds.Y + unchecked((short)(packed >> 16)));
+                    if (m.Msg is 0x0202 or 0x0205 or 0x0208) session.MouseUp(button, point, mouseButtonModifiers);
+                    else session.MouseDown(this, button, point, mouseButtonModifiers);
+                }
+                else base.WndProc(ref m);
+            }
             finally { mouseButtonModifiers = previous; }
         }
         else base.WndProc(ref m);

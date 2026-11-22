@@ -12,10 +12,12 @@ internal static class SelectionGuideText
         string esc = KeyDisplay.Key(Keys.Escape);
         var lines = new List<string>();
         bool twoPoints = mode == CaptureMode.Rectangle && selectionMethod == CaptureSelectionMethod.TwoClicks;
+        MouseButtons[] buttons = [MouseButtons.Left, MouseButtons.Right, MouseButtons.Middle];
+        string select = string.Join(" / ", buttons.Where(button => mouse.Before(button) == CaptureClickAction.Select).Select(CaptureMouseMap.Label));
         if (mode == CaptureMode.FixedRegion && fixedSize is Size size)
         {
             lines.Add($"固定サイズ {size.Width} × {size.Height} px　基点: {anchor.Label()}");
-            lines.Add($"{(mouse.BeforeLeft ? "左クリック / " : "")}Enter　確定　　矢印　1px　　Shift＋矢印　10px");
+            lines.Add($"{(select.Length > 0 ? select + " / " : "")}Enter　確定　　矢印　1px　　Shift＋矢印　10px");
             if (spaceEnabled) lines.Add("Space　基点切替（四隅・中心）");
         }
         else if (dragging && spaceEnabled && mode == CaptureMode.Rectangle)
@@ -24,22 +26,29 @@ internal static class SelectionGuideText
         var clicks = new List<string>();
         if (!dragging)
         {
-            if (mouse.BeforeLeft)
+            foreach (var button in buttons)
             {
-                if (twoPoints) clicks.Add("左クリック　始点を指定");
-                else if (mode != CaptureMode.FixedRegion) clicks.Add("左クリック　ウィンドウ");
-                if (mode == CaptureMode.Rectangle && !twoPoints) clicks.Add("左ドラッグ　範囲選択");
-                if (mode == CaptureMode.Freeform) clicks.Add("左ドラッグ　輪郭を囲む");
-                if (mode == CaptureMode.Window && intent == CaptureIntent.Screenshot) clicks.Add("左ドラッグ　複数ウィンドウを合成");
+                string label = CaptureMouseMap.Label(button);
+                switch (mouse.Before(button))
+                {
+                    case CaptureClickAction.Select:
+                        if (twoPoints) clicks.Add($"{label}　始点を指定");
+                        else if (mode != CaptureMode.FixedRegion) clicks.Add($"{label}　ウィンドウ");
+                        string drag = label.Replace("クリック", "ドラッグ", StringComparison.Ordinal);
+                        if (mode == CaptureMode.Rectangle && !twoPoints) clicks.Add($"{drag}　範囲選択");
+                        if (mode == CaptureMode.Freeform) clicks.Add($"{drag}　輪郭を囲む");
+                        if (mode == CaptureMode.Window && intent == CaptureIntent.Screenshot) clicks.Add($"{drag}　複数ウィンドウを合成");
+                        break;
+                    case CaptureClickAction.Desktop: clicks.Add($"{label}　画面全体"); break;
+                    case CaptureClickAction.Menu: clicks.Add($"{label}　メニュー"); break;
+                }
             }
-            if (mouse.BeforeMiddle) clicks.Add("中央クリック　画面全体");
-            if (mouse.BeforeRight) clicks.Add("右クリック　メニュー");
             clicks.Add($"{esc}　撮影終了");
         }
         else
         {
-            if (twoPoints) clicks.Add("左クリック　終点を指定");
-            clicks.Add($"{(mouse.DragRight ? "右クリック / " : "")}{esc}　選択だけ中断");
+            if (twoPoints && select.Length > 0) clicks.Add($"{select}　終点を指定");
+            clicks.Add($"{CancelKeys(mouse)}　選択だけ中断");
         }
         if (mode != CaptureMode.FixedRegion) clicks.Add("矢印　1px移動");
         lines.AddRange(clicks.Chunk(2).Select(pair => string.Join("　　", pair)));
@@ -55,11 +64,11 @@ internal static class SelectionGuideText
             {
                 var activation = action == CaptureKeyAction.HighlightWindow ? windowActivation : controlActivation;
                 modifiers.Add($"{label}{(activation == CaptureActivation.Push ? "を押しながら" : "を短押し")}　{CaptureKeyMap.Describe(action)}");
-                if (canCrossMonitors && chord == CaptureModifiers.Win && action == CaptureKeyAction.HighlightWindow)
-                    modifiers.Add($"{label}を押しながら　別のモニターへ移動");
             }
             else if (!dragging && chord == CaptureModifiers.Alt && action == CaptureKeyAction.Snap)
                 modifiers.Add($"{label}を短押し　スナップのON/OFF");
+            else if (action == CaptureKeyAction.SelectDesktop)
+                modifiers.Add($"{label}を押しながら　デスクトップの選択");
             else if (action == CaptureKeyAction.CrossMonitor)
                 modifiers.Add($"{label}を押しながら　別のモニターへ移動");
             else if (action == CaptureKeyAction.SelectControl)
@@ -81,11 +90,16 @@ internal static class SelectionGuideText
         CaptureKeyAction.None => false,
         CaptureKeyAction.CrossMonitor => canCrossMonitors,
         CaptureKeyAction.SwitchAnchor => mode is CaptureMode.FixedRegion or CaptureMode.Rectangle,
-        CaptureKeyAction.HighlightWindow => !dragging,
+        CaptureKeyAction.HighlightWindow or CaptureKeyAction.SelectDesktop => !dragging,
         CaptureKeyAction.LockAspectRatio or CaptureKeyAction.FromCenter or CaptureKeyAction.FromCenterWithAspectRatio
             or CaptureKeyAction.Grid or CaptureKeyAction.LockWidth or CaptureKeyAction.LockHeight => dragging && mode == CaptureMode.Rectangle,
         _ => true
     };
 
-    internal static string CancelHint(bool rightClick) => rightClick ? "Esc / 右クリックで取り消し" : "Escで取り消し";
+    private static string CancelKeys(CaptureMouseMap? mouse, MouseButtons activeButton = MouseButtons.None) => string.Join(" / ", new[] { "Esc" }.Concat(
+        new[] { MouseButtons.Right, MouseButtons.Middle }
+            .Where(button => button != activeButton && mouse?.During(button) == CaptureClickAction.Cancel).Select(CaptureMouseMap.Label)));
+
+    internal static string CancelHint(CaptureMouseMap? mouse = null, MouseButtons activeButton = MouseButtons.None) =>
+        CancelKeys(mouse, activeButton) + "で取り消し";
 }

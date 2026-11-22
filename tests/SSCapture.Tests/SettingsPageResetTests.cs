@@ -31,6 +31,15 @@ internal static partial class Program
             Equal(10m, Field<NumericUpDown>(form, "MagnifierZoom").Value);
             Check(!Field<CheckBox>(form, "KeepHistory").Checked, "履歴の設定が変わった");
             Equal(17m, Field<NumericUpDown>(form, "NotificationDurationSeconds").Value);
+            var basic = Field<TabControl>(form, "SettingsTabs").TabPages[0];
+            var revert = (Button)basic.Controls.Find("RevertPageSettings", true).Single();
+            Check(revert.Enabled, "初期化後の戻すが無効");
+            CaptureCommandClick(basic, "RevertPageSettings");
+            Equal(27m, Field<NumericUpDown>(form, "GridStepPixels").Value);
+            Equal(8m, Field<NumericUpDown>(form, "MagnifierZoom").Value);
+            Check(Field<CheckBox>(form, "ShowMagnifier").Checked && !revert.Enabled, "保存済みの状態に戻らない");
+            Equal(0, saved.Count);
+            CaptureCommandClick(basic, "ResetSettingsPage");
 
             form.SelectCategory("履歴");
             form.ResetSelectedPage();
