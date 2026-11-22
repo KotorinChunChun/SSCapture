@@ -72,6 +72,20 @@ internal sealed partial class TrayApplicationContext
         }
     }
 
+    private static CaptureOptions CreateCaptureOptions(CaptureMode mode, CaptureIntent intent, AppSettings startSettings,
+        SavedRegion? inputPreset, CapturePreset? outputPreset) =>
+        new(mode, intent, startSettings.DefaultDestination, startSettings.FreezeFrame,
+            IncludeRecordingImage: intent == CaptureIntent.Recording && RecordingNeedsOcrImage(startSettings),
+            IncludeCursor: startSettings.IncludeCursor, FixedSize: new Size(startSettings.FixedWidth, startSettings.FixedHeight),
+            FixedAnchor: startSettings.FixedCaptureAnchor, LimitToStartingMonitor: startSettings.LimitToStartingMonitor,
+            Grid20: startSettings.Grid20, ShowSelectionGuide: startSettings.ShowSelectionGuide, OutputSettings: startSettings,
+            DimCaptureBackground: startSettings.DimCaptureBackground, InitialInputPreset: inputPreset, InitialOutputPreset: outputPreset);
+
+    // 既定または登録済みの出力プリセットのどれかがOCR命名でファイル保存する場合、録画開始時の画像を残す。
+    private static bool RecordingNeedsOcrImage(AppSettings startSettings) =>
+        FileNamePattern.RequiresOcrNaming(startSettings.DefaultDestination, startSettings.FileNamePattern)
+        || startSettings.CapturePresets.Any(p => FileNamePattern.RequiresOcrNaming(p.Destination, p.FileNamePattern));
+
     private async Task TakeCaptureAsync(CaptureMode mode, CaptureIntent intent, SavedRegion? inputPreset = null, bool showPreviousOnEscape = false, ResolvedPresetCapture? presetCapture = null)
     {
         if (busy || exiting || pendingRecording is not null)
@@ -89,7 +103,9 @@ internal sealed partial class TrayApplicationContext
             PrepareCaptureUi();
             AppSettings startSettings = presetCapture?.Settings ?? (inputPreset is null
                 ? settings : ResolvedPresetCapture.Resolve(settings, inputPreset.Id, null).Settings);
-            using CaptureOutcome outcome = await CaptureSession.SelectAsync(new CaptureOptions(mode, intent, startSettings.DefaultDestination, startSettings.FreezeFrame, IncludeRecordingImage: intent == CaptureIntent.Recording && (startSettings.DefaultDestination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(startSettings.FileNamePattern) || startSettings.CapturePresets.Any(p => p.Destination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(p.FileNamePattern))), IncludeCursor: startSettings.IncludeCursor, FixedSize: new Size(startSettings.FixedWidth, startSettings.FixedHeight), FixedAnchor: startSettings.FixedCaptureAnchor, LimitToStartingMonitor: startSettings.LimitToStartingMonitor, Grid20: startSettings.Grid20, ShowSelectionGuide: startSettings.ShowSelectionGuide, OutputSettings: startSettings, DimCaptureBackground: startSettings.DimCaptureBackground, InitialInputPreset: inputPreset ?? settings.SavedRegions.FirstOrDefault(p => p.IsDefault), InitialOutputPreset: presetCapture?.Output), SaveGrid20, SaveGuideVisibility);
+            using CaptureOutcome outcome = await CaptureSession.SelectAsync(
+                CreateCaptureOptions(mode, intent, startSettings, inputPreset ?? settings.SavedRegions.FirstOrDefault(p => p.IsDefault), presetCapture?.Output),
+                SaveGrid20, SaveGuideVisibility);
             if (outcome.OpenSettings)
                 settingsLink = outcome.SettingsLink ?? new(CaptureSettingsDestination.General);
             if (outcome.Selection is null)
@@ -111,8 +127,7 @@ internal sealed partial class TrayApplicationContext
             FileNamePlan? namePlan = new(captureSettings.FileNamePattern, capturedAt, intent,
                 intent == CaptureIntent.Recording && FileNamePattern.UsesOcr(captureSettings.FileNamePattern) ? "OCRなし" : "",
                 Region: regionName);
-            if (intent == CaptureIntent.Recording && outcome.Selection.Destination.HasFlag(OutputDestination.File)
-                && FileNamePattern.UsesOcr(captureSettings.FileNamePattern))
+            if (intent == CaptureIntent.Recording && FileNamePattern.RequiresOcrNaming(outcome.Selection.Destination, captureSettings.FileNamePattern))
             {
                 using var naming = new OcrNameForm(outcome.Image ?? throw new InvalidOperationException("OCR用画像がありません。"),
                     captureSettings, intent, capturedAt, regionName: regionName);
@@ -147,7 +162,7 @@ internal sealed partial class TrayApplicationContext
             else if (outcome.Image is not null)
             {
                 var namingFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                Func<Bitmap, Task<ScreenshotFileName?>>? requestFileName = outcome.Selection.Destination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(captureSettings.FileNamePattern) ? async namingImage =>
+                Func<Bitmap, Task<ScreenshotFileName?>>? requestFileName = FileNamePattern.RequiresOcrNaming(outcome.Selection.Destination, captureSettings.FileNamePattern) ? async namingImage =>
                 {
                     try
                     {

@@ -204,7 +204,7 @@ internal static class InstantCapture
         var plan = new FileNamePlan(settings.FileNamePattern, capturedAt, CaptureIntent.Screenshot, Region: regionName);
         bool openFolder = preserveOutputs && settings.OpenFolderAfterSave;
         Func<Bitmap, Task<ScreenshotFileName?>>? requestName = null;
-        if (destination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(settings.FileNamePattern))
+        if (FileNamePattern.RequiresOcrNaming(destination, settings.FileNamePattern))
         {
             requestName = async namingImage =>
             {

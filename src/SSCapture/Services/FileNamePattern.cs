@@ -11,6 +11,9 @@ internal static partial class FileNamePattern
     [GeneratedRegex(@"^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Reserved();
     internal static bool UsesOcr(string? pattern) => pattern?.Contains("{ocr}", StringComparison.Ordinal) == true;
+    /// <summary>ファイル保存を行い、命名規則にOCR文字列を含む場合だけtrue。</summary>
+    internal static bool RequiresOcrNaming(OutputDestination destination, string? pattern) =>
+        destination.HasFlag(OutputDestination.File) && UsesOcr(pattern);
 
     internal static string Expand(string pattern, DateTimeOffset capturedAt, CaptureIntent intent, string ocr = "", int sequence = 1, string region = "撮影")
     {

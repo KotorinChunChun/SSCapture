@@ -15,15 +15,8 @@ internal static class CaptureSession
         IReadOnlyList<CaptureWindow> windows;
         try { windows = CaptureNative.CaptureWindows(snapshot.Bounds); }
         catch { snapshot.Dispose(); throw; }
-        return await SelectAsync(options, snapshot, windows.Select(window => window.Bounds).ToArray(), () =>
-        {
-            CaptureNative.SynchronizeDesktop();
-            return DesktopSnapshot.Take(options.IncludeCursor, metadata);
-        }, initialPointer, gridChanged, guideChanged, (cursor, observe) =>
-        {
-            CaptureNative.SynchronizeDesktop();
-            return DesktopSnapshot.Take(cursor, observe);
-        }, bounds =>
+        return await SelectAsync(options, snapshot, windows.Select(window => window.Bounds).ToArray(),
+            () => RetakeDesktop(options.IncludeCursor, metadata), initialPointer, gridChanged, guideChanged, RetakeDesktop, bounds =>
         {
             windows = CaptureNative.CaptureWindows(bounds);
             return windows.Select(window => window.Bounds).ToArray();
@@ -77,6 +70,15 @@ internal static class CaptureSession
         return outcome.Image is null ? null : (Bitmap)outcome.Image.Clone();
     }
 
+    private static DesktopSnapshot RetakeDesktop(bool includeCursor, bool observeContext)
+    {
+        CaptureNative.SynchronizeDesktop();
+        return DesktopSnapshot.Take(includeCursor, observeContext);
+    }
+
+    internal static bool SameMonitors(IEnumerable<Rectangle> left, IEnumerable<Rectangle> right) =>
+        left.OrderBy(m => m.X).ThenBy(m => m.Y).SequenceEqual(right.OrderBy(m => m.X).ThenBy(m => m.Y));
+
     private static void ValidateCall(CaptureOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -96,6 +98,7 @@ internal sealed partial class SessionController
     private readonly CaptureOptions options;
     private readonly Func<Rectangle, Services.AppSettings, Task<(Bitmap Image, Services.CaptureMetadata? Metadata)?>>? scrollCollector;
     private bool IsRectangleMode => Mode is CaptureMode.Rectangle or CaptureMode.Scroll;
+    private bool IsScreenshot => options.Intent == CaptureIntent.Screenshot;
     internal SSCapture.Services.AppSettings OutputSettings { get; private set; }
     private readonly Func<DesktopSnapshot>? currentFrameFactory;
     private readonly Func<bool, bool, DesktopSnapshot>? recapture;
@@ -157,72 +160,13 @@ internal sealed partial class SessionController
     internal bool HasPointerPress => pressedButton != MouseButtons.None;
     private bool desktopHeld, desktopPress;
     private bool SelectingDesktop => desktopPress || !HasPointerPress && desktopHeld;
-    private bool FreeDesktopDrag => desktopPress && options.Intent == CaptureIntent.Screenshot;
+    private bool FreeDesktopDrag => desktopPress && IsScreenshot;
     internal bool IsSecondaryPress(MouseButtons button) => HasPointerPress && button != pressedButton;
     private bool HasWindowDrag => HasPointerPress && !desktopPress && HighlightWindow && gesture.HasDragged && targetDrag is not null;
     internal IReadOnlyList<Point> TargetDragPath => controlDrag?.Path ?? (HasWindowDrag ? targetDrag!.Path : []);
     internal Rectangle TargetDragBounds => controlDrag?.TrailBounds ?? (HasWindowDrag ? targetDrag!.TrailBounds : Rectangle.Empty);
     internal IReadOnlyList<Rectangle> TargetDragHighlights => !DimCaptureBackground ? [] : controlDrag?.Highlights ?? (HasWindowDrag ? targetDrag!.BrightWindows : []);
     internal bool PointerLabelsSuppressed => menuOpen || menuTransition;
-    internal string? PointerHint
-    {
-        get
-        {
-            if (!OutputSettings.ShowPointerGuide || PointerLabelsSuppressed) return null;
-            string hint = string.Join('\n', CaptureTargetHints().Prepend(OperationHint).OfType<string>());
-            return hint.Length == 0 ? null : hint;
-        }
-    }
-
-    private string? OperationHint
-    {
-        get
-        {
-            if (HasControlDrag)
-            {
-                string status = confirmingControl ? "コントロールを取得中" : $"ドラッグ：複数コントロールを合成（{SelectedControlCount} 件）";
-                return $"{status}　{SelectionGuideText.CancelHint(OutputSettings.CaptureMouse, pressedButton)}";
-            }
-            if (SelectingControl)
-            {
-                string controlOperation = controlConfirmationError ?? (confirmingControl ? "コントロールを取得中"
-                    : ControlBounds.IsEmpty ? "対象のコントロールが見つかりません"
-                    : UsesControlPreview && !ControlPreviewReady ? windowPreview?.Frame.IsFaulted == true
-                        ? "コントロールのプレビューを取得できません" : "コントロールをプレビュー中"
-                    : "ボタンを離してコントロールを撮影");
-                return (ModifierHint is null ? "" : ModifierHint + "\n") + controlOperation + "　" +
-                    SelectionGuideText.CancelHint(OutputSettings.CaptureMouse, pressedButton) + "\nドラッグ：複数コントロールを合成";
-            }
-            if (TwoPointSelection && !SelectingDesktop)
-            {
-                string step = waitingForSecondPoint ? "終点をクリック" : "始点をクリック";
-                string hint = ModifierHint is null ? step : $"{ModifierHint}\n{step}";
-                return $"{hint}　{SelectionGuideText.CancelHint(waitingForSecondPoint ? OutputSettings.CaptureMouse : null)}";
-            }
-            if (desktopHeld && !HasPointerPress)
-                return $"{ModifierHint}　{SelectionGuideText.CancelHint()}";
-            if (!HasPointerPress)
-            {
-                string? idleHint = controlConfirmationError ?? ModifierHint ?? (windowPreview?.Frame switch
-                {
-                    { IsFaulted: true } => windowPreview.Frame.Exception?.GetBaseException().Message,
-                    { IsCompleted: false } => "WGCプレビューを取得中",
-                    _ => null
-                });
-                return idleHint is null ? null : $"{idleHint}　{SelectionGuideText.CancelHint()}";
-            }
-            string operation = SelectingDesktop ? "モニター全体を撮影"
-                : Mode == CaptureMode.Scroll ? "スクロールする領域を選択"
-                : Mode == CaptureMode.FixedRegion ? "固定範囲を撮影"
-                : !gesture.HasDragged || Mode == CaptureMode.Window ? "ウィンドウを撮影" : "選択範囲を撮影";
-            string cancel = SelectionGuideText.CancelHint(OutputSettings.CaptureMouse, pressedButton);
-            if (FreeDesktopDrag) return $"{operation}　{cancel}\nドラッグ：複数デスクトップを合成";
-            if (HighlightWindow && !SelectingDesktop && options.Intent == CaptureIntent.Screenshot)
-                return $"{operation}　{cancel}\nドラッグ：複数ウィンドウを合成";
-            string effect = gesture.HasDragged ? ModifierHint ?? operation : operation;
-            return $"{effect}　{cancel}";
-        }
-    }
     internal Point Pointer => gesture.RawCurrent;
     internal bool HighlightWindow => Mode == CaptureMode.Window;
     private bool UsesWindowSource => HighlightWindow && exclusiveWindow;
@@ -281,7 +225,7 @@ internal sealed partial class SessionController
         this.initialPointer = initialPointer ?? snapshot.Monitors[0].Location;
         this.confineCursor = confineCursor ?? CursorConfinement.Acquire;
         Snapshot = snapshot;
-        Destination = options.Intent == CaptureIntent.Recording ? options.Destination & ~OutputDestination.Pinned : options.Destination;
+        Destination = AllowedDestination(options.Destination);
         OutputSettings = (options.OutputSettings ?? new SSCapture.Services.AppSettings()) with
         { FreezeFrame = options.FreezeFrame, IncludeCursor = options.IncludeCursor, DimCaptureBackground = options.DimCaptureBackground,
             LimitToStartingMonitor = options.LimitToStartingMonitor };
@@ -296,15 +240,20 @@ internal sealed partial class SessionController
         gesture = CreateGesture(Mode, options.Grid20);
         selectedInput = options.InitialInputPreset ?? OutputSettings.SavedRegions.FirstOrDefault(p => p.IsDefault) ?? Services.SavedRegion.FromSettings("撮影開始時", OutputSettings with { DefaultMode = Mode, FixedWidth = activeFixedSize.Width, FixedHeight = activeFixedSize.Height, FixedCaptureAnchor = activeAnchor });
         selectedOutput = options.InitialOutputPreset ?? OutputSettings.CapturePresets.FirstOrDefault(p => p.IsDefault) ?? Services.CapturePreset.FromSettings("撮影開始時", OutputSettings with { DefaultDestination = Destination });
-        SelectionMenu = new CaptureContextMenu(Destination, ChangeDestination,
+        SelectionMenu = CreateSelectionMenu();
+        UpdateMenu();
+    }
+
+    private CaptureContextMenu CreateSelectionMenu()
+    {
+        var menu = new CaptureContextMenu(Destination, ChangeDestination,
             () => FinishCommand(true), Cancel, Mode, options.Grid20, ChangeMode, ChangeGrid20, () => CaptureDesktop(menuPointer),
             showGuide: ShowSelectionGuide, changeGuide: ChangeGuideVisibility, changeRatio: ChangeAspectRatio,
-            defaultPadding: OutputSettings.ScreenshotPaddingPixels, changePadding: options.Intent == CaptureIntent.Screenshot ? ChangePadding : null,
+            defaultPadding: OutputSettings.ScreenshotPaddingPixels, changePadding: IsScreenshot ? ChangePadding : null,
             presets: OutputSettings.CapturePresets, applyPreset: ApplyPreset,
-            applications: options.Intent == CaptureIntent.Screenshot ? OutputSettings.ImageEditors : OutputSettings.VideoEditors,
-            selectedApplication: options.Intent == CaptureIntent.Screenshot ? OutputSettings.SelectedImageEditorId : OutputSettings.SelectedVideoEditorId,
+            applications: EditorApplications, selectedApplication: SelectedEditorId,
             changeApplication: ChangeApplication, inputPresets: OutputSettings.SavedRegions, applyInputPreset: ApplyInputPreset,
-            editing: new(OutputSettings, activeFixedSize, activeAnchor, selectionBounds is not null, options.Intent == CaptureIntent.Screenshot,
+            editing: new(OutputSettings, activeFixedSize, activeAnchor, selectionBounds is not null, IsScreenshot,
                 recapture is not null || currentFrameFactory is not null, ChangeFixedSize, ChangeFixedAnchor, ChangeMonitorLimit, ChangeColor,
                 mode => _ = ChangeMetadataAsync(mode), ChangeDim, enabled => _ = ChangeCaptureSourceAsync(enabled, OutputSettings.IncludeCursor),
                 enabled => _ = ChangeCaptureSourceAsync(OutputSettings.FreezeFrame, enabled), ChangeSnapPrecision, ChangeOutputDetails,
@@ -312,26 +261,26 @@ internal sealed partial class SessionController
                 enabled => ApplyMenuSetting(OutputSettings with { ShowPointerGuide = enabled }),
                 enabled => ApplyMenuSetting(OutputSettings with { RecordSystemAudio = enabled }),
                 enabled => ApplyMenuSetting(OutputSettings with { RecordMicrophone = enabled })),
-            changeWindowSource: options.Intent == CaptureIntent.Screenshot && findWindow is not null
+            changeWindowSource: IsScreenshot && findWindow is not null
                 ? enabled => { exclusiveWindow = enabled; UpdateMenu(); RefreshOverlays(); } : null,
             openSettingsLink: OpenCaptureSettings, allowScroll: options.AllowScroll);
-        SelectionMenu.AddRectangleSelectionMethods(
+        menu.AddRectangleSelectionMethods(
             () => ChangeSelectionMethod(CaptureSelectionMethod.Drag), () => ChangeSelectionMethod(CaptureSelectionMethod.TwoClicks));
-        SelectionMenu.AddPresentationOptions(OutputSettings.ShowMagnifier, ChangeMagnifierVisibility,
+        menu.AddPresentationOptions(OutputSettings.ShowMagnifier, ChangeMagnifierVisibility,
             OutputSettings.ShareCapturePresentation, ChangeSharePresentation);
-        if (options.Intent == CaptureIntent.Screenshot && !options.SelectionOnly)
-            SelectionMenu.AddWindowCropOptions(() => ApplyMenuSetting(OutputSettings with { WindowCrop = selectedOutput.WindowCrop }),
+        if (IsScreenshot && !options.SelectionOnly)
+            menu.AddWindowCropOptions(() => ApplyMenuSetting(OutputSettings with { WindowCrop = selectedOutput.WindowCrop }),
                 () => ApplyMenuSetting(OutputSettings with { WindowCrop = default }));
         if (options.SelectionOnly)
         {
-            foreach (var item in SelectionMenu.Items.Cast<ToolStripItem>())
+            foreach (var item in menu.Items.Cast<ToolStripItem>())
                 if (item.Name is "CapturePresetMenu" or "CaptureOutputGroup" or "OpenSettings" or "CaptureSettingsMenu") item.Available = false;
         }
-        SelectionMenu.SetRatio(AspectRatio);
-        SelectionMenu.Closed += MenuClosed;
+        menu.SetRatio(AspectRatio);
+        menu.Closed += MenuClosed;
         // WinForms can label a parent close as AppFocusChange when a child item was clicked.
-        SelectionMenu.CommandInvoking += () => { if (menuTransition && !menuOpen) menuClosedByCommand = true; };
-        UpdateMenu();
+        menu.CommandInvoking += () => { if (menuTransition && !menuOpen) menuClosedByCommand = true; };
+        return menu;
     }
 
     private SelectionGesture CreateGesture(CaptureMode mode, bool grid20)
@@ -393,7 +342,13 @@ internal sealed partial class SessionController
         SelectionMenu.SetWindowCrop(OutputSettings.WindowCrop, selectedOutput.WindowCrop);
         UpdateControlShortcutMenu();
     }
-    private void ChangeDestination(OutputDestination destination) { Destination = options.Intent == CaptureIntent.Recording ? destination & ~OutputDestination.Pinned : destination; SelectionMenu.SetDestination(Destination); UpdateMenu(); }
+    // 録画はピン留めへ出力できない。
+    private OutputDestination AllowedDestination(OutputDestination destination) =>
+        options.Intent == CaptureIntent.Recording ? destination & ~OutputDestination.Pinned : destination;
+    private Services.ExternalApplication[] EditorApplications =>
+        IsScreenshot ? OutputSettings.ImageEditors : OutputSettings.VideoEditors;
+    private string SelectedEditorId => IsScreenshot ? OutputSettings.SelectedImageEditorId : OutputSettings.SelectedVideoEditorId;
+    private void ChangeDestination(OutputDestination destination) { Destination = AllowedDestination(destination); SelectionMenu.SetDestination(Destination); UpdateMenu(); }
     internal Task ResetInputPresetAsync() => ApplyInputPresetAsync(selectedInput);
     internal void ResetOutputPreset()
     {
@@ -451,8 +406,7 @@ internal sealed partial class SessionController
         if (!starting)
         {
             foreach (var overlay in overlays) { if (SelectionMonitors.Contains(overlay.MonitorBounds)) overlay.Show(); else overlay.Hide(); }
-            foreach (var monitor in SelectionMonitors.Where(m => overlays.All(o => o.MonitorBounds != m)))
-            { var overlay = new CaptureOverlay(this, monitor); overlays.Add(overlay); overlay.Show(); }
+            AddMissingOverlays();
             if (limit is Rectangle clip) cursorConfinement = confineCursor(clip);
             ReplaceGuide();
         }
@@ -469,7 +423,7 @@ internal sealed partial class SessionController
         else { OutputSettings = OutputSettings with { MetadataMode = mode }; UpdateMenu(); }
     }
     private DesktopSnapshot TakeFrame(Services.AppSettings settings) => recapture is not null
-        ? recapture(settings.IncludeCursor, options.Intent == CaptureIntent.Screenshot && Services.CaptureMetadata.RequiresPreparation(settings))
+        ? recapture(settings.IncludeCursor, IsScreenshot && Services.CaptureMetadata.RequiresPreparation(settings))
         : currentFrameFactory?.Invoke() ?? throw new InvalidOperationException("この選択画面では画像を再取得できません。");
 
     private async Task RefreshSnapshotAsync(Services.AppSettings next)
@@ -483,7 +437,7 @@ internal sealed partial class SessionController
             snapTimer?.Stop();
             UI.CaptureUiPreparation.Prepare(overlays.Cast<Form?>().Append(guide), SelectionMenu.CloseForCapture);
             replacement = TakeFrame(next);
-            if (replacement.Bounds != Snapshot.Bounds || !replacement.Monitors.OrderBy(m => m.X).ThenBy(m => m.Y).SequenceEqual(Snapshot.Monitors.OrderBy(m => m.X).ThenBy(m => m.Y)))
+            if (replacement.Bounds != Snapshot.Bounds || !CaptureSession.SameMonitors(replacement.Monitors, Snapshot.Monitors))
                 throw new IOException("画面構成が変わりました。撮影を開始し直してください。");
             var nextWindows = readWindows?.Invoke(replacement.Bounds) ?? windows;
             if (replacement.Pointer is { } pointer && Services.CaptureMetadata.RequiresPreparation(next))
@@ -522,10 +476,7 @@ internal sealed partial class SessionController
             preset.Validate();
             if (!preset.UseFixedCoordinates)
             {
-                var next = preset.Apply(OutputSettings) with { ScreenshotPaddingPixels = EffectivePadding(selectedOutput, preset) };
-                if (next.FreezeFrame != OutputSettings.FreezeFrame || next.IncludeCursor != OutputSettings.IncludeCursor)
-                { await RefreshSnapshotAsync(next); if (SelectionError is not null || completed) return; }
-                else OutputSettings = next;
+                if (!await ApplyInputPresetSettingsAsync(preset)) return;
                 activeFixedSize = preset.Bounds.Size; activeAnchor = preset.FixedAnchor;
                 selectedInput = preset; selectedInputBounds = null; AspectRatio = CaptureAspectRatio.Free;
                 Mode = preset.Mode; waitingForSecondPoint = false; ReleasePointer(); gesture = CreateGesture(Mode, Grid20);
@@ -535,16 +486,12 @@ internal sealed partial class SessionController
                 return;
             }
             var displays = readPresetDisplays();
-            if (!displays.Select(d => d.Bounds).OrderBy(b => b.X).ThenBy(b => b.Y)
-                .SequenceEqual(Snapshot.Monitors.OrderBy(b => b.X).ThenBy(b => b.Y)))
+            if (!CaptureSession.SameMonitors(displays.Select(d => d.Bounds), Snapshot.Monitors))
                 throw new InvalidOperationException("選択開始後に画面構成が変わりました。撮影を開始し直してください。");
             Rectangle bounds = Services.RegionCoordinates.Resolve(preset, displays);
             if (preset.ProfileVersion >= 1)
             {
-                var next = preset.Apply(OutputSettings) with { ScreenshotPaddingPixels = EffectivePadding(selectedOutput, preset) };
-                if (next.FreezeFrame != OutputSettings.FreezeFrame || next.IncludeCursor != OutputSettings.IncludeCursor)
-                { await RefreshSnapshotAsync(next); if (SelectionError is not null || completed) return; }
-                else OutputSettings = next;
+                if (!await ApplyInputPresetSettingsAsync(preset)) return;
                 activeAnchor = preset.FixedAnchor;
             }
             SelectionError = null;
@@ -573,8 +520,7 @@ internal sealed partial class SessionController
             lastRectangleAction = CaptureKeyAction.None;
             if (!starting)
             {
-                foreach (Rectangle monitor in SelectionMonitors.Where(m => overlays.All(o => o.MonitorBounds != m)))
-                { var overlay = new CaptureOverlay(this, monitor); overlays.Add(overlay); overlay.Show(); }
+                AddMissingOverlays();
                 ReplaceGuide();
             }
             SelectionMenu.SetMode(Mode); UpdateMenu(); RefreshOverlays();
@@ -584,6 +530,19 @@ internal sealed partial class SessionController
             SelectionError = "入力プリセットを呼び出せません: " + ex.Message;
             RefreshOverlays();
         }
+    }
+
+    /// <summary>入力プリセットの設定を適用する。画面固定・カーソルが変わる場合は画面を取り直し、失敗・終了したらfalse。</summary>
+    private async Task<bool> ApplyInputPresetSettingsAsync(Services.SavedRegion preset)
+    {
+        var next = preset.Apply(OutputSettings) with { ScreenshotPaddingPixels = EffectivePadding(selectedOutput, preset) };
+        if (next.FreezeFrame == OutputSettings.FreezeFrame && next.IncludeCursor == OutputSettings.IncludeCursor)
+        {
+            OutputSettings = next;
+            return true;
+        }
+        await RefreshSnapshotAsync(next);
+        return SelectionError is null && !completed;
     }
 
     internal void ChangeAspectRatio(CaptureAspectRatio ratio)
@@ -608,18 +567,17 @@ internal sealed partial class SessionController
     {
         OutputSettings = preset.Apply(OutputSettings) with { ScreenshotPaddingPixels = EffectivePadding(preset, selectedInput) };
         selectedOutput = preset;
-        Destination = options.Intent == CaptureIntent.Recording ? OutputSettings.DefaultDestination & ~OutputDestination.Pinned : OutputSettings.DefaultDestination;
+        Destination = AllowedDestination(OutputSettings.DefaultDestination);
         SelectionMenu.SetDestination(Destination);
         SelectionMenu.SetPadding(OutputSettings.ScreenshotPaddingPixels);
-        SelectionMenu.SetApplication(options.Intent == CaptureIntent.Screenshot ? OutputSettings.SelectedImageEditorId : OutputSettings.SelectedVideoEditorId);
+        SelectionMenu.SetApplication(SelectedEditorId);
         UpdateMenu();
     }
 
     internal void ChangeApplication(string id)
     {
-        var apps = options.Intent == CaptureIntent.Screenshot ? OutputSettings.ImageEditors : OutputSettings.VideoEditors;
-        SSCapture.Services.ExternalApplication.ValidateReference(apps, id);
-        OutputSettings = options.Intent == CaptureIntent.Screenshot ? OutputSettings with { SelectedImageEditorId = id } : OutputSettings with { SelectedVideoEditorId = id };
+        SSCapture.Services.ExternalApplication.ValidateReference(EditorApplications, id);
+        OutputSettings = IsScreenshot ? OutputSettings with { SelectedImageEditorId = id } : OutputSettings with { SelectedVideoEditorId = id };
         SelectionMenu.SetApplication(id);
         UpdateMenu();
     }
@@ -641,7 +599,7 @@ internal sealed partial class SessionController
 
     private void ChangeMode(CaptureMode mode, bool preferWgc)
     {
-        bool isolated = mode == CaptureMode.Window && preferWgc && options.Intent == CaptureIntent.Screenshot && findWindow is not null;
+        bool isolated = mode == CaptureMode.Window && preferWgc && IsScreenshot && findWindow is not null;
         if (completed || mode == CaptureMode.Scroll && !options.AllowScroll || mode == Mode && isolated == exclusiveWindow) return;
         try
         {
@@ -870,6 +828,17 @@ internal sealed partial class SessionController
         else if (!starting && cursorConfinement is null) cursorConfinement = confineCursor(bounds);
     }
 
+    /// <summary>オーバーレイのない選択対象モニターにだけ追加して表示する。既存のオーバーレイの表示状態は変えない。</summary>
+    private void AddMissingOverlays()
+    {
+        foreach (Rectangle monitor in SelectionMonitors.Where(m => overlays.All(o => o.MonitorBounds != m)))
+        {
+            var overlay = new CaptureOverlay(this, monitor);
+            overlays.Add(overlay);
+            overlay.Show();
+        }
+    }
+
     private CaptureOverlay ShowMonitorOverlay(Rectangle monitor)
     {
         var overlay = overlays.FirstOrDefault(candidate => candidate.MonitorBounds == monitor);
@@ -970,7 +939,7 @@ internal sealed partial class SessionController
         ModifierHint = hint;
         bool selectControl = dragging ? action == CaptureKeyAction.SelectControl
             : controlToggled || beforeAction == CaptureKeyAction.SelectControl && OutputSettings.ControlActivation == CaptureActivation.Push;
-        UpdateControlSelection(Mode != CaptureMode.Scroll && (selectControl || HasControlDrag) && options.Intent == CaptureIntent.Screenshot
+        UpdateControlSelection(Mode != CaptureMode.Scroll && (selectControl || HasControlDrag) && IsScreenshot
             && !SelectingDesktop && !HasWindowDrag && suppressedButtons == MouseButtons.None, pointer, preview: !dragging);
         bool snap = altSnapEnabled || action == CaptureKeyAction.Snap;
         bool height = action == CaptureKeyAction.LockHeight;
@@ -1189,7 +1158,7 @@ internal sealed partial class SessionController
             BeginControlPress(overlay);
             return;
         }
-        if (FreeDesktopDrag || !desktopPress && options.Intent == CaptureIntent.Screenshot && HighlightWindow && findWindow is not null)
+        if (FreeDesktopDrag || !desktopPress && IsScreenshot && HighlightWindow && findWindow is not null)
         {
             targetDrag = new CaptureTargetDrag(findWindowGroup);
             targetDrag.Move(gesture.RawCurrent, Snapshot.Monitors, FreeDesktopDrag ? null : findWindow);
@@ -1442,7 +1411,7 @@ internal sealed partial class SessionController
         if (selection.WindowHitPoint is Point hitPoint) selection = selection with { WindowTitle = target?.Title ?? readTitle?.Invoke(hitPoint) };
         bool useWindowSource = (controlGroup?.Isolated ?? control?.Isolated ?? UsesWindowSource) && !entireMonitor;
         bool singleWindow = roots is null && selection.WindowHitPoint is not null && (Mode == CaptureMode.Rectangle || HighlightWindow);
-        bool groupWindows = control is null && controlGroup is null && selection.TargetMargin is null && target is not null && HighlightWindow && !entireMonitor && options.Intent == CaptureIntent.Screenshot
+        bool groupWindows = control is null && controlGroup is null && selection.TargetMargin is null && target is not null && HighlightWindow && !entireMonitor && IsScreenshot
             && (useWindowSource || !singleWindow);
         CaptureWindow[] group = groupWindows ? [.. (roots ?? [target!]).SelectMany(findWindowGroup)
             .DistinctBy(window => window.Handle).OrderBy(window => window.ZOrder)] : [];
@@ -1461,7 +1430,7 @@ internal sealed partial class SessionController
             || selection.Polygon?.Any(point => !bounds.Contains(point)) == true)) return;
         if (control is null && controlGroup is null && Mode == CaptureMode.FixedRegion && !entireMonitor
             && (selection.Polygon is not null || gesture.FixedSelection(Destination)?.Bounds != selection.Bounds)) return;
-        if (options.Intent == CaptureIntent.Screenshot)
+        if (IsScreenshot)
         {
             if (controlGroup is null && (entireMonitor || Mode == CaptureMode.FullScreen))
             {
@@ -1504,7 +1473,7 @@ internal sealed partial class SessionController
             }
             if (OutputSettings.ShareCapturePresentation && captureWindowsKey)
                 CaptureNative.SynchronizeDesktop();
-            if (!options.SelectionOnly && (options.Intent == CaptureIntent.Screenshot || options.IncludeRecordingImage))
+            if (!options.SelectionOnly && (IsScreenshot || options.IncludeRecordingImage))
             {
                 if (controlGroup is { Isolated: true })
                 {
