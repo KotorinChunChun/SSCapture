@@ -198,6 +198,7 @@ flowchart LR
 ## 案内
 
 - [使い方](docs/usage.md)：撮影・録画・OCR命名・プリセット・履歴・通知
+- [設定画面一覧](docs/settings.md)：設定画面の全ページの画像と項目
 - [コマンドライン](docs/cli.md)：CLIからの撮影・時限／定期撮影・設定の書き出しと取り込み
 - [KotorinToysでSSCaptureを認識できない場合](docs/recovery.md)：v0.1.2の公開setupからの復旧
 - [第三者ライセンス・配布元](THIRD_PARTY.md)

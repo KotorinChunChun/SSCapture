@@ -106,6 +106,7 @@ internal static partial class Program
         if (args.Contains("--ocr-ui-preview")) return OcrPreview();
         if (args.Contains("--display-routing-smoke")) return DisplayRoutingSmoke();
         if (args.Contains("--workflow-ui-preview")) return WorkflowPreview(args[1]);
+        if (args is ["--settings-gallery", var galleryOutput]) return SettingsGallery(galleryOutput);
         if (args.Contains("--interactive-smoke")) return RunInteractiveSmoke();
         if (args.Contains("--feedback-native-smoke")) return RunFeedbackNativeSmoke();
         if (args.Contains("--feedback-exclusion-preview")) return RunFeedbackNativeSmoke(preview: true);

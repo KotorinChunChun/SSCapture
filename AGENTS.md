@@ -17,7 +17,7 @@
 
 | 目的 | 参照先 |
 | --- | --- |
-| 概要・利用 | README.md、docs/usage.md、docs/cli.md |
+| 概要・利用 | README.md、docs/usage.md、docs/settings.md（設定画面一覧）、docs/cli.md |
 | KotorinToysでの認識不良の回復 | docs/recovery.md |
 | 公開用ビルド | docs/DEVELOPERS_GUIDE.md |
 | 内部設計・更新 | dev/development.md |
@@ -35,7 +35,7 @@
 - `dev/reject.md`: ユーザーが実装しないと明言した事項だけをプロジェクト全体で記録する。AI独自の却下事項を追加しない。
 - 標準フロー: req/reject確認 → 不明点確認 → imp計画 → 必要時task → フェーズ実装/文書更新 → 検証 → imp結果 → コミット → 最終報告。
 - 公開済みの `docs/releases/` と、過去版の `dev/history/` は当時の記録として書き換えない。誤りが分かったときは削除・改変せず、日付を付けた追記で訂正する。現行の利用・開発文書（README・docs・dev直下）は最新の動作に合わせる。
-- 機能を追加・変更したら、同じコミットで README・docs/usage.md・docs/cli.md・未公開版のリリースノートの該当箇所を更新する。
+- 機能を追加・変更したら、同じコミットで README・docs/usage.md・docs/cli.md・未公開版のリリースノートの該当箇所を更新する。設定画面の項目・配置を変えたら、docs/settings.mdの説明と画像（`--settings-gallery`）も更新する。
 
 ## 検証
 

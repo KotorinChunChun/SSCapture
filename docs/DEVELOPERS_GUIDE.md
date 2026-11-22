@@ -149,6 +149,8 @@ pwsh -File scripts/package.ps1
 
 ## READMEの撮影
 
+設定画面の全ページの画像は `--settings-gallery` で作り直します。手順は[設定画面一覧](settings.md#画像の作り直し)にあります。
+
 先に`pwsh -File scripts/test.ps1 -Suite Preset`と同じ`-Suite Menu`を実行します。専用のビルド出力を使い、設定はSSCapture.exeの`--ui-preview`、範囲と撮影メニューはSSCapture.Tests.exeの`--capture-menu-preview <専用出力先>`で開きます。後者は合成画像を使い、実画面取得とクリップボード操作をしません。
 
 設定・入力・出力・範囲・メニュー・結果通知の6場面をREADMEへ掲載しました。範囲確定後は専用先のPNGと寸法を読み戻して確認します。実撮影の受入とは区別してください。
