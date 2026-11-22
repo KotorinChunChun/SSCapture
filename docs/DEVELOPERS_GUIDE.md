@@ -151,6 +151,14 @@ pwsh -File scripts/package.ps1
 
 設定画面の全ページの画像は `--settings-gallery` で作り直します。手順は[設定画面一覧](settings.md#画像の作り直し)にあります。
 
+READMEの「撮影中の画面」の4枚は、設定画面の画像を作った後に、リポジトリのルートで次のコマンドを実行して作り直します。架空のデスクトップ（設定画面の画像とサンプルの資料の窓）を背景にし、マウス操作は撮影セッションへ直接渡すので、実際の画面・マウス・キーは使いません。撮影画面と操作ガイドは画面取得から除外されているため、ウィンドウに自分自身を描かせて画像にします。実行中は数秒間、画面の左上に撮影画面が表示されます。
+
+```powershell
+.tools/dotnet/dotnet.exe tests/SSCapture.Tests/bin/Release/net10.0-windows10.0.19041.0/SSCapture.Tests.dll --capture-scene-gallery docs/images/readme
+```
+
+READMEに画像を追加・改名したときは、`scripts/managed-payload.ps1` の `Get-ReadmeImages` にも登録します。登録しない画像は配布物に入らず、インストール先のREADMEで表示されません。
+
 先に`pwsh -File scripts/test.ps1 -Suite Preset`と同じ`-Suite Menu`を実行します。専用のビルド出力を使い、設定はSSCapture.exeの`--ui-preview`、範囲と撮影メニューはSSCapture.Tests.exeの`--capture-menu-preview <専用出力先>`で開きます。後者は合成画像を使い、実画面取得とクリップボード操作をしません。
 
 設定・入力・出力・範囲・メニュー・結果通知の6場面をREADMEへ掲載しました。範囲確定後は専用先のPNGと寸法を読み戻して確認します。実撮影の受入とは区別してください。

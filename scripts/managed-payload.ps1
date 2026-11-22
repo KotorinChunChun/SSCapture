@@ -44,6 +44,10 @@ function Get-ReadmeImages {
         'docs/images/readme/04-selection-0110.png'
         'docs/images/readme/05-menu-0110.png'
         'docs/images/readme/capture-complete.png'
+        'docs/images/readme/capture-scene-drag.png'
+        'docs/images/readme/capture-scene-two-clicks.png'
+        'docs/images/readme/capture-scene-window.png'
+        'docs/images/readme/capture-scene-fixed.png'
     )
 }
 
