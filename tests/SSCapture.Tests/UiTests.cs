@@ -61,6 +61,11 @@ internal static partial class Program
             Check(!grid.Checked && step.Enabled, "既定OFFでグリッド間隔が編集できない");
             var screenGuide = Box("ShowSelectionGuide");
             var pointerGuide = Box("ShowPointerGuide");
+            var magnifier = Box("ShowMagnifier");
+            Equal(screenGuide.Left, pointerGuide.Left);
+            Equal(pointerGuide.Left, magnifier.Left);
+            Check(screenGuide.Bottom <= pointerGuide.Top && pointerGuide.Bottom <= magnifier.Top &&
+                magnifier.Bottom <= magnifier.Parent!.ClientSize.Height, "操作ガイドの3項目が縦に収まらない");
             Equal("画面右下に操作ガイドを表示する", screenGuide.Text);
             Equal("ポインタ横に操作ガイドを表示する", pointerGuide.Text);
             using var tooltip = new ToolTip();

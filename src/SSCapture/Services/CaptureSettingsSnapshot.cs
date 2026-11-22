@@ -23,6 +23,7 @@ internal static class CaptureSettingsSnapshot
         NotificationApplicationId = current.NotificationApplicationId,
         NotificationCorner = current.NotificationCorner,
         NotificationDisplay = current.NotificationDisplay,
+        ShareCapturePresentation = current.ShareCapturePresentation,
         HoldNotificationWhileApproaching = current.HoldNotificationWhileApproaching
     };
 }

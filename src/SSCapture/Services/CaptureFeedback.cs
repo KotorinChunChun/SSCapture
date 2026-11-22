@@ -25,7 +25,7 @@ internal interface ICaptureToast : IDisposable
     bool IsEditorMenuOpen => false;
     void SetActions(NotificationActions actions) { }
     bool TryShow(string message, bool hasFailure, NotificationCorner corner, out string? warning,
-        Action? activate = null, NotificationDisplay display = NotificationDisplay.Captured, Rectangle? captureBounds = null);
+        Action? activate = null, NotificationDisplay display = NotificationDisplay.Main, Rectangle? captureBounds = null);
     void Hide();
 }
 
@@ -152,8 +152,10 @@ internal sealed class CaptureFeedback : IDisposable
                     HideForCapture();
                     retryOutput();
                 } : null, heading, editorChoices));
+            bool shared = result.CaptureSettings?.ShareCapturePresentation ?? settings.ShareCapturePresentation;
+            var display = shared ? NotificationDisplay.Captured : settings.NotificationDisplay;
             if (!toast.TryShow(presentation.Message, presentation.HasFailure, settings.NotificationCorner, out string? error,
-                null, settings.NotificationDisplay, result.CaptureBounds))
+                null, display, result.CaptureBounds))
             {
                 HideForCapture();
                 Warn(error ?? "完了表示を画面取得から除外できないため、表示を中止しました。");

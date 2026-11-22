@@ -32,7 +32,7 @@ internal sealed record AppSettings
     public bool IncludeCursor { get; init; }
     public Capture.CaptureSelectionMethod SelectionMethod { get; init; }
     public bool KeepHistory { get; init; } = true;
-    public NotificationDisplay NotificationDisplay { get; init; } = Services.NotificationDisplay.Captured;
+    public NotificationDisplay NotificationDisplay { get; init; } = Services.NotificationDisplay.Main;
     public int NotificationDurationSeconds { get; init; } = 1;
     public bool HoldNotificationWhileApproaching { get; init; } = true;
     public NotificationClickAction NotificationClickAction { get; init; } = Services.NotificationClickAction.OpenFolder;

@@ -20,19 +20,20 @@ internal static partial class Program
     }
     static partial void ServiceTests()
     {
-        Run("通知は撮影画面に1秒の既定値で旧設定を読み込み原本保持", () => WithServiceDirectory(directory =>
+        Run("通知先の省略時はメイン画面に1秒表示し明示設定を保持", () => WithServiceDirectory(directory =>
         {
             string path = Path.Combine(directory, "settings.json");
             string old = "{\"SchemaVersion\":2,\"FileNamePattern\":\"sample_{##}.png\"}";
             File.WriteAllText(path, old);
             var store = new SettingsStore(path); var restored = store.Load(out var warning);
             Equal<string?>(null, warning); Check(restored.ShowCaptureNotification && restored.PlayCaptureSound, "通知の初期値");
-            Equal(NotificationDisplay.Captured, new AppSettings().NotificationDisplay);
+            Equal(NotificationDisplay.Main, new AppSettings().NotificationDisplay);
             Equal(1, new AppSettings().NotificationDurationSeconds);
-            Equal(NotificationDisplay.Captured, restored.NotificationDisplay);
+            Equal(NotificationDisplay.Main, restored.NotificationDisplay);
             Equal(1, restored.NotificationDurationSeconds);
             Equal(NotificationCorner.BottomRight, restored.NotificationCorner); Equal(old, File.ReadAllText(path));
-            var changed = restored with { NotificationDurationSeconds = 0, PlayCaptureSound = true, NotificationCorner = NotificationCorner.BottomLeft };
+            var changed = restored with { NotificationDisplay = NotificationDisplay.Captured, NotificationDurationSeconds = 0,
+                PlayCaptureSound = true, NotificationCorner = NotificationCorner.BottomLeft };
             store.Save(changed); SettingsEqual(changed, store.Load(out warning)); Equal<string?>(null, warning);
             Check(!changed.ShowCaptureNotification && changed.PlayCaptureSound, "0秒の非表示と効果音を独立して保持");
         }));

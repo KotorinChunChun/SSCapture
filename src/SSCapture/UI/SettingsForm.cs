@@ -286,7 +286,7 @@ internal sealed class SettingsForm : Form
         // 旧単独ページを廃止し、プリセットの編集欄だけを公開する。
         basic.Controls.Clear();
         basic.RowStyles.Clear(); basic.RowCount = 6;
-        foreach (int height in new[] { 108, 120, 72, 150, 84, 46 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        foreach (int height in new[] { 108, 120, 108, 150, 84, 46 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
         basic.Dock = DockStyle.Top;
         basic.AutoSize = true;
         basic.AutoSizeMode = AutoSizeMode.GrowAndShrink;
@@ -308,11 +308,13 @@ internal sealed class SettingsForm : Form
         snapDistance = PixelField(precisionOptions, "ウィンドウスナップ距離（px）", "SnapDistancePixels", settings.SnapDistancePixels, 2);
         Add(basic, "位置・寸法の補正", precisionOptions, 1);
 
-        var guideOptions = new FlowLayoutPanel { WrapContents = true };
+        var guideOptions = BasicFields(34, 34, 34);
         guideEnabled = BasicCheckBox("ShowSelectionGuide", "画面右下に操作ガイドを表示する", settings.ShowSelectionGuide);
         pointerGuideEnabled = BasicCheckBox("ShowPointerGuide", "ポインタ横に操作ガイドを表示する", settings.ShowPointerGuide);
         magnifierEnabled = BasicCheckBox("ShowMagnifier", "拡大鏡を表示する", settings.ShowMagnifier);
-        guideOptions.Controls.AddRange([guideEnabled, pointerGuideEnabled, magnifierEnabled]);
+        AddFullRow(guideOptions, guideEnabled, 0);
+        AddFullRow(guideOptions, pointerGuideEnabled, 1);
+        AddFullRow(guideOptions, magnifierEnabled, 2);
         Add(basic, "操作ガイド", guideOptions, 2);
 
         var presetSummaries = BasicFields(72, 72);

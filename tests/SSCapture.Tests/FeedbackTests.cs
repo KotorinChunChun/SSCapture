@@ -28,6 +28,29 @@ internal static partial class Program
             Equal(screens[1], NotificationPlacement.Resolve(NotificationDisplay.Captured, new Rectangle(9999, 9999, 10, 10), screens));
         });
 
+        Run("通知は初期設定でメイン、撮影時に配信表示がONなら撮影モニター", () =>
+        {
+            var toast = new FakeCaptureToast();
+            using var feedback = new CaptureFeedback(createToast: () => toast, sound: new FakeCompletionSound(), timer: new FakeFeedbackTimer());
+            var settings = new AppSettings();
+            var bounds = new Rectangle(-700, -200, 300, 100);
+            var result = new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, CaptureBounds: bounds);
+            feedback.Notify(result, settings);
+            Equal(NotificationDisplay.Main, toast.Display);
+            Equal<Rectangle?>(bounds, toast.CaptureBounds);
+
+            settings = settings with { NotificationDisplay = NotificationDisplay.Display3 };
+            var shared = settings with { ShareCapturePresentation = true };
+            feedback.Notify(result with { CaptureSettings = shared }, settings);
+            Equal(NotificationDisplay.Captured, toast.Display);
+            feedback.Notify(result with { CaptureSettings = settings }, shared);
+            Equal(NotificationDisplay.Display3, toast.Display);
+            feedback.Notify(result, shared);
+            Equal(NotificationDisplay.Captured, toast.Display);
+            feedback.Notify(result with { CaptureSettings = CaptureSettingsSnapshot.ForReplay(shared, settings) }, settings);
+            Equal(NotificationDisplay.Display3, toast.Display);
+        });
+
         Run("保存通知だけにクリック先を付け最新パスを1回開く", () =>
         {
             var toast = new FakeCaptureToast(); var sound = new FakeCompletionSound(); var timer = new FakeFeedbackTimer();
@@ -299,7 +322,7 @@ internal static partial class Program
         internal Rectangle? CaptureBounds;
         internal string Message = "";
         public bool TryShow(string message, bool hasFailure, NotificationCorner corner, out string? warning,
-            Action? activate = null, NotificationDisplay display = NotificationDisplay.Captured, Rectangle? captureBounds = null)
+            Action? activate = null, NotificationDisplay display = NotificationDisplay.Main, Rectangle? captureBounds = null)
         { Shows++; Message = message; Visible = Allow; Activate = activate; Display = display; CaptureBounds = captureBounds; warning = Allow ? null : "除外を確認できません"; return Allow; }
         public void Hide() { Visible = false; Activate = null; Actions = null; }
         public void Dispose() { Disposed = true; Visible = false; }

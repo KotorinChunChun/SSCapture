@@ -82,7 +82,7 @@ internal sealed class CaptureToastForm : Form, ICaptureToast
     public void SetActions(NotificationActions value) => actions = value;
 
     public bool TryShow(string text, bool hasFailure, NotificationCorner corner, out string? warning,
-        Action? activate = null, NotificationDisplay display = NotificationDisplay.Captured, Rectangle? captureBounds = null)
+        Action? activate = null, NotificationDisplay display = NotificationDisplay.Main, Rectangle? captureBounds = null)
     {
         warning = null;
         try
