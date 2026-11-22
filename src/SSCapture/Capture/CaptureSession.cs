@@ -157,11 +157,12 @@ internal sealed partial class SessionController
     internal IReadOnlyList<Point> WindowDragPath => HasWindowDrag ? targetDrag!.Path : [];
     internal Rectangle WindowDragBounds => HasWindowDrag ? targetDrag!.TrailBounds : Rectangle.Empty;
     internal IReadOnlyList<Rectangle> WindowDragHighlights => DimCaptureBackground && HasWindowDrag ? targetDrag!.BrightWindows : [];
+    internal bool PointerLabelsSuppressed => menuOpen || menuTransition;
     internal string? PointerHint
     {
         get
         {
-            if (!OutputSettings.ShowPointerGuide) return null;
+            if (!OutputSettings.ShowPointerGuide || PointerLabelsSuppressed) return null;
             string hint = string.Join('\n', CaptureTargetHints().Prepend(OperationHint).OfType<string>());
             return hint.Length == 0 ? null : hint;
         }
@@ -1217,7 +1218,7 @@ internal sealed partial class SessionController
                 // A canceled opening does not raise Closed.
                 menuOpen = SelectionMenu.Visible;
                 menuTransition = false;
-                if (!menuOpen) menuOwner = null;
+                if (!menuOpen) { menuOwner = null; RefreshOverlays(); }
             }
         }
         catch (Exception ex) { Fail(ex); }

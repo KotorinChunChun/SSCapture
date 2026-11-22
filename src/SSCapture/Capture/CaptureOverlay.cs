@@ -182,11 +182,11 @@ internal sealed class CaptureOverlay : Form
                 DrawSnapshot(graphics, Rectangle.Intersect(Local(window), dirty));
         DrawSelection(graphics, selection, dirty, shared);
         DrawWindowTrail(graphics, dirty);
-        string? hint = PointerHintText();
-        if (DimensionsText(selection) is string dimensions)
-            DrawPointerLabel(graphics, dimensions, session.SelectingControl ? session.Pointer : session.Current, 24, shared, hint);
+        var (dimensions, dimensionsPointer, hint) = ReadPointerLabels(session.DisplaySelection);
+        if (dimensions is not null)
+            DrawPointerLabel(graphics, dimensions, dimensionsPointer, 24, shared, hint);
         if (hint is not null)
-            DrawPointerLabel(graphics, hint, session.Pointer, HintOffset(selection), shared);
+            DrawPointerLabel(graphics, hint, session.Pointer, HintOffset(dimensions, dimensionsPointer), shared);
         DrawMagnifier(graphics);
         if (session.SelectionError is string error)
         {
@@ -291,14 +291,12 @@ internal sealed class CaptureOverlay : Form
     private VisualState ReadVisualState()
     {
         Rectangle selection = session.DisplaySelection;
-        string? dimensions = DimensionsText(selection);
-        Point dimensionsPointer = session.SelectingControl ? session.Pointer : session.Current;
-        string? hint = PointerHintText();
+        var (dimensions, dimensionsPointer, hint) = ReadPointerLabels(selection);
         Rectangle target = session.HighlightForOverlay(MonitorBounds);
         return new(session.Snapshot, session.Mode, session.DimCaptureBackground, session.HighlightWindow, selection,
             target, session.PreviewFrame, session.FixedSelectionValid, session.Points.Count,
             dimensions is null ? Rectangle.Empty : PointerLabelBounds(dimensions, dimensionsPointer, 24, hint),
-            hint is null ? Rectangle.Empty : PointerLabelBounds(hint, session.Pointer, HintOffset(selection)),
+            hint is null ? Rectangle.Empty : PointerLabelBounds(hint, session.Pointer, HintOffset(dimensions, dimensionsPointer)),
             hint, session.SelectionError, session.WindowDragPath.Count, session.WindowDragBounds, session.WindowDragHighlights,
             MagnifierBounds, MagnifierBounds.IsEmpty ? Point.Empty : session.Pointer, session.OutputSettings.ShareCapturePresentation);
     }
@@ -365,12 +363,18 @@ internal sealed class CaptureOverlay : Form
         else graphics.DrawLines(border, points);
     }
 
-    private string? DimensionsText(Rectangle selection) =>
-        selection.Width > 0 && selection.Height > 0 && MonitorBounds.Contains(session.SelectingControl ? session.Pointer : session.Current)
-            ? $"{selection.Width} × {selection.Height}" + (session.FixedSelectionValid ? "" : " 画面外") : null;
+    private (string? Dimensions, Point DimensionsPointer, string? Hint) ReadPointerLabels(Rectangle selection)
+    {
+        Point pointer = session.SelectingControl ? session.Pointer : session.Current;
+        string? dimensions = null;
+        if (!session.PointerLabelsSuppressed && selection.Width > 0 && selection.Height > 0 && MonitorBounds.Contains(pointer)
+            && selection != session.PointerHintCoordinates)
+            dimensions = $"{selection.Width} × {selection.Height}" + (session.FixedSelectionValid ? "" : " 画面外");
+        return (dimensions, pointer, PointerHintText());
+    }
 
-    private int HintOffset(Rectangle selection) => selection.Width > 0 && selection.Height > 0
-        && (session.SelectingControl || MonitorBounds.Contains(session.Current) && Math.Abs(session.Current.Y - session.Pointer.Y) < 52)
+    private int HintOffset(string? dimensions, Point dimensionsPointer) =>
+        dimensions is not null && Math.Abs(dimensionsPointer.Y - session.Pointer.Y) < 52
         ? 24 + Math.Max(28, PointerLabelLineHeight + 8) : 24;
 
     private int PointerLabelLineHeight => TextRenderer.MeasureText("国", dimensionsFont).Height;

@@ -8,6 +8,45 @@ internal static partial class Program
 {
     private static void OverlayWindowTests()
     {
+        Run("固定サイズの座標と寸法を一つにまとめて右クリックメニューと重ねない", () =>
+        {
+            Rectangle bounds = new(0, 0, 440, 320);
+            Point pointer = new(100, 90);
+            foreach (bool show in new[] { true, false })
+            {
+                var frame = new Bitmap(bounds.Width, bounds.Height);
+                using (Graphics graphics = Graphics.FromImage(frame)) graphics.Clear(Color.White);
+                var session = new SessionController(new(CaptureMode.FixedRegion, CaptureIntent.Screenshot, OutputDestination.None,
+                    FixedSize: new(100, 80), ShowSelectionGuide: false, DimCaptureBackground: false,
+                    LimitToStartingMonitor: false, OutputSettings: new() { ShowPointerGuide = show }),
+                    new DesktopSnapshot(frame, bounds, [bounds]), [], initialPointer: pointer);
+                try
+                {
+                    session.Start();
+                    session.MoveTo(pointer);
+                    var overlay = Application.OpenForms.OfType<CaptureOverlay>().Single(form => form.SelectionMenu == session.SelectionMenu);
+                    using var rendered = new Bitmap(bounds.Width, bounds.Height);
+                    void Draw() => overlay.DrawToBitmap(rendered, bounds);
+                    Draw();
+                    Equal(show ? "座標（100, 90　100 × 80）" : null, session.PointerHint);
+                    Equal(Color.Black.ToArgb(), rendered.GetPixel(118, 114).ToArgb());
+                    Equal(Color.White.ToArgb(), rendered.GetPixel(118, 142).ToArgb());
+                    if (!show) continue;
+                    session.MouseDown(overlay, MouseButtons.Right, pointer);
+                    Check(session.SelectionMenu.Visible, "右クリックでメニューが出ない");
+                    Draw();
+                    Check(session.PointerHint is null, "メニューの表示中に座標案内が残った");
+                    Equal(Color.White.ToArgb(), rendered.GetPixel(118, 114).ToArgb());
+                    session.SelectionMenu.Close(ToolStripDropDownCloseReason.AppClicked);
+                    session.MouseDown(overlay, MouseButtons.Left, pointer);
+                    session.MoveTo(pointer);
+                    Draw();
+                    Equal("座標（100, 90　100 × 80）", session.PointerHint);
+                    Equal(Color.Black.ToArgb(), rendered.GetPixel(118, 114).ToArgb());
+                }
+                finally { session.Cancel(); }
+            }
+        });
         Run("拡大鏡は負座標の画面でポインタ下の物理1pxを中心に表示する", () =>
         {
             Rectangle frameBounds = new(-400, -200, 320, 240);

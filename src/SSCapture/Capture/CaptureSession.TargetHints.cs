@@ -9,6 +9,18 @@ internal sealed partial class SessionController
     private IReadOnlyDictionary<Rectangle, string>? guideMonitorNames;
     private readonly Dictionary<uint, string> guideProcessNames = [];
 
+    internal Rectangle? PointerHintCoordinates
+    {
+        get
+        {
+            if (!OutputSettings.ShowPointerGuide || PointerLabelsSuppressed) return null;
+            if (SelectingControl) return controlCandidate?.Bounds;
+            if (pressedButton == MouseButtons.Middle || HighlightWindow) return null;
+            return (Mode == CaptureMode.FixedRegion ? FixedSelectionValid : gesture.HasDragged)
+                && CaptureGeometry.IsUsable(Selection) ? Selection : null;
+        }
+    }
+
     private IEnumerable<string> CaptureTargetHints()
     {
         if (SelectingControl)
@@ -52,9 +64,7 @@ internal sealed partial class SessionController
             yield break;
         }
 
-        if ((Mode == CaptureMode.FixedRegion ? FixedSelectionValid : gesture.HasDragged)
-            && CaptureGeometry.IsUsable(Selection))
-            yield return DescribeBounds(Selection);
+        if (PointerHintCoordinates is Rectangle bounds) yield return DescribeBounds(bounds);
     }
 
     private string DescribeMonitor(Rectangle monitor)
