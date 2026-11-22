@@ -32,7 +32,11 @@ internal static class CaptureSession
             for (int i = 0; i < windows.Count; i++)
                 if (windows[i].Bounds.Contains(point)) return windows[i];
             return null;
-        }, findWindowGroup: root => CaptureWindowGroups.ForegroundGroup(root, windows));
+        }, findWindowGroup: root => CaptureWindowGroups.ForegroundGroup(root, windows),
+            readGuideDisplays: () => InstantCapture.ReadDisplays().Select(display => display with
+            {
+                MonitorName = Services.RegionCoordinates.ReadMonitorName(display.DeviceName)
+            }).ToArray());
     }
 
     /// <summary>Consumes snapshot. Never reads desktop pixels or enumerates real windows.</summary>
@@ -40,7 +44,8 @@ internal static class CaptureSession
         IReadOnlyList<Rectangle>? windows = null, Func<DesktopSnapshot>? currentFrameFactory = null, Point? initialPointer = null, Action<bool>? gridChanged = null, Action<bool>? guideChanged = null,
         Func<bool, bool, DesktopSnapshot>? recapture = null, Func<Rectangle, IReadOnlyList<Rectangle>>? readWindows = null,
         Func<Point, string?>? readTitle = null, bool captureWindowsKey = false, Func<Point, CaptureWindow?>? findWindow = null,
-        Func<CaptureWindow, IReadOnlyList<CaptureWindow>>? findWindowGroup = null)
+        Func<CaptureWindow, IReadOnlyList<CaptureWindow>>? findWindowGroup = null,
+        Func<IReadOnlyList<DisplayTarget>>? readGuideDisplays = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         try
@@ -50,7 +55,8 @@ internal static class CaptureSession
                 throw new ArgumentException("画面固定OFFの合成画像検証には画像取得関数を指定してください。", nameof(currentFrameFactory));
             SessionController session = new(options, snapshot, windows ?? [], currentFrameFactory,
                 initialPointer ?? snapshot.Monitors.FirstOrDefault().Location, gridChanged: gridChanged, guideChanged: guideChanged, recapture: recapture, readWindows: readWindows,
-                readTitle: readTitle, captureWindowsKey: captureWindowsKey, findWindow: findWindow, findWindowGroup: findWindowGroup);
+                readTitle: readTitle, captureWindowsKey: captureWindowsKey, findWindow: findWindow, findWindowGroup: findWindowGroup,
+                readGuideDisplays: readGuideDisplays);
             if (options.InitialInputPreset is { UseFixedCoordinates: true } preset) session.ApplyInputPreset(preset);
             session.Start();
             return session.Completion;
@@ -155,8 +161,21 @@ internal sealed partial class SessionController
         get
         {
             if (!OutputSettings.ShowPointerGuide) return null;
+            string hint = string.Join('\n', CaptureTargetHints().Prepend(OperationHint).OfType<string>());
+            return hint.Length == 0 ? null : hint;
+        }
+    }
+
+    private string? OperationHint
+    {
+        get
+        {
             if (SelectingControl)
-                return $"{ModifierHint}\n{(ControlBounds.IsEmpty ? "対象のコントロールが見つかりません" : "左ボタンを離して部品を撮影")}　{SelectionGuideText.CancelHint(OutputSettings.CaptureMouse.DragRight)}";
+            {
+                string controlOperation = ControlBounds.IsEmpty ? "対象のコントロールが見つかりません" : "左ボタンを離して部品を撮影";
+                return (ModifierHint is null ? "" : ModifierHint + "\n") + controlOperation + "　" +
+                    SelectionGuideText.CancelHint(OutputSettings.CaptureMouse.DragRight);
+            }
             if (TwoPointSelection && pressedButton != MouseButtons.Middle)
             {
                 string step = waitingForSecondPoint ? "終点をクリック" : "始点をクリック";
@@ -220,12 +239,14 @@ internal sealed partial class SessionController
         Func<IReadOnlyList<Services.DisplayLayout>>? readPresetDisplays = null,
         Func<bool, bool, DesktopSnapshot>? recapture = null, Func<Rectangle, IReadOnlyList<Rectangle>>? readWindows = null,
         Func<Point, string?>? readTitle = null, bool captureWindowsKey = false, Func<Point, CaptureWindow?>? findWindow = null,
-        Func<CaptureWindow, IReadOnlyList<CaptureWindow>>? findWindowGroup = null)
+        Func<CaptureWindow, IReadOnlyList<CaptureWindow>>? findWindowGroup = null,
+        Func<IReadOnlyList<DisplayTarget>>? readGuideDisplays = null)
     {
         this.options = options;
         this.recapture = recapture; this.readWindows = readWindows;
         this.readTitle = readTitle; this.captureWindowsKey = captureWindowsKey; this.findWindow = findWindow;
         this.findWindowGroup = findWindowGroup ?? (root => [root]);
+        this.readGuideDisplays = readGuideDisplays;
         activeAnchor = options.FixedAnchor;
         activeFixedSize = options.FixedSize ?? new Size(1280, 720);
         this.readPresetDisplays = readPresetDisplays ?? Services.RegionCoordinates.ReadDisplays;

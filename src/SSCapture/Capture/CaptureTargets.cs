@@ -42,9 +42,11 @@ internal sealed class CaptureTargetDrag(Func<CaptureWindow, IReadOnlyList<Captur
     private readonly List<Point> path = [];
     private readonly HashSet<Rectangle> monitors = [];
     private readonly Dictionary<nint, CaptureWindow> windows = [];
+    private readonly Dictionary<nint, CaptureWindow> includedWindows = [];
     internal IReadOnlyList<Point> Path => path;
     internal IReadOnlySet<Rectangle> Monitors => monitors;
     internal IReadOnlyCollection<CaptureWindow> Windows => windows.Values;
+    internal IReadOnlyCollection<CaptureWindow> IncludedWindows => includedWindows.Values;
     internal IReadOnlyList<Rectangle> BrightWindows { get; private set; } = [];
     internal Rectangle TrailBounds { get; private set; }
 
@@ -68,7 +70,9 @@ internal sealed class CaptureTargetDrag(Func<CaptureWindow, IReadOnlyList<Captur
                 if (hitWindow(through) is { } window && windows.TryAdd(window.Handle, window))
                 {
                     var group = findWindowGroup?.Invoke(window) ?? [window];
-                    BrightWindows = BrightWindows.Concat(group.Select(member => member.Bounds)).Distinct().ToArray();
+                    includedWindows.TryAdd(window.Handle, window);
+                    foreach (CaptureWindow member in group) includedWindows.TryAdd(member.Handle, member);
+                    BrightWindows = includedWindows.Values.Select(member => member.Bounds).Distinct().ToArray();
                 }
             }
             else

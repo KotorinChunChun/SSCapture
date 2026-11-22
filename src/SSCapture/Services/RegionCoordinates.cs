@@ -150,6 +150,18 @@ internal static class RegionCoordinates
             throw new ArgumentException("撮影範囲に画面外またはディスプレイ間の隙間が含まれています。範囲を指定し直してください。");
     }
 
+    internal static string? ReadMonitorName(string deviceName)
+    {
+        for (uint index = 0; index < 256; index++)
+        {
+            var device = new DisplayDevice { Size = Marshal.SizeOf<DisplayDevice>() };
+            if (!EnumDisplayDevices(deviceName, index, ref device, 0)) break;
+            if ((device.StateFlags & 1 /* DISPLAY_DEVICE_ACTIVE */) != 0 && !string.IsNullOrWhiteSpace(device.DeviceString))
+                return device.DeviceString.Trim();
+        }
+        return null;
+    }
+
     internal static IReadOnlyList<DisplayLayout> ReadDisplays()
     {
         List<DisplayLayout> result = [];

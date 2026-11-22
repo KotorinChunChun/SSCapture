@@ -84,6 +84,7 @@ internal sealed class WindowCapturePreview(CaptureWindow target, bool includeCur
     private Task<WindowCaptureFrame>? frame;
     private bool transferred;
     internal CaptureWindow Target { get; } = target;
+    internal IReadOnlyList<CaptureWindow> Windows { get; } = foregroundFirst;
     internal bool IncludeCursor { get; } = includeCursor;
     internal Task<WindowCaptureFrame> Frame => frame ??= LoadAsync(cancellation.Token);
 
@@ -91,7 +92,7 @@ internal sealed class WindowCapturePreview(CaptureWindow target, bool includeCur
     {
         // Skip GPU setup for windows the pointer only passes over.
         await Task.Delay(80, token).ConfigureAwait(false);
-        return await IsolatedWindowCapture.TakeGroupAsync(foregroundFirst, IncludeCursor, token,
+        return await IsolatedWindowCapture.TakeGroupAsync(Windows, IncludeCursor, token,
             new HashSet<nint> { Target.Handle }).ConfigureAwait(false);
     }
 

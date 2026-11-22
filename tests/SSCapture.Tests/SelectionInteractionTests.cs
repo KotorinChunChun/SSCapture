@@ -6,6 +6,87 @@ internal static partial class Program
 {
     private static void SelectionInteractionTests()
     {
+        Run("ポインタ横のガイドは左単押しのウィンドウ名を負座標のドラッグ範囲に切り替える", () =>
+        {
+            Rectangle monitor = new(-400, -100, 400, 300);
+            Rectangle windowBounds = new(-340, -80, 180, 120);
+            using var process = System.Diagnostics.Process.GetCurrentProcess();
+            var window = new CaptureWindow(windowBounds, "テストウィンドウ", 1, (uint)process.Id, 1);
+            var snapshot = new DesktopSnapshot(new Bitmap(400, 300), monitor, [monitor]);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.None),
+                snapshot, [windowBounds], initialPointer: new(-300, -50), findWindow: point => windowBounds.Contains(point) ? window : null);
+            using var overlay = new CaptureOverlay(session, monitor);
+            try
+            {
+                _ = overlay.Handle;
+                Check(session.PointerHint is null, "未選択のウィンドウ名が表示された");
+                session.MouseDown(overlay, MouseButtons.Left, new(-300, -50));
+                Equal("ウィンドウを撮影　Esc / 右クリックで取り消し\nテストウィンドウ（" + process.ProcessName + "）", session.PointerHint);
+                session.MoveTo(new(-211, 27));
+                Equal("選択範囲を撮影　Esc / 右クリックで取り消し\n座標（-300, -50　89 × 77）", session.PointerHint);
+                session.AbortSelection();
+                Check(session.PointerHint is null, "取り消した対象が表示された");
+            }
+            finally { session.Cancel(); }
+        });
+        Run("ポインタ横のガイドは中ドラッグで通過したモニターと名称を一度ずつ表示する", () =>
+        {
+            Rectangle left = new(-160, 0, 160, 120), right = new(0, 0, 160, 120);
+            var snapshot = new DesktopSnapshot(new Bitmap(320, 120), Rectangle.Union(left, right), [left, right]);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.None),
+                snapshot, [], initialPointer: new(-95, 30),
+                readGuideDisplays: () => [new("DISPLAY2", right, true, "メイン画面"), new("DISPLAY1", left, false, "左の画面")]);
+            using var overlay = new CaptureOverlay(session, left);
+            try
+            {
+                _ = overlay.Handle;
+                session.MouseDown(overlay, MouseButtons.Middle, new(-95, 30));
+                Check(session.PointerHint?.EndsWith("\nデスクトップ 2（左の画面）", StringComparison.Ordinal) == true, "1台目のモニターが表示されない");
+                session.MoveTo(new(50, 30));
+                session.MoveTo(new(-95, 30));
+                Equal("モニター全体を撮影　Esc / 右クリックで取り消し\nドラッグ：複数デスクトップを合成\nデスクトップ 2（左の画面）\nデスクトップ 1（メイン画面）", session.PointerHint);
+            }
+            finally { session.Cancel(); }
+        });
+        Run("ポインタ横のガイドはウィンドウドラッグで前面の子ウィンドウと通過した対象を表示する", () =>
+        {
+            Rectangle monitor = new(0, 0, 400, 300);
+            var first = new CaptureWindow(new(20, 20, 100, 100), "最初", 1, 0, 1);
+            var child = new CaptureWindow(new(60, 75, 120, 80), "子ウィンドウ", 2, 0, 1);
+            var last = new CaptureWindow(new(200, 20, 140, 100), "最後", 3, 0, 1);
+            CaptureWindow[] targets = [child, first, last];
+            var snapshot = new DesktopSnapshot(new Bitmap(400, 300), monitor, [monitor]);
+            var session = new SessionController(new(CaptureMode.Window, CaptureIntent.Screenshot, OutputDestination.None),
+                snapshot, targets.Select(target => target.Bounds).ToArray(), initialPointer: new(30, 40),
+                findWindow: point => targets.FirstOrDefault(target => target.Bounds.Contains(point)),
+                findWindowGroup: root => root == first ? [child, first] : [root]);
+            using var overlay = new CaptureOverlay(session, monitor);
+            try
+            {
+                _ = overlay.Handle;
+                session.MouseDown(overlay, MouseButtons.Left, new(30, 40));
+                session.MoveTo(new(220, 40));
+                session.MoveTo(new(30, 40));
+                Equal("ウィンドウを撮影　Esc / 右クリックで取り消し\nドラッグ：複数ウィンドウを合成\n最初（PID 0）\n子ウィンドウ（PID 0）\n最後（PID 0）", session.PointerHint);
+            }
+            finally { session.Cancel(); }
+        });
+        Run("固定サイズの座標はガイドONの場合だけ表示する", () =>
+        {
+            Rectangle monitor = new(0, 0, 400, 300);
+            foreach (bool show in new[] { true, false })
+            {
+                var session = new SessionController(new(CaptureMode.FixedRegion, CaptureIntent.Screenshot, OutputDestination.None,
+                    FixedSize: new(100, 80), OutputSettings: new() { ShowPointerGuide = show }),
+                    new DesktopSnapshot(new Bitmap(400, 300), monitor, [monitor]), [], initialPointer: new(30, 40));
+                try
+                {
+                    session.MoveTo(new(30, 40));
+                    Equal(show ? "座標（30, 40　100 × 80）" : null, session.PointerHint);
+                }
+                finally { session.Cancel(); }
+            }
+        });
         Run("矩形の2点クリックは1点目で確定せず終点まで同じ始点を使う", () =>
         {
             var session = OutputSession(new Services.AppSettings { SelectionMethod = CaptureSelectionMethod.TwoClicks });

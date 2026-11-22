@@ -3,7 +3,7 @@ using SSCapture.Services;
 
 namespace SSCapture.Capture;
 
-internal sealed record DisplayTarget(string DeviceName, Rectangle Bounds, bool IsPrimary = false);
+internal sealed record DisplayTarget(string DeviceName, Rectangle Bounds, bool IsPrimary = false, string? MonitorName = null);
 internal sealed record WindowReplayFrame(Bitmap Image, Rectangle Bounds, CaptureMetadata? Metadata, string? Title, CaptureReplaySource Source);
 
 internal static class InstantCapture

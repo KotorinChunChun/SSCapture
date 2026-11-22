@@ -182,8 +182,11 @@ internal sealed class CaptureOverlay : Form
                 DrawSnapshot(graphics, Rectangle.Intersect(Local(window), dirty));
         DrawSelection(graphics, selection, dirty, shared);
         DrawWindowTrail(graphics, dirty);
-        DrawDimensions(graphics, selection, shared);
-        DrawPointerHint(graphics, selection, shared);
+        string? hint = PointerHintText();
+        if (DimensionsText(selection) is string dimensions)
+            DrawPointerLabel(graphics, dimensions, session.SelectingControl ? session.Pointer : session.Current, 24, shared, hint);
+        if (hint is not null)
+            DrawPointerLabel(graphics, hint, session.Pointer, HintOffset(selection), shared);
         DrawMagnifier(graphics);
         if (session.SelectionError is string error)
         {
@@ -290,12 +293,12 @@ internal sealed class CaptureOverlay : Form
         Rectangle selection = session.DisplaySelection;
         string? dimensions = DimensionsText(selection);
         Point dimensionsPointer = session.SelectingControl ? session.Pointer : session.Current;
-        string? hint = MonitorBounds.Contains(session.Pointer) ? session.PointerHint : null;
+        string? hint = PointerHintText();
         Rectangle target = session.HighlightForOverlay(MonitorBounds);
         return new(session.Snapshot, session.Mode, session.DimCaptureBackground, session.HighlightWindow, selection,
             target, session.PreviewFrame, session.FixedSelectionValid, session.Points.Count,
-            dimensions is null ? Rectangle.Empty : PointerLabelBounds(dimensions, dimensionsPointer, 24, reserveHint: true),
-            hint is null ? Rectangle.Empty : PointerLabelBounds(hint, session.Pointer, HintOffset(selection), reserveHint: false),
+            dimensions is null ? Rectangle.Empty : PointerLabelBounds(dimensions, dimensionsPointer, 24, hint),
+            hint is null ? Rectangle.Empty : PointerLabelBounds(hint, session.Pointer, HintOffset(selection)),
             hint, session.SelectionError, session.WindowDragPath.Count, session.WindowDragBounds, session.WindowDragHighlights,
             MagnifierBounds, MagnifierBounds.IsEmpty ? Point.Empty : session.Pointer, session.OutputSettings.ShareCapturePresentation);
     }
@@ -362,53 +365,57 @@ internal sealed class CaptureOverlay : Form
         else graphics.DrawLines(border, points);
     }
 
-    private void DrawDimensions(Graphics graphics, Rectangle selection, bool shared)
-    {
-        if (DimensionsText(selection) is string text)
-            DrawPointerLabel(graphics, text, session.SelectingControl ? session.Pointer : session.Current, 24, reserveHint: true, shared);
-    }
-
     private string? DimensionsText(Rectangle selection) =>
         selection.Width > 0 && selection.Height > 0 && MonitorBounds.Contains(session.SelectingControl ? session.Pointer : session.Current)
             ? $"{selection.Width} × {selection.Height}" + (session.FixedSelectionValid ? "" : " 画面外") : null;
 
-    private void DrawPointerHint(Graphics graphics, Rectangle selection, bool shared)
+    private int HintOffset(Rectangle selection) => selection.Width > 0 && selection.Height > 0
+        && (session.SelectingControl || MonitorBounds.Contains(session.Current) && Math.Abs(session.Current.Y - session.Pointer.Y) < 52)
+        ? 24 + Math.Max(28, PointerLabelLineHeight + 8) : 24;
+
+    private int PointerLabelLineHeight => TextRenderer.MeasureText("国", dimensionsFont).Height;
+
+    private string? PointerHintText()
     {
-        if (session.PointerHint is not string hint || !MonitorBounds.Contains(session.Pointer)) return;
-        DrawPointerLabel(graphics, hint, session.Pointer, HintOffset(selection), reserveHint: false, shared);
+        if (!MonitorBounds.Contains(session.Pointer) || session.PointerHint is not string hint) return null;
+        int lineHeight = PointerLabelLineHeight;
+        int maximumLines = Math.Max(2, (ClientSize.Height - lineHeight - 16) / lineHeight);
+        if (1 + hint.Count(c => c == '\n') <= maximumLines) return hint;
+        string[] lines = hint.Split('\n');
+        return string.Join('\n', lines.Take(maximumLines - 1).Append($"ほか {lines.Length - maximumLines + 1} 件"));
     }
 
-    private int HintOffset(Rectangle selection) => selection.Width > 0 && selection.Height > 0
-        && (session.SelectingControl || MonitorBounds.Contains(session.Current) && Math.Abs(session.Current.Y - session.Pointer.Y) < 52) ? 52 : 24;
-
-    private Rectangle PointerLabelBounds(string text, Point pointer, int offset, bool reserveHint)
+    private Rectangle PointerLabelBounds(string text, Point pointer, int offset, string? hintBelow = null)
     {
         string[] lines = text.Split('\n');
-        int height = TextRenderer.MeasureText("国", dimensionsFont).Height * lines.Length + 4;
+        int lineHeight = PointerLabelLineHeight;
+        int height = lineHeight * lines.Length + 4;
         int width = Math.Min(ClientSize.Width, lines.Max(line => TextRenderer.MeasureText(line, dimensionsFont).Width) + 8);
         int x = Math.Clamp(pointer.X - MonitorBounds.X + 18, 0, Math.Max(0, ClientSize.Width - width));
-        int reserved = reserveHint && session.PointerHint is string hint ? (1 + hint.Count(c => c == '\n')) * height : 0;
+        int reserved = hintBelow is null ? 0 : (1 + hintBelow.Count(c => c == '\n')) * lineHeight + 12;
         int y = Math.Clamp(pointer.Y - MonitorBounds.Y + offset, 0, Math.Max(0, ClientSize.Height - height - reserved));
         return new(x, y, width, height);
     }
 
-    private void DrawPointerLabel(Graphics graphics, string text, Point pointer, int offset, bool reserveHint, bool shared)
+    private void DrawPointerLabel(Graphics graphics, string text, Point pointer, int offset, bool shared, string? hintBelow = null)
     {
-        Rectangle label = PointerLabelBounds(text, pointer, offset, reserveHint);
+        Rectangle label = PointerLabelBounds(text, pointer, offset, hintBelow);
         graphics.FillRectangle(Brushes.Black, label);
         string[] lines = text.Split('\n');
         int lineHeight = (label.Height - 4) / lines.Length;
         label.Offset(0, 2);
         label.Height = lineHeight;
+        using var format = shared ? new StringFormat
+        {
+            Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center,
+            Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap
+        } : null;
         foreach (string line in lines)
         {
-            if (shared)
-            {
-                using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            if (format is not null)
                 graphics.DrawString(line, dimensionsFont, Brushes.White, label, format);
-            }
             else TextRenderer.DrawText(graphics, line, dimensionsFont, label, Color.White,
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix |
                     TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.PreserveGraphicsTranslateTransform);
             label.Offset(0, lineHeight);
         }
