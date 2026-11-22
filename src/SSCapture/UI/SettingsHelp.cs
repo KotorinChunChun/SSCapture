@@ -130,7 +130,7 @@ internal static class SettingsHelp
                 320×240（4:3）  メニューや通知。
                 """;
         if (name == "PreviewRegion") return "登録した位置と寸法の枠だけを表示します。位置が未指定の場合は利用できません。先に座標を指定するか範囲を選んでください。撮影や設定保存は行いません。";
-        if (name == "CaptureKeysWheelAdjustRectangle") return "ドラッグ開始後と2点クリックの終点待ちに、1ノッチごとに終点側を1物理px調整します。";
+        if (name == "CaptureKeysWheelAdjustRectangle") return "ドラッグ開始後と2点クリックの終点待ちに、ホイール上で矩形の四辺を各1物理px広げ、下で縮めます。";
         if (name == "FileNamePattern") return "{yyyymmdd} 年月日 / {hhmmss} 時分秒 / {ext} 静止画png・録画mp4 / {ocr} OCR文字列 / {region} 範囲名 / {#}・{##} 連番。例: {yyyymmdd}_{hhmmss}.{ext}";
         if (Descriptions.TryGetValue(name, out string? description)) return description;
         if (name == "SnapDistancePixels") return $"ウィンドウ枠やデスクトップ（モニター）の端・角にスナップする距離です。既定値は{SelectionSnap.Distance}pxです。";

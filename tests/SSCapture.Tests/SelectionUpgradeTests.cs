@@ -239,7 +239,7 @@ internal static partial class Program
             gesture.Move(new(-230, -155));
             Equal(new Rectangle(-230, -155, 140, 105), gesture.End(new(-230, -155), OutputDestination.None)!.Bounds);
         });
-        Run("矩形のホイールは始点を固定して終点側を調整し、移動と確定に寸法を反映する", () =>
+        Run("矩形のホイールは始点側と終点側を広げ、移動と確定に寸法を反映する", () =>
         {
             var gesture = new SelectionGesture(CaptureMode.Rectangle, [new(-100, -100, 400, 300)], []);
             Check(!gesture.ResizeRectangle(120), "未押下で範囲を変更した");
@@ -249,17 +249,17 @@ internal static partial class Program
             Check(gesture.ResizeRectangle(60), "高精細ホイールを受け付けない");
             Equal(new Rectangle(-60, 10, 70, 60), gesture.Selection);
             gesture.ResizeRectangle(60);
-            Equal(new Rectangle(-60, 10, 71, 61), gesture.Selection);
+            Equal(new Rectangle(-61, 9, 72, 62), gesture.Selection);
             Equal(new Point(11, 71), gesture.MagnifierPoint);
             gesture.Move(new(40, 70));
-            Equal(new Rectangle(-60, 10, 101, 61), gesture.Selection);
+            Equal(new Rectangle(-61, 9, 102, 62), gesture.Selection);
             gesture.ResizeRectangle(-240);
-            Equal(new Rectangle(-60, 10, 99, 59), gesture.Selection);
+            Equal(new Rectangle(-59, 11, 98, 58), gesture.Selection);
             var adjusted = gesture.Selection;
             gesture.Space(cycle: CaptureAnchorCycle.Corners);
             Equal(adjusted, gesture.End(gesture.RawCurrent, OutputDestination.None)!.Bounds);
         });
-        Run("矩形ホイールは片側が画面端に達しても残りの寸法を各ノッチで調整する", () =>
+        Run("矩形ホイールは画面端で対辺を同じ幅に保ち、もう一方の軸は調整できる", () =>
         {
             var gesture = new SelectionGesture(CaptureMode.Rectangle, [new(0, 0, 300, 300)], []);
             gesture.Begin(new(100, 100), new(4, 4));
@@ -267,9 +267,52 @@ internal static partial class Program
             gesture.ResizeRectangle(120);
             gesture.ResizeRectangle(120);
             gesture.ResizeRectangle(120);
-            Equal(new Rectangle(100, 100, 200, 83), gesture.Selection);
+            Equal(new Rectangle(99, 97, 201, 86), gesture.Selection);
             gesture.ResizeRectangle(-120);
-            Equal(new Rectangle(100, 100, 199, 82), gesture.Selection);
+            Equal(new Rectangle(100, 98, 199, 84), gesture.Selection);
+        });
+        Run("四方向の矩形ホイールは負座標でも各辺を動かし最小2pxで止まる", () =>
+        {
+            var gesture = new SelectionGesture(CaptureMode.Rectangle, [new(-500, -500, 1000, 1000)], []);
+            Point start = new(-100, -80);
+            foreach (int x in new[] { -1, 1 })
+            foreach (int y in new[] { -1, 1 })
+            {
+                Point end = start + new Size(200 * x, 100 * y);
+                MoveRectangle(start, end);
+                Rectangle original = CaptureGeometry.FromDrag(start, end);
+                gesture.ResizeRectangle(120);
+                Equal(Rectangle.Inflate(original, 1, 1), gesture.Selection);
+                gesture.ResizeRectangle(-120);
+                Equal(original, gesture.Selection);
+            }
+
+            MoveRectangle(start, start + new Size(6, 4));
+            gesture.ResizeRectangle(-1200);
+            Equal(new Rectangle(-98, -79, 2, 2), gesture.Selection);
+            gesture.ResizeRectangle(120);
+            Equal(new Rectangle(-99, -80, 4, 4), gesture.Selection);
+
+            void MoveRectangle(Point from, Point to)
+            {
+                gesture.Begin(from, new(4, 4));
+                gesture.Move(to);
+            }
+        });
+        Run("矩形ホイールは方向固定と縦横比固定を保つ", () =>
+        {
+            var gesture = new SelectionGesture(CaptureMode.Rectangle, [new(0, 0, 600, 500)], []);
+            gesture.Begin(new(100, 100), new(4, 4));
+            gesture.Move(new(300, 200));
+            gesture.Move(new(340, 230), lockWidth: true);
+            gesture.ResizeRectangle(120);
+            Equal(new Rectangle(100, 99, 200, 132), gesture.Selection);
+
+            gesture.Begin(new(100, 100), new(4, 4));
+            gesture.Move(new(300, 200));
+            gesture.Move(new(300, 200), action: CaptureKeyAction.LockAspectRatio);
+            gesture.ResizeRectangle(120);
+            Equal(new Rectangle(98, 99, 204, 102), gesture.Selection);
         });
         Run("矩形Spaceは選択を保ちポインタを対角へ移し逆側を操作する", () =>
         {

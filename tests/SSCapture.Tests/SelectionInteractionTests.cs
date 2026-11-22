@@ -135,13 +135,17 @@ internal static partial class Program
                 session.MouseDown(overlay, MouseButtons.Left, start, Keys.None);
                 session.ApplyPointerInput(end, CaptureModifiers.None);
                 session.MouseWheel(end, 240);
-                var grown = new Rectangle(40, 50, 202, 132);
+                var grown = new Rectangle(38, 48, 204, 134);
+                session.Snapshot.Image.SetPixel(grown.Left, grown.Top, Color.Red);
+                session.Snapshot.Image.SetPixel(grown.Right - 1, grown.Bottom - 1, Color.Blue);
                 Equal(grown, session.DisplaySelection);
                 session.MouseUp(MouseButtons.Left, end, Keys.None);
                 Check(session.Completion.IsCompletedSuccessfully, "ホイール調整した矩形を確定できない");
                 using var result = session.Completion.Result;
                 Equal(grown, result.Selection!.Bounds);
                 Equal(grown.Size, result.Image!.Size);
+                Equal(Color.Red.ToArgb(), result.Image.GetPixel(0, 0).ToArgb());
+                Equal(Color.Blue.ToArgb(), result.Image.GetPixel(grown.Width - 1, grown.Height - 1).ToArgb());
             }
             finally { session.Cancel(); }
         });
@@ -166,7 +170,7 @@ internal static partial class Program
                     session.MouseUp(MouseButtons.Left, start, Keys.None);
                     session.ApplyPointerInput(end, CaptureModifiers.None);
                     session.MouseWheel(end, 120);
-                    var expected = enabled ? new Rectangle(40, 50, 201, 131) : new Rectangle(40, 50, 200, 130);
+                    var expected = enabled ? new Rectangle(39, 49, 202, 132) : new Rectangle(40, 50, 200, 130);
                     Equal(expected, session.DisplaySelection);
                     session.MouseDown(overlay, MouseButtons.Left, end, Keys.None);
                     session.MouseUp(MouseButtons.Left, end, Keys.None);

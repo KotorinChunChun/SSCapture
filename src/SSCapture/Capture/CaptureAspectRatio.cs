@@ -23,15 +23,17 @@ internal static class AspectRatios
         _ => throw new ArgumentOutOfRangeException(nameof(ratio))
     };
 
+    internal static (int Width, int Height) Units(CaptureAspectRatio ratio) => ratio switch
+    {
+        CaptureAspectRatio.Wide => (16, 9), CaptureAspectRatio.Standard => (4, 3),
+        CaptureAspectRatio.Square => (1, 1), _ => throw new ArgumentOutOfRangeException(nameof(ratio))
+    };
+
     internal static Point Constrain(Point start, Point target, CaptureAspectRatio ratio, Rectangle? bounds,
         bool lockWidth, bool lockHeight)
     {
         if (ratio == CaptureAspectRatio.Free) return target;
-        (int width, int height) = ratio switch
-        {
-            CaptureAspectRatio.Wide => (16, 9), CaptureAspectRatio.Standard => (4, 3),
-            CaptureAspectRatio.Square => (1, 1), _ => throw new ArgumentOutOfRangeException(nameof(ratio))
-        };
+        var (width, height) = Units(ratio);
         long dx = (long)target.X - start.X, dy = (long)target.Y - start.Y;
         int sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1;
         double units = lockWidth ? Math.Abs(dx) / (double)width : lockHeight ? Math.Abs(dy) / (double)height
