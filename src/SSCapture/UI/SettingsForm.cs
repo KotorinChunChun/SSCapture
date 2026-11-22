@@ -5,7 +5,7 @@ using SSCapture.Services;
 
 namespace SSCapture.UI;
 
-internal sealed class SettingsForm : Form
+internal sealed partial class SettingsForm : Form
 {
     private AppSettings committed;
     private bool manualSave;
@@ -41,6 +41,9 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox gridEnabled, guideEnabled, pointerGuideEnabled;
     private readonly CheckBox magnifierEnabled, shareCapturePresentation;
     private readonly ComboBox guideDisplay;
+    private readonly StartupSettingsControl startupSettings;
+    private readonly CaptureCommandControl captureCommand;
+    private readonly Action refreshDefaultSummaries;
 
     public SettingsForm(AppSettings settings, Func<AppSettings, string?> onSave, Action openFolder,
         Func<IReadOnlyList<MicrophoneInfo>>? listMicrophones = null, Action? openRegions = null, Action? openHistory = null,
@@ -330,7 +333,7 @@ internal sealed class SettingsForm : Form
         var outputSummary = MakeButton("", "DefaultOutputSummary", ButtonRole.Secondary); outputSummary.AutoSize = false; outputSummary.Height = 68;
         Add(presetSummaries, "入力", inputSummary, 0); Add(presetSummaries, "出力", outputSummary, 1);
         Add(basic, "既定プリセット", presetSummaries, 3);
-        var startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration());
+        startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration());
         AddFullRow(basic, startupSettings, 4);
         var transfer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
         var exportButton = MakeButton("設定をエクスポート", "ExportSettings");
@@ -373,9 +376,11 @@ internal sealed class SettingsForm : Form
         clipboardOutput = (CheckBox)presetEditor.Controls.Find("ClipboardOutput", true).Single(); fileOutput = (CheckBox)presetEditor.Controls.Find("FileOutput", true).Single(); externalOutput = (CheckBox)presetEditor.Controls.Find("ExternalOutput", true).Single();
         openFolderAfterSave = (CheckBox)presetEditor.Controls.Find("OpenFolderAfterSave", true).Single(); screenshotColorDepth = (ComboBox)presetEditor.Controls.Find("ScreenshotColorDepth", true).Single(); metadataMode = (ComboBox)presetEditor.Controls.Find("MetadataMode", true).Single();
         screenshotPadding = (NumericUpDown)inputPresetEditor.Controls.Find("ScreenshotPaddingPixels", true).Single();
+        refreshDefaultSummaries = UpdateSummary;
         tabs.SelectedIndexChanged += (_, _) => UpdateSummary(); UpdateSummary();
         var commandPage = new TabPage("撮影コマンド") { BackColor = BackColor, Padding = new Padding(8) };
-        commandPage.Controls.Add(new CaptureCommandControl(() => committed, SetStatus)); tabs.TabPages.Add(commandPage);
+        captureCommand = new CaptureCommandControl(() => committed, SetStatus);
+        commandPage.Controls.Add(captureCommand); tabs.TabPages.Add(commandPage);
         string[] order = ["基本", "入力プリセット", "出力プリセット", "外部アプリ", "ショートカット", "撮影コマンド", "通知", "履歴"];
         var ordered = order.Select(title => tabs.TabPages.Cast<TabPage>().Single(p => p.Text == title)).ToArray();
         tabs.TabPages.Clear(); tabs.TabPages.AddRange(ordered);
@@ -392,7 +397,11 @@ internal sealed class SettingsForm : Form
         var folderButton = MakeButton("保存先を開く", "OpenFolder", ButtonRole.Secondary);
         folderButton.Width = 144;
         folderButton.Click += (_, _) => openFolder();
-        buttons.Controls.AddRange([saveButton, closeButton, folderButton]);
+        var resetButton = MakeButton("初期設定に戻す", "ResetSettingsPage");
+        resetButton.Width = 168;
+        resetButton.CausesValidation = false;
+        resetButton.Click += (_, _) => ResetSelectedPage();
+        buttons.Controls.AddRange([saveButton, closeButton, folderButton, resetButton]);
         layout.Controls.Add(buttons, 0, 2);
         AcceptButton = saveButton;
         CancelButton = closeButton;

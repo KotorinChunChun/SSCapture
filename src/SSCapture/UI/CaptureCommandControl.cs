@@ -76,6 +76,17 @@ internal sealed class CaptureCommandControl : UserControl
         UpdateCoordinates();
     }
 
+    internal void ResetDraft()
+    {
+        method.SelectedIndex = 0;
+        RefreshCandidates();
+        input.SelectedIndex = output.SelectedIndex = 0;
+        x.Value = y.Value = 0;
+        width.Value = height.Value = 1;
+        schedule.ResetDraft();
+        ClearCommand();
+    }
+
     private void UpdateScheduleOutput()
     {
         if (output.Items.Count == 0) return;

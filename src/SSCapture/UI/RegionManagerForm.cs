@@ -298,7 +298,7 @@ internal sealed class RegionManagerForm : Form
             {
                 var source = ReadRegion(); string seed = source.Name + "のコピー", nextName = seed;
                 for (int suffix = 2; this.regions.Any(r => r.Name == nextName); suffix++) nextName = seed + " " + suffix;
-                LoadRegion(source with { Id = Guid.NewGuid().ToString("N"), Name = nextName, Shortcut = "", IsDefault = false });
+                LoadRegion(source with { Id = Guid.NewGuid().ToString("N"), Name = nextName, Shortcut = "", IsDefault = false, BuiltInKey = null });
             });
             add.Click += (_, _) => { choices.Items[2].Enabled = editing is not null; choices.Show(add, new Point(0, add.Height)); };
             Disposed += (_, _) => choices.Dispose();
@@ -348,6 +348,13 @@ internal sealed class RegionManagerForm : Form
         string? error = saveRegions(candidate);
         if (error is not null) { SetStatus(error, true); return; }
         string id = editing.Id; regions.Clear(); regions.AddRange(candidate); ReloadList(id);
+    }
+    internal void LoadRestoredRegions(SavedRegion[] restored)
+    {
+        regions.Clear();
+        regions.AddRange(restored.Select(Clone));
+        ReloadList(regions.Single(region => region.IsDefault).Id);
+        SetStatus("標準の入力プリセットを初期設定に戻しました。");
     }
     internal void UpdateLastRegion(SavedRegion? region)
     {
@@ -468,7 +475,7 @@ internal sealed class RegionManagerForm : Form
             : editing is not null && editing.UseFixedCoordinates && !pickedBounds && bounds == loadedBounds
             ? editing with { Name = name.Text.Trim(), Shortcut = shortcut.Value }
             : RegionCoordinates.FromBounds(name.Text.Trim(), bounds, displays(), editing?.Id, shortcut.Value);
-        next = next with { Name = name.Text.Trim(), Shortcut = shortcut.Value, ProfileVersion = 2, UseFixedCoordinates = coordinates.Checked,
+        next = next with { Name = name.Text.Trim(), Shortcut = shortcut.Value, ProfileVersion = 2, UseFixedCoordinates = coordinates.Checked, BuiltInKey = editing?.BuiltInKey,
             Mode = captureMode.SelectedIndex == 5 ? CaptureMode.FixedRegion : (CaptureMode)captureMode.SelectedIndex, FixedAnchor = ((AnchorItem)anchor.SelectedItem!).Value,
             FreezeFrame = freezeFrame.Checked, IncludeCursor = includeCursor.Checked, PaddingPixels = (int)padding.Value,
             SelectionMethod = (Capture.CaptureSelectionMethod)selectionMethod.SelectedIndex,

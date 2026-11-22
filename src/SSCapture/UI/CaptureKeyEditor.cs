@@ -109,6 +109,26 @@ internal sealed class CaptureKeyEditor : UserControl
         }
     }
 
+    internal void ResetDraft(CaptureKeyMap map, CaptureMouseMap mouse, CaptureActivation controlMode, CaptureActivation windowMode)
+    {
+        foreach (var (keys, combo) in commands)
+            combo.SelectedItem = combo.Items.Cast<Choice>().First(choice => choice.Action == map.Resolve(keys));
+
+        if (space is not null)
+        {
+            space.Checked = map.SpaceEnabled;
+            clicks[MouseButtons.Right].SelectedIndex = mouse.DragRight ? 1 : 0;
+        }
+        else
+        {
+            clicks[MouseButtons.Left].SelectedIndex = mouse.BeforeLeft ? 1 : 0;
+            clicks[MouseButtons.Right].SelectedIndex = mouse.BeforeRight ? 1 : 0;
+            clicks[MouseButtons.Middle].SelectedIndex = mouse.BeforeMiddle ? 1 : 0;
+            controlActivation!.SelectedIndex = (int)controlMode;
+            windowActivation!.SelectedIndex = (int)windowMode;
+        }
+    }
+
     internal CaptureKeyMap Value => new(
         ActionAt(CaptureModifiers.Ctrl), ActionAt(CaptureModifiers.Shift), ActionAt(CaptureModifiers.Alt), ActionAt(CaptureModifiers.Win),
         ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Shift), ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Alt),

@@ -57,6 +57,16 @@ internal sealed class CaptureScheduleEditor : TableLayoutPanel
         Changed();
     }
 
+    internal void ResetDraft()
+    {
+        mode.SelectedIndex = 0;
+        seconds.Value = 5;
+        interval.Value = 10;
+        count.Value = 3;
+        at.Value = DateTime.Now.AddMinutes(1);
+        unlimited.Checked = false;
+    }
+
     private static NumericUpDown Number(string name, int value) => new()
     {
         Name = name, Maximum = int.MaxValue, Value = value, Dock = DockStyle.Fill

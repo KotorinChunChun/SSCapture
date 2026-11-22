@@ -26,33 +26,37 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
     {
         Dock = DockStyle.Fill;
         rows = shortcuts.ToList();
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 4 };
-        foreach (int width in new[] { 40, 14, 23, 23 })
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 6 };
+        foreach (int width in new[] { 20, 40, 40 })
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, width));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         Controls.Add(layout);
 
         layout.Controls.Add(list, 0, 0);
-        layout.SetColumnSpan(list, 4);
+        layout.SetColumnSpan(list, 3);
         string[] labels = ["ショートカットキー", "撮影種別", "入力プリセット", "出力プリセット"];
         for (int column = 0; column < labels.Length; column++)
         {
             int index = list.Columns.Add("PresetCaptureColumn" + column, labels[column]);
             list.Columns[index].SortMode = DataGridViewColumnSortMode.NotSortable;
-            layout.Controls.Add(new Label { Name = "PresetCaptureFieldLabel" + column, Text = labels[column], AutoSize = true }, column, 1);
+            layout.Controls.Add(new Label { Name = "PresetCaptureFieldLabel" + column, Text = labels[column], AutoSize = true },
+                Math.Max(0, column - 1), column == 0 ? 1 : 3);
         }
         layout.Controls.Add(key, 0, 2);
+        layout.SetColumnSpan(key, 3);
         intent.Items.AddRange(["静止画", "録画"]);
-        layout.Controls.Add(intent, 1, 2);
-        layout.Controls.Add(input, 2, 2);
-        layout.Controls.Add(output, 3, 2);
+        layout.Controls.Add(intent, 0, 4);
+        layout.Controls.Add(input, 1, 4);
+        layout.Controls.Add(output, 2, 4);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
-        layout.Controls.Add(buttons, 0, 3);
-        layout.SetColumnSpan(buttons, 4);
+        layout.Controls.Add(buttons, 0, 5);
+        layout.SetColumnSpan(buttons, 3);
         var add = SettingsForm.MakeButton("追加", "AddPresetCaptureShortcut");
         add.Click += (_, _) =>
         {
@@ -80,6 +84,13 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
     }
 
     internal PresetCaptureShortcut[] Rows => rows.ToArray();
+
+    internal void LoadRows(PresetCaptureShortcut[] replacements)
+    {
+        rows.Clear();
+        rows.AddRange(replacements);
+        RefreshRows(rows.Count > 0 ? 0 : -1);
+    }
 
     internal void RefreshPresets(SavedRegion[] inputPresets, CapturePreset[] outputPresets)
     {

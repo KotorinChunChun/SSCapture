@@ -146,7 +146,19 @@ internal sealed class ExternalApplicationsEditor : UserControl
         if (disposing) { newMenu.Dispose(); argumentTips.Dispose(); }
         base.Dispose(disposing);
     }
-    private void Refresh(string id)
+    internal void LoadRestoredApplications(ExternalApplication[] restored)
+    {
+        string selectedId = SelectedId;
+        string? editingId = EditingApplication?.Id;
+        applications.Clear();
+        applications.AddRange(restored);
+        Refresh(selectedId, notifySelection: false);
+        if (editingId is not null) SelectRow(editingId);
+        else if (applications.Count > 0) SelectRow(applications[0].Id);
+        else { appName.Clear(); SetLaunch(ExternalApplicationLaunch.Executable, "", EditorArguments.Default); }
+        status.Text = "変更しました。設定の保存で確定します。";
+    }
+    private void Refresh(string id, bool notifySelection = true)
     {
         refreshing = true;
         try
@@ -159,7 +171,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
             selected.SelectedIndex = applications.FindIndex(a => a.Id == id) + 1;
         }
         finally { refreshing = false; }
-        SelectedChanged?.Invoke(SelectedId);
+        if (notifySelection) SelectedChanged?.Invoke(SelectedId);
         RefreshUsage();
     }
 
@@ -200,7 +212,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
     private void Store()
     {
         var prior = EditingApplication;
-        var app = new ExternalApplication { Id = prior?.Id ?? Guid.NewGuid().ToString("N"), Name = appName.Text.Trim(),
+        var app = new ExternalApplication { Id = prior?.Id ?? Guid.NewGuid().ToString("N"), Name = appName.Text.Trim(), BuiltInKey = prior?.BuiltInKey,
             Launch = launch, Executable = Environment.ExpandEnvironmentVariables(Executable.Text.Trim().Trim('"')), Arguments = Arguments.Text };
         var next = applications.Where(a => a.Id != app.Id).Append(app).ToArray();
         ExternalApplication.ValidateList(next, "");

@@ -9,25 +9,7 @@ internal static partial class Program
 {
     static partial void UiTests()
     {
-        Run("PC作業中のショートカット6行は設定ウィンドウを縦に広げても等間隔", () =>
-        {
-            using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
-            form.SelectCategory("ショートカット");
-            _ = form.Handle;
-            var tabs = (TabControl)form.Controls.Find("ShortcutGroups", true).Single();
-            var table = tabs.TabPages[0].Controls.OfType<TableLayoutPanel>().Single();
-            foreach (int height in new[] { 760, 1320 })
-            {
-                form.Height = height;
-                LayoutTree(form);
-                int[] rows = table.GetRowHeights();
-                Equal(7, rows.Length);
-                Check(rows.Take(6).All(row => row > 0 && row == rows[0]), "再撮影を含む6行の高さが一致しない");
-                var previous = table.GetControlFromPosition(1, 4)!;
-                var recent = table.GetControlFromPosition(1, 5)!;
-                Equal(rows[0], recent.Top - previous.Top);
-            }
-        });
+        SettingsPageResetTests();
         Run("基本は指定の順序・項目名・ツールチップで、グリッド間隔とガイドを個別に保存する", () =>
         {
             AppSettings? saved = null;
@@ -352,6 +334,7 @@ internal static partial class Program
                     bool captureGrid = input.Parent!.Name is "CaptureBeforeKeysGrid" or "CaptureKeysGrid";
                     int minimumWidth = input.Name.EndsWith("EditorPreset", StringComparison.Ordinal) ? 160
                         : input.Name is "ShortcutInputPreset" or "ShortcutOutputPreset" ? 160
+                        : input.Name is "ShortcutCaptureIntent" ? 110
                         : input.Name.EndsWith("Key", StringComparison.Ordinal) ? 200 : page.Text == "入力プリセット" ? 300 : 420;
                     if (captureGrid && input is ComboBox combo)
                         minimumWidth = combo.Items.Cast<object>().Max(item => TextRenderer.MeasureText(item.ToString(), combo.Font).Width)
@@ -370,7 +353,7 @@ internal static partial class Program
                     Check(label.Width >= preferred.Width && label.Height >= preferred.Height, $"項目名 {label.Text} が切れる: {label.Size} preferred={preferred}");
                 }
             }
-            foreach (string name in new[] { "SaveSettings", "CloseSettings", "OpenFolder" })
+            foreach (string name in new[] { "SaveSettings", "CloseSettings", "OpenFolder", "ResetSettingsPage" })
             {
                 var button = form.Controls.Find(name, true).Single();
                 Check(button.Width >= 90 && button.Height >= 32, $"{name} サイズ不正");

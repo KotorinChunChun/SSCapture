@@ -26,6 +26,8 @@ internal sealed class StartupSettingsControl : UserControl
         enabled.CheckedChanged += (_, _) => apply.Enabled = !working && current?.CanChange == true && enabled.Checked != current.Enabled;
         apply.Click += async (_, _) => await ApplyAsync();
     }
+    internal void ResetDraft() => enabled.Checked = false;
+
     internal async Task RefreshAsync()
     {
         if (working || IsDisposed) return;

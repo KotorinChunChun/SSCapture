@@ -120,7 +120,7 @@ internal sealed class CapturePresetEditor : UserControl
         { var item = new ToolStripMenuItem(text) { Name = id }; item.Click += (_, _) => { try { action(); StoreCurrent(); } catch (ArgumentException ex) { ShowError(ex.Message); } }; choices.Items.Add(item); }
         Choice("新規", "NewCapturePreset", () => Fill(CapturePreset.FromSettings(UniqueName("出力プリセット"), CurrentSettings())));
         Choice("直前の出力設定", "PreviousCapturePreset", () => { if (PreviousOutput is not null) Fill(CapturePreset.FromSettings(UniqueName("直前の出力設定"), PreviousOutput)); });
-        Choice("選択を複製", "DuplicateCapturePreset", () => { var source = ReadCurrent(); Fill(source with { Id = Guid.NewGuid().ToString("N"), Name = UniqueName(source.Name + "のコピー"), IsDefault = false }); });
+        Choice("選択を複製", "DuplicateCapturePreset", () => { var source = ReadCurrent(); Fill(source with { Id = Guid.NewGuid().ToString("N"), Name = UniqueName(source.Name + "のコピー"), IsDefault = false, BuiltInKey = null }); });
         add.Click += (_, _) => { choices.Items[1].Enabled = PreviousOutput is not null; choices.Items[2].Enabled = editing is not null; choices.Show(add, new Point(0, add.Height)); }; add.Dock = DockStyle.Fill; add.Margin = new Padding(3); buttons.Controls.Add(add, 0, 0);
         Disposed += (_, _) => choices.Dispose();
         Button("削除", "DeleteCapturePreset", () => { if (editing is CapturePreset p) { if (p.IsDefault) { ShowError("別のプリセットを既定にしてから削除してください。"); return; } ApplyCandidates(Presets.Where(x => x.Id != p.Id).ToArray(), null); } });
@@ -175,7 +175,7 @@ internal sealed class CapturePresetEditor : UserControl
     }
     private CapturePreset ReadCurrent() => new()
     {
-        Id = editing?.Id ?? Guid.NewGuid().ToString("N"), IsDefault = editing?.IsDefault == true, Name = presetName.Text.Trim(),
+        Id = editing?.Id ?? Guid.NewGuid().ToString("N"), IsDefault = editing?.IsDefault == true, Name = presetName.Text.Trim(), BuiltInKey = editing?.BuiltInKey,
         SaveDirectory = Environment.ExpandEnvironmentVariables(directory.Text.Trim().Trim('"')), FileNamePattern = pattern.Text, ColorDepth = (ScreenshotColorDepth)color.SelectedIndex, OpenFolderAfterSave = openFolder.Checked, OcrSeparator = separator.Text,
         ImageEditorId = (imageApp.SelectedItem as ExternalApplication)?.Id, VideoEditorId = (videoApp.SelectedItem as ExternalApplication)?.Id, MetadataMode = (CaptureMetadataMode)metadataMode.SelectedIndex,
         WindowCrop = new((int)cropTop.Value, (int)cropBottom.Value, (int)cropLeft.Value, (int)cropRight.Value),
@@ -203,6 +203,10 @@ internal sealed class CapturePresetEditor : UserControl
     {
         string? error = autoSave?.Invoke(presets);
         if (error is not null) { ShowError(error); return; }
+        LoadPresets(presets, selectedId);
+    }
+    internal void LoadPresets(CapturePreset[] presets, string? selectedId)
+    {
         filling = true;
         try { list.Items.Clear(); list.Items.AddRange(presets); list.SelectedIndex = Math.Max(0, Array.FindIndex(presets, p => p.Id == selectedId)); }
         finally { filling = false; }
@@ -213,6 +217,12 @@ internal sealed class CapturePresetEditor : UserControl
     {
         autoSave = persist; status.Text = "変更確定時に自動保存します。";
         PresetAutoSaveBinding.Attach(this, () => !filling && !storing, StoreCurrent);
+    }
+    internal void RefreshApplications()
+    {
+        var settings = CurrentSettings();
+        RefreshApps(imageApp, settings.ImageEditors, (imageApp.SelectedItem as ExternalApplication)?.Id);
+        RefreshApps(videoApp, settings.VideoEditors, (videoApp.SelectedItem as ExternalApplication)?.Id);
     }
     private void ShowError(string text) { Error = text; status.Text = text; status.ForeColor = Color.DarkRed; }
     private static TableLayoutPanel Fields() { var t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 8 }; t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 176)); t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); for (int i = 0; i < 7; i++) t.RowStyles.Add(new RowStyle(SizeType.Absolute, 38)); t.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); return t; }
