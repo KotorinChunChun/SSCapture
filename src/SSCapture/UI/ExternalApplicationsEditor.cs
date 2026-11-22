@@ -48,12 +48,12 @@ internal sealed class ExternalApplicationsEditor : UserControl
             applications.Add(legacy); selectedId = legacy.Id;
         }
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 7 };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 148)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         for (int row = 0; row < 5; row++) root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, SettingsEditorActions.Height)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         Controls.Add(root);
         selected = new ComboBox { Name = prefix + "SelectedEditor", DropDownStyle = ComboBoxStyle.DropDownList };
-        Add("既定出力のアプリ", selected, 0);
+        Add("既定の出力プリセットのアプリ", selected, 0);
         selected.SelectedIndexChanged += (_, _) =>
         {
             if (refreshing) return;
@@ -198,8 +198,8 @@ internal sealed class ExternalApplicationsEditor : UserControl
         {
             var app = (ExternalApplication)row.Tag!;
             var linked = presets.Where(preset => EditorId(preset) == app.Id).ToArray();
-            row.Cells[1].Value = app.Id == notificationId ? "直接指定"
-                : !notificationHasDirectApp && linked.Length > 0 ? "プリセット経由" : "—";
+            row.Cells[1].Value = app.Id == notificationId ? "通知用に指定"
+                : !notificationHasDirectApp && linked.Length > 0 ? "出力プリセットのアプリを使う" : "—";
             row.Cells[2].Value = linked.Length == 0 ? "—" : string.Join("、", linked.Select(DisplayName));
             row.Cells[2].ToolTipText = string.Join("\n", linked.Select(preset => DisplayName(preset)
                 + (preset.Destination.HasFlag(OutputDestination.ExternalApp) ? "" : "（自動で開く：OFF）")));

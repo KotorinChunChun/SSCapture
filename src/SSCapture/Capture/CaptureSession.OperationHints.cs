@@ -50,7 +50,7 @@ internal sealed partial class SessionController
         string? idleHint = controlConfirmationError ?? ModifierHint ?? (windowPreview?.Frame switch
         {
             { IsFaulted: true } => windowPreview.Frame.Exception?.GetBaseException().Message,
-            { IsCompleted: false } => "WGCプレビューを取得中",
+            { IsCompleted: false } => "ウィンドウのプレビューを取得中",
             _ => null
         });
         return idleHint is null ? null : $"{idleHint}　{SelectionGuideText.CancelHint()}";

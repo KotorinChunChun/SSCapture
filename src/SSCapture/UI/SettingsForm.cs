@@ -104,12 +104,12 @@ internal sealed partial class SettingsForm : Form
         fileNamePattern = Field(naming, "パターン", "FileNamePattern", settings.FileNamePattern, 0);
         ocrSeparator = Field(naming, "OCR区切り", "OcrSeparator", settings.OcrSeparator, 1);
         oneOcrDirectory = Field(naming, "OneOCRフォルダ", "OneOcrDirectory", settings.OneOcrDirectory, 2);
-        oneOcrDirectory.PlaceholderText = "空欄でSnipping Toolから自動検出";
+        oneOcrDirectory.PlaceholderText = "全プリセット共通。空欄でSnipping Toolから自動検出";
         var metadataPage = Page(tabs, "撮影情報");
         metadataMode = Combo(metadataPage, "保存形式", "MetadataMode", 0);
         metadataMode.Items.AddRange(["記録しない", "PNG内XMP", "別JSON", "PNG内XMPと別JSON"]);
         metadataMode.SelectedIndex = (int)settings.MetadataMode;
-        var metadataHelp = new Label { Dock = DockStyle.Fill, Text = "静止画のファイル保存時だけ、位置・UIA・exe/class/titleを記録します。\nウィンドウ名やアプリのパスを含むため、画像を共有する前にご確認ください。\n値の本文・パスワードの名前・UI全体のツリーは採取しません。\n画像とUIAは同時刻ではありません。未取得時は理由を記録します。" };
+        var metadataHelp = new Label { Dock = DockStyle.Fill, Text = "静止画をファイルに保存するときに、ポインタの位置、指していた画面部品の名前、アプリの実行ファイル名・ウィンドウ名を記録します。\n画像を共有する前に、ウィンドウ名やパスが含まれていないか確認してください。\nパスワード欄の名前、入力欄の値、画面全体の部品の一覧は記録しません。\n部品の情報は撮影と同じ瞬間のものとは限りません。取得できなかったときは理由を記録します。" };
         metadataPage.Controls.Add(metadataHelp, 0, 1); metadataPage.SetColumnSpan(metadataHelp, 2); metadataPage.SetRowSpan(metadataHelp, 4);
         var namingHelp = new Label { Dock = DockStyle.Fill, Text = "{yyyymmdd} 年月日　{hhmmss} 時分秒　{ocr} 文字列\n{region} 範囲名　{#} 1,2…　{##} 01,02…　動画は.mp4" };
         naming.Controls.Add(namingHelp, 0, 3); naming.SetColumnSpan(namingHelp, 2); naming.SetRowSpan(namingHelp, 2);

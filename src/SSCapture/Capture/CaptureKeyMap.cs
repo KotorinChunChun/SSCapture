@@ -53,8 +53,8 @@ internal sealed record CaptureKeyMap(
 
     internal static string Describe(CaptureKeyAction action) => action switch
     {
-        CaptureKeyAction.LockWidth => "上下に変更",
-        CaptureKeyAction.LockHeight => "左右に変更",
+        CaptureKeyAction.LockWidth => "高さだけ変更",
+        CaptureKeyAction.LockHeight => "幅だけ変更",
         CaptureKeyAction.Snap => "ウィンドウスナップ",
         CaptureKeyAction.Grid => "一時グリッドスナップ",
         CaptureKeyAction.CrossMonitor => "別モニターへの移動を許可",
@@ -64,7 +64,7 @@ internal sealed record CaptureKeyMap(
         CaptureKeyAction.FromCenter => "起点を中心にする",
         CaptureKeyAction.FromCenterWithAspectRatio => "中心基準＋比率固定",
         CaptureKeyAction.SelectControl => "コントロールを選択",
-        CaptureKeyAction.SelectDesktop => "デスクトップの選択",
+        CaptureKeyAction.SelectDesktop => "モニター全体を選択",
         _ => "なし"
     };
 

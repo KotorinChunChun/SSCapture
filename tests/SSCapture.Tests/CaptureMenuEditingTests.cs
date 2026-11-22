@@ -118,8 +118,8 @@ internal static partial class Program
                 var menu = session.SelectionMenu;
                 Check(!menu.Items.OfType<ToolStripControlHost>().Any() && menu.AllCommands.All(item => !item.DropDownItems.OfType<ToolStripControlHost>().Any()), "入力ホストがある");
                 Check(!menu.AllCommands.Any(item => item.Name is "FixedSizeMenu" or "CapturePrecisionMenu" or "OutputDetailsMenu"), "旧入力フォームの入口が残る");
-                Equal("一時入力カスタマイズ", menu.Command("CaptureRangeGroup").Text);
-                Equal("一時出力カスタマイズ", menu.Command("CaptureOutputGroup").Text);
+                Equal("今回だけ入力を変更", menu.Command("CaptureRangeGroup").Text);
+                Equal("今回だけ出力を変更", menu.Command("CaptureOutputGroup").Text);
             }
             finally { session.Cancel(); }
         });

@@ -109,7 +109,7 @@ internal static partial class Program
                 Equal(SelectionTestMonitors[1], session.SelectionMonitors.Single());
                 Equal(destination, session.Pointer);
                 Equal(SelectionTestMonitors[1], session.HighlightedWindow);
-                Check(session.PointerHint?.Contains("デスクトップの選択", StringComparison.Ordinal) == true, "Shiftの効果が表示されない");
+                Check(session.PointerHint?.Contains("モニター全体を選択", StringComparison.Ordinal) == true, "Shiftの効果が表示されない");
                 session.ApplyPointerInput(destination, CaptureModifiers.None);
                 Equal(CaptureMode.Rectangle, session.Mode);
                 Equal(Rectangle.Empty, session.HighlightedWindow);

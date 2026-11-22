@@ -89,7 +89,7 @@ internal static class ClipboardWriter
         // CF_DIBはBITMAPFILEHEADER（14バイト）を含めない。
         var bytes = encoded.ToArray();
         if (bytes.Length < 54 || bytes[0] != (byte)'B' || bytes[1] != (byte)'M')
-            throw new IOException("クリップボード用DIBを生成できませんでした。");
+            throw new IOException("クリップボードに渡す画像を作成できませんでした。");
         return bytes[14..];
     }
 }

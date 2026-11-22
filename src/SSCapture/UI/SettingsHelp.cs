@@ -8,8 +8,8 @@ internal static class SettingsHelp
     private static readonly IReadOnlyDictionary<string, string> Descriptions = new Dictionary<string, string>
     {
         ["ResetSettingsPage"] = "表示中のページの設定を初期値に戻します。ショートカットは選択中のタブだけが対象です。入力・出力プリセットは確認後に自動保存し、自作登録を保持します。",
-        ["StartupSettings"] = "Windowsサインイン時の自動起動です。初期設定はOFFです。KotorinToysと同じ所有予約を参照します。変更は「自動起動を適用」で確定します。設定全体の保存やビルドでは予約を変更しません。",
-        ["StartWithWindows"] = "ONにして「自動起動を適用」を押すと、次回のWindowsサインイン時から設定画面を表示せず起動します。正式インストール版だけが登録できます。本体経由の予約はKotorinToysで変更してください。",
+        ["StartupSettings"] = "Windowsサインイン時の自動起動です。初期設定はOFFです。KotorinToysと同じ自動起動の登録を使います。変更は「自動起動を適用」で確定します。設定全体の保存やビルドでは登録を変更しません。",
+        ["StartWithWindows"] = "ONにして「自動起動を適用」を押すと、次回のWindowsサインイン時から設定画面を表示せず起動します。正式インストール版だけが登録できます。KotorinToysから登録した自動起動は、KotorinToysで変更してください。",
         ["ApplyStartup"] = "自動起動のON/OFFだけを適用します。他の設定編集中の値は保存しません。OFFにしても現在のアプリは終了しません。",
         ["ExportSettings"] = "保存済みの設定とプリセットを新規のJSONファイルに書き出します。外部アプリの実行先や保存先も含まれます。",
         ["ImportSettings"] = "書き出したJSONや旧版の設定を確認します。「適用」で現在の設定を置き換えます。",
@@ -62,7 +62,7 @@ internal static class SettingsHelp
         ["CapturePresetEditor"] = "出力先・白い余白・減色・外部アプリ・保存先・命名・OCR・撮影情報の組合せを登録し、変更確定時に自動保存します。撮影中の適用や個別変更は今回だけです。",
         ["FileNamePattern"] = "保存ファイルや受け渡しキャッシュの名前を組み立てます。{yyyymmdd}は年月日、{hhmmss}は時分秒、{ocr}は画像から選んだ文字列、{region}は範囲名です。{#}は連番、{##}は2桁の連番です。例: {yyyymmdd}_{hhmmss}_{##}.png。録画は.mp4で保存します。",
         ["OcrSeparator"] = "OCRで選んだ複数の文字列の間に入れる文字です。例: _ を指定すると、文字列をアンダースコアでつなぎます。ファイル名に使用できない文字は指定できません。",
-        ["OneOcrDirectory"] = "OneOCRのエンジンとモデルがあるフォルダの完全パスです。空欄のときはSnipping Toolから自動検出します。OCRを使う命名パターンで必要になります。",
+        ["OneOcrDirectory"] = "OneOCRのエンジンとモデルがあるフォルダの完全パスです。すべての出力プリセットで共通です。空欄のときはSnipping Toolから自動検出します。OCRを使う命名パターンで必要になります。",
         ["FixedWidth"] = "固定サイズモードの横幅です。単位は画像の物理ピクセルで、1～32768pxを指定できます。幅と高さの積は1億画素以内にしてください。",
         ["FixedHeight"] = "固定サイズモードの高さです。単位は画像の物理ピクセルで、1～32768pxを指定できます。幅と高さの積は1億画素以内にしてください。",
         ["FixedCaptureAnchor"] = "固定サイズの枠でポインタに合わせる隅または中心です。画面外にはみ出した枠は確定できません。",
@@ -141,7 +141,7 @@ internal static class SettingsHelp
         if (name == "InputFixedCoordinates") return "ONは登録した位置へ固定枠を表示します。OFFは撮影モードに従い位置や範囲を選びます。再撮影キーはONなら即時撮影、OFFなら選択開始です。";
         if (name.Contains("InputPreset", StringComparison.Ordinal)) return "入力プリセットを追加・複製し、通常撮影の既定を選べます。録画音声も含めて変更確定時に自動保存します。暗転・モニター制限は基本設定です。";
         if (name is "AddCapturePreset" or "DeleteCapturePreset" or "DefaultCapturePreset" or "CapturePresetName") return "出力プリセットを追加・削除し、既定を選びます。変更確定時に自動保存します。追加では新規と直前の出力設定を選べます。";
-        if (name is "MetadataMode" or "PresetMetadataMode") return "静止画をファイルに保存する場合の撮影情報です。記録しない・PNG内XMP・別JSON・両方から選択します。UI名・アプリのパス・タイトル等を含むため共有時には注意してください。";
+        if (name is "MetadataMode" or "PresetMetadataMode") return "静止画をファイルに保存する場合の撮影情報です。記録しない・PNG内XMP・別JSON・両方から選択します。画面部品の名前・アプリのパス・ウィンドウ名などを含むため、共有するときは注意してください。";
         if (name.EndsWith("EditorArguments", StringComparison.Ordinal)) return Services.EditorArguments.Help;
         if (name.Contains("Editor", StringComparison.Ordinal) || name.Contains("SelectedEditor", StringComparison.Ordinal))
             return "画像用・動画用の外部アプリを複数登録し、既定を1つ選びます。追加メニューから入力例を選べます。この画面の「保存」で登録を確定します。参照中のアプリは削除できません。";

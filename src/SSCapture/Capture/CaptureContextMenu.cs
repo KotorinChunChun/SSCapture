@@ -68,12 +68,12 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         {
             windowSource = Menu("ウィンドウの撮影方式", "WindowCaptureSource", Items);
             visibleWindow = Item("見えている画面を撮影", "VisibleWindowCapture", () => changeWindowSource(false), windowSource.DropDownItems);
-            isolatedWindow = Item("対象ウィンドウだけ撮影（WGC）", "IsolatedWindowCapture", () => changeWindowSource(true), windowSource.DropDownItems);
+            isolatedWindow = Item("対象ウィンドウだけ撮影（重なった窓を除く）", "IsolatedWindowCapture", () => changeWindowSource(true), windowSource.DropDownItems);
             SetWindowSource(mode, false);
         }
         Items.Add(new ToolStripSeparator());
-        var range = Menu("一時入力カスタマイズ", "CaptureRangeGroup", Items);
-        var output = Menu("一時出力カスタマイズ", "CaptureOutputGroup", Items);
+        var range = Menu("今回だけ入力を変更", "CaptureRangeGroup", Items);
+        var output = Menu("今回だけ出力を変更", "CaptureOutputGroup", Items);
         var operation = Menu("表示・操作", "CaptureOperationGroup", Items);
         if (changeMode is not null)
         {
