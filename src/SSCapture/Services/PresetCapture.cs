@@ -1,9 +1,20 @@
 namespace SSCapture.Services;
 
 internal sealed record PresetCaptureShortcut(string Key, string? InputPresetId = null, string? OutputPresetId = null,
-    bool LegacyInstantOutput = false)
+    bool LegacyInstantOutput = false, CaptureIntent Intent = CaptureIntent.Screenshot)
 {
-    internal string Label(int index) => $"プリセット撮影 {index + 1}（{KeyDisplay.Binding(Key)}）";
+    internal string IntentLabel => Intent == CaptureIntent.Recording ? "録画" : "静止画";
+    internal string Label(int index) => $"{IntentLabel}の割り当て {index + 1}（{KeyDisplay.Binding(Key)}）";
+    internal bool UsesDirectCapture(SavedRegion input) =>
+        Intent == CaptureIntent.Screenshot && InputPresetId is not null && input.UseFixedCoordinates;
+
+    internal static (string Label, string Key, CaptureIntent Intent)[] LegacySlots(AppSettings settings) =>
+    [
+        ("静止画のキー1", settings.ScreenshotShortcut1, CaptureIntent.Screenshot),
+        ("静止画のキー2", settings.ScreenshotShortcut2, CaptureIntent.Screenshot),
+        ("録画のキー1", settings.RecordingShortcut1, CaptureIntent.Recording),
+        ("録画のキー2", settings.RecordingShortcut2, CaptureIntent.Recording)
+    ];
 
     internal static AppSettings Migrate(AppSettings settings)
     {
@@ -11,13 +22,18 @@ internal sealed record PresetCaptureShortcut(string Key, string? InputPresetId =
             .Where(region => !string.IsNullOrWhiteSpace(region.Shortcut))
             .Select(region => new PresetCaptureShortcut(region.Shortcut, region.Id, LegacyInstantOutput: region.UseFixedCoordinates))
             .ToArray();
-        var normalized = rows.Select(Normalize).ToArray();
-        bool hasLegacyKeys = settings.SavedRegions.Any(region => !string.IsNullOrEmpty(region.Shortcut));
-        if (settings.PresetCaptureShortcuts is not null && !hasLegacyKeys && rows.SequenceEqual(normalized)) return settings;
+        var legacySlots = LegacySlots(settings);
+        var normalized = rows.Concat(legacySlots.Where(slot => !string.IsNullOrWhiteSpace(slot.Key))
+            .Select(slot => new PresetCaptureShortcut(slot.Key, Intent: slot.Intent))).Select(Normalize).ToArray();
+        bool hasLegacyRegionKeys = settings.SavedRegions.Any(region => !string.IsNullOrEmpty(region.Shortcut));
+        if (settings.PresetCaptureShortcuts is not null && !hasLegacyRegionKeys &&
+            legacySlots.All(slot => slot.Key == "") && rows.SequenceEqual(normalized)) return settings;
         return settings with
         {
             PresetCaptureShortcuts = normalized,
-            SavedRegions = hasLegacyKeys ? settings.SavedRegions.Select(region => string.IsNullOrEmpty(region.Shortcut)
+            ScreenshotShortcut1 = "", ScreenshotShortcut2 = "",
+            RecordingShortcut1 = "", RecordingShortcut2 = "",
+            SavedRegions = hasLegacyRegionKeys ? settings.SavedRegions.Select(region => string.IsNullOrEmpty(region.Shortcut)
                 ? region : region with { Shortcut = "" }).ToArray() : settings.SavedRegions
         };
     }
@@ -28,7 +44,8 @@ internal sealed record PresetCaptureShortcut(string Key, string? InputPresetId =
         {
             if (HotkeyBinding.Parse(row?.Key) is not { } key)
                 throw new ArgumentException("ショートカットキーを指定してください。");
-            return row! with { Key = key.ToString(), LegacyInstantOutput = row.OutputPresetId is null && row.LegacyInstantOutput };
+            return row! with { Key = key.ToString(), LegacyInstantOutput = row.Intent == CaptureIntent.Screenshot &&
+                row.InputPresetId is not null && row.OutputPresetId is null && row.LegacyInstantOutput };
         }
         catch (ArgumentException ex)
         {

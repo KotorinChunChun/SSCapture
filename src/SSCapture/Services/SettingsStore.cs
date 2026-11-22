@@ -10,7 +10,7 @@ internal sealed class SettingsStore(string path)
     {
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter<CaptureMode>(), new JsonStringEnumConverter<OutputDestination>(),
-            new JsonStringEnumConverter<NotificationCorner>(), new JsonStringEnumConverter<NotificationDisplay>(),
+            new JsonStringEnumConverter<CaptureIntent>(), new JsonStringEnumConverter<NotificationCorner>(), new JsonStringEnumConverter<NotificationDisplay>(),
             new JsonStringEnumConverter<SelectionGuideDisplay>(),
             new JsonStringEnumConverter<CaptureAnchor>(), new JsonStringEnumConverter<Capture.CaptureKeyAction>(),
             new JsonStringEnumConverter<Capture.CaptureSelectionMethod>(), new JsonStringEnumConverter<Capture.CaptureActivation>() }
@@ -63,8 +63,11 @@ internal sealed class SettingsStore(string path)
         if (!root.TryGetProperty(nameof(AppSettings.InstantShortcuts), out _))
         {
             // Preserve existing custom keys when adding the new default slots.
-            var existing = new[] { settings.ScreenshotShortcut1, settings.ScreenshotShortcut2, settings.RecordingShortcut1, settings.RecordingShortcut2 }
-                .Select(HotkeyBinding.Parse).Where(binding => binding is not null).ToHashSet();
+            var keys = PresetCaptureShortcut.LegacySlots(settings).Select(slot => (string?)slot.Key)
+                .Concat(settings.PresetCaptureShortcuts is { } rows ? rows.Select(row => row?.Key)
+                    : settings.SavedRegions?.Select(region => region?.Shortcut) ?? [])
+                .Append(settings.LastRecipeShortcut);
+            var existing = keys.Select(HotkeyBinding.Parse).Where(binding => binding is not null).ToHashSet();
             settings = settings with { InstantShortcuts = settings.InstantShortcuts.Select(key => existing.Contains(HotkeyBinding.Parse(key)) ? "" : key).ToArray() };
         }
         if (!root.TryGetProperty(nameof(AppSettings.LastRegionShortcut), out _))

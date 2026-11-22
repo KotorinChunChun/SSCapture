@@ -8,7 +8,7 @@ namespace SSCapture.Tests;
 
 internal static partial class Program
 {
-    private static void PresetShortcutTests()
+    private static void PresetShortcutTests(bool includeSettingsForm = true)
     {
         Run("v0.1.10のキーはIDを保持して各1行に移り、空を保存すると復活しない", () => WithServiceDirectory(directory =>
         {
@@ -74,7 +74,7 @@ internal static partial class Program
                 "撮影するだけで既定を変更した");
             string? used = PresetCaptureShortcut.ReferenceError(rows, input.Id, input: true);
             Check(used?.Contains("Ctrl＋F6") == true && used.Contains("Ctrl＋F7") && !used.Contains("Ctrl＋F8"), "使用中の行を正しく案内しない");
-            foreach (string competing in new[] { settings.ScreenshotShortcut1, settings.RecordingShortcut1, settings.InstantShortcuts[0], settings.LastRegionShortcut, "Ctrl+F6" })
+            foreach (string competing in new[] { settings.InstantShortcuts[0], settings.LastRegionShortcut, "Ctrl+F6" })
                 CaptureCommandReject(() => (settings with { PresetCaptureShortcuts = [.. rows, new(competing)] }).Validate());
             CaptureCommandReject(() => (settings with { PresetCaptureShortcuts = [new("Ctrl+F6", "missing")] }).Validate());
             CaptureCommandReject(() => (settings with { PresetCaptureShortcuts = [new("Ctrl+F6", OutputPresetId: "missing")] }).Validate());
@@ -85,7 +85,7 @@ internal static partial class Program
             var settings = new AppSettings { SavedRegions = [fixedInput], SaveDirectory = directory, FileNamePattern = "preset_{##}.png",
                 DefaultDestination = OutputDestination.Clipboard | OutputDestination.File | OutputDestination.ExternalApp,
                 OpenFolderAfterSave = true }.ApplyDefaults();
-            var row = settings.PresetCaptureShortcuts!.Single();
+            var row = settings.PresetCaptureShortcuts!.Single(p => p.InputPresetId == fixedInput.Id);
             var legacy = ResolvedPresetCapture.Resolve(settings, row.InputPresetId, row.OutputPresetId, row.LegacyInstantOutput);
             int copies = 0, launches = 0;
             using var output = new OutputRouter(directory, _ => { copies++; return Task.CompletedTask; }, launch: _ => launches++);
@@ -97,6 +97,67 @@ internal static partial class Program
             Check(!modern.LegacyInstantOutput && modern.Settings.OpenFolderAfterSave && modern.Settings.DefaultDestination.HasFlag(OutputDestination.ExternalApp),
                 "明示出力へ切り替わらない");
         })));
+        Run("通常キーと既存の組み合わせを移行し、録画のキーと設定を再読込しても維持", () => WithServiceDirectory(directory =>
+        {
+            var defaults = new AppSettings().ApplyDefaults();
+            var fixedInput = RegionCoordinates.FromBounds("登録位置", new(10, 20, 30, 40), RegionLayout) with
+                { IsDefault = true, RecordSystemAudio = true, RecordMicrophone = true, MicrophoneDeviceId = "fixture-mic" };
+            var file = defaults.CapturePresets.Single(p => p.Id == "initial-output-file");
+            var clipboard = defaults.CapturePresets.Single(p => p.IsDefault);
+            var old = defaults with
+            {
+                ScreenshotShortcut1 = "control + F5", ScreenshotShortcut2 = "Ctrl+F6",
+                RecordingShortcut1 = "Ctrl+F7", RecordingShortcut2 = "Ctrl+F8",
+                SavedRegions = [.. defaults.SavedRegions.Select(p => p with { IsDefault = false }), fixedInput],
+                PresetCaptureShortcuts = [new("Ctrl+F9", fixedInput.Id, file.Id), new("Ctrl+F10", OutputPresetId: file.Id)]
+            };
+            string path = Path.Combine(directory, "settings.json");
+            File.WriteAllText(path, JsonSerializer.Serialize(old, SettingsStore.Options));
+            var store = new SettingsStore(path);
+            var loaded = store.Load(out string? warning);
+            Equal<string?>(null, warning);
+            PresetCaptureShortcut[] expected =
+            [
+                new("Ctrl+F9", fixedInput.Id, file.Id), new("Ctrl+F10", OutputPresetId: file.Id),
+                new("Ctrl+F5"), new("Ctrl+F6"), new("Ctrl+F7", Intent: CaptureIntent.Recording),
+                new("Ctrl+F8", Intent: CaptureIntent.Recording)
+            ];
+            Check(loaded.PresetCaptureShortcuts!.SequenceEqual(expected), "既定参照・個別指定または撮影種別を移行できない");
+            var keys = new HotkeyState(HotkeyBinding.ReadAssignments(loaded), KeyboardModifiers.LeftControl);
+            Equal(new HotkeyDecision(true, true, CaptureIntent.Recording, PresetKey: "Ctrl+F7"), keys.Process((int)Keys.F7, true, true));
+            Check(!keys.Process((int)Keys.F7, true, true).Capture && !keys.Process((int)Keys.F7, false, true).Capture, "連続イベントで録画が再発火");
+            Check(keys.Process((int)Keys.F7, true, true).Capture, "次の押下が録画に届かない");
+            Check(expected[0].UsesDirectCapture(fixedInput) && !expected[2].UsesDirectCapture(fixedInput), "通常撮影と即時範囲撮影を区別できない");
+            var recording = expected[4];
+            Check(!(recording with { InputPresetId = fixedInput.Id }).UsesDirectCapture(fixedInput), "録画を静止画として即時撮影する");
+            var nextInput = loaded.SavedRegions.First(p => !p.IsDefault);
+            var changed = loaded with
+            {
+                SavedRegions = loaded.SavedRegions.Select(p => p with { IsDefault = p.Id == nextInput.Id }).ToArray(),
+                CapturePresets = loaded.CapturePresets.Select(p => p with { IsDefault = p.Id == file.Id }).ToArray()
+            };
+            foreach (bool explicitInput in new[] { false, true })
+            foreach (bool explicitOutput in new[] { false, true })
+            {
+                var resolved = ResolvedPresetCapture.Resolve(changed, explicitInput ? fixedInput.Id : null, explicitOutput ? clipboard.Id : null);
+                Equal(explicitInput ? fixedInput.Id : nextInput.Id, resolved.Input.Id);
+                Equal(explicitOutput ? OutputDestination.Clipboard : OutputDestination.File, resolved.Settings.DefaultDestination);
+                Equal(explicitInput, resolved.Settings.RecordSystemAudio);
+                Equal(explicitInput, resolved.Settings.RecordMicrophone);
+                Equal(explicitInput ? "fixture-mic" : "", resolved.Settings.MicrophoneDeviceId);
+            }
+            store.Save(loaded);
+            var reopened = store.Load(out warning);
+            Equal<string?>(null, warning);
+            Check(reopened.PresetCaptureShortcuts!.SequenceEqual(expected), "二度目の起動で移行行を再作成した");
+            store.Save(reopened with { PresetCaptureShortcuts = [recording] });
+            Equal(recording, store.Load(out _).PresetCaptureShortcuts!.Single());
+            CaptureCommandReject(() => (loaded with { PresetCaptureShortcuts = [.. expected, new("ctrl+f7", Intent: CaptureIntent.Screenshot)] }).Validate());
+            CaptureCommandReject(() => (loaded with { PresetCaptureShortcuts = [new("")] }).Validate());
+            CaptureCommandReject(() => (loaded with { PresetCaptureShortcuts = [new("Ctrl+F5", Intent: (CaptureIntent)9)] }).Validate());
+        }));
+
+        if (!includeSettingsForm) return;
         Run("組み合わせ画面で編集・保存失敗・再試行・参照削除・両プリセットからの入口を検証", () =>
         {
             var defaults = new AppSettings().ApplyDefaults();
@@ -118,7 +179,8 @@ internal static partial class Program
             Click("OpenInputPresetShortcuts");
             Equal("ショートカット", Category());
             var grid = Find<DataGridView>("PresetCaptureShortcuts");
-            Equal(input.Name, (string?)grid.Rows[0].Cells[1].Value);
+            Equal("静止画", (string?)grid.Rows[0].Cells[1].Value);
+            Equal(input.Name, (string?)grid.Rows[0].Cells[2].Value);
             var key = Find<HotkeyEditor>("PresetCaptureShortcut");
             key.Value = "Ctrl+F7";
             SaveConsolidation(form);
@@ -131,7 +193,7 @@ internal static partial class Program
             Click("DeleteCapturePreset");
             Check(Find<Label>("PresetEditorStatus").Text.Contains("Ctrl＋F8"), "出力を参照する行を案内しない");
             Click("OpenOutputPresetShortcuts");
-            Equal(output.Name, (string?)grid.Rows[0].Cells[2].Value);
+            Equal(output.Name, (string?)grid.Rows[0].Cells[3].Value);
             Click("DeletePresetCaptureShortcut");
             SaveConsolidation(form);
             Equal(0, persisted.PresetCaptureShortcuts!.Length);
@@ -140,10 +202,11 @@ internal static partial class Program
             form.ShowPresetShortcuts();
             Click("AddPresetCaptureShortcut");
             key.Value = "Ctrl+F9";
+            Find<ComboBox>("ShortcutCaptureIntent").SelectedIndex = (int)CaptureIntent.Recording;
             Find<ComboBox>("ShortcutInputPreset").SelectedIndex = 0;
             Find<ComboBox>("ShortcutOutputPreset").SelectedIndex = Array.FindIndex(defaults.CapturePresets, p => p.Id == output.Id) + 1;
             SaveConsolidation(form);
-            Equal(new PresetCaptureShortcut("Ctrl+F9", OutputPresetId: output.Id), persisted.PresetCaptureShortcuts!.Single());
+            Equal(new PresetCaptureShortcut("Ctrl+F9", OutputPresetId: output.Id, Intent: CaptureIntent.Recording), persisted.PresetCaptureShortcuts!.Single());
         });
     }
 }

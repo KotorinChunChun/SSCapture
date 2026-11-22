@@ -16,8 +16,9 @@ internal static class SettingsHelp
         ["PinnedOutput"] = "静止画を撮影位置へ枠なし・常に最前面の窓として残します。複数枚を並べられます。Ctrlで描画、Shiftでコピー範囲、通常ドラッグで移動します。録画には適用しません。",
         ["CaptureCommandMethod"] = "範囲選択は実行時に範囲を選びます。固定範囲では座標を指定し、入力プリセットに従う場合は登録した撮影方式を使います。",
         ["PresetCaptureShortcuts"] = "設定済みの組み合わせです。一覧で行を選ぶと下の項目で編集できます。",
-        ["PresetCaptureShortcut"] = "選んだ組み合わせで静止画撮影を開始するキーです。Windows キー・Ctrl・Alt・Shiftと最後のキーを選びます。",
-        ["ShortcutInputPreset"] = "このキーで撮影するときの入力です。「既定を使う」は撮影時点の既定入力を参照します。",
+        ["PresetCaptureShortcut"] = "選んだ組み合わせで静止画撮影または録画を開始するキーです。Windows キー・Ctrl・Alt・Shiftと最後のキーを選びます。",
+        ["ShortcutCaptureIntent"] = "静止画または録画を選びます。録画中に録画のキーを押すと停止します。",
+        ["ShortcutInputPreset"] = "「既定を使う」は撮影時点の既定入力を使います。静止画で固定座標のプリセットを指定すると、その範囲をすぐに撮影します。",
         ["ShortcutOutputPreset"] = "このキーで撮影するときの出力です。「既定を使う」は撮影時点の既定出力を参照します。",
         ["AddPresetCaptureShortcut"] = "組み合わせの行を追加します。キーと入出力を選び、設定の「保存」で確定します。",
         ["DeletePresetCaptureShortcut"] = "選んだ行を削除します。設定の「保存」でキーの登録解除が確定します。",
@@ -129,8 +130,6 @@ internal static class SettingsHelp
             return "画像用・動画用の外部アプリを複数登録し、既定を1つ選びます。新規メニューから入力例を選べます。「保存」で一覧登録、設定の「保存」で確定します。参照中のアプリは削除できません。";
         if (name.StartsWith("InstantShortcut", StringComparison.Ordinal))
             return "指定モニタの全体を選択画面なしで即時撮影するキーです。画面1は主画面で、未接続の画面は撮影できません。" + ShortcutHelp;
-        if (name.StartsWith("ScreenshotShortcut", StringComparison.Ordinal)) return "静止画の範囲選択を開始するキーです。撮影1と撮影2は同じ操作を開始します。" + ShortcutHelp;
-        if (name.StartsWith("RecordingShortcut", StringComparison.Ordinal)) return "録画範囲の選択を開始するキーです。録画中に押すと録画を停止します。" + ShortcutHelp;
         if (name == "LastRegionShortcut") return "直前に確定した範囲を選択画面なしで再撮影するキーです。前回範囲がない場合は撮影できません。" + ShortcutHelp;
         if (name == "LastRecipeShortcut") return "成功した直前の静止画と同じ範囲・入出力設定（一時変更を含む）で新しく撮影します。画像履歴とは別で、終了時に記録を破棄します。初期値は未割当です。" + ShortcutHelp;
         if (name.StartsWith("Region", StringComparison.Ordinal) || name is "SavedRegions" or "NewNumericRegion" or "AddLastRegion" or "DrawRegion" or "PickFixedRegion" or "PreviewRegion" or "SaveRegion" or "DeleteRegion" or "CloseRegions")

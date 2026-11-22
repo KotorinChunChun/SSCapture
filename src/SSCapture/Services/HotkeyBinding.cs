@@ -76,13 +76,10 @@ internal readonly record struct HotkeyBinding(int VirtualKey, HotkeyModifiers Mo
         if (settings.SavedRegions is null || settings.SavedRegions.Any(region => region is null)) throw new ArgumentException("登録範囲が不正です。");
         List<(string Label, string? Text, CaptureIntent Intent, int DisplayNumber, string? RegionId)> slots =
         [
-            ("静止画のキー1", settings.ScreenshotShortcut1, CaptureIntent.Screenshot, 0, null),
-            ("静止画のキー2", settings.ScreenshotShortcut2, CaptureIntent.Screenshot, 0, null),
-            ("録画のキー1", settings.RecordingShortcut1, CaptureIntent.Recording, 0, null),
-            ("録画のキー2", settings.RecordingShortcut2, CaptureIntent.Recording, 0, null),
             ("前回範囲", settings.LastRegionShortcut, CaptureIntent.Screenshot, 0, AppSettings.LastRegionKeyId),
             ("直前と同じ設定で再撮影", settings.LastRecipeShortcut, CaptureIntent.Screenshot, 0, AppSettings.LastRecipeKeyId)
         ];
+        slots.AddRange(PresetCaptureShortcut.LegacySlots(settings).Select(slot => (slot.Label, (string?)slot.Key, slot.Intent, 0, (string?)null)));
         slots.AddRange(settings.InstantShortcuts.Select((text, index) => ($"即時撮影 {index + 1}", (string?)text, CaptureIntent.Screenshot, index + 1, (string?)null)));
         if (settings.PresetCaptureShortcuts is null)
             slots.AddRange(settings.SavedRegions.Select(region => ($"登録範囲「{region.Name}」", (string?)region.Shortcut, CaptureIntent.Screenshot, 0, (string?)region.Id)));
@@ -108,7 +105,8 @@ internal readonly record struct HotkeyBinding(int VirtualKey, HotkeyModifiers Mo
                 try
                 {
                     var binding = Parse(row?.Key) ?? throw new ArgumentException("ショートカットキーを指定してください。");
-                    label = row!.Label(index);
+                    if (!Enum.IsDefined(row!.Intent)) throw new ArgumentException("撮影種別が正しくありません。");
+                    label = row.Label(index);
                     if (row.InputPresetId is { } input && !settings.SavedRegions.Any(p => p.Id == input))
                         throw new ArgumentException("入力プリセットが見つかりません: " + input);
                     if (row.OutputPresetId is { } output && settings.CapturePresets?.Any(p => p?.Id == output) != true)
@@ -116,7 +114,7 @@ internal readonly record struct HotkeyBinding(int VirtualKey, HotkeyModifiers Mo
                     if (used.TryGetValue(binding, out string? first))
                         throw new ArgumentException($"{first}とショートカットが重複しています。");
                     used.Add(binding, label);
-                    assignments.Add(new(binding, CaptureIntent.Screenshot, PresetKey: binding.ToString()));
+                    assignments.Add(new(binding, row.Intent, PresetKey: binding.ToString()));
                 }
                 catch (ArgumentException ex)
                 {

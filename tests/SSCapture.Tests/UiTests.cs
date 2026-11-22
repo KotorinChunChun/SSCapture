@@ -251,10 +251,10 @@ internal static partial class Program
             }, value => { saved = value; return null; }, () => { }, () => []);
             var groups = (TabControl)form.Controls.Find("ShortcutGroups", true).Single();
             Check(groups.TabPages.Cast<TabPage>().Select(page => page.Text).SequenceEqual(
-                ["PC作業中のショートカットキー", "プリセット撮影", "撮影範囲設定前の操作", "撮影ドラッグ中の操作"]), "ショートカットの分類が不正");
+                ["PC作業中", "即時撮影キー", "撮影範囲設定前", "撮影ドラッグ中"]), "ショートカットの分類が不正");
             var pc = groups.TabPages[0];
             Check(Descendants(pc).OfType<HotkeyEditor>().Select(editor => editor.Name).ToHashSet().SetEquals(
-                ["ScreenshotShortcut1", "ScreenshotShortcut2", "RecordingShortcut1", "RecordingShortcut2", "LastRegionShortcut", "LastRecipeShortcut"]),
+                ["LastRegionShortcut", "LastRecipeShortcut", "PresetCaptureShortcut"]),
                 "PC作業中のショートカット欄が不正");
             Check(!Descendants(pc).Any(control => control.Name.StartsWith("CaptureMouse", StringComparison.Ordinal)), "PC作業中にクリック欄がある");
 

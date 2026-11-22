@@ -1,5 +1,4 @@
 using SSCapture.Services;
-using SSCapture.UI;
 
 namespace SSCapture;
 
@@ -17,13 +16,22 @@ internal sealed partial class TrayApplicationContext
 
     private async Task TakePresetCaptureAsync(PresetCaptureShortcut row)
     {
-        if (WindowVisibility.RestorePending(namingForm) || !CanStartPresetCapture) return;
+        if (HandleActiveCapture(row.Intent) || !CanStartPresetCapture) return;
         try
         {
             var capture = ResolvedPresetCapture.Resolve(settings, row.InputPresetId, row.OutputPresetId, row.LegacyInstantOutput);
-            if (capture.Settings.DefaultDestination == OutputDestination.None)
-                throw new ArgumentException("出力先がすべてOFFです。出力プリセットを確認してください。");
-            await TakeRegionAsync(capture.Input.Id, capture);
+            if (row.UsesDirectCapture(capture.Input))
+            {
+                if (capture.Settings.DefaultDestination == OutputDestination.None)
+                    throw new ArgumentException("出力先がすべてOFFです。出力プリセットを確認してください。");
+                await TakeRegionAsync(capture.Input.Id, capture);
+            }
+            else
+            {
+                await TakeCaptureAsync(capture.Settings.DefaultMode, row.Intent, capture.Input,
+                    showPreviousOnEscape: row.Intent == CaptureIntent.Screenshot && row.InputPresetId is null,
+                    presetCapture: capture);
+            }
         }
         catch (Exception ex)
         {
@@ -41,7 +49,7 @@ internal sealed partial class TrayApplicationContext
         {
             var preset = ResolvedPresetCapture.Resolve(settings, row.InputPresetId, row.OutputPresetId, row.LegacyInstantOutput);
             presetCaptureMenu.DropDownItems.Add(new ToolStripMenuItem(
-                $"{preset.Input.Name} → {preset.Output.Name}", null, (_, _) => _ = TakePresetCaptureAsync(row))
+                $"{row.IntentLabel}  {preset.Input.Name} → {preset.Output.Name}", null, (_, _) => _ = TakePresetCaptureAsync(row))
             {
                 ShortcutKeyDisplayString = KeyDisplay.Binding(row.Key)
             });

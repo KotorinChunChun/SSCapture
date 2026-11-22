@@ -102,7 +102,7 @@ internal static partial class Program
             var persisted = target.Load(out var warning);
             Equal<string?>(null, warning);
             Equal(region.Id, persisted.SavedRegions.Last().Id);
-            Equal("Win+Ctrl+2", persisted.ScreenshotShortcut1);
+            Equal(input.PresetCaptureShortcuts!.Single(), persisted.PresetCaptureShortcuts!.Single());
         }));
 
         Run("未知の形式・設定世代、不正JSON、重複、キー競合、参照切れを拒否する", () => WithSettingsDirectory(directory =>
@@ -138,7 +138,7 @@ internal static partial class Program
             string target = Path.Combine(directory, "settings.json");
             var store = new SettingsStore(target);
             var current = new AppSettings().ApplyDefaults();
-            var candidate = current with { ScreenshotShortcut1 = "Win+Ctrl+2" };
+            var candidate = current with { PresetCaptureShortcuts = [new("Win+Ctrl+2")] };
             store.Save(current);
             byte[] previous = File.ReadAllBytes(target);
             using var oldHook = new FakePreparedHook();
@@ -157,7 +157,7 @@ internal static partial class Program
 
             using var success = store.PrepareAndSave(candidate, import: true, () => new FakePreparedHook());
             Check(!success.Disposed, "適用に使うキーを破棄した");
-            Equal("Win+Ctrl+2", store.Load(out _).ScreenshotShortcut1);
+            Equal(new PresetCaptureShortcut("Win+Ctrl+2"), store.Load(out _).PresetCaptureShortcuts!.Single());
             Check(previous.SequenceEqual(File.ReadAllBytes(target + ".import.bak")), "前回の内容を復元できない");
         }));
 

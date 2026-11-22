@@ -26,23 +26,29 @@ internal sealed partial class TrayApplicationContext
 
     private void OnCaptureKey(CaptureIntent intent)
     {
+        if (HandleActiveCapture(intent)) return;
+        _ = TakeCaptureAsync(settings.DefaultMode, intent, showPreviousOnEscape: intent == CaptureIntent.Screenshot);
+    }
+
+    private bool HandleActiveCapture(CaptureIntent intent)
+    {
         if (WindowVisibility.RestorePending(namingForm))
-            return;
+            return true;
         if (intent == CaptureIntent.Recording && recorder is not null)
         {
             if (recorder.IsRecording && !recordingTransition)
                 _ = StopRecordingAsync();
-            return;
+            return true;
         }
 
         if (pendingRecording is not null)
         {
             if (recordingForm is not null)
                 WindowVisibility.Show(recordingForm);
-            return;
+            return true;
         }
 
-        _ = TakeCaptureAsync(settings.DefaultMode, intent, showPreviousOnEscape: intent == CaptureIntent.Screenshot);
+        return false;
     }
 
     private bool TryConfigureHook(bool enabled, out string? error)

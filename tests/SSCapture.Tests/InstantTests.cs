@@ -49,7 +49,7 @@ internal static partial class Program
             string path = Path.Combine(directory, "settings.json");
             File.WriteAllText(path, "{\"SchemaVersion\":2,\"ScreenshotShortcut1\":\"Win+Shift+1\",\"SaveDirectory\":\"C:\\\\captures\"}");
             var settings = new SettingsStore(path).Load(out var warning);
-            Equal<string?>(null, warning); Equal("Win+Shift+1", settings.ScreenshotShortcut1);
+            Equal<string?>(null, warning); Check(settings.PresetCaptureShortcuts!.Contains(new("Win+Shift+1")), "通常キーの移行に失敗");
             Equal("", settings.InstantShortcuts[0]); Equal("Win+Shift+0", settings.InstantShortcuts[9]);
         }));
         Run("即時画面番号は主画面から左・上の順で列挙順やDISPLAY番号に依存しない", () =>
@@ -167,7 +167,9 @@ internal static partial class Program
             using var form = new SettingsForm(new AppSettings(), next => { saved = next; return null; }, () => { }, () => []);
             _ = form.Handle; foreach (Control child in Descendants(form)) _ = child.Handle;
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
-            tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "即時撮影キー"); LayoutTree(form);
+            tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "ショートカット");
+            var groups = (TabControl)form.Controls.Find("ShortcutGroups", true).Single();
+            groups.SelectedTab = groups.TabPages[1]; LayoutTree(form);
             var last = (HotkeyEditor)form.Controls.Find("InstantShortcut10", true).Single();
             var table = last.Parent!;
             tabs.SelectedTab.ScrollControlIntoView(last); LayoutTree(form);

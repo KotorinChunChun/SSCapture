@@ -16,7 +16,7 @@ internal static partial class Program
             var migrated = (old with { PresetSchemaVersion = 2, SavedRegions = [edited], PresetCaptureShortcuts = null, RecordSystemAudio = true, RecordMicrophone = true, MicrophoneDeviceId = "missing-device" }).EnsurePresets();
             var preserved = migrated.SavedRegions.Single(p => p.Id == edited.Id);
             Equal("標準", preserved.Name); Equal(23, preserved.PaddingPixels); Equal("", preserved.Shortcut);
-            Equal(edited.Shortcut, migrated.PresetCaptureShortcuts!.Single().Key);
+            Equal(edited.Shortcut, migrated.PresetCaptureShortcuts!.Single(p => p.InputPresetId == edited.Id).Key);
             Check(preserved.IsDefault && preserved.RecordSystemAudio && preserved.RecordMicrophone, "既定または旧音声を失った");
             Equal("missing-device", preserved.MicrophoneDeviceId);
             Check(migrated.SavedRegions.Where(p => p.Id != edited.Id).All(p => !p.RecordSystemAudio && !p.RecordMicrophone), "新規候補の音声を有効にした");

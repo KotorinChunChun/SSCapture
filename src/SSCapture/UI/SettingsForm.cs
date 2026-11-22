@@ -11,7 +11,7 @@ internal sealed class SettingsForm : Form
     private bool manualSave;
     private Action? refreshSaveButton;
     private readonly TextBox directory, imageEditor, videoEditor, imageArguments, videoArguments, fileNamePattern, ocrSeparator, oneOcrDirectory;
-    private readonly HotkeyEditor screenshot1, screenshot2, recording1, recording2, lastRegionKey, lastRecipeKey;
+    private readonly HotkeyEditor lastRegionKey, lastRecipeKey;
     private readonly CaptureKeyEditor captureBeforeKeys, captureKeys;
     private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration, screenshotPadding;
     private readonly ComboBox screenshotColorDepth;
@@ -33,7 +33,7 @@ internal sealed class SettingsForm : Form
     private readonly CapturePresetEditor presetEditor;
     private readonly PresetCaptureShortcutEditor presetShortcutEditor;
     private readonly TabControl shortcutTabs;
-    private readonly TabPage presetShortcutPage;
+    private readonly TabPage workShortcutPage;
     private readonly ExternalApplicationsEditor imageApps, videoApps;
     private readonly RegionManagerForm inputPresetEditor;
     private readonly ListBox categories;
@@ -119,28 +119,27 @@ internal sealed class SettingsForm : Form
         shortcutTabs = new TabControl { Name = "ShortcutGroups", Dock = DockStyle.Fill };
         shortcutPage.Controls.Add(shortcutTabs);
         tabs.TabPages.Add(shortcutPage);
-        var keys = Page(shortcutTabs, "PC作業中のショートカットキー");
-        keys.RowStyles[5] = new RowStyle(SizeType.Absolute, 40);
-        keys.RowCount = 7;
+        var keys = Page(shortcutTabs, "PC作業中");
+        workShortcutPage = (TabPage)keys.Parent!;
+        keys.ColumnStyles[0].Width = 196;
+        keys.RowCount = 3;
+        keys.RowStyles.Clear();
+        keys.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        keys.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         keys.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        screenshot1 = KeyField(keys, "撮影 1", "ScreenshotShortcut1", settings.ScreenshotShortcut1, 0);
-        screenshot2 = KeyField(keys, "撮影 2", "ScreenshotShortcut2", settings.ScreenshotShortcut2, 1);
-        recording1 = KeyField(keys, "録画 1", "RecordingShortcut1", settings.RecordingShortcut1, 2);
-        recording2 = KeyField(keys, "録画 2", "RecordingShortcut2", settings.RecordingShortcut2, 3);
-        lastRegionKey = KeyField(keys, "前回の範囲", "LastRegionShortcut", settings.LastRegionShortcut, 4);
-        lastRecipeKey = KeyField(keys, "直前の設定で再撮影", "LastRecipeShortcut", settings.LastRecipeShortcut, 5);
+        lastRecipeKey = KeyField(keys, "直前の設定で再撮影", "LastRecipeShortcut", settings.LastRecipeShortcut, 0);
+        lastRegionKey = KeyField(keys, "前回の範囲", "LastRegionShortcut", settings.LastRegionShortcut, 1);
+        presetShortcutEditor = new PresetCaptureShortcutEditor(settings.PresetCaptureShortcuts ?? []);
+        keys.Controls.Add(presetShortcutEditor, 0, 2);
+        keys.SetColumnSpan(presetShortcutEditor, 2);
         captureBeforeKeys = new CaptureKeyEditor(settings.CaptureBeforeKeys, settings.CaptureMouse, beforeSelection: true,
             settings.ControlActivation, settings.WindowActivation);
         captureKeys = new CaptureKeyEditor(settings.CaptureKeys, settings.CaptureMouse, beforeSelection: false);
-        var beforePage = new TabPage("撮影範囲設定前の操作") { BackColor = BackColor, Padding = new Padding(8) };
-        var dragPage = new TabPage("撮影ドラッグ中の操作") { BackColor = BackColor, Padding = new Padding(8) };
+        var beforePage = new TabPage("撮影範囲設定前") { BackColor = BackColor, Padding = new Padding(8) };
+        var dragPage = new TabPage("撮影ドラッグ中") { BackColor = BackColor, Padding = new Padding(8) };
         beforePage.Controls.Add(captureBeforeKeys);
         dragPage.Controls.Add(captureKeys);
         shortcutTabs.TabPages.AddRange([beforePage, dragPage]);
-        presetShortcutPage = new TabPage("プリセット撮影") { BackColor = BackColor, Padding = new Padding(8) };
-        presetShortcutEditor = new PresetCaptureShortcutEditor(settings.PresetCaptureShortcuts ?? []);
-        presetShortcutPage.Controls.Add(presetShortcutEditor);
-        shortcutTabs.TabPages.Insert(1, presetShortcutPage);
         var regions = inputs;
         fixedWidth = PixelField(regions, "固定幅 (px)", "FixedWidth", settings.FixedWidth, 1);
         fixedHeight = PixelField(regions, "固定高さ (px)", "FixedHeight", settings.FixedHeight, 2);
@@ -154,7 +153,10 @@ internal sealed class SettingsForm : Form
         historyButton.Width = 144; historyButton.Enabled = openHistory is not null;
         historyButton.Click += (_, _) => openHistory?.Invoke();
         Add(historyPage, "管理", historyButton, 1);
-        var instant = Page(tabs, "即時撮影キー");
+        var instant = Page(shortcutTabs, "即時撮影キー");
+        var instantPage = (TabPage)instant.Parent!;
+        shortcutTabs.TabPages.Remove(instantPage);
+        shortcutTabs.TabPages.Insert(1, instantPage);
         ((TabPage)instant.Parent!).AutoScroll = true;
         instant.Dock = DockStyle.Top;
         instant.Height = 440;
@@ -180,7 +182,7 @@ internal sealed class SettingsForm : Form
         }
         RefreshInstantDisplays();
         Activated += (_, _) => RefreshInstantDisplays();
-        tabs.SelectedIndexChanged += (_, _) => { if (tabs.SelectedTab == instant.Parent) RefreshInstantDisplays(); };
+        instantPage.VisibleChanged += (_, _) => { if (instantPage.Visible) RefreshInstantDisplays(); };
         var audio = Page(tabs, "録画・音声");
         systemAudio = Toggle(audio, "PCの再生音", "SystemAudio", "録音する", settings.RecordSystemAudio, 0);
         micAudio = Toggle(audio, "マイク", "MicrophoneAudio", "録音する", settings.RecordMicrophone, 1);
@@ -273,9 +275,9 @@ internal sealed class SettingsForm : Form
             selectAnchoredRegion: PickInputRegion, embedded: true, profileSettings: settings, openPresetShortcuts: id => ShowPresetShortcuts(inputId: id));
         inputPresetPage.Controls.Add(inputPresetEditor); tabs.TabPages.Add(inputPresetPage); inputPresetEditor.Show();
         inputPresetEditor.AttachRecordingSettings(systemAudio, micAudio, microphone);
-        presetShortcutPage.VisibleChanged += (_, _) =>
+        workShortcutPage.VisibleChanged += (_, _) =>
         {
-            if (presetShortcutPage.Visible) RefreshPresetShortcutChoices();
+            if (workShortcutPage.Visible) RefreshPresetShortcutChoices();
         };
         RefreshPresetShortcutChoices();
         async Task<Rectangle?> PickInputRegion(Size? size, CaptureAnchor anchor)
@@ -374,7 +376,7 @@ internal sealed class SettingsForm : Form
         tabs.SelectedIndexChanged += (_, _) => UpdateSummary(); UpdateSummary();
         var commandPage = new TabPage("撮影コマンド") { BackColor = BackColor, Padding = new Padding(8) };
         commandPage.Controls.Add(new CaptureCommandControl(() => committed, SetStatus)); tabs.TabPages.Add(commandPage);
-        string[] order = ["基本", "入力プリセット", "出力プリセット", "外部アプリ", "ショートカット", "即時撮影キー", "撮影コマンド", "通知", "履歴"];
+        string[] order = ["基本", "入力プリセット", "出力プリセット", "外部アプリ", "ショートカット", "撮影コマンド", "通知", "履歴"];
         var ordered = order.Select(title => tabs.TabPages.Cast<TabPage>().Single(p => p.Text == title)).ToArray();
         tabs.TabPages.Clear(); tabs.TabPages.AddRange(ordered);
         status = new TextBox { Name = "Status", Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
@@ -460,7 +462,7 @@ internal sealed class SettingsForm : Form
     {
         RefreshPresetShortcutChoices();
         SelectCategory("ショートカット");
-        shortcutTabs.SelectedTab = presetShortcutPage;
+        shortcutTabs.SelectedTab = workShortcutPage;
         presetShortcutEditor.OpenForPreset(inputId, outputId);
     }
 
@@ -551,8 +553,6 @@ internal sealed class SettingsForm : Form
                 CapturePresets = presetEditor.Presets,
                 SavedRegions = inputPresetEditor.Regions,
                 PresetCaptureShortcuts = presetShortcutEditor.Rows,
-                ScreenshotShortcut1 = screenshot1.Value, ScreenshotShortcut2 = screenshot2.Value,
-                RecordingShortcut1 = recording1.Value, RecordingShortcut2 = recording2.Value,
                 LastRegionShortcut = lastRegionKey.Value, LastRecipeShortcut = lastRecipeKey.Value, KeepHistory = keepHistory.Checked,
                 CaptureKeys = captureKeys.Value,
                 CaptureBeforeKeys = captureBeforeKeys.Value,

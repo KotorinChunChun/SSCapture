@@ -109,7 +109,7 @@ internal static partial class Program
             Equal(CaptureMode.Rectangle, settings.DefaultMode); Equal(OutputDestination.Clipboard, settings.DefaultDestination);
             Check(settings.DimCaptureBackground && settings.FreezeFrame && !settings.IncludeCursor && !settings.Grid20, "標準入力の初期条件が異なる");
             Equal(0, settings.ScreenshotPaddingPixels); Equal(ScreenshotColorDepth.Original, settings.ScreenshotColorDepth);
-            Equal(CaptureMetadataMode.None, settings.MetadataMode); Equal("Win+Shift+S", settings.ScreenshotShortcut1);
+            Equal(CaptureMetadataMode.None, settings.MetadataMode); Check(settings.PresetCaptureShortcuts!.Contains(new("Win+Shift+S")), "通常キーの初期値がない");
             Equal("Rectangle,FixedRegion,FixedRegion,FixedRegion,FixedRegion", string.Join(',', settings.SavedRegions.Select(p => p.Mode)));
             Check(settings.SavedRegions.All(p => !p.UseFixedCoordinates && p.FreezeFrame && p.PaddingPixels == 0 && !p.IncludeCursor && p.Shortcut == ""), "初期入力に座標・キー・加工が混入");
             Equal("1280x720,1920x1080,2560x1440,3840x2160", string.Join(',', settings.SavedRegions.Where(p => p.Mode == CaptureMode.FixedRegion).Select(p => $"{p.Bounds.Width}x{p.Bounds.Height}")));
@@ -172,7 +172,7 @@ internal static partial class Program
         {
             using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
-            Equal("基本,入力プリセット,出力プリセット,外部アプリ,ショートカット,即時撮影キー,撮影コマンド,通知,履歴", string.Join(',', tabs.TabPages.Cast<TabPage>().Select(p => p.Text)));
+            Equal("基本,入力プリセット,出力プリセット,外部アプリ,ショートカット,撮影コマンド,通知,履歴", string.Join(',', tabs.TabPages.Cast<TabPage>().Select(p => p.Text)));
             var input = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "入力プリセット"); var output = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "出力プリセット");
             Check(input.Contains(form.Controls.Find("ScreenshotPaddingPixels", true).Single()), "入力に余白がない");
             Check(output.Contains(form.Controls.Find("ScreenshotColorDepth", true).Single()), "出力に減色がない");

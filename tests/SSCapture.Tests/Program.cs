@@ -48,6 +48,11 @@ internal static partial class Program
             CaptureMenuEditingTests(); SnapTests();
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }
+        if (args.SequenceEqual(["--shortcut-tests"]))
+        {
+            PresetShortcutTests(includeSettingsForm: false);
+            Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
+        }
         if (args.SequenceEqual(["--preset-tests"]))
         {
             PresetShortcutTests(); PresetConsolidationTests(); PresetUpgradeTests(); AutoSaveBindingTests(); UiTests(); RegionTests(); RegionUiTests(); CapturePresetTests(); ExternalApplicationTests();
