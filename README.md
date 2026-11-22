@@ -49,7 +49,7 @@ flowchart LR
 
 新規設定では、入力4件（囲った範囲＋960×540・800×600・320×240pxの固定サイズ）と出力3件を用意します。既定は矩形選択＋クリップボードのみで、画面固定ON・カーソルOFF・白余白なし・減色なし・グリッドOFF。暗転は基本設定で初期ONです。既存の編集済みプリセットやスナップ設定は保持します。
 
-[公開済みプレリリースのダウンロード](https://github.com/KotorinChunChun/SSCapture/releases)・[この文書の対象版（v0.1.10）のリリースノート](docs/releases/v0.1.10.md)を参照してください。未署名のプレリリースです。KotorinToysのツール一覧からもインストール・更新できます。
+この文書は開発中のv0.1.11の内容を含みます。公開済みの最新版はv0.1.10です。[公開済みプレリリースのダウンロード](https://github.com/KotorinChunChun/SSCapture/releases)・[v0.1.10のリリースノート](docs/releases/v0.1.10.md)・[v0.1.11の変更点（未公開）](docs/releases/v0.1.11.md)を参照してください。未署名のプレリリースです。KotorinToysのツール一覧からもインストール・更新できます。
 
 ## Windows標準のSnipping Toolとの違い
 
@@ -198,6 +198,8 @@ flowchart LR
 ## 案内
 
 - [使い方](docs/usage.md)：撮影・録画・OCR命名・プリセット・履歴・通知
+- [コマンドライン](docs/cli.md)：CLIからの撮影・時限／定期撮影・設定の書き出しと取り込み
+- [KotorinToysでSSCaptureを認識できない場合](docs/recovery.md)：v0.1.2の公開setupからの復旧
 - [第三者ライセンス・配布元](THIRD_PARTY.md)
 - [開発者向け資料](docs/DEVELOPERS_GUIDE.md)：ビルド・検証・公開手順
 

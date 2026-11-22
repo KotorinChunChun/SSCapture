@@ -25,8 +25,10 @@ pwsh -File scripts/test-build.ps1
 
 機能別に実行するには `-Suite` を指定します。通知の試験は、保存済み・未保存・保存失敗でのボタンとクリック領域の切り替え、サムネイルのドラッグ操作、一時PNGの生成や取り消しを確認します。
 
+`-Suite` は修正中に早く確かめるためのもので、完了の判定には全体の `scripts/test.ps1` を使います。変更前後でテストごとの成否を比べる手順と、失敗が環境によるものかを切り分ける手順は[検証の手順書](../.claude/skills/sscapture-verify/SKILL.md)にあります。
+
 ```powershell
-pwsh -File scripts/test.ps1 -Suite Notification -OutputPath dev/history/v0.1.10/logs/notification-cli/tests
+pwsh -File scripts/test.ps1 -Suite Notification -OutputPath dev/history/v0.1.11/logs/notification-cli/tests
 pwsh -File scripts/test.ps1 -Suite Output
 pwsh -File scripts/test.ps1 -Suite Recording
 pwsh -File scripts/test.ps1 -Suite Startup
@@ -37,7 +39,7 @@ pwsh -File scripts/test.ps1 -Suite Startup
 ロックを解除したWindowsデスクトップで、試験中に他のマウス・キー操作を行わずに実行します。テストは専用画面を使い、対象が前面にない場合は入力を中止します。
 
 ```powershell
-$run = 'dev/history/v0.1.10/logs/native-tests'
+$run = 'dev/history/v0.1.11/logs/native-tests'
 pwsh -File scripts/test.ps1 -NativeSmoke Selection -OutputPath "$run/tests"
 pwsh -File scripts/test.ps1 -NativeSmoke Notification -OutputPath "$run/tests"
 pwsh -File scripts/test.ps1 -NativeSmoke Monitors -OutputPath "$run/tests"
@@ -73,7 +75,7 @@ dotnet $test --recording-desktop-smoke artifacts/app/tools/ffmpeg.exe artifacts/
 実プロセスで確認するときは、試験用に新規発行した `SSCapture.exe` と依存ファイルを使います。例では版別ログに `app` を発行し、その実行ファイルの隣に試験用の `data/settings.json` を作ります。
 
 ```powershell
-$run = Join-Path $PWD.Path ('dev/history/v0.1.10/logs/capture-cli-' + [Guid]::NewGuid().ToString('N'))
+$run = Join-Path $PWD.Path ('dev/history/v0.1.11/logs/capture-cli-' + [Guid]::NewGuid().ToString('N'))
 $app = Join-Path $run 'app'
 . ./scripts/common.ps1
 Invoke-Dotnet publish src/SSCapture/SSCapture.csproj -c Release -r win-x64 --self-contained true '-p:RestoreConfigFile=NuGet.Config' -o $app

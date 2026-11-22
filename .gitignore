@@ -31,3 +31,6 @@ credentials.json
 *.db-shm
 *.sqlite
 *.sqlite3
+
+# Claude Codeの個人設定（プロジェクトのスキル .claude/skills は管理対象）
+.claude/settings.local.json

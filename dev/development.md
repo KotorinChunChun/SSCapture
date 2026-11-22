@@ -4,16 +4,19 @@
 
 コマンドはリポジトリのルートで、PowerShell 7の `pwsh` を使って実行します。このフォルダだけがGit管理の対象です。
 
-## 完了版の開発記録
+## 版別の開発記録
 
-- [v0.1.0の要求](history/v0.1.0/v0.1.0-req.md)
-- [v0.1.0の実装計画・点検報告](history/v0.1.0/v0.1.0-imp.md)
-- [v0.1.0の進捗](history/v0.1.0/v0.1.0-task.md)
-- [共通ルール](../AGENTS.md) / [対応しない事項](reject.md)
-- [v0.1.1の要求](history/v0.1.1/v0.1.1-req.md) / [実装計画・報告](history/v0.1.1/v0.1.1-imp.md)
+- [共通ルール](../AGENTS.md) / [対応しない事項](reject.md) / [検証の手順書](../.claude/skills/sscapture-verify/SKILL.md)
 - [公開用ビルド手順](../docs/DEVELOPERS_GUIDE.md) / [Release規則](RELEASE_RULE.md)
 
-現在の版は `v0.1.1` です。以後は `vX.Y.Z` の通常の連番を使い、過去の `v0.YYYYMMDD.Z` の文書は履歴として維持します。新しい版の要求・計画を `dev/vX.Y.Z-req.md`・`dev/vX.Y.Z-imp.md` に記録し、必要な場合にだけ `task.md` を作成します。フェーズごとに検証結果を記録し、問題がなければコミットします。却下事項にはユーザーが明示したものだけを記録し、未検証項目は [validation.md](validation.md) に分けます。
+| 版 | 状態 | 要求 | 実装計画・報告 |
+| --- | --- | --- | --- |
+| v0.1.11 | 開発中（`feature/v0.1.11`） | [要求](history/v0.1.11/v0.1.11-req.md) | [実装計画・報告](history/v0.1.11/v0.1.11-imp.md) |
+| v0.1.10 | 公開済みの最新版 | [要求](history/v0.1.10/v0.1.10-req.md) | [実装計画・報告](history/v0.1.10/v0.1.10-imp.md) |
+| v0.2.0 | 設計のみ（要求はv0.1.4で実装済み） | [要求](history/v0.2.0/v0.2.0-req.md) | [設計](history/v0.2.0/v0.2.0-imp.md) |
+| v0.1.0〜v0.1.9 | 完了 | [history](history/) の各版のフォルダ | |
+
+版は `vX.Y.Z` の通常の連番を使います。過去の `v0.YYYYMMDD.Z` の文書（`dev/v0.20261010.*`）は履歴として移動しません。新しい版の要求・計画は、最初から `dev/history/vX.Y.Z/vX.Y.Z-req.md`・`vX.Y.Z-imp.md` に記録し、必要な場合にだけ `vX.Y.Z-task.md` を作成します。フェーズごとに検証結果を記録し、問題がなければコミットします。却下事項にはユーザーが明示したものだけを記録し、未検証項目は [validation.md](validation.md) に分けます。
 
 ## 主要構成と変更時の不変条件
 
@@ -26,6 +29,21 @@
 | `src/SSCapture/UI` | 設定・OCR・範囲・履歴・録画のWinForms画面。データ処理の結果と所有権を明確にし、システムダイアログを追加しない |
 | `tests/SSCapture.Tests` | 通常の合成テストと明示指定するスモークを分離。通常実行で実画面・実録音・個人クリップボードを扱わない |
 
+### 撮影セッションのファイル分担
+
+`CaptureSession.SelectAsync` が作る `SessionController` は、次の部分クラスに分かれています。テストが非公開のフィールド名をリフレクションで参照するため、フィールドを別のファイルへ移すのは構いませんが、名前は変えないでください。
+
+| ファイル | 受け持つ処理 |
+| --- | --- |
+| `CaptureSession.cs` | 入口の `SelectAsync`、状態、コンストラクタ、撮影中メニューの生成、入出力プリセットの適用、モニター制限、画面の取り直し、マウス・キー入力、確定と取消 |
+| `CaptureSession.BeforeModes.cs` | 撮影範囲を決める前のキーで、コントロール選択・ウィンドウ撮影を「押している間だけ」または「単押しで切り替え」で有効にする処理と、元の撮り方への復帰 |
+| `CaptureSession.Controls.cs` | コントロールの選択・プレビュー・ドラッグ合成 |
+| `CaptureSession.GuidePlacement.cs` | 画面右下の操作ガイドを表示するモニターの決定と追従 |
+| `CaptureSession.Optics.cs` | ウィンドウ・コントロールの四辺をホイールで調整する余白 |
+| `CaptureSession.Precision.cs` | 2点クリック、拡大鏡・配信表示の切り替え、矢印キーによる1ドット移動 |
+| `CaptureSession.OperationHints.cs` | ポインタ横の操作ガイドに出す操作ヒント |
+| `CaptureSession.TargetHints.cs` | ポインタ横の操作ガイドに出す撮影対象（ウィンドウ名・モニター・座標） |
+
 - `CaptureSession.SelectAsync` はSTAのUIスレッドから呼びます。セッションがSnapshotを所有・解放し、呼び出し元が返却された `CaptureOutcome` を解放します。非同期出力は所有する画像のコピーを使い、処理完了前に元データを解放しないようにします。保存OFFの履歴はメモリー内だけに保持します。
 - 録画の開始・停止・音声切替は既存のゲートで直列化します。デバイス初期化・取得終了待ちをUIスレッドへ依存させず、停止時に映像・音声の取得を解放します。音声OFF区間の生音をWAVへ残さず、途中で音源を追加しても同じ区間時計で無音を補います。失敗時の区間原本・作業ファイルは回収用に保持します。
 - `OutputRouter` はコピー・保存・外部アプリの結果を独立して扱います。OCR命名より先に成功したコピーを、確定・キャンセル時にやり直しません。元の撮影日時と、命名画面で編集されたファイル名日時を混同しないようにします。
@@ -34,7 +52,7 @@
 
 ## 環境準備
 
-対象はWindows 11 x64、.NET 10 Windows Formsです。ローカルSDKの既定版は10.0.401、録画エンジンはFFmpeg 9.0.2、音声ライブラリはNAudio.Wasapi 3.1.0です。配布元とライセンスは [THIRD_PARTY.md](../THIRD_PARTY.md) に記録しています。
+対象はWindows 11 x64、.NET 10 Windows Formsです。ローカルSDKの既定版は10.0.402（`scripts/setup-sdk.ps1` の指定版）、録画エンジンはFFmpeg 9.0.2、音声ライブラリはNAudio.Wasapi 3.1.0です。配布元とライセンスは [THIRD_PARTY.md](../THIRD_PARTY.md) に記録しています。
 
 ```powershell
 pwsh -File scripts/setup-sdk.ps1
