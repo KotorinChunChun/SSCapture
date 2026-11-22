@@ -58,6 +58,8 @@ internal sealed class CaptureOverlay : Form
 
     protected override void OnHandleDestroyed(EventArgs e)
     {
+        sharedPresentation?.Dispose();
+        sharedPresentation = null;
         if (sessionNotifications)
         {
             CaptureNative.WTSUnRegisterSessionNotification(Handle);
@@ -79,11 +81,7 @@ internal sealed class CaptureOverlay : Form
                 MonitorBounds.Width, MonitorBounds.Height, 0x0010 /* SWP_NOACTIVATE */);
     }
 
-    internal void RaiseWithoutActivation()
-    {
-        CaptureNative.RaiseWithoutActivation(Handle);
-        if (sharedPresentation?.Visible == true) CaptureNative.RaiseWithoutActivation(sharedPresentation.Handle);
-    }
+    internal void RaiseWithoutActivation() => CaptureNative.RaiseWithoutActivation(Handle);
 
     protected override void WndProc(ref Message m)
     {
@@ -134,7 +132,7 @@ internal sealed class CaptureOverlay : Form
         DrawSnapshot(e.Graphics, dirty);
         if (session.OutputSettings.ShareCapturePresentation && Visible && !session.Refreshing)
         {
-            sharedPresentation ??= new CapturePresentation(MonitorBounds);
+            sharedPresentation ??= new CapturePresentation(MonitorBounds, Handle);
             if (sharedPresentation.Present(dirty, DrawForeground))
             {
                 rendered ??= ReadVisualState();
@@ -450,7 +448,7 @@ internal sealed class CaptureOverlay : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { sharedPresentation?.Dispose(); dimensionsFont.Dispose(); }
+        if (disposing) dimensionsFont.Dispose();
         base.Dispose(disposing);
     }
 }

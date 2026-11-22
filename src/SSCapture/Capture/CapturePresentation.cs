@@ -14,12 +14,14 @@ internal sealed class CapturePresentation : NativeWindow, IDisposable
     private Graphics? drawing;
     internal bool Visible { get; private set; }
 
-    internal CapturePresentation(Rectangle bounds)
+    internal CapturePresentation(Rectangle bounds, nint owner)
     {
         this.bounds = bounds;
         CreateHandle(new CreateParams
         {
             Caption = WindowTitle.Create("撮影操作の共有"),
+            // An owned popup stays above its input overlay even when that overlay is activated.
+            Parent = owner,
             X = bounds.X, Y = bounds.Y, Width = bounds.Width, Height = bounds.Height,
             Style = unchecked((int)0x80000000), // WS_POPUP
             ExStyle = CaptureNative.WsExToolWindow | 0x00080000 | 0x00000020 | 0x08000000 | 0x8

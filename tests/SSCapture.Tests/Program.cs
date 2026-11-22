@@ -70,7 +70,7 @@ internal static partial class Program
         if (args.Contains("--padding-ui-preview")) return PaddingUiPreview(args[1]);
         if (args.Contains("--selection-guide-preview")) return SelectionGuidePreview(args[1]);
         if (args.Contains("--overlay-placement-smoke")) return RunOverlayPlacementSmoke();
-        if (args.Contains("--presentation-smoke")) return RunPresentationSmoke();
+        if (args.Contains("--presentation-smoke")) return RunPresentationSmoke(useNativeInput: !args.Contains("--no-native-input"));
         if (args.Contains("--control-capture-smoke")) return RunControlCaptureSmoke();
         if (args is ["--browser-control-smoke", "--interactive", var browser, var scratch]) return RunBrowserControlSmoke(browser, scratch);
         if (args.Length == 2 && args[0] == "--timer-native-smoke") return RunTimerNativeSmoke(args[1]);

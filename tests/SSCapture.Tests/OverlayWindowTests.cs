@@ -8,6 +8,36 @@ internal static partial class Program
 {
     private static void OverlayWindowTests()
     {
+        Run("配信用レイヤーは前面にした側も含めて各画面の入力ウィンドウより上に残る", () =>
+        {
+            Rectangle[] monitors = [new(0, 0, 160, 120), new(160, 0, 160, 120)];
+            Rectangle bounds = Rectangle.Union(monitors[0], monitors[1]);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.None,
+                ShowSelectionGuide: false, DimCaptureBackground: true, LimitToStartingMonitor: false,
+                OutputSettings: new() { ShareCapturePresentation = true }),
+                new DesktopSnapshot(new Bitmap(bounds.Width, bounds.Height), bounds, monitors), []);
+            using var first = new CaptureOverlay(session, monitors[0]);
+            using var second = new CaptureOverlay(session, monitors[1]);
+            try
+            {
+                first.Show(); second.Show();
+                first.Update(); second.Update();
+                foreach (var active in new[] { first, second })
+                {
+                    CaptureNative.RaiseWithoutActivation(active.Handle);
+                    Check(OwnsLayerAbove(first.Handle) && OwnsLayerAbove(second.Handle), "配信用レイヤーが入力ウィンドウに覆われた");
+                }
+            }
+            finally { session.Cancel(); }
+
+            static bool OwnsLayerAbove(nint owner)
+            {
+                for (nint window = OverlayProbeNative.GetWindow(owner, 3 /* GW_HWNDPREV */); window != 0;
+                    window = OverlayProbeNative.GetWindow(window, 3))
+                    if (OverlayProbeNative.GetWindow(window, 4 /* GW_OWNER */) == owner) return true;
+                return false;
+            }
+        });
         Run("固定サイズの座標と寸法を一つにまとめて右クリックメニューと重ねない", () =>
         {
             Rectangle bounds = new(0, 0, 440, 320);
@@ -221,6 +251,8 @@ internal static partial class Program
         internal struct Rect { internal int Left, Top, Right, Bottom; }
         [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
         internal static extern int GetWindowLong(nint window, int index);
+        [DllImport("user32.dll")]
+        internal static extern nint GetWindow(nint window, uint command);
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool GetWindowRect(nint window, out Rect rect);
