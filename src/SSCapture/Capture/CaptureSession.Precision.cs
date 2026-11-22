@@ -4,7 +4,7 @@ internal sealed partial class SessionController
 {
     private bool waitingForSecondPoint;
     private Point? precisePointer;
-    internal bool TwoPointSelection => Mode == CaptureMode.Rectangle && OutputSettings.SelectionMethod == CaptureSelectionMethod.TwoClicks;
+    internal bool TwoPointSelection => IsRectangleMode && OutputSettings.SelectionMethod == CaptureSelectionMethod.TwoClicks;
 
     internal void ChangeSelectionMethod(CaptureSelectionMethod method)
     {

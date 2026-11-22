@@ -28,17 +28,19 @@ internal static partial class Program
             var check = form.Controls.Find("PreviewRegion", true).Single();
             Check(!check.Enabled, "位置未指定なのに確認できる");
             var mode = (ComboBox)form.Controls.Find("CaptureMode", true).Single();
-            mode.SelectedIndex = 5; Check(check.Enabled, "固定位置モード後も確認できない");
+            mode.SelectedItem = "固定位置とサイズ"; Check(check.Enabled, "固定位置モード後も確認できない");
             mode.SelectedIndex = 0; Check(!check.Enabled, "無効状態へ戻らない");
             using var tips = new ToolTip(); SettingsHelp.Apply(form, tips);
             Check((tips.GetToolTip(check) ?? "").Contains("位置が未指定"), "無効理由の説明がない");
         });
-        Run("白い余白は入力プリセットで変更することを出力側の説明に表示する", () =>
+        Run("白い余白は出力の設定で変更し空欄と0の違いを説明する", () =>
         {
             var settings = new AppSettings().ApplyDefaults();
             using var form = new SettingsForm(settings, _ => null, _ => { }, () => []); using var tips = new ToolTip(); SettingsHelp.Apply(form, tips);
             var help = tips.GetToolTip(form.Controls.Find("CapturePresetEditor", true).Single()) ?? "";
-            Check(help.Contains("白い余白は入力プリセット") && !help.Contains("登録・更新"), "旧説明のまま");
+            Check(help.Contains("白い余白") && !help.Contains("入力プリセット"), "出力プリセットの説明が古い");
+            string padding = tips.GetToolTip(form.Controls.Find("WhitePaddingPixels", true).Single()) ?? "";
+            Check(padding.Contains("0で余白なし") && padding.Contains("空欄は旧入力の余白を引き継ぎ"), "空欄と0の説明がない");
         });
         Run("4画面の登録ボタンの並び・寸法と入出力の一覧幅を統一する", () =>
         {

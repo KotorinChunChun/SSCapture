@@ -377,7 +377,9 @@ internal static partial class Program
             try
             {
                 var modeMenu = (ToolStripMenuItem)session.SelectionMenu.Command("CaptureModeMenu")!;
-                Equal(5, modeMenu.DropDownItems.Count);
+                var modes = modeMenu.DropDownItems.Cast<ToolStripMenuItem>().Select(item => (CaptureMode)item.Tag!);
+                Check(modes.SequenceEqual(Enum.GetValues<CaptureMode>().Where(mode => mode != CaptureMode.Scroll)),
+                    "録画には静止画専用のスクロール撮影を出さない");
                 ((ToolStripMenuItem)modeMenu.DropDownItems.Cast<ToolStripMenuItem>().Single(i => (CaptureMode)i.Tag! == CaptureMode.Window)).PerformClick();
                 Equal(CaptureMode.Window, session.Mode);
                 session.MoveTo(new(-100, 20)); Equal(SelectionTestMonitors[0], session.Selection);

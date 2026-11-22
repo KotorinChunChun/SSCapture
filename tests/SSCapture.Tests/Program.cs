@@ -138,7 +138,11 @@ internal static partial class Program
         }
         if (args.SequenceEqual(["--startup-tests"]))
         { StartupTests(); SettingsTransferTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
-        Run("5つの撮影モード", () => Equal(5, Enum.GetValues<CaptureMode>().Length));
+        if (args is ["--scroll-ui-smoke"]) return ScrollDesktopSmoke();
+        if (args.SequenceEqual(["--scroll-tests"]))
+        { ScrollTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
+        Run("6つの撮影モード", () => Equal(6, Enum.GetValues<CaptureMode>().Length));
+        ScrollTests();
         PinnedImageTests();
         CaptureCommandTests();
         CaptureTimerTests();

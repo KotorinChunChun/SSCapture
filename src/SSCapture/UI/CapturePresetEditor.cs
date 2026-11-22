@@ -98,9 +98,6 @@ internal sealed class CapturePresetEditor : UserControl
         output.RowStyles[5].Height = 62;
         whitePadding = new TextBox { Name = "WhitePaddingPixels", MaxLength = 4, PlaceholderText = "旧入力の値を引き継ぐ（未指定の場合は0）" };
         Add(output, "白い余白（px）", whitePadding, 6);
-        var paddingHint = new ToolTip();
-        paddingHint.SetToolTip(whitePadding, "静止画の外側に上下左右同じ幅の白枠を追加します。0で余白なし。空欄は旧入力の余白を引き継ぎ、旧設定がなければ0pxです。");
-        Disposed += (_, _) => paddingHint.Dispose();
         NumericUpDown AddCrop(string title, string edge, int column)
         {
             cropFields.Controls.Add(new Label { Text = title, Anchor = AnchorStyles.Left, AutoSize = true }, column, 0);

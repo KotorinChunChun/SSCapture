@@ -14,6 +14,7 @@ internal sealed class LastCaptureRecipe
     internal long Sequence { get; }
     internal Rectangle Bounds { get; }
     internal bool TracksWindows => windows is not null;
+    internal bool RequiresScroll { get; }
     internal bool TracksMonitors => monitors is not null;
     internal bool UseIsolatedWindow { get; }
     internal bool TracksControl { get; }
@@ -24,7 +25,7 @@ internal sealed class LastCaptureRecipe
     internal int? TargetMargin { get; }
     internal IReadOnlyList<Point>? Polygon { get; }
     internal AppSettings Settings => CaptureSettingsSnapshot.Copy(settings);
-    internal SavedRegion? RectangularRegion => Polygon is null ? region : null;
+    internal SavedRegion? RectangularRegion => !RequiresScroll && Polygon is null ? region : null;
 
     // 成功記録を公開する前に、命名画面で確定した保存条件を反映する。
     internal void ConfirmNaming(ScreenshotFileName requested) => settings = settings with
@@ -40,6 +41,7 @@ internal sealed class LastCaptureRecipe
         Sequence = sequence;
         this.region = region;
         Bounds = bounds;
+        RequiresScroll = source is CaptureReplaySource.Scroll;
         if (source is CaptureReplaySource.Windows selected)
         {
             windows = selected.Targets.Select(window => new CaptureWindowIdentity(window, processStart(window.ProcessId))).ToArray();
@@ -76,7 +78,12 @@ internal sealed class LastCaptureRecipe
 
     internal static LastCaptureRecipe Create(long sequence, Rectangle bounds, IReadOnlyList<Point>? polygon, AppSettings settings,
         IReadOnlyList<DisplayLayout> displays, CaptureReplaySource? source = null, Func<uint, long?>? processStart = null) =>
-        new(sequence, bounds, source is null ? RegionCoordinates.FromBounds("直前の撮影", bounds, displays) : null,
+        new(sequence, bounds, source switch
+        {
+            null => RegionCoordinates.FromBounds("直前の撮影", bounds, displays),
+            CaptureReplaySource.Scroll scroll => RegionCoordinates.FromBounds("直前のスクロール撮影", scroll.Viewport, displays),
+            _ => null
+        },
             polygon, settings, source, displays, processStart ?? ReadProcessStart);
 
     internal Rectangle Resolve(IReadOnlyList<DisplayLayout> displays) => region is null

@@ -12,7 +12,8 @@ internal static class SelectionGuideText
     {
         string esc = KeyDisplay.Key(Keys.Escape);
         var lines = new List<string>();
-        bool twoPoints = mode == CaptureMode.Rectangle && selectionMethod == CaptureSelectionMethod.TwoClicks;
+        bool rectangle = mode is CaptureMode.Rectangle or CaptureMode.Scroll;
+        bool twoPoints = rectangle && selectionMethod == CaptureSelectionMethod.TwoClicks;
         MouseButtons[] buttons = [MouseButtons.Left, MouseButtons.Right, MouseButtons.Middle];
         string select = string.Join(" / ", buttons.Where(button => mouse.Before(button) == CaptureClickAction.Select).Select(CaptureMouseMap.Label));
         if (mode == CaptureMode.FixedRegion && fixedSize is Size size)
@@ -21,7 +22,7 @@ internal static class SelectionGuideText
             lines.Add($"{(select.Length > 0 ? select + " / " : "")}Enter　確定　　矢印　1px　　Shift＋矢印　10px");
             if (spaceEnabled) lines.Add(SpaceOperation(spaceCycle == CaptureAnchorCycle.Legacy ? CaptureAnchorCycle.CornersAndCenter : spaceCycle));
         }
-        else if (dragging && mode == CaptureMode.Rectangle)
+        else if (dragging && rectangle)
         {
             if (spaceEnabled) lines.Add(SpaceOperation(spaceCycle));
             if (keys.WheelAdjustRectangle) lines.Add("ホイール　撮影範囲の調整");
@@ -37,13 +38,14 @@ internal static class SelectionGuideText
                 {
                     case CaptureClickAction.Select:
                         if (twoPoints) clicks.Add($"{label}　始点を指定");
-                        else if (mode != CaptureMode.FixedRegion) clicks.Add($"{label}　ウィンドウ");
+                        else if (mode is not (CaptureMode.FixedRegion or CaptureMode.Scroll)) clicks.Add($"{label}　ウィンドウ");
                         string drag = label.Replace("クリック", "ドラッグ", StringComparison.Ordinal);
-                        if (mode == CaptureMode.Rectangle && !twoPoints) clicks.Add($"{drag}　範囲選択");
+                        if (rectangle && !twoPoints)
+                            clicks.Add($"{drag}　{(mode == CaptureMode.Scroll ? "スクロールする領域を選択" : "範囲選択")}");
                         if (mode == CaptureMode.Freeform) clicks.Add($"{drag}　輪郭を囲む");
                         if (mode == CaptureMode.Window && intent == CaptureIntent.Screenshot) clicks.Add($"{drag}　複数ウィンドウを合成");
                         break;
-                    case CaptureClickAction.Desktop: clicks.Add($"{label}　画面全体"); break;
+                    case CaptureClickAction.Desktop when mode != CaptureMode.Scroll: clicks.Add($"{label}　画面全体"); break;
                     case CaptureClickAction.Menu: clicks.Add($"{label}　メニュー"); break;
                 }
             }
@@ -61,6 +63,7 @@ internal static class SelectionGuideText
         foreach (var chord in CaptureKeyMap.Combinations)
         {
             CaptureKeyAction action = keys.Resolve(chord);
+            if (mode == CaptureMode.Scroll) action = SessionController.ScrollSelectionAction(action);
             if (action == CaptureKeyAction.SelectControl && intent != CaptureIntent.Screenshot) continue;
             if (!Applies(action, mode, dragging, canCrossMonitors)) continue;
             string label = CaptureKeyMap.Label(chord);
@@ -101,10 +104,10 @@ internal static class SelectionGuideText
     {
         CaptureKeyAction.None => false,
         CaptureKeyAction.CrossMonitor => canCrossMonitors,
-        CaptureKeyAction.SwitchAnchor => mode is CaptureMode.FixedRegion or CaptureMode.Rectangle,
+        CaptureKeyAction.SwitchAnchor => mode is CaptureMode.FixedRegion or CaptureMode.Rectangle or CaptureMode.Scroll,
         CaptureKeyAction.HighlightWindow or CaptureKeyAction.SelectDesktop => !dragging,
         CaptureKeyAction.LockAspectRatio or CaptureKeyAction.FromCenter or CaptureKeyAction.FromCenterWithAspectRatio
-            or CaptureKeyAction.Grid or CaptureKeyAction.LockWidth or CaptureKeyAction.LockHeight => dragging && mode == CaptureMode.Rectangle,
+            or CaptureKeyAction.Grid or CaptureKeyAction.LockWidth or CaptureKeyAction.LockHeight => dragging && mode is CaptureMode.Rectangle or CaptureMode.Scroll,
         _ => true
     };
 

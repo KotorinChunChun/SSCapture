@@ -9,7 +9,8 @@
     "ShiftAlt": "LockHeight",
     "AltWin": "Grid",
     "SpaceEnabled": true,
-    "SpaceCycle": "Corners"
+    "SpaceCycle": "Corners",
+    "WheelAdjustRectangle": true
   },
   "Before": {
     "Ctrl": "SelectControl",

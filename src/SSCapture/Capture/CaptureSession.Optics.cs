@@ -24,11 +24,11 @@ internal sealed partial class SessionController
         }
     }
 
-    internal bool MagnifierMarksOrigin => Mode == CaptureMode.Rectangle && !gesture.HasDragged
+    internal bool MagnifierMarksOrigin => IsRectangleMode && !gesture.HasDragged
         && !SelectingControl && !SelectingDesktop && !targetWheelUsed;
 
     internal Point MagnifierSample => MagnifierMarksOrigin || (!SelectingControl && !SelectingDesktop
-        && (Mode == CaptureMode.Rectangle || Mode == CaptureMode.FixedRegion && gesture.FixedPosition is null)
+        && (IsRectangleMode || Mode == CaptureMode.FixedRegion && gesture.FixedPosition is null)
         && MarginSelection is null) ? gesture.MagnifierPoint : Pointer;
 
     internal Rectangle MagnifierSelection => SelectingDesktop ? gesture.MonitorAt(Pointer)

@@ -650,7 +650,7 @@ internal sealed partial class SettingsForm : Form
     public static string ModeName(CaptureMode value) => value switch
     {
         CaptureMode.Rectangle => "矩形", CaptureMode.Window => "ウィンドウ",
-        CaptureMode.FullScreen => "全画面", CaptureMode.Freeform => "自由形状", CaptureMode.FixedRegion => "固定サイズ", _ => "矩形"
+        CaptureMode.FullScreen => "全画面", CaptureMode.Freeform => "自由形状", CaptureMode.FixedRegion => "固定サイズ", CaptureMode.Scroll => "スクロール撮影", _ => "矩形"
     };
     private sealed record ModeItem(CaptureMode Value) { public override string ToString() => ModeName(Value); }
     private sealed record CornerItem(NotificationCorner Value)

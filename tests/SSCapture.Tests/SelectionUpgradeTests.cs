@@ -259,6 +259,18 @@ internal static partial class Program
             gesture.Space(cycle: CaptureAnchorCycle.Corners);
             Equal(adjusted, gesture.End(gesture.RawCurrent, OutputDestination.None)!.Bounds);
         });
+        Run("矩形ホイールは片側が画面端に達しても残りの寸法を各ノッチで調整する", () =>
+        {
+            var gesture = new SelectionGesture(CaptureMode.Rectangle, [new(0, 0, 300, 300)], []);
+            gesture.Begin(new(100, 100), new(4, 4));
+            gesture.Move(new(299, 180));
+            gesture.ResizeRectangle(120);
+            gesture.ResizeRectangle(120);
+            gesture.ResizeRectangle(120);
+            Equal(new Rectangle(100, 100, 200, 83), gesture.Selection);
+            gesture.ResizeRectangle(-120);
+            Equal(new Rectangle(100, 100, 199, 82), gesture.Selection);
+        });
         Run("矩形Spaceは選択を保ちポインタを対角へ移し逆側を操作する", () =>
         {
             var gesture = new SelectionGesture(CaptureMode.Rectangle, [new(0, 0, 1000, 1000)], []);

@@ -94,6 +94,8 @@ internal sealed partial class SessionController
     private readonly TaskCompletionSource<CaptureOutcome> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly List<CaptureOverlay> overlays = [];
     private readonly CaptureOptions options;
+    private readonly Func<Rectangle, Services.AppSettings, Task<(Bitmap Image, Services.CaptureMetadata? Metadata)?>>? scrollCollector;
+    private bool IsRectangleMode => Mode is CaptureMode.Rectangle or CaptureMode.Scroll;
     internal SSCapture.Services.AppSettings OutputSettings { get; private set; }
     private readonly Func<DesktopSnapshot>? currentFrameFactory;
     private readonly Func<bool, bool, DesktopSnapshot>? recapture;
@@ -210,6 +212,7 @@ internal sealed partial class SessionController
                 return idleHint is null ? null : $"{idleHint}　{SelectionGuideText.CancelHint()}";
             }
             string operation = SelectingDesktop ? "モニター全体を撮影"
+                : Mode == CaptureMode.Scroll ? "スクロールする領域を選択"
                 : Mode == CaptureMode.FixedRegion ? "固定範囲を撮影"
                 : !gesture.HasDragged || Mode == CaptureMode.Window ? "ウィンドウを撮影" : "選択範囲を撮影";
             string cancel = SelectionGuideText.CancelHint(OutputSettings.CaptureMouse, pressedButton);
@@ -227,7 +230,7 @@ internal sealed partial class SessionController
     internal Rectangle HighlightedWindow => FreeDesktopDrag ? Snapshot.Monitors.FirstOrDefault(monitor => monitor.Contains(Pointer))
         : SelectingDesktop ? gesture.MonitorAt(Pointer)
         : HasWindowDrag ? Rectangle.Empty : UsesWindowSource ? PreviewFrame?.Bounds ?? Rectangle.Empty
-        : HighlightWindow ? gesture.WindowAt(Pointer) : TwoPointSelection ? Rectangle.Empty : gesture.PressedWindow;
+        : HighlightWindow ? gesture.WindowAt(Pointer) : TwoPointSelection || Mode == CaptureMode.Scroll ? Rectangle.Empty : gesture.PressedWindow;
     internal Rectangle HighlightForOverlay(Rectangle monitor) => SelectingControl ? HasControlDrag ? Rectangle.Empty : ControlBounds : MarginSelection is Rectangle adjusted ? adjusted : FreeDesktopDrag
         ? targetDrag?.Monitors.Contains(monitor) == true ? monitor : Rectangle.Empty : HighlightedWindow;
     internal Rectangle DisplaySelection => SelectingControl ? HasControlDrag ? Rectangle.Empty : ControlBounds : MarginSelection ??
@@ -258,9 +261,11 @@ internal sealed partial class SessionController
         Func<bool, bool, DesktopSnapshot>? recapture = null, Func<Rectangle, IReadOnlyList<Rectangle>>? readWindows = null,
         Func<Point, string?>? readTitle = null, bool captureWindowsKey = false, Func<Point, CaptureWindow?>? findWindow = null,
         Func<CaptureWindow, IReadOnlyList<CaptureWindow>>? findWindowGroup = null,
-        Func<IReadOnlyList<DisplayTarget>>? readGuideDisplays = null)
+        Func<IReadOnlyList<DisplayTarget>>? readGuideDisplays = null,
+        Func<Rectangle, Services.AppSettings, Task<(Bitmap Image, Services.CaptureMetadata? Metadata)?>>? scrollCollector = null)
     {
         this.options = options;
+        this.scrollCollector = scrollCollector;
         this.recapture = recapture; this.readWindows = readWindows;
         this.readTitle = readTitle; this.captureWindowsKey = captureWindowsKey; this.findWindow = findWindow;
         this.findWindowGroup = findWindowGroup ?? (root => [root]);
@@ -268,7 +273,7 @@ internal sealed partial class SessionController
         activeAnchor = options.FixedAnchor;
         activeFixedSize = options.FixedSize ?? Services.PresetSettings.InitialFixedSize;
         this.readPresetDisplays = readPresetDisplays ?? Services.RegionCoordinates.ReadDisplays;
-        Mode = options.Mode;
+        Mode = options.Mode == CaptureMode.Scroll && !options.AllowScroll ? CaptureMode.Rectangle : options.Mode;
         this.gridChanged = gridChanged;
         this.guideChanged = guideChanged;
         ShowSelectionGuide = options.ShowSelectionGuide;
@@ -309,7 +314,7 @@ internal sealed partial class SessionController
                 enabled => ApplyMenuSetting(OutputSettings with { RecordMicrophone = enabled })),
             changeWindowSource: options.Intent == CaptureIntent.Screenshot && findWindow is not null
                 ? enabled => { exclusiveWindow = enabled; UpdateMenu(); RefreshOverlays(); } : null,
-            openSettingsLink: OpenCaptureSettings);
+            openSettingsLink: OpenCaptureSettings, allowScroll: options.AllowScroll);
         SelectionMenu.AddRectangleSelectionMethods(
             () => ChangeSelectionMethod(CaptureSelectionMethod.Drag), () => ChangeSelectionMethod(CaptureSelectionMethod.TwoClicks));
         SelectionMenu.AddPresentationOptions(OutputSettings.ShowMagnifier, ChangeMagnifierVisibility,
@@ -331,7 +336,7 @@ internal sealed partial class SessionController
 
     private SelectionGesture CreateGesture(CaptureMode mode, bool grid20)
     {
-        var next = new SelectionGesture(mode, SelectionMonitors, windows, activeFixedSize, activeAnchor) { Grid20 = grid20, AspectRatio = AspectRatio, WindowLimit = selectionBounds };
+        var next = new SelectionGesture(mode == CaptureMode.Scroll ? CaptureMode.Rectangle : mode, SelectionMonitors, windows, activeFixedSize, activeAnchor) { Grid20 = grid20, AspectRatio = AspectRatio, WindowLimit = selectionBounds };
         next.SetSnapPrecision(OutputSettings.SnapDistancePixels, OutputSettings.GridStepPixels);
         return next;
     }
@@ -511,7 +516,7 @@ internal sealed partial class SessionController
     internal void ApplyInputPreset(Services.SavedRegion preset) => _ = ApplyInputPresetAsync(preset);
     internal async Task ApplyInputPresetAsync(Services.SavedRegion preset)
     {
-        if (completed || refreshing) return;
+        if (completed || refreshing || preset.Mode == CaptureMode.Scroll && !options.AllowScroll) return;
         try
         {
             preset.Validate();
@@ -637,7 +642,7 @@ internal sealed partial class SessionController
     private void ChangeMode(CaptureMode mode, bool preferWgc)
     {
         bool isolated = mode == CaptureMode.Window && preferWgc && options.Intent == CaptureIntent.Screenshot && findWindow is not null;
-        if (completed || mode == Mode && isolated == exclusiveWindow) return;
+        if (completed || mode == CaptureMode.Scroll && !options.AllowScroll || mode == Mode && isolated == exclusiveWindow) return;
         try
         {
             if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
@@ -899,6 +904,13 @@ internal sealed partial class SessionController
     internal void ModifiersChanged() => UpdateModifiers(false);
     internal void AltKeyChanged() => UpdateModifiers(true);
 
+    internal static CaptureKeyAction ScrollSelectionAction(CaptureKeyAction action) => action switch
+    {
+        CaptureKeyAction.SelectDesktop => CaptureKeyAction.CrossMonitor,
+        CaptureKeyAction.SelectControl or CaptureKeyAction.HighlightWindow => CaptureKeyAction.None,
+        _ => action
+    };
+
     private void UpdateModifiers(bool queuedKeyState)
     {
         if (completed || refreshing || menuOpen || menuTransition) return;
@@ -918,10 +930,15 @@ internal sealed partial class SessionController
         var bindings = dragging ? OutputSettings.CaptureKeys : OutputSettings.CaptureBeforeKeys;
         CaptureKeyAction action = ResolveCaptureAction(bindings, modifiers, dragging);
         CaptureKeyAction beforeAction = OutputSettings.CaptureBeforeKeys.Resolve(modifiers);
-        CaptureKeyAction modeTap = TakeBeforeModeTap(pointer, modifiers, beforeAction, windowsTap);
+        if (Mode == CaptureMode.Scroll)
+        {
+            beforeAction = ScrollSelectionAction(beforeAction);
+            action = ScrollSelectionAction(action);
+        }
+        CaptureKeyAction modeTap = Mode == CaptureMode.Scroll ? CaptureKeyAction.None : TakeBeforeModeTap(pointer, modifiers, beforeAction, windowsTap);
         if (modeTap != CaptureKeyAction.None) hasSelectionInput = true;
         if (modeTap == CaptureKeyAction.SelectControl) controlToggled = !controlToggled;
-        UpdateBeforeWindowMode(modifiers, beforeAction, modeTap == CaptureKeyAction.HighlightWindow);
+        if (Mode != CaptureMode.Scroll) UpdateBeforeWindowMode(modifiers, beforeAction, modeTap == CaptureKeyAction.HighlightWindow);
         UpdateAltSnapTap(pointer, modifiers);
         bool wasDesktopHeld = desktopHeld;
         desktopHeld = !dragging && beforeAction == CaptureKeyAction.SelectDesktop;
@@ -952,7 +969,7 @@ internal sealed partial class SessionController
         ModifierHint = hint;
         bool selectControl = dragging ? action == CaptureKeyAction.SelectControl
             : controlToggled || beforeAction == CaptureKeyAction.SelectControl && OutputSettings.ControlActivation == CaptureActivation.Push;
-        UpdateControlSelection((selectControl || HasControlDrag) && options.Intent == CaptureIntent.Screenshot
+        UpdateControlSelection(Mode != CaptureMode.Scroll && (selectControl || HasControlDrag) && options.Intent == CaptureIntent.Screenshot
             && !SelectingDesktop && !HasWindowDrag && suppressedButtons == MouseButtons.None, pointer, preview: !dragging);
         bool snap = altSnapEnabled || action == CaptureKeyAction.Snap;
         bool height = action == CaptureKeyAction.LockHeight;
@@ -1146,7 +1163,7 @@ internal sealed partial class SessionController
             ShowMenu(overlay, eventPosition);
             return;
         }
-        if (click == CaptureClickAction.None)
+        if (click == CaptureClickAction.None || Mode == CaptureMode.Scroll && click == CaptureClickAction.Desktop)
         {
             overlay.Capture = false;
             return;
@@ -1215,6 +1232,7 @@ internal sealed partial class SessionController
         }
         CaptureSelection? selection = desktopPress ? SelectDesktopMonitors()
             : HasWindowDrag && targetDrag!.Windows.Count != 0 ? SelectDraggedWindows()
+            : Mode == CaptureMode.Scroll && !gesture.HasDragged ? null
             : gesture.End(gesture.RawCurrent, Destination, lastSnap && precisePointer is null,
                 lastHeightLock, lastWidthLock, lastRectangleAction, precisePointer.HasValue);
         if (selection is not null) selection = ApplyWindowMargin(selection);
@@ -1467,6 +1485,23 @@ internal sealed partial class SessionController
         try
         {
             CloseOverlays();
+            if (Mode == CaptureMode.Scroll && !entireMonitor && options.AllowScroll)
+            {
+                Rectangle viewport = selection.Bounds;
+                Point center = new(viewport.X + viewport.Width / 2, viewport.Y + viewport.Height / 2);
+                var settings = OutputSettings with { DefaultDestination = Destination };
+                var scroll = scrollCollector is null
+                    ? await ScrollCapture.CollectAsync(viewport, settings, findWindow?.Invoke(center)?.Handle ?? 0, Snapshot.Context?.FocusedElement)
+                    : await scrollCollector(viewport, settings);
+                if (scroll is { } capture)
+                    completion.TrySetResult(new CaptureOutcome(capture.Image, selection with
+                    {
+                        ReplaySource = new CaptureReplaySource.Scroll(viewport)
+                    }, outputSettings: settings, metadata: capture.Metadata));
+                else
+                    completion.TrySetResult(new CaptureOutcome(null, null));
+                return;
+            }
             if (OutputSettings.ShareCapturePresentation && captureWindowsKey)
                 CaptureNative.SynchronizeDesktop();
             if (!options.SelectionOnly && (options.Intent == CaptureIntent.Screenshot || options.IncludeRecordingImage))

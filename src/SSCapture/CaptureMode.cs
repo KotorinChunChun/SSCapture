@@ -1,3 +1,3 @@
 namespace SSCapture;
 
-public enum CaptureMode { Rectangle, Window, FullScreen, Freeform, FixedRegion }
+public enum CaptureMode { Rectangle, Window, FullScreen, Freeform, FixedRegion, Scroll }

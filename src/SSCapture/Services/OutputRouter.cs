@@ -110,7 +110,8 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                     if (!retry.IsRetry && !fileCancelled) captureSucceeded?.Invoke(sequence, recipe);
                     onDelivered?.Invoke();
                 }
-            }, captureBounds, retry.PrepareFile, string.IsNullOrWhiteSpace(windowTitle)
+            }, captureBounds, retry.PrepareFile, replaySource is CaptureReplaySource.Scroll
+                ? $"スクロール撮影 {image.Width}×{image.Height}px" : string.IsNullOrWhiteSpace(windowTitle)
                 ? DescribeCapture(captureBounds, (replaySource as CaptureReplaySource.Monitors)?.Bounds) : $"ウィンドウ「{windowTitle}」" + (crop.IsEmpty ? "" : $"【{outputBounds.X},{outputBounds.Y} / {outputBounds.Width}×{outputBounds.Height}px】"), retry,
             sidecar is null ? null : async path => { if (beforeMetadataSave is not null) await beforeMetadataSave(path); await Task.Run(() => sidecar.Write(path)); },
             settings.ShowCaptureNotification

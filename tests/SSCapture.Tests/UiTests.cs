@@ -495,13 +495,13 @@ internal static partial class Program
             LayoutTree(form);
             Check(categories.Parent!.ClientSize.Width < 420, "Dock断線を寸法検査で検出できない");
         });
-        Run("撮影モード5種と未接続マイクIDが設定に保持される", () =>
+        Run("撮影モード6種と未接続マイクIDが設定に保持される", () =>
         {
             foreach (var captureMode in Enum.GetValues<CaptureMode>())
             {
                 using var form = NewSettings(new AppSettings { DefaultMode = captureMode, MicrophoneDeviceId = "missing" });
                 var combo = (ComboBox)form.Controls.Find("CaptureMode", true).Single();
-                Equal(6, combo.Items.Count);
+                Equal(7, combo.Items.Count);
                 Equal((int)captureMode, combo.SelectedIndex);
                 var microphones = (ComboBox)form.Controls.Find("MicrophoneDevice", true).Single();
                 Equal("missing", ((MicrophoneInfo)microphones.SelectedItem!).Id);

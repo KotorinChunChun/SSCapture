@@ -14,6 +14,7 @@ internal abstract record CaptureReplaySource
     }
     internal sealed record ControlGroup(IReadOnlyList<CaptureControlTarget> Targets, bool Isolated) : CaptureReplaySource;
     internal sealed record Monitors(IReadOnlyList<Rectangle> Bounds) : CaptureReplaySource;
+    internal sealed record Scroll(Rectangle Viewport) : CaptureReplaySource;
 }
 
 internal static class CaptureWindowGroups

@@ -57,7 +57,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         int defaultPadding = 0, Action<int>? changePadding = null, IReadOnlyList<CapturePreset>? presets = null, Action<CapturePreset>? applyPreset = null,
         IReadOnlyList<ExternalApplication>? applications = null, string selectedApplication = "", Action<string>? changeApplication = null,
         IReadOnlyList<SavedRegion>? inputPresets = null, Action<SavedRegion>? applyInputPreset = null, CaptureMenuEditing? editing = null,
-        Action<bool>? changeWindowSource = null, Action<CaptureSettingsDestination, string?>? openSettingsLink = null)
+        Action<bool>? changeWindowSource = null, Action<CaptureSettingsDestination, string?>? openSettingsLink = null, bool allowScroll = true)
     {
         this.cancel = cancel;
         Font = menuFont;
@@ -80,6 +80,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             var parent = Menu("撮影モード", "CaptureModeMenu", range.DropDownItems);
             foreach (var value in Enum.GetValues<CaptureMode>())
             {
+                if (value == CaptureMode.Scroll && (!allowScroll || editing is { Screenshot: false })) continue;
                 var item = Item(UI.SettingsForm.ModeName(value), "Mode" + value, () => changeMode(value), parent.DropDownItems);
                 item.Tag = value; modes[value] = item;
             }
@@ -87,7 +88,9 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         if (applyInputPreset is not null)
         {
             var parent = inputPresetsMenu;
-            foreach (var preset in inputPresets ?? []) Item(preset.Name, preset.Id, () => applyInputPreset(preset), parent.DropDownItems);
+            foreach (var preset in inputPresets ?? [])
+                if (preset.Mode != CaptureMode.Scroll || allowScroll && editing is not { Screenshot: false })
+                    Item(preset.Name, preset.Id, () => applyInputPreset(preset), parent.DropDownItems);
             EmptyHint(parent);
         }
         if (editing is not null)
@@ -219,15 +222,15 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         currentMode = mode;
         foreach (var pair in modes) pair.Value.Checked = pair.Key == mode;
         if (AllCommands.FirstOrDefault(i => i.Name == "AspectRatioMenu") is { } aspect)
-            aspect.Enabled = mode == CaptureMode.Rectangle;
-        if (selectionMethod is not null) selectionMethod.Available = mode == CaptureMode.Rectangle;
+            aspect.Enabled = mode is CaptureMode.Rectangle or CaptureMode.Scroll;
+        if (selectionMethod is not null) selectionMethod.Available = mode is CaptureMode.Rectangle or CaptureMode.Scroll;
         if (windowCrop is not null) windowCrop.Available = mode is CaptureMode.Rectangle or CaptureMode.Window;
     }
 
     internal void AddRectangleSelectionMethods(Action selectByDrag, Action selectByTwoClicks)
     {
         selectionMethod = Menu("選択方法", "RectangleSelectionMethod", Command("CaptureRangeGroup").DropDownItems);
-        selectionMethod.Available = currentMode == CaptureMode.Rectangle;
+        selectionMethod.Available = currentMode is CaptureMode.Rectangle or CaptureMode.Scroll;
         selectDrag = Item("ドラッグ", "SelectionMethodDrag", selectByDrag, selectionMethod.DropDownItems);
         selectTwoClicks = Item("2点クリック", "SelectionMethodTwoClicks", selectByTwoClicks, selectionMethod.DropDownItems);
         SetRectangleSelectionMethod(false);

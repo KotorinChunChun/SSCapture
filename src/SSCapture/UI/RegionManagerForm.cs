@@ -17,6 +17,7 @@ internal sealed class RegionManagerForm : Form
     private readonly ComboBox anchor;
     private readonly Label displayInfo, status;
     private readonly Button delete, addLast, previewBounds;
+    private static readonly int FixedCoordinatesModeIndex = Enum.GetValues<CaptureMode>().Length;
     private readonly ComboBox captureMode;
     private readonly ComboBox selectionMethod;
     private readonly CheckBox coordinates, freezeFrame, includeCursor;
@@ -212,7 +213,7 @@ internal sealed class RegionManagerForm : Form
         {
             x.Enabled = y.Enabled = previewBounds.Enabled = coordinates.Checked;
             captureMode.Enabled = profileSettings is not null || !coordinates.Checked;
-            selectionMethod.Enabled = !coordinates.Checked && captureMode.SelectedIndex == (int)CaptureMode.Rectangle;
+            selectionMethod.Enabled = !coordinates.Checked && (CaptureMode)captureMode.SelectedIndex is CaptureMode.Rectangle or CaptureMode.Scroll;
         }
         coordinates.CheckedChanged += (_, _) => UpdateCoordinates();
         captureMode.SelectedIndexChanged += (_, _) => UpdateCoordinates();
@@ -258,8 +259,8 @@ internal sealed class RegionManagerForm : Form
         {
             width.Name = "FixedWidth"; height.Name = "FixedHeight"; anchor.Name = "FixedCaptureAnchor";
             conditions.Controls.Remove(conditions.GetControlFromPosition(0, 1)!); conditions.Controls.Remove(coordinates); conditions.RowStyles[1].Height = 0;
-            captureMode.SelectedIndexChanged += (_, _) => { if (!updatingFields) coordinates.Checked = captureMode.SelectedIndex == 5; };
-            if (editing?.UseFixedCoordinates == true) captureMode.SelectedIndex = 5;
+            captureMode.SelectedIndexChanged += (_, _) => { if (!updatingFields) coordinates.Checked = captureMode.SelectedIndex == FixedCoordinatesModeIndex; };
+            if (editing?.UseFixedCoordinates == true) captureMode.SelectedIndex = FixedCoordinatesModeIndex;
             body.ColumnStyles[0] = new ColumnStyle(SizeType.Absolute, SettingsEditorActions.PresetListWidth + SettingsEditorActions.PresetListGap);
             body.ColumnStyles[1] = new ColumnStyle(SizeType.Percent, 100);
             left.Margin = new Padding(0, 0, SettingsEditorActions.PresetListGap, 0);
@@ -426,7 +427,7 @@ internal sealed class RegionManagerForm : Form
             var connected = displays();
             Rectangle bounds = RegionCoordinates.Resolve(lastRegion, connected);
             NewRegion(); SetBoundsFields(bounds); pickedBounds = true; coordinates.Checked = true;
-            if (profileSettings is not null) captureMode.SelectedIndex = 5;
+            if (profileSettings is not null) captureMode.SelectedIndex = FixedCoordinatesModeIndex;
             ShowDisplays(connected); SetStatus("前回の範囲を読み込みました（未保存）。");
         }
         catch (Exception ex) { SetStatus(ex.Message, true); }
@@ -438,7 +439,7 @@ internal sealed class RegionManagerForm : Form
         updatingFields = true;
         automaticName = region.Name == RegionAutoName.Create(region.Shortcut, region.Bounds);
         name.Text = region.Name; shortcut.Value = region.Shortcut;
-        captureMode.SelectedIndex = profileSettings is not null && region.UseFixedCoordinates ? 5 : (int)region.Mode; coordinates.Checked = region.UseFixedCoordinates; freezeFrame.Checked = region.FreezeFrame; includeCursor.Checked = region.IncludeCursor; anchor.SelectedIndex = (int)region.FixedAnchor;
+        captureMode.SelectedIndex = profileSettings is not null && region.UseFixedCoordinates ? FixedCoordinatesModeIndex : (int)region.Mode; coordinates.Checked = region.UseFixedCoordinates; freezeFrame.Checked = region.FreezeFrame; includeCursor.Checked = region.IncludeCursor; anchor.SelectedIndex = (int)region.FixedAnchor;
         selectionMethod.SelectedIndex = (int)region.SelectionMethod;
         LoadAudio(region);
         try
@@ -485,7 +486,7 @@ internal sealed class RegionManagerForm : Form
             ? editing with { Name = name.Text.Trim(), Shortcut = shortcut.Value }
             : RegionCoordinates.FromBounds(name.Text.Trim(), bounds, displays(), editing?.Id, shortcut.Value);
         next = next with { Name = name.Text.Trim(), Shortcut = shortcut.Value, ProfileVersion = 2, UseFixedCoordinates = coordinates.Checked, BuiltInKey = editing?.BuiltInKey,
-            Mode = captureMode.SelectedIndex == 5 ? CaptureMode.FixedRegion : (CaptureMode)captureMode.SelectedIndex, FixedAnchor = ((AnchorItem)anchor.SelectedItem!).Value,
+            Mode = captureMode.SelectedIndex == FixedCoordinatesModeIndex ? CaptureMode.FixedRegion : (CaptureMode)captureMode.SelectedIndex, FixedAnchor = ((AnchorItem)anchor.SelectedItem!).Value,
             FreezeFrame = freezeFrame.Checked, IncludeCursor = includeCursor.Checked, PaddingPixels = editing?.PaddingPixels ?? 0,
             SelectionMethod = (Capture.CaptureSelectionMethod)selectionMethod.SelectedIndex,
             IsDefault = editing?.IsDefault == true || (profileSettings is not null && regions.Count == 0),
@@ -565,7 +566,7 @@ internal sealed class RegionManagerForm : Form
             var connected = displays();
             _ = RegionCoordinates.FromBounds("選択範囲", bounds.Value, connected);
             SetBoundsFields(bounds.Value); pickedBounds = true; coordinates.Checked = true; ShowDisplays(connected);
-            if (profileSettings is not null) captureMode.SelectedIndex = 5;
+            if (profileSettings is not null) captureMode.SelectedIndex = FixedCoordinatesModeIndex;
             SetStatus("選択した範囲は未保存です。");
         }
         catch (Exception ex) { if (!IsDisposed) SetStatus("範囲を選択できませんでした: " + ex.Message, true); }

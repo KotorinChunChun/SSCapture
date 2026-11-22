@@ -9,6 +9,7 @@ internal sealed class CaptureWindowsKey : IDisposable
     private readonly HookProcedure callback;
     private readonly Func<bool> ignoreTap;
     private readonly Func<bool>? ownsSelectionInput;
+    private readonly bool interceptWindowsKey;
     private bool escapeHeld, escapeRequested;
     private nint hook;
     private int held;
@@ -42,10 +43,11 @@ internal sealed class CaptureWindowsKey : IDisposable
         return value;
     }
 
-    internal CaptureWindowsKey(Func<bool> ignoreTap, Func<bool>? ownsSelectionInput = null)
+    internal CaptureWindowsKey(Func<bool> ignoreTap, Func<bool>? ownsSelectionInput = null, bool interceptWindowsKey = true)
     {
         this.ignoreTap = ignoreTap;
         this.ownsSelectionInput = ownsSelectionInput;
+        this.interceptWindowsKey = interceptWindowsKey;
         callback = OnKey;
         hook = SetWindowsHookEx(13 /* WH_KEYBOARD_LL */, callback, GetModuleHandle(null), 0);
         if (hook == 0) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
@@ -66,6 +68,7 @@ internal sealed class CaptureWindowsKey : IDisposable
                 escapeHeld = down;
                 return 1;
             }
+            if (!interceptWindowsKey) return CallNextHookEx(0, code, message, data);
             if ((previouslyHeld & side) != 0)
             {
                 if (!down) previouslyHeld &= ~side;

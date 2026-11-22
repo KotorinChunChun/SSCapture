@@ -113,6 +113,8 @@ internal static class CaptureCommandLine
         settings.Validate();
         settings = settings.EnsurePresets();
         var preset = ResolvedPresetCapture.Resolve(settings, request.InputPresetId, request.OutputPresetId);
+        if (request.Schedule is not null && request.UsePresetMode && preset.Input.Mode == CaptureMode.Scroll)
+            throw new ArgumentException("スクロール撮影は手動操作が必要です。予約撮影では固定座標または通常の範囲選択を指定してください。");
         var output = request.OutputPresetId is null && request.Schedule is CaptureSchedule.Periodic
             ? CaptureTimerOutput.InitialPeriodic(settings) : preset.Output;
         settings = output == preset.Output ? preset.Settings : output.Apply(preset.Input.Apply(settings)).ResolveEditors();

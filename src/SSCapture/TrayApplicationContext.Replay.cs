@@ -29,6 +29,19 @@ internal sealed partial class TrayApplicationContext
             var displays = RegionCoordinates.ReadDisplays();
             var regions = recipe.RegionsFor(displays);
             Rectangle bounds = regions?.Aggregate(Rectangle.Union) ?? recipe.Resolve(displays);
+            if (recipe.RequiresScroll)
+            {
+                Point center = new(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
+                var target = CaptureNative.CaptureWindows(displays.Select(display => display.Bounds).Aggregate(Rectangle.Union))
+                    .FirstOrDefault(window => window.Bounds.Contains(center));
+                var scroll = await ScrollCapture.CollectAsync(bounds, captureSettings, target?.Handle ?? 0);
+                if (scroll is not { } captureScroll) return;
+                using var scrollImage = captureScroll.Image;
+                StoreStatus(await InstantCapture.DeliverAsync(scrollImage, captureSettings, capturedAt, output, regionName: "再撮影",
+                    captureBounds: bounds, metadata: captureScroll.Metadata, preserveOutputs: true,
+                    replaySource: new CaptureReplaySource.Scroll(bounds)));
+                return;
+            }
             var capture = await InstantCapture.TakeWithContextAsync(bounds, captureSettings);
             using var raw = capture.Image;
             using var image = regions is null ? recipe.Shape(raw) : CaptureGeometry.ComposeRegions(raw, bounds, bounds, regions);
