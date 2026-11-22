@@ -18,7 +18,7 @@ internal sealed record CaptureKeyMap(
     CaptureKeyAction ShiftAlt = CaptureKeyAction.None,
     CaptureKeyAction ShiftWin = CaptureKeyAction.None,
     CaptureKeyAction AltWin = CaptureKeyAction.None,
-    bool SpaceEnabled = false, CaptureAnchorCycle SpaceCycle = CaptureAnchorCycle.Legacy)
+    bool SpaceEnabled = false, CaptureAnchorCycle SpaceCycle = CaptureAnchorCycle.Legacy, bool WheelAdjustRectangle = true)
 {
     internal static CaptureKeyMap BeforeDefaults => CaptureKeyDefaults.Current.Before;
 

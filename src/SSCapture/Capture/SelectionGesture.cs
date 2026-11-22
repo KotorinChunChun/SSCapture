@@ -261,16 +261,45 @@ internal sealed class SelectionGesture
         (int steps, rectangleWheelRemainder) = CaptureTargetMargin.WheelSteps(rectangleWheelRemainder, wheelDelta);
         if (steps != 0)
         {
-            int previous = Selection == rectangleBase ? 0 : (Selection.Width - rectangleBase.Width) / 2;
-            rectangleMargin = previous + steps;
+            int previous = !horizontal.IsLocked ? Selection.Width - rectangleBase.Width : Selection.Height - rectangleBase.Height;
+            if (centerMove is not null || IsCentered) previous /= 2;
+            rectangleMargin = Math.Clamp((dragAspect.HasValue || AspectRatio != CaptureAspectRatio.Free ? rectangleMargin : previous) + steps, -32768, 32768);
             Selection = AdjustedRectangle();
             if (centerMove is not null) Current = AnchorPoint(Selection, CaptureAnchor.Center);
         }
         return true;
     }
 
-    private Rectangle AdjustedRectangle() => rectangleMargin != 0 && desktopBounds is Rectangle desktop && CaptureGeometry.IsUsable(rectangleBase)
-        ? CaptureTargetMargin.Apply(rectangleBase, rectangleMargin, desktop, CaptureGeometry.MinimumSize).Bounds : rectangleBase;
+    private Rectangle AdjustedRectangle()
+    {
+        if (rectangleMargin == 0 || desktopBounds is not Rectangle desktop || !CaptureGeometry.IsUsable(rectangleBase))
+            return rectangleBase;
+        if (centerMove is not null)
+            return CaptureTargetMargin.Apply(rectangleBase, rectangleMargin, desktop, CaptureGeometry.MinimumSize).Bounds;
+
+        bool centered = IsCentered;
+        int directionX = Current.X < start.X ? -1 : 1;
+        int directionY = Current.Y < start.Y ? -1 : 1;
+        Rectangle limits = centered ? CenteredLimits() : desktop;
+        int minimum = centered ? 1 : CaptureGeometry.MinimumSize;
+        int x = Adjust(Current.X, start.X, directionX, limits.Left, limits.Right, horizontal.IsLocked);
+        int y = Adjust(Current.Y, start.Y, directionY, limits.Top, limits.Bottom, vertical.IsLocked);
+        var adjusted = new Point(x, y);
+        Point endpoint = dragAspect is double ratio && AspectRatio == CaptureAspectRatio.Free
+            ? AspectRatios.ConstrainDrag(start, adjusted, ratio, limits)
+            : AspectRatios.Constrain(start, adjusted, AspectRatio, limits, horizontal.IsLocked, vertical.IsLocked);
+        Rectangle resized = CaptureGeometry.FromDrag(centered ? Reflect(endpoint) : start, endpoint);
+        return CaptureGeometry.IsUsable(resized) ? resized : rectangleBase;
+
+        int Adjust(int current, int origin, int direction, int low, int high, bool locked)
+        {
+            if (locked) return current;
+            long distance = Math.Abs((long)current - origin);
+            long maximum = direction < 0 ? (long)origin - low : (long)high - origin;
+            long delta = Math.Clamp(distance + rectangleMargin, Math.Min(minimum, maximum), maximum);
+            return (int)(origin + direction * delta);
+        }
+    }
 
     private void ResetRectangleAdjustments()
     {

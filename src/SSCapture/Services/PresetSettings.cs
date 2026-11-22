@@ -116,9 +116,7 @@ internal static class PresetSettings
         {
             var entry = entries[index];
             if (!IsLegacySlot(entry, old4K, old4K)) continue;
-            bool used = entry.IsDefault || settings.PresetCaptureShortcuts?.Any(row => row.InputPresetId == entry.Id) == true;
-            if (!used && IsUnedited(entry, new Size(3840, 2160))) entries.RemoveAt(index);
-            else if (entry.BuiltInKey is not null) entries[index] = entry with { BuiltInKey = null };
+            if (entry.BuiltInKey is not null) entries[index] = entry with { BuiltInKey = null };
         }
 
         var initial = settings.SavedRegions.Single(preset => preset.IsDefault);

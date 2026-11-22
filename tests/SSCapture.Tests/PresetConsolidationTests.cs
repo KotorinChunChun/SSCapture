@@ -154,7 +154,7 @@ internal static partial class Program
                 PresetCaptureShortcuts = keys.Where(key => key.InputPresetId != old4K.Id).ToArray()
             }).ApplyDefaults();
             Equal(custom.Id, withCustomDefault.SavedRegions.Single(p => p.IsDefault).Id);
-            Check(withCustomDefault.SavedRegions.All(p => p.Id != old4K.Id), "未使用の標準4Kが残った");
+            Equal(old4K.Bounds, ResolvedPresetCapture.Resolve(withCustomDefault, old4K.Id, null).Input.Bounds);
             Equal(custom.Bounds.Size, new Size(withCustomDefault.FixedWidth, withCustomDefault.FixedHeight));
         }));
         Run("入力プリセットの初期化は新しい寸法を復元し、新規の固定サイズも960×540で保存する", () =>

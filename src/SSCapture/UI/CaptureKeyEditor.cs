@@ -9,6 +9,7 @@ internal sealed class CaptureKeyEditor : UserControl
     private readonly Dictionary<CaptureModifiers, ComboBox> commands = [];
     private readonly Dictionary<MouseButtons, ComboBox> clicks = [];
     private readonly ComboBox? space;
+    private readonly CheckBox? wheelAdjust;
     private CaptureAnchorCycle loadedSpaceCycle;
     private readonly ComboBox? controlActivation, windowActivation;
 
@@ -25,7 +26,7 @@ internal sealed class CaptureKeyEditor : UserControl
         Dock = DockStyle.Fill;
         AutoScroll = true;
         var table = new TableLayoutPanel { Name = prefix + "Grid", ColumnCount = 5,
-            RowCount = beforeSelection ? 10 : 9, Dock = DockStyle.Top };
+            RowCount = 10, Dock = DockStyle.Top };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         for (int column = 0; column < Modifiers.Length; column++)
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
@@ -72,6 +73,10 @@ internal sealed class CaptureKeyEditor : UserControl
             space = AddChoice(table, 1, clickRow++, "CaptureKeysSpace", "Space",
                 ["なし", "対角移動", "四方移動", "四方と中心"], SpaceIndex(map));
             table.SetColumnSpan(space, 4);
+            wheelAdjust = new CheckBox { Name = "CaptureKeysWheelAdjustRectangle", Text = "ホイールで撮影範囲を調整する",
+                AutoSize = true, Anchor = AnchorStyles.Left, Checked = map.WheelAdjustRectangle };
+            table.Controls.Add(wheelAdjust, 1, clickRow++);
+            table.SetColumnSpan(wheelAdjust, 4);
         }
 
         if (beforeSelection)
@@ -135,6 +140,7 @@ internal sealed class CaptureKeyEditor : UserControl
 
         loadedSpaceCycle = map.SpaceCycle;
         if (space is not null) space.SelectedIndex = SpaceIndex(map);
+        if (wheelAdjust is not null) wheelAdjust.Checked = map.WheelAdjustRectangle;
         foreach (var (button, combo) in clicks)
         {
             var action = space is null ? mouse.Before(button) : mouse.During(button);
@@ -148,7 +154,7 @@ internal sealed class CaptureKeyEditor : UserControl
         ActionAt(CaptureModifiers.Ctrl), ActionAt(CaptureModifiers.Shift), ActionAt(CaptureModifiers.Alt), ActionAt(CaptureModifiers.Win),
         ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Shift), ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Alt),
         ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Win), ActionAt(CaptureModifiers.Shift | CaptureModifiers.Alt),
-        ActionAt(CaptureModifiers.Shift | CaptureModifiers.Win), ActionAt(CaptureModifiers.Alt | CaptureModifiers.Win), space?.SelectedIndex > 0, SelectedSpaceCycle);
+        ActionAt(CaptureModifiers.Shift | CaptureModifiers.Win), ActionAt(CaptureModifiers.Alt | CaptureModifiers.Win), space?.SelectedIndex > 0, SelectedSpaceCycle, wheelAdjust?.Checked ?? true);
 
     private static int SpaceIndex(CaptureKeyMap map) => !map.SpaceEnabled ? 0 : Math.Max(1, (int)map.SpaceCycle);
 

@@ -239,7 +239,7 @@ internal static partial class Program
             gesture.Move(new(-230, -155));
             Equal(new Rectangle(-230, -155, 140, 105), gesture.End(new(-230, -155), OutputDestination.None)!.Bounds);
         });
-        Run("矩形のホイールはドラッグ中だけ四辺を調整し、移動と確定に寸法を反映する", () =>
+        Run("矩形のホイールは始点を固定して終点側を調整し、移動と確定に寸法を反映する", () =>
         {
             var gesture = new SelectionGesture(CaptureMode.Rectangle, [new(-100, -100, 400, 300)], []);
             Check(!gesture.ResizeRectangle(120), "未押下で範囲を変更した");
@@ -249,12 +249,12 @@ internal static partial class Program
             Check(gesture.ResizeRectangle(60), "高精細ホイールを受け付けない");
             Equal(new Rectangle(-60, 10, 70, 60), gesture.Selection);
             gesture.ResizeRectangle(60);
-            Equal(new Rectangle(-61, 9, 72, 62), gesture.Selection);
+            Equal(new Rectangle(-60, 10, 71, 61), gesture.Selection);
             Equal(new Point(11, 71), gesture.MagnifierPoint);
             gesture.Move(new(40, 70));
-            Equal(new Rectangle(-61, 9, 102, 62), gesture.Selection);
+            Equal(new Rectangle(-60, 10, 101, 61), gesture.Selection);
             gesture.ResizeRectangle(-240);
-            Equal(new Rectangle(-59, 11, 98, 58), gesture.Selection);
+            Equal(new Rectangle(-60, 10, 99, 59), gesture.Selection);
             var adjusted = gesture.Selection;
             gesture.Space(cycle: CaptureAnchorCycle.Corners);
             Equal(adjusted, gesture.End(gesture.RawCurrent, OutputDestination.None)!.Bounds);

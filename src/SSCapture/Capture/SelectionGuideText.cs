@@ -24,7 +24,7 @@ internal static class SelectionGuideText
         else if (dragging && mode == CaptureMode.Rectangle)
         {
             if (spaceEnabled) lines.Add(SpaceOperation(spaceCycle));
-            if (!twoPoints) lines.Add("ホイール　選択範囲を拡大／縮小");
+            if (keys.WheelAdjustRectangle) lines.Add("ホイール　撮影範囲の調整");
         }
 
         var clicks = new List<string>();

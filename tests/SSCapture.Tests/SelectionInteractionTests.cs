@@ -7,7 +7,7 @@ internal static partial class Program
     private static void SelectionInteractionTests()
     {
         static SessionController RectangleSelectionSession(Services.AppSettings settings) =>
-            OutputSession(settings with { CaptureKeys = new(), CaptureBeforeKeys = new() });
+            OutputSession(settings with { CaptureKeys = new(WheelAdjustRectangle: settings.CaptureKeys.WheelAdjustRectangle), CaptureBeforeKeys = new() });
 
         Run("ポインタ横のガイドは左単押しのウィンドウ名を負座標のドラッグ範囲に切り替える", () =>
         {
@@ -135,7 +135,7 @@ internal static partial class Program
                 session.MouseDown(overlay, MouseButtons.Left, start, Keys.None);
                 session.ApplyPointerInput(end, CaptureModifiers.None);
                 session.MouseWheel(end, 240);
-                var grown = new Rectangle(38, 48, 204, 134);
+                var grown = new Rectangle(40, 50, 202, 132);
                 Equal(grown, session.DisplaySelection);
                 session.MouseUp(MouseButtons.Left, end, Keys.None);
                 Check(session.Completion.IsCompletedSuccessfully, "ホイール調整した矩形を確定できない");
@@ -144,6 +144,38 @@ internal static partial class Program
                 Equal(grown.Size, result.Image!.Size);
             }
             finally { session.Cancel(); }
+        });
+        Run("2点クリックの終点待ちでホイール調整し、設定OFF時は元の寸法を保つ", () =>
+        {
+            foreach (bool enabled in new[] { true, false })
+            {
+                var session = RectangleSelectionSession(new Services.AppSettings
+                {
+                    SelectionMethod = CaptureSelectionMethod.TwoClicks,
+                    CaptureKeys = new(WheelAdjustRectangle: enabled)
+                });
+                using var overlay = new CaptureOverlay(session, new(0, 0, 400, 300));
+                try
+                {
+                    _ = overlay.Handle;
+                    var start = new Point(40, 50);
+                    var end = new Point(240, 180);
+                    session.MouseWheel(start, 120);
+                    Equal(Rectangle.Empty, session.DisplaySelection);
+                    session.MouseDown(overlay, MouseButtons.Left, start, Keys.None);
+                    session.MouseUp(MouseButtons.Left, start, Keys.None);
+                    session.ApplyPointerInput(end, CaptureModifiers.None);
+                    session.MouseWheel(end, 120);
+                    var expected = enabled ? new Rectangle(40, 50, 201, 131) : new Rectangle(40, 50, 200, 130);
+                    Equal(expected, session.DisplaySelection);
+                    session.MouseDown(overlay, MouseButtons.Left, end, Keys.None);
+                    session.MouseUp(MouseButtons.Left, end, Keys.None);
+                    Check(session.Completion.IsCompletedSuccessfully, "2点目の調整が確定しない");
+                    using var outcome = session.Completion.Result;
+                    Equal(expected, outcome.Selection!.Bounds);
+                }
+                finally { session.Cancel(); }
+            }
         });
         Run("矩形の2点クリックは1点目で確定せず終点まで同じ始点を使う", () =>
         {
