@@ -122,22 +122,19 @@ internal sealed partial class SettingsForm : Form
         tabs.TabPages.Add(shortcutPage);
         var keys = Page(shortcutTabs, "PC作業中");
         workShortcutPage = (TabPage)keys.Parent!;
-        keys.ColumnStyles[0].Width = 196;
-        keys.RowCount = 2;
+        keys.RowCount = 1;
         keys.RowStyles.Clear();
-        keys.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         keys.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        lastRecipeKey = KeyField(keys, "直前の設定で再撮影", "LastRecipeShortcut", settings.LastRecipeShortcut, 0);
         presetShortcutEditor = new PresetCaptureShortcutEditor(settings.PresetCaptureShortcuts ?? [], SaveWorkingShortcuts);
-        keys.Controls.Add(presetShortcutEditor, 0, 1);
+        keys.Controls.Add(presetShortcutEditor, 0, 0);
         keys.SetColumnSpan(presetShortcutEditor, 2);
         captureBeforeKeys = new CaptureKeyEditor(settings.CaptureBeforeKeys, settings.CaptureMouse, beforeSelection: true,
             settings.ControlActivation, settings.WindowActivation);
         captureKeys = new CaptureKeyEditor(settings.CaptureKeys, settings.CaptureMouse, beforeSelection: false);
-        var beforePage = new TabPage("撮影範囲設定前") { BackColor = BackColor, Padding = new Padding(8) };
-        var dragPage = new TabPage("撮影ドラッグ中") { BackColor = BackColor, Padding = new Padding(8) };
-        beforePage.Controls.Add(captureBeforeKeys);
-        dragPage.Controls.Add(captureKeys);
+        var beforePage = CaptureShortcutPage(FirstPointTab, captureBeforeKeys,
+            "撮影を開始してから、1点目を決めるまでに使うキーとクリックを設定します。");
+        var dragPage = CaptureShortcutPage(SecondPointTab, captureKeys,
+            "ドラッグ中や、2点クリックで1点目を指定した後に使うキーとクリックを設定します。");
         shortcutTabs.TabPages.AddRange([beforePage, dragPage]);
         var regions = inputs;
         fixedWidth = PixelField(regions, "固定幅 (px)", "FixedWidth", settings.FixedWidth, 1);
@@ -158,17 +155,19 @@ internal sealed partial class SettingsForm : Form
         shortcutTabs.TabPages.Insert(1, instantPage);
         ((TabPage)instant.Parent!).AutoScroll = true;
         instant.Dock = DockStyle.Top;
-        instant.Height = 440;
-        instant.RowCount = 11;
+        instant.Height = 480;
+        instant.ColumnStyles[0].Width = 196;
+        instant.RowCount = 12;
         instant.RowStyles.Clear();
-        for (int row = 0; row < 11; row++) instant.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        for (int row = 0; row < instant.RowCount; row++) instant.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        lastRecipeKey = KeyField(instant, "直前の設定で再撮影", "LastRecipeShortcut", settings.LastRecipeShortcut, 0);
         var displaySummary = new Label { Name = "InstantDisplays", Dock = DockStyle.Fill, AutoEllipsis = true };
-        instant.Controls.Add(displaySummary, 0, 0); instant.SetColumnSpan(displaySummary, 2);
+        instant.Controls.Add(displaySummary, 0, 1); instant.SetColumnSpan(displaySummary, 2);
         var displayLabels = new Label[10];
         for (int index = 0; index < 10; index++)
         {
-            instantKeys[index] = KeyField(instant, $"画面{index + 1}", $"InstantShortcut{index + 1}", settings.InstantShortcuts[index], index + 1);
-            displayLabels[index] = (Label)instant.GetControlFromPosition(0, index + 1)!;
+            instantKeys[index] = KeyField(instant, $"画面{index + 1}", $"InstantShortcut{index + 1}", settings.InstantShortcuts[index], index + 2);
+            displayLabels[index] = (Label)instant.GetControlFromPosition(0, index + 2)!;
             displayLabels[index].Name = $"InstantDisplayLabel{index + 1}";
         }
         void RefreshInstantDisplays()
@@ -495,8 +494,7 @@ internal sealed partial class SettingsForm : Form
     {
         var error = CommitEditorSettings(committed with
         {
-            PresetCaptureShortcuts = presetShortcutEditor.Rows,
-            LastRecipeShortcut = lastRecipeKey.Value
+            PresetCaptureShortcuts = presetShortcutEditor.Rows
         });
         SetStatus(error ?? "PC作業中のショートカットを保存しました。", error is not null);
     }
@@ -608,6 +606,19 @@ internal sealed partial class SettingsForm : Form
         };
         return (executable, parameters);
     }
+    private const string FirstPointTab = "1点目";
+    private const string SecondPointTab = "2点目";
+
+    private TabPage CaptureShortcutPage(string title, CaptureKeyEditor editor, string description)
+    {
+        var page = new TabPage(title) { BackColor = BackColor, Padding = new Padding(8) };
+        var explanation = new Label { Name = "ShortcutStageDescription", Text = description, AutoSize = true,
+            Dock = DockStyle.Top, Padding = new Padding(3, 3, 3, 8) };
+        page.Controls.Add(editor);
+        page.Controls.Add(explanation);
+        return page;
+    }
+
     private static TableLayoutPanel Page(TabControl tabs, string title)
     {
         var page = new TabPage(title) { BackColor = Color.FromArgb(247, 249, 251), Padding = new Padding(8) };

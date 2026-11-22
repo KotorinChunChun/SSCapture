@@ -140,7 +140,7 @@ internal sealed class SelectionGuideForm : Form
     private void UpdateText()
     {
         help.Text = SelectionGuideText.Create(mode, intent, fixedSize, currentAnchor,
-            dragging ? dragKeys : beforeKeys, mouse, dragging, spaceEnabled, canCrossMonitors, selectionMethod, controlActivation, windowActivation);
+            dragging ? dragKeys : beforeKeys, mouse, dragging, spaceEnabled, canCrossMonitors, selectionMethod, controlActivation, windowActivation, dragKeys.SpaceCycle);
         ResizeToText();
     }
 

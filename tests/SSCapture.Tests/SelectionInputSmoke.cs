@@ -178,7 +178,7 @@ internal static partial class Program
                     }, token, settings: new() { GridStepPixels = 20 }, captureWindowsKey: true, showGuide: false);
                     Equal(new Size(73, 57), result.Image!.Size);
                 });
-                await Test("Spaceで実ポインタを対角へ移動して同じ範囲を確定", async token =>
+                await Test("Spaceで実ポインタを次の隅へ移動して同じ範囲を確定", async token =>
                 {
                     Rectangle expected = Rectangle.FromLTRB(P(80, 80).X, P(80, 80).Y, P(230, 180).X, P(230, 180).Y);
                     using var result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input, async (overlay, _) =>
@@ -186,7 +186,7 @@ internal static partial class Program
                         await Down(overlay); await Move(overlay, 230, 180);
                         Equal(expected, OverlaySession(overlay).Selection);
                         await Key(overlay, 0x20, true); await Key(overlay, 0x20, false);
-                        Equal(P(80, 80), CaptureNative.CursorPosition());
+                        Equal(P(80, 180), CaptureNative.CursorPosition());
                         Equal(expected, OverlaySession(overlay).Selection);
                         input.LeftUp();
                     }, token, captureWindowsKey: true, showGuide: false);
@@ -216,6 +216,7 @@ internal static partial class Program
                         Check(session.OutputSettings.IncludeCursor, "画面の再取得が適用されない");
                         await Down(overlay, 310, 245); input.LeftUp();
                     }, token, fixedSize: new(101, 81), fixedAnchor: CaptureAnchor.BottomLeft, showGuide: false,
+                        settings: new() { CaptureKeys = new AppSettings().CaptureKeys with { SpaceCycle = CaptureAnchorCycle.CornersAndCenter } },
                         currentFrameFactory: () => new(new Bitmap(bounds.Width, bounds.Height), bounds, [bounds]));
                     Equal(FrameAt(confirmAt), result.Selection!.Bounds);
                 });

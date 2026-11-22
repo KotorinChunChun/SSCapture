@@ -9,6 +9,7 @@ internal sealed class CaptureKeyEditor : UserControl
     private readonly Dictionary<CaptureModifiers, ComboBox> commands = [];
     private readonly Dictionary<MouseButtons, ComboBox> clicks = [];
     private readonly ComboBox? space;
+    private CaptureAnchorCycle loadedSpaceCycle;
     private readonly ComboBox? controlActivation, windowActivation;
 
     private sealed record Choice(CaptureKeyAction Action, string Text)
@@ -67,7 +68,9 @@ internal sealed class CaptureKeyEditor : UserControl
         if (!beforeSelection)
         {
             table.Controls.Add(new Label { Text = "Space", AutoSize = true, Anchor = AnchorStyles.Left }, 0, clickRow);
-            space = AddChoice(table, 1, clickRow++, "CaptureKeysSpace", "Space", ["なし", "基点を切り替える"], map.SpaceEnabled ? 1 : 0);
+            loadedSpaceCycle = map.SpaceCycle;
+            space = AddChoice(table, 1, clickRow++, "CaptureKeysSpace", "Space",
+                ["なし", "対角移動", "四方移動", "四方と中心"], SpaceIndex(map));
             table.SetColumnSpan(space, 4);
         }
 
@@ -130,7 +133,8 @@ internal sealed class CaptureKeyEditor : UserControl
         foreach (var (keys, combo) in commands)
             combo.SelectedItem = combo.Items.Cast<Choice>().FirstOrDefault(choice => choice.Action == map.Resolve(keys)) ?? combo.Items[0];
 
-        if (space is not null) space.SelectedIndex = map.SpaceEnabled ? 1 : 0;
+        loadedSpaceCycle = map.SpaceCycle;
+        if (space is not null) space.SelectedIndex = SpaceIndex(map);
         foreach (var (button, combo) in clicks)
         {
             var action = space is null ? mouse.Before(button) : mouse.During(button);
@@ -144,7 +148,16 @@ internal sealed class CaptureKeyEditor : UserControl
         ActionAt(CaptureModifiers.Ctrl), ActionAt(CaptureModifiers.Shift), ActionAt(CaptureModifiers.Alt), ActionAt(CaptureModifiers.Win),
         ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Shift), ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Alt),
         ActionAt(CaptureModifiers.Ctrl | CaptureModifiers.Win), ActionAt(CaptureModifiers.Shift | CaptureModifiers.Alt),
-        ActionAt(CaptureModifiers.Shift | CaptureModifiers.Win), ActionAt(CaptureModifiers.Alt | CaptureModifiers.Win), space?.SelectedIndex == 1);
+        ActionAt(CaptureModifiers.Shift | CaptureModifiers.Win), ActionAt(CaptureModifiers.Alt | CaptureModifiers.Win), space?.SelectedIndex > 0, SelectedSpaceCycle);
+
+    private static int SpaceIndex(CaptureKeyMap map) => !map.SpaceEnabled ? 0 : Math.Max(1, (int)map.SpaceCycle);
+
+    private CaptureAnchorCycle SelectedSpaceCycle => space?.SelectedIndex switch
+    {
+        null or 0 => loadedSpaceCycle,
+        1 when loadedSpaceCycle == CaptureAnchorCycle.Legacy => loadedSpaceCycle,
+        int index => (CaptureAnchorCycle)index
+    };
 
     internal CaptureClickAction ClickAt(MouseButtons button) => ((ClickChoice)clicks[button].SelectedItem!).Action;
     internal CaptureActivation ControlActivation => (CaptureActivation)(controlActivation?.SelectedIndex ?? 0);

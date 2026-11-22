@@ -20,13 +20,10 @@ internal sealed partial class SettingsForm
         {
             var revert = AddRevertButton(actions, () =>
             {
-                lastRecipeKey.Value = committed.LastRecipeShortcut;
                 presetShortcutEditor.LoadRows(committed.PresetCaptureShortcuts ?? []);
             });
-            void Refresh() => revert.Enabled = !presetShortcutEditor.Rows.SequenceEqual(committed.PresetCaptureShortcuts ?? [])
-                || lastRecipeKey.Value != committed.LastRecipeShortcut;
+            void Refresh() => revert.Enabled = !presetShortcutEditor.Rows.SequenceEqual(committed.PresetCaptureShortcuts ?? []);
             presetShortcutEditor.DraftChanged += (_, _) => Refresh();
-            lastRecipeKey.ValueChanged += (_, _) => Refresh();
             refreshSettingControls += Refresh;
             Refresh();
         }
@@ -129,12 +126,13 @@ internal sealed partial class SettingsForm
                 presetEditor.RefreshApplications();
                 break;
             case "即時撮影キー":
+                lastRecipeKey.Value = committed.LastRecipeShortcut;
                 for (int index = 0; index < instantKeys.Length; index++) instantKeys[index].Value = committed.InstantShortcuts[index];
                 break;
-            case "撮影範囲設定前":
+            case FirstPointTab:
                 captureBeforeKeys.ResetDraft(committed.CaptureBeforeKeys, committed.CaptureMouse, committed.ControlActivation, committed.WindowActivation);
                 break;
-            case "撮影ドラッグ中":
+            case SecondPointTab:
                 captureKeys.ResetDraft(committed.CaptureKeys, committed.CaptureMouse, committed.ControlActivation, committed.WindowActivation);
                 break;
         }
@@ -173,26 +171,26 @@ internal sealed partial class SettingsForm
         {
             case "PC作業中":
                 var rows = PresetCaptureShortcut.Migrate(defaults).PresetCaptureShortcuts!;
-                HotkeyBinding.ValidateSettings(committed with
+                var fixedShortcut = PresetCaptureShortcut.FindDefaultFixedAssignment(committed with
                 {
-                    PresetCaptureShortcuts = rows, LastRecipeShortcut = defaults.LastRecipeShortcut,
-                    InstantShortcuts = instantKeys.Select(key => key.Value).ToArray()
+                    PresetCaptureShortcuts = rows, InstantShortcuts = [], LastRecipeShortcut = ""
                 });
-                lastRecipeKey.Value = defaults.LastRecipeShortcut;
+                if (fixedShortcut is not null) rows = [.. rows, fixedShortcut];
+                HotkeyBinding.ValidateSettings(committed with { PresetCaptureShortcuts = rows });
                 presetShortcutEditor.LoadRows(rows);
                 break;
             case "即時撮影キー":
                 HotkeyBinding.ValidateSettings(committed with
                 {
-                    PresetCaptureShortcuts = presetShortcutEditor.Rows, LastRecipeShortcut = lastRecipeKey.Value,
-                    InstantShortcuts = defaults.InstantShortcuts
+                    LastRecipeShortcut = defaults.LastRecipeShortcut, InstantShortcuts = defaults.InstantShortcuts
                 });
+                lastRecipeKey.Value = defaults.LastRecipeShortcut;
                 for (int index = 0; index < instantKeys.Length; index++) instantKeys[index].Value = defaults.InstantShortcuts[index];
                 break;
-            case "撮影範囲設定前":
+            case FirstPointTab:
                 captureBeforeKeys.ResetDraft(defaults.CaptureBeforeKeys, defaults.CaptureMouse, defaults.ControlActivation, defaults.WindowActivation);
                 break;
-            case "撮影ドラッグ中":
+            case SecondPointTab:
                 captureKeys.ResetDraft(defaults.CaptureKeys, defaults.CaptureMouse, defaults.ControlActivation, defaults.WindowActivation);
                 break;
         }

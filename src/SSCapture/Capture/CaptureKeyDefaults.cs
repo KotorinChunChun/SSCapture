@@ -14,7 +14,8 @@ internal sealed record CaptureKeyDefaults(CaptureKeyMap Drag, CaptureKeyMap Befo
     {
         Converters = { new JsonStringEnumConverter<CaptureKeyAction>(allowIntegerValues: false),
             new JsonStringEnumConverter<CaptureActivation>(allowIntegerValues: false),
-            new JsonStringEnumConverter<CaptureClickAction>(allowIntegerValues: false) }
+            new JsonStringEnumConverter<CaptureClickAction>(allowIntegerValues: false),
+            new JsonStringEnumConverter<CaptureAnchorCycle>(allowIntegerValues: false) }
     };
     private static readonly Lazy<CaptureKeyDefaults> Defaults = new(() => Load(AppContext.BaseDirectory));
     internal static CaptureKeyDefaults Current => Defaults.Value;
@@ -42,7 +43,7 @@ internal sealed record CaptureKeyDefaults(CaptureKeyMap Drag, CaptureKeyMap Befo
     private static CaptureKeyDefaults? Read(Stream stream)
     {
         var defaults = JsonSerializer.Deserialize<CaptureKeyDefaults>(stream, Options);
-        if (defaults?.Drag is null || defaults.Before is null || defaults.Mouse?.IsValid == false || CaptureKeyMap.Combinations.Any(key =>
+        if (defaults?.Drag is null || defaults.Before is null || !Enum.IsDefined(defaults.Drag.SpaceCycle) || defaults.Mouse?.IsValid == false || CaptureKeyMap.Combinations.Any(key =>
             !CaptureKeyMap.IsDragAction(defaults.Drag.Resolve(key)) || !CaptureKeyMap.IsBeforeAction(defaults.Before.Resolve(key))))
             return null;
         return defaults;

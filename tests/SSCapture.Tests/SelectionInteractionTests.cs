@@ -123,6 +123,28 @@ internal static partial class Program
                 finally { session.Cancel(); }
             }
         });
+        Run("矩形のホイール拡縮を画面上の範囲と確定画像に反映する", () =>
+        {
+            var session = RectangleSelectionSession(new Services.AppSettings());
+            using var overlay = new CaptureOverlay(session, new(0, 0, 400, 300));
+            try
+            {
+                _ = overlay.Handle;
+                var start = new Point(40, 50);
+                var end = new Point(240, 180);
+                session.MouseDown(overlay, MouseButtons.Left, start, Keys.None);
+                session.ApplyPointerInput(end, CaptureModifiers.None);
+                session.MouseWheel(end, 240);
+                var grown = new Rectangle(38, 48, 204, 134);
+                Equal(grown, session.DisplaySelection);
+                session.MouseUp(MouseButtons.Left, end, Keys.None);
+                Check(session.Completion.IsCompletedSuccessfully, "ホイール調整した矩形を確定できない");
+                using var result = session.Completion.Result;
+                Equal(grown, result.Selection!.Bounds);
+                Equal(grown.Size, result.Image!.Size);
+            }
+            finally { session.Cancel(); }
+        });
         Run("矩形の2点クリックは1点目で確定せず終点まで同じ始点を使う", () =>
         {
             var session = RectangleSelectionSession(new Services.AppSettings { SelectionMethod = CaptureSelectionMethod.TwoClicks });

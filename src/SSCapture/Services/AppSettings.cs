@@ -25,8 +25,8 @@ internal sealed record AppSettings
     public PresetCaptureShortcut[]? PresetCaptureShortcuts { get; init; }
     public SavedRegion[] SavedRegions { get; init; } = [];
     public CapturePreset[] CapturePresets { get; init; } = [];
-    public int FixedWidth { get; init; } = 1280;
-    public int FixedHeight { get; init; } = 720;
+    public int FixedWidth { get; init; } = PresetSettings.InitialFixedWidth;
+    public int FixedHeight { get; init; } = PresetSettings.InitialFixedHeight;
     public CaptureAnchor FixedCaptureAnchor { get; init; } = CaptureAnchor.TopLeft;
     public bool IncludeCursor { get; init; }
     public Capture.CaptureSelectionMethod SelectionMethod { get; init; }
@@ -113,7 +113,7 @@ internal sealed record AppSettings
             throw new ArgumentException("矩形の選択方法が無効です。");
         if (!Enum.IsDefined(SelectionGuideDisplay))
             throw new ArgumentException("操作ガイドの表示先が正しくありません。");
-        if (CaptureKeys is null || Capture.CaptureKeyMap.Combinations.Any(keys => !Enum.IsDefined(CaptureKeys.Resolve(keys)) || CaptureKeys.Resolve(keys) == Capture.CaptureKeyAction.SelectDesktop))
+        if (CaptureKeys is null || !Enum.IsDefined(CaptureKeys.SpaceCycle) || Capture.CaptureKeyMap.Combinations.Any(keys => !Enum.IsDefined(CaptureKeys.Resolve(keys)) || CaptureKeys.Resolve(keys) == Capture.CaptureKeyAction.SelectDesktop))
             throw new ArgumentException("撮影中のキー割り当てが正しくありません。");
         if (CaptureBeforeKeys is null || Capture.CaptureKeyMap.Combinations.Any(keys => !Capture.CaptureKeyMap.IsBeforeAction(CaptureBeforeKeys.Resolve(keys))))
             throw new ArgumentException("撮影範囲設定前のキー割り当てが正しくありません。");

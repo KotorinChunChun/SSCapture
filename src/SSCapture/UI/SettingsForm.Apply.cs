@@ -14,8 +14,8 @@ internal sealed partial class SettingsForm
         "履歴" => () => committed with { KeepHistory = keepHistory.Checked },
         "外部アプリ" => ReadExternalApplicationSettings,
         "即時撮影キー" => ReadInstantShortcuts,
-        "撮影範囲設定前" => ReadBeforeShortcuts,
-        "撮影ドラッグ中" => ReadDragShortcuts,
+        FirstPointTab => ReadBeforeShortcuts,
+        SecondPointTab => ReadDragShortcuts,
         _ => null
     };
 
@@ -95,7 +95,11 @@ internal sealed partial class SettingsForm
     private AppSettings ReadInstantShortcuts()
     {
         var keys = instantKeys.Select(key => key.Value).ToArray();
-        return committed.InstantShortcuts.SequenceEqual(keys) ? committed : committed with { InstantShortcuts = keys };
+        return committed with
+        {
+            InstantShortcuts = committed.InstantShortcuts.SequenceEqual(keys) ? committed.InstantShortcuts : keys,
+            LastRecipeShortcut = lastRecipeKey.Value
+        };
     }
 
     private AppSettings ReadBeforeShortcuts() => committed with

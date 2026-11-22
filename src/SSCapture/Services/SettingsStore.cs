@@ -13,7 +13,7 @@ internal sealed class SettingsStore(string path)
             new JsonStringEnumConverter<CaptureIntent>(), new JsonStringEnumConverter<NotificationCorner>(), new JsonStringEnumConverter<NotificationDisplay>(),
             new JsonStringEnumConverter<SelectionGuideDisplay>(),
             new JsonStringEnumConverter<CaptureAnchor>(), new JsonStringEnumConverter<Capture.CaptureKeyAction>(),
-            new JsonStringEnumConverter<Capture.CaptureClickAction>(), new JsonStringEnumConverter<Capture.CaptureSelectionMethod>(), new JsonStringEnumConverter<Capture.CaptureActivation>() }
+            new JsonStringEnumConverter<Capture.CaptureClickAction>(), new JsonStringEnumConverter<Capture.CaptureAnchorCycle>(), new JsonStringEnumConverter<Capture.CaptureSelectionMethod>(), new JsonStringEnumConverter<Capture.CaptureActivation>() }
     };
     private static readonly JsonSerializerOptions StrictReadOptions = new(Options) { RespectNullableAnnotations = true };
     private readonly string filePath = Path.GetFullPath(path);
@@ -173,6 +173,7 @@ internal sealed class SettingsStore(string path)
             else if (profiles.GetInt32() < 2) suffix = ".presets-v1.bak";
             else if (profiles.GetInt32() < 3) suffix = ".presets-v2.bak";
             else if (!old.RootElement.TryGetProperty(nameof(AppSettings.ExternalApplicationsVersion), out var apps) || apps.GetInt32() < 1) suffix = ".external-apps-v0.bak";
+            else if (profiles.GetInt32() < 4) suffix = ".presets-v3.bak";
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException) { suffix = ".invalid.bak"; }
         if (suffix is not null && !File.Exists(filePath + suffix)) File.Copy(filePath, filePath + suffix, false);

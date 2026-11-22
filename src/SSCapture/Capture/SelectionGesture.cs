@@ -14,6 +14,9 @@ internal sealed class SelectionGesture
     internal CaptureAnchor FixedAnchor { get; private set; }
     internal CaptureAspectRatio AspectRatio { get; set; }
     private Point? swappedPointer;
+    private Rectangle rectangleBase;
+    private int rectangleMargin, rectangleWheelRemainder;
+    private (Rectangle Bounds, Point Pointer)? centerMove;
     private Point start;
     private Point rawStart;
     private Size threshold;
@@ -37,7 +40,8 @@ internal sealed class SelectionGesture
     internal bool HasDragged { get; private set; }
     internal Point Current { get; private set; }
     internal Point RawCurrent { get; private set; }
-    internal Point MagnifierPoint => mode == CaptureMode.Rectangle && IsPressed && !HasDragged ? start : Current;
+    internal Point MagnifierPoint => mode == CaptureMode.Rectangle && IsPressed && !HasDragged ? start
+        : rectangleMargin != 0 && centerMove is null ? AnchorPoint(Selection, PointerCorner(rectangleBase, Current)) : Current;
     internal Point WindowTargetPoint => IsPressed && !HasDragged ? rawStart : RawCurrent;
     internal Rectangle Selection { get; private set; }
     internal Rectangle PressedWindow => IsPressed && !HasDragged && mode is (CaptureMode.Rectangle or CaptureMode.Freeform)
@@ -67,6 +71,7 @@ internal sealed class SelectionGesture
         IsPressed = true;
         HasDragged = false;
         swappedPointer = null;
+        ResetRectangleAdjustments();
         dragAspect = null;
         if (mode == CaptureMode.Rectangle) Selection = Rectangle.Empty;
         horizontal.Reset();
@@ -103,6 +108,16 @@ internal sealed class SelectionGesture
         }
         if (!IsPressed) return;
         HasDragged |= ExceedsThreshold(rawStart, point, threshold);
+        if (centerMove is { } sliding)
+        {
+            Rectangle limit = desktopBounds ?? sliding.Bounds;
+            int x = (int)Math.Clamp((long)sliding.Bounds.X + point.X - sliding.Pointer.X, limit.Left, limit.Right - sliding.Bounds.Width);
+            int y = (int)Math.Clamp((long)sliding.Bounds.Y + point.Y - sliding.Pointer.Y, limit.Top, limit.Bottom - sliding.Bounds.Height);
+            rectangleBase = new(new Point(x, y), sliding.Bounds.Size);
+            Selection = AdjustedRectangle();
+            Current = AnchorPoint(Selection, CaptureAnchor.Center);
+            return;
+        }
         if (mode == CaptureMode.Rectangle)
         {
             int x = horizontal.Prepare(point.X, lockWidth, previous.X, previous.X != start.X, HasDragged);
@@ -134,6 +149,11 @@ internal sealed class SelectionGesture
             ? mode == CaptureMode.Freeform ? CaptureGeometry.PolygonBounds(Points)
                 : CaptureGeometry.FromDrag(IsCentered ? Reflect(Current) : start, Current)
             : Rectangle.Empty;
+        if (mode == CaptureMode.Rectangle)
+        {
+            rectangleBase = Selection;
+            Selection = AdjustedRectangle();
+        }
     }
 
     internal CaptureSelection? End(Point point, OutputDestination destination, bool snap = false, bool lockHeight = false, bool lockWidth = false,
@@ -205,33 +225,83 @@ internal sealed class SelectionGesture
         _ => Size.Empty
     };
 
-    internal bool Space(Func<Point, Point?>? movePointer = null)
+    internal bool Space(Func<Point, Point?>? movePointer = null, CaptureAnchorCycle cycle = CaptureAnchorCycle.Legacy)
     {
         if (FixedPosition is not null) return true;
         if (mode == CaptureMode.FixedRegion)
         {
-            ChangeAnchor(FixedAnchor switch
-            {
-                CaptureAnchor.TopLeft => CaptureAnchor.TopRight,
-                CaptureAnchor.TopRight => CaptureAnchor.BottomRight,
-                CaptureAnchor.BottomRight => CaptureAnchor.BottomLeft,
-                CaptureAnchor.BottomLeft => CaptureAnchor.Center,
-                _ => CaptureAnchor.TopLeft
-            });
+            ChangeAnchor(NextAnchor(FixedAnchor, cycle == CaptureAnchorCycle.Legacy ? CaptureAnchorCycle.CornersAndCenter : cycle));
             return true;
         }
         if (mode != CaptureMode.Rectangle || !IsPressed || !HasDragged || !CaptureGeometry.IsUsable(Selection)) return false;
-        Point opposite = IsCentered ? Reflect(Current) : start;
-        Point? pointer = movePointer is null ? opposite : movePointer(opposite);
+
+        CaptureAnchor current = centerMove is not null ? CaptureAnchor.Center : PointerCorner(rectangleBase, Current);
+        CaptureAnchor next = NextAnchor(current, cycle == CaptureAnchorCycle.Legacy ? CaptureAnchorCycle.Diagonal : cycle);
+        Point target = AnchorPoint(Selection, next);
+        Point? pointer = movePointer is null ? target : movePointer(target);
         if (pointer is null) return false;
-        if (!IsCentered) start = Current;
-        Current = opposite;
+
+        ResetRectangleAdjustments();
+        rectangleBase = Selection;
+        if (next == CaptureAnchor.Center)
+            centerMove = (Selection, pointer.Value);
+        else
+            start = AnchorPoint(Selection, IsCentered ? CaptureAnchor.Center : NextAnchor(next, CaptureAnchorCycle.Diagonal));
+        Current = target;
         RawCurrent = pointer.Value;
         swappedPointer = pointer;
         horizontal.Reset();
         vertical.Reset();
         return true;
     }
+
+    internal bool ResizeRectangle(int wheelDelta)
+    {
+        if (mode != CaptureMode.Rectangle || !IsPressed || !HasDragged || !CaptureGeometry.IsUsable(rectangleBase)) return false;
+        (int steps, rectangleWheelRemainder) = CaptureTargetMargin.WheelSteps(rectangleWheelRemainder, wheelDelta);
+        if (steps != 0)
+        {
+            int previous = Selection == rectangleBase ? 0 : (Selection.Width - rectangleBase.Width) / 2;
+            rectangleMargin = previous + steps;
+            Selection = AdjustedRectangle();
+            if (centerMove is not null) Current = AnchorPoint(Selection, CaptureAnchor.Center);
+        }
+        return true;
+    }
+
+    private Rectangle AdjustedRectangle() => rectangleMargin != 0 && desktopBounds is Rectangle desktop && CaptureGeometry.IsUsable(rectangleBase)
+        ? CaptureTargetMargin.Apply(rectangleBase, rectangleMargin, desktop, CaptureGeometry.MinimumSize).Bounds : rectangleBase;
+
+    private void ResetRectangleAdjustments()
+    {
+        rectangleMargin = rectangleWheelRemainder = 0;
+        centerMove = null;
+    }
+
+    private static CaptureAnchor NextAnchor(CaptureAnchor current, CaptureAnchorCycle cycle)
+    {
+        if (current == CaptureAnchor.Center) return CaptureAnchor.TopLeft;
+        if (cycle == CaptureAnchorCycle.Diagonal) return (CaptureAnchor)(((int)current + 2) % 4);
+        if (current == CaptureAnchor.BottomLeft && cycle == CaptureAnchorCycle.CornersAndCenter) return CaptureAnchor.Center;
+        return (CaptureAnchor)(((int)current + 1) % 4);
+    }
+
+    private static CaptureAnchor PointerCorner(Rectangle bounds, Point pointer)
+    {
+        bool right = pointer.X >= bounds.Left + bounds.Width / 2;
+        bool bottom = pointer.Y >= bounds.Top + bounds.Height / 2;
+        return bottom ? right ? CaptureAnchor.BottomRight : CaptureAnchor.BottomLeft
+            : right ? CaptureAnchor.TopRight : CaptureAnchor.TopLeft;
+    }
+
+    private static Point AnchorPoint(Rectangle bounds, CaptureAnchor anchor) => anchor switch
+    {
+        CaptureAnchor.TopRight => new(bounds.Right, bounds.Top),
+        CaptureAnchor.BottomRight => new(bounds.Right, bounds.Bottom),
+        CaptureAnchor.BottomLeft => new(bounds.Left, bounds.Bottom),
+        CaptureAnchor.Center => new(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2),
+        _ => bounds.Location
+    };
 
     internal CaptureSelection? WindowSelection(Point point, OutputDestination destination) =>
         FromBounds(WindowAt(point), destination) is { } selection ? selection with { WindowHitPoint = point } : null;
@@ -261,6 +331,7 @@ internal sealed class SelectionGesture
         IsPressed = false;
         HasDragged = false;
         swappedPointer = null;
+        ResetRectangleAdjustments();
         dragAspect = null;
         horizontal.Reset();
         vertical.Reset();

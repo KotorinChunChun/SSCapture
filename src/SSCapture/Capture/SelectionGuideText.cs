@@ -7,7 +7,8 @@ internal static class SelectionGuideText
     internal static string Create(CaptureMode mode, CaptureIntent intent, Size? fixedSize, CaptureAnchor anchor,
         CaptureKeyMap keys, CaptureMouseMap mouse, bool dragging, bool spaceEnabled, bool canCrossMonitors,
         CaptureSelectionMethod selectionMethod = CaptureSelectionMethod.Drag,
-        CaptureActivation controlActivation = CaptureActivation.Push, CaptureActivation windowActivation = CaptureActivation.Push)
+        CaptureActivation controlActivation = CaptureActivation.Push, CaptureActivation windowActivation = CaptureActivation.Push,
+        CaptureAnchorCycle spaceCycle = CaptureAnchorCycle.Legacy)
     {
         string esc = KeyDisplay.Key(Keys.Escape);
         var lines = new List<string>();
@@ -18,10 +19,13 @@ internal static class SelectionGuideText
         {
             lines.Add($"固定サイズ {size.Width} × {size.Height} px　基点: {anchor.Label()}");
             lines.Add($"{(select.Length > 0 ? select + " / " : "")}Enter　確定　　矢印　1px　　Shift＋矢印　10px");
-            if (spaceEnabled) lines.Add("Space　基点切替（四隅・中心）");
+            if (spaceEnabled) lines.Add(SpaceOperation(spaceCycle == CaptureAnchorCycle.Legacy ? CaptureAnchorCycle.CornersAndCenter : spaceCycle));
         }
-        else if (dragging && spaceEnabled && mode == CaptureMode.Rectangle)
-            lines.Add("Space　始点と終点を入れ替える");
+        else if (dragging && mode == CaptureMode.Rectangle)
+        {
+            if (spaceEnabled) lines.Add(SpaceOperation(spaceCycle));
+            if (!twoPoints) lines.Add("ホイール　選択範囲を拡大／縮小");
+        }
 
         var clicks = new List<string>();
         if (!dragging)
@@ -85,6 +89,13 @@ internal static class SelectionGuideText
         lines.AddRange(modifiers.Chunk(2).Select(pair => string.Join("　　", pair)));
         return string.Join('\n', lines);
     }
+
+    private static string SpaceOperation(CaptureAnchorCycle cycle) => cycle switch
+    {
+        CaptureAnchorCycle.Corners => "Space　基点切替（四隅）",
+        CaptureAnchorCycle.CornersAndCenter => "Space　基点切替（四隅・中心）",
+        _ => "Space　基点切替（対角）"
+    };
 
     internal static bool Applies(CaptureKeyAction action, CaptureMode mode, bool dragging, bool canCrossMonitors) => action switch
     {

@@ -25,7 +25,7 @@ internal static partial class Program
         Run("工場出荷の固定サイズ候補は一度だけ追加し削除後に復活しない", () =>
         {
             var settings = new AppSettings().ApplyDefaults();
-            Equal(5, settings.SavedRegions.Length); Check(settings.SavedRegions.All(p => p.ProfileVersion == 2), "音声形式未移行");
+            Equal(4, settings.SavedRegions.Length); Check(settings.SavedRegions.All(p => p.ProfileVersion == 2), "音声形式未移行");
             var removed = settings with { SavedRegions = [settings.SavedRegions.Single(p => p.IsDefault)] };
             Equal(1, removed.EnsurePresets().SavedRegions.Length);
             Equal("囲った範囲", settings.SavedRegions.Single(p => p.IsDefault).Name);

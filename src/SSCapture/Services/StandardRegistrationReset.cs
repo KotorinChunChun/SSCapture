@@ -11,7 +11,7 @@ internal static class StandardRegistrationReset
         var regions = Restore(settings.SavedRegions, defaults,
             preset => (preset.Id, preset.Name, preset.BuiltInKey), MatchesLegacyInput,
             (template, previous, id, name) => template with { Id = id, Name = name, IsDefault = previous?.IsDefault == true });
-        return settings with { SavedRegions = regions };
+        return settings with { SavedRegions = PresetSettings.OrderFixedPresets(regions) };
     }
 
     internal static AppSettings RestoreOutputs(AppSettings settings)

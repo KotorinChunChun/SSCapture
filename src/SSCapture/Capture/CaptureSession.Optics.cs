@@ -91,6 +91,12 @@ internal sealed partial class SessionController
     {
         if (completed || refreshing || menuOpen || menuTransition || confirmingControl || delta == 0) return;
         Move(true, pointer);
+        if (HasPointerPress && !TwoPointSelection && !SelectingControl && !SelectingDesktop && gesture.ResizeRectangle(delta))
+        {
+            hasSelectionInput = true;
+            RefreshOverlays();
+            return;
+        }
         UpdateTargetMargin();
         if (marginTarget is not { } target) return;
         (int steps, wheelRemainder) = CaptureTargetMargin.WheelSteps(wheelRemainder, delta);

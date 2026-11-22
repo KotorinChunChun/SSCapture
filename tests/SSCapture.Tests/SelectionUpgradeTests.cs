@@ -214,6 +214,51 @@ internal static partial class Program
             gesture.Begin(pointer, new(8, 8));
             Check(gesture.End(new(150, 150), OutputDestination.Clipboard)!.WindowHitPoint is null, "任意の矩形にウィンドウ名を付けた");
         });
+        Run("矩形Spaceは四隅を時計回りに巡回し、中心の選択中は寸法を保って移動する", () =>
+        {
+            var defaults = new AppSettings().CaptureKeys;
+            Check(defaults.SpaceEnabled && defaults.SpaceCycle == CaptureAnchorCycle.Corners, "初期値が四方移動ではない");
+            var gesture = new SelectionGesture(CaptureMode.Rectangle, [new(-800, -600, 1600, 1200)], []);
+            gesture.Begin(new(-220, -150), new(8, 8));
+            gesture.Move(new(-100, -70));
+            var original = gesture.Selection;
+            foreach (Point expected in new Point[] { new(-220, -70), new(-220, -150), new(-100, -150), new(-100, -70) })
+            {
+                Check(gesture.Space(cycle: CaptureAnchorCycle.Corners), "四方移動ができない");
+                Equal(expected, gesture.RawCurrent);
+                gesture.Move(expected);
+                Equal(original, gesture.Selection);
+            }
+            gesture.Space(cycle: CaptureAnchorCycle.CornersAndCenter);
+            gesture.Space(cycle: CaptureAnchorCycle.CornersAndCenter);
+            Equal(new Point(-160, -110), gesture.RawCurrent);
+            gesture.Move(new(-150, -90));
+            Equal(new Rectangle(-210, -130, 120, 80), gesture.Selection);
+            gesture.Space(cycle: CaptureAnchorCycle.CornersAndCenter);
+            Equal(new Point(-210, -130), gesture.RawCurrent);
+            gesture.Move(new(-230, -155));
+            Equal(new Rectangle(-230, -155, 140, 105), gesture.End(new(-230, -155), OutputDestination.None)!.Bounds);
+        });
+        Run("矩形のホイールはドラッグ中だけ四辺を調整し、移動と確定に寸法を反映する", () =>
+        {
+            var gesture = new SelectionGesture(CaptureMode.Rectangle, [new(-100, -100, 400, 300)], []);
+            Check(!gesture.ResizeRectangle(120), "未押下で範囲を変更した");
+            gesture.Begin(new(-60, 10), new(8, 8));
+            Check(!gesture.ResizeRectangle(120), "ドラッグ前のホイールで範囲を変更した");
+            gesture.Move(new(10, 70));
+            Check(gesture.ResizeRectangle(60), "高精細ホイールを受け付けない");
+            Equal(new Rectangle(-60, 10, 70, 60), gesture.Selection);
+            gesture.ResizeRectangle(60);
+            Equal(new Rectangle(-61, 9, 72, 62), gesture.Selection);
+            Equal(new Point(11, 71), gesture.MagnifierPoint);
+            gesture.Move(new(40, 70));
+            Equal(new Rectangle(-61, 9, 102, 62), gesture.Selection);
+            gesture.ResizeRectangle(-240);
+            Equal(new Rectangle(-59, 11, 98, 58), gesture.Selection);
+            var adjusted = gesture.Selection;
+            gesture.Space(cycle: CaptureAnchorCycle.Corners);
+            Equal(adjusted, gesture.End(gesture.RawCurrent, OutputDestination.None)!.Bounds);
+        });
         Run("矩形Spaceは選択を保ちポインタを対角へ移し逆側を操作する", () =>
         {
             var gesture = new SelectionGesture(CaptureMode.Rectangle, [new(0, 0, 1000, 1000)], []);

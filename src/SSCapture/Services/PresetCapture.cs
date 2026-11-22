@@ -46,6 +46,16 @@ internal sealed record PresetCaptureShortcut(string Key, string? InputPresetId =
         };
     }
 
+    internal static PresetCaptureShortcut? FindDefaultFixedAssignment(AppSettings settings)
+    {
+        const string key = "Win+Shift+Q";
+        if (settings.SavedRegions.FirstOrDefault(region => region.BuiltInKey == PresetSettings.InitialFixedKey) is not { } preset)
+            return null;
+        var used = (settings.PresetCaptureShortcuts ?? []).Select(row => row.Key)
+            .Concat(settings.InstantShortcuts).Append(settings.LastRecipeShortcut);
+        return used.Any(value => HotkeyBinding.Parse(value) == HotkeyBinding.Parse(key)) ? null : new(key, preset.Id);
+    }
+
     private static PresetCaptureShortcut Normalize(PresetCaptureShortcut row, int index)
     {
         try

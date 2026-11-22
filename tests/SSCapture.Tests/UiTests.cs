@@ -110,9 +110,9 @@ internal static partial class Program
             var basic = SettingsApplyButton(form, "基本");
             var notice = SettingsApplyButton(form, "通知");
             var external = SettingsApplyButton(form, "外部アプリ");
-            var before = SettingsApplyButton(form, "ショートカット", "撮影範囲設定前");
+            var before = SettingsApplyButton(form, "ショートカット", "1点目");
             var instant = SettingsApplyButton(form, "ショートカット", "即時撮影キー");
-            var drag = SettingsApplyButton(form, "ショートカット", "撮影ドラッグ中");
+            var drag = SettingsApplyButton(form, "ショートカット", "2点目");
             Check(new[] { basic, notice, external, before, instant, drag }.All(button => button.Text == "適用" && !button.Enabled),
                 "未変更なのに適用できる");
             var dim = (CheckBox)form.Controls.Find("DimCaptureBackground", true).Single();
@@ -278,7 +278,7 @@ internal static partial class Program
             ((CheckBox)form.Controls.Find("KeepHistory", true).Single()).Checked = false;
             ((HotkeyEditor)form.Controls.Find("LastRecipeShortcut", true).Single()).Value = "Ctrl+F11";
             ApplySettingsPage(form, "履歴");
-            ConsolidationClick(form, "SavePresetCaptureShortcuts");
+            ApplySettingsPage(form, "ショートカット", "即時撮影キー");
             Check(saved is not null, "設定未保存"); Equal(321, saved!.FixedWidth); Equal(123, saved.FixedHeight);
             Check(saved.IncludeCursor && !saved.KeepHistory, "チェック項目が反映されない");
             Equal(CaptureAnchor.BottomRight, saved.FixedCaptureAnchor);
@@ -322,11 +322,12 @@ internal static partial class Program
             }, value => { saved = value; return null; }, _ => { }, () => []);
             var groups = (TabControl)form.Controls.Find("ShortcutGroups", true).Single();
             Check(groups.TabPages.Cast<TabPage>().Select(page => page.Text).SequenceEqual(
-                ["PC作業中", "即時撮影キー", "撮影範囲設定前", "撮影ドラッグ中"]), "ショートカットの分類が不正");
+                ["PC作業中", "即時撮影キー", "1点目", "2点目"]), "ショートカットの分類が不正");
             var pc = groups.TabPages[0];
             Check(Descendants(pc).OfType<HotkeyEditor>().Select(editor => editor.Name).ToHashSet().SetEquals(
-                ["LastRecipeShortcut", "PresetCaptureShortcut"]),
+                ["PresetCaptureShortcut"]),
                 "PC作業中のショートカット欄が不正");
+            Check(groups.TabPages[1].Controls.Find("LastRecipeShortcut", true).Length == 1, "再撮影キーが即時撮影キーにない");
             Check(!Descendants(pc).Any(control => control.Name.StartsWith("CaptureMouse", StringComparison.Ordinal)), "PC作業中にクリック欄がある");
 
             CaptureModifiers[] modifiers = [CaptureModifiers.Ctrl, CaptureModifiers.Shift, CaptureModifiers.Alt, CaptureModifiers.Win];
@@ -335,6 +336,8 @@ internal static partial class Program
                 var page = groups.TabPages[group];
                 string prefix = group == 2 ? "CaptureBeforeKeys" : "CaptureKeys";
                 var grid = (TableLayoutPanel)page.Controls.Find(prefix + "Grid", true).Single();
+                var description = (Label)page.Controls.Find("ShortcutStageDescription", true).Single();
+                Check(description.Text.Contains("1点目") && description.Dock == DockStyle.Top, "操作段階の説明がない");
                 for (int row = 0; row < modifiers.Length; row++)
                 {
                     Equal(CaptureKeyMap.Label(modifiers[row]), grid.GetControlFromPosition(0, row + 1)!.Text);
@@ -355,12 +358,12 @@ internal static partial class Program
             Equal("ウィンドウ撮影に切り替え", Choice("CaptureBeforeKeys8").Text);
             Equal("ウィンドウスナップ", Choice("CaptureBeforeKeys4").Text);
             Check(Choice("CaptureKeys4").Items.Cast<object>().Any(item => item.ToString() == "一時グリッドスナップ"),
-                "撮影ドラッグ中にグリッドを割り当てられない");
+                "2点目にグリッドを割り当てられない");
             Equal("別モニタへの移動を許可", Choice("CaptureKeys8").Text);
             Check(!Choice("CaptureKeys9").Items.Cast<object>().Any(item => item.ToString() == "ウィンドウ撮影に切り替え"),
                 "ドラッグ中にウィンドウ撮影の選択肢がある");
             Check(!Choice("CaptureBeforeKeys9").Items.Cast<object>().Any(item => item.ToString() is "上下に変更" or "左右に変更"),
-                "撮影範囲設定前にドラッグの寸法固定がある");
+                "1点目にドラッグの寸法固定がある");
             var beforeMirror = Choice("CaptureBeforeKeys5Mirror");
             var beforePrimary = Choice("CaptureBeforeKeys5");
             beforePrimary.SelectedIndex = beforePrimary.Items.Cast<object>().ToList().FindIndex(item => item.ToString() == "基点切替（固定サイズ）");
@@ -386,10 +389,12 @@ internal static partial class Program
             Choice("CaptureMouseBeforeMiddle").SelectedIndex = 3;
             Equal("ポインタ下のモニターを撮影", Choice("CaptureMouseBeforeMiddle").Text);
             Choice("CaptureMouseDragRight").SelectedIndex = 0;
-            Choice("CaptureKeysSpace").SelectedIndex = 0;
+            var space = Choice("CaptureKeysSpace");
+            Check(space.Items.Cast<object>().Select(item => item.ToString()).SequenceEqual(["なし", "対角移動", "四方移動", "四方と中心"]), "Spaceの設定候補が足りない");
+            space.SelectedIndex = 0;
 
-            ApplySettingsPage(form, "ショートカット", "撮影範囲設定前");
-            ApplySettingsPage(form, "ショートカット", "撮影ドラッグ中");
+            ApplySettingsPage(form, "ショートカット", "1点目");
+            ApplySettingsPage(form, "ショートカット", "2点目");
             Check(saved is not null, "ショートカット設定が保存されない");
             Equal(CaptureKeyMap.BeforeDefaults with { CtrlAlt = CaptureKeyAction.SwitchAnchor }, saved!.CaptureBeforeKeys);
             Equal(new CaptureKeyMap(Win: CaptureKeyAction.CrossMonitor, ShiftWin: CaptureKeyAction.Snap), saved.CaptureKeys);

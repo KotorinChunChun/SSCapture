@@ -400,7 +400,8 @@ internal sealed class RegionManagerForm : Form
             if (systemAudio is not null && profileSettings is not null) LoadAudio(SavedRegion.FromSettings("新規", profileSettings));
             var connected = displays();
             Rectangle screen = connected.Count > 0 ? connected[0].Bounds : new Rectangle(0, 0, 640, 480);
-            SetBoundsFields(new Rectangle(screen.Location, new Size(Math.Min(640, screen.Width), Math.Min(480, screen.Height))));
+            Size size = profileSettings is null ? new(Math.Min(640, screen.Width), Math.Min(480, screen.Height)) : PresetSettings.InitialFixedSize;
+            SetBoundsFields(new Rectangle(screen.Location, size));
             ShowDisplays(connected);
             name.Text = RegionAutoName.Create(shortcut.Value, ReadBounds());
             SetStatus("新規登録（未保存）");

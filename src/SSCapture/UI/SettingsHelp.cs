@@ -83,7 +83,7 @@ internal static class SettingsHelp
         ["RevertPageSettings"] = "このページの未適用の編集を取り消し、保存済みの設定に戻します。",
         ["CaptureMouseDragLeft"] = "左ボタンは通常、撮影対象の選択を続けるために押した状態なので、ドラッグ中の追加操作は割り当てられません。",
         ["CaptureMouseDragLeftLabel"] = "左ボタンは通常、撮影対象の選択を続けるために押した状態なので、ドラッグ中の追加操作は割り当てられません。",
-        ["CaptureKeysSpace"] = "矩形では始点と終点を入れ替え、固定サイズでは基点を順に切り替えます。",
+        ["CaptureKeysSpace"] = "対角移動、時計回りに四隅を切り替える四方移動、四隅に中心を加えた切り替えを選べます。矩形では切り替え時に範囲を保ちます。",
         ["ApplyPageSettings"] = "この欄の変更を以後の撮影に適用します。入力に問題がある場合は、画面下に理由を表示します。",
         ["CloseSettings"] = "設定画面を閉じます。未適用の設定や未登録の編集内容は引き継ぎません。アプリは常駐を続けます。",
         ["OpenFolder"] = "選択中の出力プリセットの「保存フォルダー」を開きます。ファイル保存またはピン留め表示を選び、フォルダーの絶対パスを指定してください。"
@@ -122,6 +122,13 @@ internal static class SettingsHelp
             return Descriptions[name[^1] switch { '0' => "PresetCaptureShortcut", '1' => "ShortcutInputPreset", _ => "ShortcutOutputPreset" }];
         if (name.StartsWith("Capture", StringComparison.Ordinal) && name.EndsWith("Mirror", StringComparison.Ordinal))
             return "同じキーの組み合わせを表の右上側で変更できます。";
+        if (name == "SavedRegions")
+            return """
+                標準の固定サイズ（物理ピクセル）
+                960×540（16:9）  Xへの投稿やA4のWord文書。新規の初期値です。
+                800×600（4:3）  設定画面やダイアログ。
+                320×240（4:3）  メニューや通知。
+                """;
         if (name == "PreviewRegion") return "登録した位置と寸法の枠だけを表示します。位置が未指定の場合は利用できません。先に座標を指定するか範囲を選んでください。撮影や設定保存は行いません。";
         if (name == "ScreenshotPaddingPixels") return "選択範囲の外側へ上下左右同じ幅の白い余白を追加します。元画像の縮小や周囲の画面の撮り足しはしません。0～4096物理px、0は余白なし。静止画だけに適用し録画には適用しません。";
         if (name == "FileNamePattern") return "{yyyymmdd} 年月日 / {hhmmss} 時分秒 / {ext} 静止画png・録画mp4 / {ocr} OCR文字列 / {region} 範囲名 / {#}・{##} 連番。例: {yyyymmdd}_{hhmmss}.{ext}";

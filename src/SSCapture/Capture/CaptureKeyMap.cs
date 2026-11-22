@@ -5,6 +5,8 @@ internal enum CaptureModifiers { None = 0, Ctrl = 1, Shift = 2, Alt = 4, Win = 8
 
 internal enum CaptureKeyAction { None, LockWidth, LockHeight, Snap, CrossMonitor, HighlightWindow, SwitchAnchor, LockAspectRatio, FromCenter, FromCenterWithAspectRatio, Grid, SelectControl, SelectDesktop }
 
+internal enum CaptureAnchorCycle { Legacy, Diagonal, Corners, CornersAndCenter }
+
 internal sealed record CaptureKeyMap(
     CaptureKeyAction Ctrl = CaptureKeyAction.None,
     CaptureKeyAction Shift = CaptureKeyAction.None,
@@ -16,7 +18,7 @@ internal sealed record CaptureKeyMap(
     CaptureKeyAction ShiftAlt = CaptureKeyAction.None,
     CaptureKeyAction ShiftWin = CaptureKeyAction.None,
     CaptureKeyAction AltWin = CaptureKeyAction.None,
-    bool SpaceEnabled = false)
+    bool SpaceEnabled = false, CaptureAnchorCycle SpaceCycle = CaptureAnchorCycle.Legacy)
 {
     internal static CaptureKeyMap BeforeDefaults => CaptureKeyDefaults.Current.Before;
 

@@ -91,9 +91,10 @@ internal static partial class Program
             var instant = defaults.InstantShortcuts.ToArray();
             instant[0] = "Win+Shift+S";
             var currentRows = new PresetCaptureShortcut[] { new("Ctrl+F11") };
+            int writes = 0;
             using var form = new SettingsForm(defaults with { InstantShortcuts = instant, PresetCaptureShortcuts = currentRows,
                 ScreenshotShortcut1 = "", ScreenshotShortcut2 = "", RecordingShortcut1 = "", RecordingShortcut2 = "", LastRecipeShortcut = "Ctrl+F12" },
-                _ => throw new InvalidOperationException("ショートカットを自動保存した"), _ => { }, () => []);
+                _ => { writes++; return null; }, _ => { }, () => []);
             _ = form.Handle;
             form.SelectCategory("ショートカット");
             var tabs = Field<TabControl>(form, "ShortcutGroups");
@@ -107,10 +108,13 @@ internal static partial class Program
             Equal("Ctrl+F12", Field<HotkeyEditor>(form, "LastRecipeShortcut").Value);
             tabs.SelectedIndex = 1;
             CaptureCommandClick(tabs.TabPages[1], "ResetSettingsPage");
-            Equal("Ctrl+F12", Field<HotkeyEditor>(form, "LastRecipeShortcut").Value);
+            Equal("", Field<HotkeyEditor>(form, "LastRecipeShortcut").Value);
+            Equal(0, writes);
+            ApplySettingsPage(form, "ショートカット", "即時撮影キー");
             tabs.SelectedIndex = 0;
             form.ResetSelectedPage();
-            Equal(3, ((DataGridView)editor).Rows.Count);
+            Equal(4, ((DataGridView)editor).Rows.Count);
+            Equal(1, writes);
             Equal("", Field<HotkeyEditor>(form, "LastRecipeShortcut").Value);
         });
 

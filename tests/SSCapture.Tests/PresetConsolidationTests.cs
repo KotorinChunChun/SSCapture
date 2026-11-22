@@ -92,20 +92,87 @@ internal static partial class Program
             Check(group is GroupBox && group.Contains(form.Controls.Find("PresetCaptureShortcut", true).Single()) &&
                 !group.Contains(form.Controls.Find("PresetCaptureShortcuts", true).Single()), "ショートカットの一覧と編集欄の区別がない");
         });
-        Run("新規は入力5件・出力3件と矩形コピー既定・暗転ON", () =>
+        Run("新規は入力4件・出力3件と矩形コピー既定・暗転ON", () =>
         {
             var settings = new AppSettings().ApplyDefaults(); settings.Validate();
-            Equal(3, settings.PresetSchemaVersion); Equal(5, settings.SavedRegions.Length); Equal(3, settings.CapturePresets.Length);
+            Equal(4, settings.PresetSchemaVersion); Equal(4, settings.SavedRegions.Length); Equal(3, settings.CapturePresets.Length);
             Equal(CaptureMode.Rectangle, settings.DefaultMode); Equal(OutputDestination.Clipboard, settings.DefaultDestination);
             Check(settings.DimCaptureBackground && settings.FreezeFrame && !settings.IncludeCursor && !settings.Grid20, "標準入力の初期条件が異なる");
             Equal(0, settings.ScreenshotPaddingPixels); Equal(ScreenshotColorDepth.Original, settings.ScreenshotColorDepth);
             Equal(CaptureMetadataMode.None, settings.MetadataMode); Check(settings.PresetCaptureShortcuts!.Any(row => row.Key == "Win+Shift+S" && row.UsesNormalSelection), "通常キーの初期値がない");
-            Equal("Rectangle,FixedRegion,FixedRegion,FixedRegion,FixedRegion", string.Join(',', settings.SavedRegions.Select(p => p.Mode)));
+            Equal("Rectangle,FixedRegion,FixedRegion,FixedRegion", string.Join(',', settings.SavedRegions.Select(p => p.Mode)));
             Check(settings.SavedRegions.All(p => !p.UseFixedCoordinates && p.FreezeFrame && p.PaddingPixels == 0 && !p.IncludeCursor && p.Shortcut == ""), "初期入力に座標・キー・加工が混入");
-            Equal("1280x720,1920x1080,2560x1440,3840x2160", string.Join(',', settings.SavedRegions.Where(p => p.Mode == CaptureMode.FixedRegion).Select(p => $"{p.Bounds.Width}x{p.Bounds.Height}")));
+            Equal("960x540,800x600,320x240", string.Join(',', settings.SavedRegions.Where(p => p.Mode == CaptureMode.FixedRegion).Select(p => $"{p.Bounds.Width}x{p.Bounds.Height}")));
+            var quick = settings.PresetCaptureShortcuts!.Single(row => row.Key == "Win+Shift+Q");
+            var fixedPreset = ResolvedPresetCapture.Resolve(settings, quick.InputPresetId, quick.OutputPresetId);
+            Check(!quick.UsesDirectCapture(fixedPreset.Input), "固定サイズキーが選択画面を開かない");
+            Equal(new Size(960, 540), fixedPreset.Input.Bounds.Size);
+            VerifyStandardFixedFrames(settings);
             Equal("囲った範囲", settings.SavedRegions.Single(p => p.IsDefault).Name); Equal("クリップボード", settings.CapturePresets.Single(p => p.IsDefault).Name);
             Check(settings.CapturePresets.Select(p => p.Destination).ToHashSet().SetEquals([OutputDestination.Clipboard, OutputDestination.File, OutputDestination.Clipboard | OutputDestination.File]), "初期出力の組合せが異なる");
             Check(settings.CapturePresets.All(p => !p.OpenFolderAfterSave && p.ColorDepth == ScreenshotColorDepth.Original && !p.Destination.HasFlag(OutputDestination.ExternalApp) && string.IsNullOrEmpty(p.VideoEditorId)), "初期出力がアプリやフォルダを開く");
+        });
+        Run("v3の未編集固定サイズをIDごと移行し、既定・編集済み・参照付き旧4Kを保持する", () => WithServiceDirectory(directory =>
+        {
+            var initial = new AppSettings().ApplyDefaults();
+            SavedRegion oldFirst = LegacyFixed(PresetSettings.InitialFixedKey, 1280, 720) with { IsDefault = true };
+            SavedRegion edited = LegacyFixed("initial-input-fixed-1920-1080", 1920, 1080) with { IncludeCursor = true };
+            SavedRegion oldThird = LegacyFixed("initial-input-fixed-2560-1440", 2560, 1440) with { BuiltInKey = null };
+            SavedRegion old4K = LegacyFixed("initial-input-fixed-3840-2160", 3840, 2160);
+            SavedRegion custom = SavedRegion.FromSettings("自作の寸法", new AppSettings { DefaultMode = CaptureMode.FixedRegion,
+                FixedWidth = 620, FixedHeight = 520 });
+            PresetCaptureShortcut[] keys = [new("Ctrl+F6", oldFirst.Id), new("Ctrl+F7", edited.Id),
+                new("Ctrl+F8", oldThird.Id), new("Ctrl+F9", old4K.Id), new("Ctrl+F10", custom.Id)];
+            var legacy = initial with { PresetSchemaVersion = 3, SavedRegions = [oldFirst, edited, oldThird, old4K, custom],
+                PresetCaptureShortcuts = keys, FixedWidth = 1280, FixedHeight = 720 };
+
+            string path = Path.Combine(directory, "settings.json");
+            string raw = System.Text.Json.JsonSerializer.Serialize(legacy, SettingsStore.Options);
+            File.WriteAllText(path, raw);
+            var store = new SettingsStore(path);
+            var migrated = store.Load(out string? warning);
+            Equal<string?>(null, warning);
+            Equal(raw, File.ReadAllText(path));
+            Equal(oldFirst.Id, migrated.SavedRegions.Single(region => region.IsDefault).Id);
+            Equal(new Size(960, 540), new Size(migrated.FixedWidth, migrated.FixedHeight));
+            Equal(edited with { BuiltInKey = null, Layout = migrated.SavedRegions.Single(p => p.Id == edited.Id).Layout },
+                migrated.SavedRegions.Single(p => p.Id == edited.Id));
+            Equal(new Size(320, 240), migrated.SavedRegions.Single(p => p.Id == oldThird.Id).Bounds.Size);
+            Equal(old4K.Bounds, migrated.SavedRegions.Single(p => p.Id == old4K.Id).Bounds);
+            Check(migrated.PresetCaptureShortcuts!.SequenceEqual(keys), "ショートカットの参照を書き換えた");
+            Equal(custom.Bounds, ResolvedPresetCapture.Resolve(migrated, custom.Id, null).Input.Bounds);
+            VerifyStandardFixedFrames(migrated);
+            store.Save(migrated);
+            Equal(raw, File.ReadAllText(path + ".presets-v3.bak"));
+            var roundtrip = store.Load(out warning);
+            Equal<string?>(null, warning);
+            SettingsEqual(migrated, roundtrip);
+
+            var withCustomDefault = (legacy with
+            {
+                SavedRegions = [oldFirst with { IsDefault = false }, edited, oldThird, old4K, custom with { IsDefault = true }],
+                PresetCaptureShortcuts = keys.Where(key => key.InputPresetId != old4K.Id).ToArray()
+            }).ApplyDefaults();
+            Equal(custom.Id, withCustomDefault.SavedRegions.Single(p => p.IsDefault).Id);
+            Check(withCustomDefault.SavedRegions.All(p => p.Id != old4K.Id), "未使用の標準4Kが残った");
+            Equal(custom.Bounds.Size, new Size(withCustomDefault.FixedWidth, withCustomDefault.FixedHeight));
+        }));
+        Run("入力プリセットの初期化は新しい寸法を復元し、新規の固定サイズも960×540で保存する", () =>
+        {
+            var defaults = new AppSettings().ApplyDefaults();
+            var changed = defaults with { SavedRegions = defaults.SavedRegions
+                .Where(p => p.Bounds.Width != 800)
+                .Select(p => p.BuiltInKey == PresetSettings.InitialFixedKey ? p with { Bounds = new(0, 0, 700, 400) } : p).ToArray() };
+            var restored = StandardRegistrationReset.RestoreInputs(changed).ApplyDefaults();
+            restored.Validate();
+            VerifyStandardFixedFrames(restored);
+            using var form = new SettingsForm(restored, _ => null, _ => { }, () => []);
+            var add = form.Controls.Find("AddInputPreset", true).Single();
+            ((ToolStripMenuItem)add.ContextMenuStrip!.Items["NewInputPreset"]!).PerformClick();
+            var mode = (ComboBox)form.Controls.Find("CaptureMode", true).Single();
+            mode.SelectedIndex = (int)CaptureMode.FixedRegion;
+            Equal(960m, ((NumericUpDown)form.Controls.Find("FixedWidth", true).Single()).Value);
+            Equal(540m, ((NumericUpDown)form.Controls.Find("FixedHeight", true).Single()).Value);
         });
         Run("初期候補追加はv1の既定・ID・値と重複名を保持", () =>
         {
@@ -114,10 +181,10 @@ internal static partial class Program
             var output = CapturePreset.FromSettings("ファイル保存", baseline) with { Id = "initial-output-file", IsDefault = true };
             var legacy = baseline with { PresetSchemaVersion = 1, SavedRegions = [input], CapturePresets = [output] };
             var next = legacy.ApplyDefaults(); next.Validate();
-            Equal(6, next.SavedRegions.Length); Equal(3, next.CapturePresets.Length);
+            Equal(5, next.SavedRegions.Length); Equal(3, next.CapturePresets.Length);
             Equal(input, next.SavedRegions.Single(p => p.IsDefault)); Equal(output, next.CapturePresets.Single(p => p.IsDefault));
             Equal(17, next.ScreenshotPaddingPixels); Equal(CaptureMode.Freeform, next.DefaultMode); Check(next.IncludeCursor && !next.DimCaptureBackground, "既存条件が上書きされた");
-            Equal(6, next.SavedRegions.Select(p => p.Id).Distinct().Count()); Equal(6, next.SavedRegions.Select(p => p.Name).Distinct().Count());
+            Equal(5, next.SavedRegions.Select(p => p.Id).Distinct().Count()); Equal(5, next.SavedRegions.Select(p => p.Name).Distinct().Count());
             Equal(3, next.CapturePresets.Select(p => p.Id).Distinct().Count()); Equal(3, next.CapturePresets.Select(p => p.Name).Distinct().Count());
         });
         Run("初期候補は3件以上の既存登録へ追加せず削除後も復活しない", () =>
@@ -126,8 +193,9 @@ internal static partial class Program
             var many = settings with { PresetSchemaVersion = 1,
                 SavedRegions = [..settings.SavedRegions, settings.SavedRegions[0] with { Id = "custom-input", Name = "追加", IsDefault = false }],
                 CapturePresets = [..settings.CapturePresets, settings.CapturePresets[0] with { Id = "custom-output", Name = "追加", IsDefault = false }] };
-            var next = many.EnsurePresets(); Equal(6, next.SavedRegions.Length); Equal(4, next.CapturePresets.Length);
-            var removed = settings with { SavedRegions = [settings.SavedRegions.Single(p => p.IsDefault)], CapturePresets = [settings.CapturePresets.Single(p => p.IsDefault)] };
+            var next = many.EnsurePresets(); Equal(5, next.SavedRegions.Length); Equal(4, next.CapturePresets.Length);
+            var removed = settings with { SavedRegions = [settings.SavedRegions.Single(p => p.IsDefault)], CapturePresets = [settings.CapturePresets.Single(p => p.IsDefault)],
+                PresetCaptureShortcuts = settings.PresetCaptureShortcuts!.Where(row => row.InputPresetId is null).ToArray() };
             Check(ReferenceEquals(removed, removed.EnsurePresets()), "削除済み候補を再追加した"); removed.Validate();
         });
         Run("コピー用の無効保存先は新規ファイル候補へ流用しない", () =>
@@ -140,9 +208,10 @@ internal static partial class Program
         Run("v1候補追加は読込だけでは保存せず初回保存時に原本退避", () => WithServiceDirectory(directory =>
         {
             string path = Path.Combine(directory, "settings.json");
-            var current = new AppSettings().EnsurePresets(); var legacy = current with { PresetSchemaVersion = 1, SavedRegions = [current.SavedRegions[0]], CapturePresets = [current.CapturePresets[0]], DimCaptureBackground = false };
+            var current = new AppSettings().EnsurePresets(); var legacy = current with { PresetSchemaVersion = 1, SavedRegions = [current.SavedRegions[0]], CapturePresets = [current.CapturePresets[0]], DimCaptureBackground = false,
+                PresetCaptureShortcuts = current.PresetCaptureShortcuts!.Where(row => row.InputPresetId is null).ToArray() };
             string json = System.Text.Json.JsonSerializer.Serialize(legacy); File.WriteAllText(path, json);
-            var store = new SettingsStore(path); var loaded = store.Load(out var warning); Equal<string?>(null, warning); Equal(5, loaded.SavedRegions.Length); Equal(json, File.ReadAllText(path));
+            var store = new SettingsStore(path); var loaded = store.Load(out var warning); Equal<string?>(null, warning); Equal(4, loaded.SavedRegions.Length); Equal(json, File.ReadAllText(path));
             store.Save(loaded); Equal(json, File.ReadAllText(path + ".presets-v1.bak"));
             var restored = store.Load(out warning); Equal<string?>(null, warning); SettingsEqual(loaded, restored); Check(!restored.DimCaptureBackground, "明示OFFを変更");
             store.Save(restored); Equal(json, File.ReadAllText(path + ".presets-v1.bak"));
@@ -151,12 +220,12 @@ internal static partial class Program
         {
             var settings = new AppSettings().ApplyDefaults();
             using var form = new SettingsForm(settings, _ => null, _ => { }, () => []);
-            Equal(5, ((ListBox)form.Controls.Find("SavedRegions", true).Single()).Items.Count);
+            Equal(4, ((ListBox)form.Controls.Find("SavedRegions", true).Single()).Items.Count);
             Equal(3, ((ListBox)form.Controls.Find("CapturePresetList", true).Single()).Items.Count);
             Check(((CheckBox)form.Controls.Find("DimCaptureBackground", true).Single()).Checked, "新規設定UIが暗転OFF");
             using var menu = new CaptureContextMenu(settings.DefaultDestination, _ => { }, () => { }, () => { },
                 inputPresets: settings.SavedRegions, applyInputPreset: _ => { }, presets: settings.CapturePresets, applyPreset: _ => { });
-            Equal(5, menu.Command("InputPresetMenu").DropDownItems.Count); Equal(3, menu.Command("CapturePresetMenu").DropDownItems.Count);
+            Equal(4, menu.Command("InputPresetMenu").DropDownItems.Count); Equal(3, menu.Command("CapturePresetMenu").DropDownItems.Count);
         });
         Run("統合画面は9分類と内部区分で旧入力・命名ページを重複表示しない", () =>
         {
@@ -178,8 +247,8 @@ internal static partial class Program
             var editor = (RegionManagerForm)form.Controls.Find("RegionManagerForm", true).Single();
             ConsolidationClick(form, "DuplicateInputPreset"); form.Controls.Find("RegionName", true).Single().Text = "ウィンドウ用";
             ((ComboBox)form.Controls.Find("CaptureMode", true).Single()).SelectedIndex = (int)CaptureMode.Window;
-            ConsolidationClick(form, "DefaultInputPreset"); Equal(6, editor.Regions.Length); Equal(1, editor.Regions.Count(p => p.IsDefault));
-            ConsolidationClick(form, "DeleteRegion"); Equal(6, editor.Regions.Length);
+            ConsolidationClick(form, "DefaultInputPreset"); Equal(5, editor.Regions.Length); Equal(1, editor.Regions.Count(p => p.IsDefault));
+            ConsolidationClick(form, "DeleteRegion"); Equal(5, editor.Regions.Length);
             Check(saved is not null, "保存しない"); Equal(CaptureMode.Window, saved!.DefaultMode);
             Equal("ウィンドウ用", saved.SavedRegions.Single(p => p.IsDefault).Name);
             Equal("ウィンドウ用", form.Controls.Find("RegionName", true).Single().Text);
@@ -355,5 +424,34 @@ internal static partial class Program
     {
         var button = SettingsApplyButton(form, page, section);
         if (button.Enabled) RecordingClick(button);
+    }
+    private static SavedRegion LegacyFixed(string id, int width, int height) =>
+        SavedRegion.FromSettings($"固定サイズ {width}×{height}", new AppSettings { DefaultMode = CaptureMode.FixedRegion,
+            FixedWidth = width, FixedHeight = height }) with { Id = id, BuiltInKey = id };
+
+    private static void VerifyStandardFixedFrames(AppSettings settings)
+    {
+        Size[] expected = [new(960, 540), new(800, 600), new(320, 240)];
+        var presets = settings.SavedRegions.Where(p => p.Mode == CaptureMode.FixedRegion && p.BuiltInKey is not null).ToArray();
+        Check(presets.Select(p => p.Bounds.Size).SequenceEqual(expected), "標準固定サイズが異なる");
+        Rectangle screen = new(-1920, -100, 1920, 1080);
+        Point origin = new(-1600, 40);
+        foreach (var size in expected)
+        {
+            var preset = presets.Single(p => p.Bounds.Size == size);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.None,
+                ShowSelectionGuide: false, OutputSettings: settings), new DesktopSnapshot(new Bitmap(screen.Width, screen.Height), screen, [screen]),
+                [], initialPointer: origin);
+            try
+            {
+                session.ApplyInputPresetAsync(preset).GetAwaiter().GetResult();
+                Equal(new Rectangle(origin, size), session.Selection);
+                Check(session.HandleCommandKey(Keys.Enter) && session.Completion.IsCompletedSuccessfully, "固定枠を確定できない");
+                using var outcome = session.Completion.Result;
+                Equal(new Rectangle(origin, size), outcome.Selection!.Bounds);
+                Equal(size, outcome.Image!.Size);
+            }
+            finally { session.Cancel(); }
+        }
     }
 }

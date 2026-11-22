@@ -8,7 +8,8 @@
     "CtrlAlt": "LockWidth",
     "ShiftAlt": "LockHeight",
     "AltWin": "Grid",
-    "SpaceEnabled": true
+    "SpaceEnabled": true,
+    "SpaceCycle": "Corners"
   },
   "Before": {
     "Ctrl": "SelectControl",

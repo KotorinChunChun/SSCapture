@@ -9,7 +9,7 @@ internal static partial class Program
         Run("新規設定の標準登録はすべて由来を持ち復元後も初期内容が一致する", () =>
         {
             var defaults = new AppSettings().ApplyDefaults();
-            Equal(5, defaults.SavedRegions.Length);
+            Equal(4, defaults.SavedRegions.Length);
             Equal(3, defaults.CapturePresets.Length);
             Equal(1, defaults.ImageEditors.Length);
             Equal(0, defaults.VideoEditors.Length);
@@ -151,6 +151,7 @@ internal static partial class Program
                 var changed = defaults with
                 {
                     SavedRegions = [input with { Name = "保存した入力" }],
+                    PresetCaptureShortcuts = defaults.PresetCaptureShortcuts!.Where(row => row.InputPresetId is null).ToArray(),
                     CapturePresets = [output with { Name = "保存した出力" }],
                     ImageEditors = [defaults.ImageEditors[0] with { Name = "保存したアプリ" }]
                 };

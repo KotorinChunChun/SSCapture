@@ -266,7 +266,7 @@ internal sealed partial class SessionController
         this.findWindowGroup = findWindowGroup ?? (root => [root]);
         this.readGuideDisplays = readGuideDisplays;
         activeAnchor = options.FixedAnchor;
-        activeFixedSize = options.FixedSize ?? new Size(1280, 720);
+        activeFixedSize = options.FixedSize ?? Services.PresetSettings.InitialFixedSize;
         this.readPresetDisplays = readPresetDisplays ?? Services.RegionCoordinates.ReadDisplays;
         Mode = options.Mode;
         this.gridChanged = gridChanged;
@@ -1016,7 +1016,8 @@ internal sealed partial class SessionController
 
     private bool SwitchSelectionAnchor()
     {
-        if (!gesture.Space(captureWindowsKey ? MovePointerToCorner : null)) return false;
+        if (SelectingControl || SelectingDesktop || !gesture.Space(captureWindowsKey ? MovePointerToCorner : null,
+            OutputSettings.CaptureKeys.SpaceCycle)) return false;
         hasSelectionInput = true;
         lastPointerPosition = gesture.RawCurrent;
         activeAnchor = gesture.FixedAnchor;
