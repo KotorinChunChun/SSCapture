@@ -13,8 +13,8 @@ internal sealed partial class TrayApplicationContext
 
     private void PrepareCaptureUi(bool syncClosedMenu = false)
     {
-        windowsToRestore = Application.OpenForms.Cast<Form>()
-            .Where(f => f.Visible && !f.IsDisposed && f != namingForm && f != recordingForm).ToArray();
+        windowsToRestore = CaptureUiPreparation.VisibleTopLevelWindows(
+            Application.OpenForms.Cast<Form>().Where(f => f != namingForm && f != recordingForm));
         CaptureUiPreparation.Prepare(windowsToRestore,
             () => { feedback.HideForCapture(); menu.Close(); }, syncClosedMenu || menu.Visible);
     }

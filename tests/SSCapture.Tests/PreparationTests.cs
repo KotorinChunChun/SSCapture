@@ -19,6 +19,35 @@ internal static partial class Program
                 synchronize: () => { Check(!form.Visible, "表示中に同期した"); steps.Add("sync"); });
             steps.Add("capture"); Equal("disable,hide,extra,sync,capture", string.Join(',', steps));
         });
+        Run("入力プリセットを開いた設定の子画面にはアニメーション抑止や再表示を行わない", () =>
+        {
+            using var settings = new SettingsForm(new AppSettings(), _ => null, _ => { });
+            settings.Show();
+            settings.SelectCategory("入力プリセット");
+            var embedded = Application.OpenForms.OfType<RegionManagerForm>().Single(form => settings.Contains(form));
+            Check(embedded.Visible && !embedded.TopLevel, "埋め込み画面が表示されていない");
+            Form[] visible = [embedded, settings];
+            Check(CaptureUiPreparation.VisibleTopLevelWindows(visible).SequenceEqual([settings]), "復元一覧に子画面が含まれた");
+            CaptureUiPreparation.Prepare(visible, () => { }, disableTransitions: window => Equal<Form>(settings, window),
+                synchronize: () => Check(!embedded.Visible, "親を隠した後も子画面が表示されている"));
+            CaptureUiPreparation.RestoreAll(visible);
+            Check(settings.Visible && embedded.Visible, "入力プリセットを同じ状態に復元できない");
+        });
+        Run("トップレベルのアニメーション抑止に失敗した場合は設定を閉じて再撮影するよう案内する", () =>
+        {
+            using var form = new Form(); form.Show();
+            var cause = new IOException("撮影前の画面アニメーションを抑止できません。");
+            IOException? error = null;
+            try
+            {
+                CaptureUiPreparation.Prepare([form], () => throw new InvalidOperationException("失敗した後に撮影準備を続けた"),
+                    disableTransitions: _ => throw cause, synchronize: () => throw new InvalidOperationException("失敗した後に描画を同期した"));
+            }
+            catch (IOException ex) { error = ex; }
+            Check(error is not null && error.InnerException == cause && error.Message.Contains("設定画面を閉じてください。その後、もう一度撮影してください。"),
+                "失敗理由か再撮影の案内が欠けている");
+            Check(form.Visible, "抑止に失敗した後で設定を隠した");
+        });
         Run("撮影準備は同期失敗を隠さず取得を止める", () =>
         {
             using var form = new Form(); form.Show(); bool captured = false;
@@ -168,19 +197,44 @@ internal static partial class Program
             try
             {
                 pattern.Update();
-                using var settings = new SettingsForm(new AppSettings(), _ => null, _ => { });
+                int commits = 0;
+                using var settings = new SettingsForm(new AppSettings(), _ => { commits++; return null; }, _ => { });
                 settings.StartPosition = FormStartPosition.Manual; settings.Location = new Point(target.Left + 12, target.Top + 12);
-                settings.TopMost = true; settings.Show(); settings.Update(); CaptureNative.SynchronizeDesktop();
-                CaptureUiPreparation.Prepare([settings], () => { });
-                using var image = InstantCapture.Take(target);
-                image.Save(Path.Combine(directory, "after-hide.png"), ImageFormat.Png);
-                int different = 0;
-                for (int y = 2; y < image.Height - 2; y++)
-                    for (int x = 2; x < image.Width - 2; x++)
-                        if (image.GetPixel(x, y).ToArgb() != pattern.BackColor.ToArgb()) different++;
-                File.WriteAllText(Path.Combine(directory, "result.txt"), $"取得範囲={target}; 残像画素={different}");
-                if (different != 0) throw new IOException($"設定画面の残像等が{different}画素あります。");
-                Console.WriteLine($"PREPARATION PASS: {target}; residualPixels=0");
+                settings.TopMost = true; settings.Show();
+                var tabs = (TabControl)settings.Controls.Find("SettingsTabs", true).Single();
+                var results = new List<string>();
+                foreach (TabPage page in tabs.TabPages)
+                {
+                    settings.SelectCategory(page.Text);
+                    int before = commits;
+                    ChangePreparationSetting(settings, page.Text);
+                    if (page.Text != "コマンド生成") Check(commits > before, $"{page.Text}の設定変更を保存できない");
+                    settings.Update();
+                    CaptureNative.SynchronizeDesktop();
+                    var windows = Application.OpenForms.OfType<Form>().Where(form => form != pattern);
+                    Form[] toRestore = CaptureUiPreparation.VisibleTopLevelWindows(windows);
+                    Check(toRestore.SequenceEqual([settings]), "設定の親ウィンドウ以外が復元対象に含まれた");
+                    try
+                    {
+                        CaptureUiPreparation.Prepare(windows, () => { });
+                        using var image = InstantCapture.Take(target);
+                        int different = 0;
+                        int expected = pattern.BackColor.ToArgb();
+                        for (int y = 2; y < image.Height - 2; y++)
+                            for (int x = 2; x < image.Width - 2; x++)
+                                if (image.GetPixel(x, y).ToArgb() != expected) different++;
+                        if (different != 0) throw new IOException($"設定画面の残像等が{different}画素あります。");
+                        if (page.Text == "入力プリセット") image.Save(Path.Combine(directory, "after-hide.png"), ImageFormat.Png);
+                    }
+                    catch (IOException ex) { throw new IOException($"{page.Text}の撮影準備: {ex.Message}", ex); }
+                    finally { CaptureUiPreparation.RestoreAll(toRestore); }
+                    Check(settings.Visible, "設定画面を復元できない");
+                    Equal(page.Text, settings.SelectedCategory);
+                    results.Add($"{page.Text}: 残像画素=0、設定画面を復元");
+                    Console.WriteLine(results[^1]);
+                }
+                File.WriteAllLines(Path.Combine(directory, "result.txt"), results);
+                Console.WriteLine($"PREPARATION PASS: {results.Count} pages");
             }
             catch (Exception ex) { failure = ex; }
             finally { pattern.Close(); }
@@ -188,5 +242,39 @@ internal static partial class Program
         Application.Run(pattern);
         if (failure != null) { Console.Error.WriteLine(failure); return 1; }
         return 0;
+    }
+
+    private static void ChangePreparationSetting(SettingsForm settings, string category)
+    {
+        void Toggle(string name)
+        {
+            var check = (CheckBox)settings.Controls.Find(name, true).Single();
+            check.Checked = !check.Checked;
+        }
+
+        switch (category)
+        {
+            case "基本": Toggle("DimCaptureBackground"); ApplySettingsPage(settings, category); break;
+            case "通知": Toggle("PlayCaptureSound"); ApplySettingsPage(settings, category); break;
+            case "履歴": Toggle("KeepHistory"); ApplySettingsPage(settings, category); break;
+            case "入力プリセット":
+                settings.Controls.Find("RegionName", true).Single().Text = "撮影準備の入力";
+                ConsolidationClick(settings, "SaveRegion");
+                break;
+            case "出力プリセット":
+                settings.Controls.Find("WhitePaddingPixels", true).Single().Text = "11";
+                ConsolidationClick(settings, "StoreCapturePreset");
+                break;
+            case "ショートカット":
+                var groups = (TabControl)settings.Controls.Find("ShortcutGroups", true).Single();
+                groups.SelectedTab = groups.TabPages.Cast<TabPage>().Single(page => page.Text == "2点目");
+                Toggle("CaptureKeysWheelAdjustRectangle");
+                ApplySettingsPage(settings, category, "2点目");
+                break;
+            case "外部アプリ":
+                ConsolidationClick(settings, "ImageEditorDuplicate");
+                ConsolidationClick(settings, "ImageEditorStore");
+                break;
+        }
     }
 }
