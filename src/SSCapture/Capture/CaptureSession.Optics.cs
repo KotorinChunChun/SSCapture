@@ -9,8 +9,6 @@ internal sealed partial class SessionController
     private int targetMargin, wheelRemainder;
     private bool targetWheelUsed;
 
-    internal Rectangle VisibleGuideBounds => guide is { Visible: true } visible ? visible.Bounds : Rectangle.Empty;
-
     private void WatchGuideBounds(UI.SelectionGuideForm form)
     {
         form.LocationChanged += GuideBoundsChanged;

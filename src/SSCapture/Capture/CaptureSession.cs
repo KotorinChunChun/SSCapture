@@ -677,9 +677,6 @@ internal sealed partial class SessionController
             selectionMethod: OutputSettings.SelectionMethod,
             controlActivation: OutputSettings.ControlActivation, windowActivation: OutputSettings.WindowActivation);
         guide.SetShared(OutputSettings.ShareCapturePresentation);
-        guide.LocationChanged += (_, _) => overlayUpdatePending = true;
-        guide.SizeChanged += (_, _) => overlayUpdatePending = true;
-        guide.VisibleChanged += (_, _) => overlayUpdatePending = true;
         guide.Show(owner);
         WatchGuideBounds(guide);
         UpdateGuidePointer();
