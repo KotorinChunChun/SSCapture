@@ -2,25 +2,34 @@
 
 Windows 11用の汎用スクリーンショットツールです。Windows標準の **Win＋Shift＋S（Snipping Tool）** を置き換え、キーボードやマウス入力で狙ったものを正確に撮影することを目指して開発しました。
 
+インストールは [Releases](https://github.com/KotorinChunChun/SSCapture/releases) から行ってください。
+
 ![資料のグラフを矩形で囲んでいる途中の撮影画面。選択範囲の外が暗くなり、ポインタ横に座標と寸法、その近くに拡大鏡、画面右下に操作ガイドが表示されている](docs/images/readme/capture-scene-drag.png)
 
 [撮影中の画面例と操作ガイド](docs/usage.md#撮影中の画面)
-
-インストールは [Releases](https://github.com/KotorinChunChun/SSCapture/releases) から行ってください。
 
 ## 想定活用フロー
 
 ### インプット
 
+キャプチャー範囲は、修飾キーを押すだけで選択範囲を切り替えることができます。
+
+ドラッグすることで複数モニター、複数ウィンドウ、複数コントロールの撮影なども柔軟に選択できます。
+
 ```mermaid
 flowchart LR
-    area["任意範囲撮影"] --> output["クリップボード／ファイル保存"]
+    area["任意範囲撮影(Alt:境界スナップ可)"] --> output["クリップボード／ファイル保存"]
+    monitor["Shift:モニタ撮影"] --> output
+    window["Win:ウィンドウ撮影(子ウィンドウ対応)"] --> output
+    ctrl["Ctrl:コントロール撮影"] --> output
     size["固定サイズ撮影"] --> output
     position["固定位置とサイズで撮影"] --> output
-    repeat["直前と同じ範囲を再撮影"] --> output
+    repeat["直前と同じ範囲・対象物を再撮影"] --> output
 ```
 
 ### アウトプット
+
+画像編集に関わる機能は、それに特化したツールを使って欲しいという思いもあり、敢えて実装していません。代わりに、かなり柔軟に他のツールへ作業が引き継げるような工夫をいくつも行っています。
 
 ```mermaid
 flowchart LR
