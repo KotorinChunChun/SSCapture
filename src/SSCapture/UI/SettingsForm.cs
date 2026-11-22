@@ -11,7 +11,7 @@ internal sealed partial class SettingsForm : Form
     private bool manualSave;
     private Action? refreshSaveButton;
     private readonly TextBox directory, imageEditor, videoEditor, imageArguments, videoArguments, fileNamePattern, ocrSeparator, oneOcrDirectory;
-    private readonly HotkeyEditor lastRegionKey, lastRecipeKey;
+    private readonly HotkeyEditor lastRecipeKey;
     private readonly CaptureKeyEditor captureBeforeKeys, captureKeys;
     private readonly NumericUpDown fixedWidth, fixedHeight, notificationDuration, screenshotPadding;
     private readonly ComboBox screenshotColorDepth;
@@ -125,15 +125,13 @@ internal sealed partial class SettingsForm : Form
         var keys = Page(shortcutTabs, "PC作業中");
         workShortcutPage = (TabPage)keys.Parent!;
         keys.ColumnStyles[0].Width = 196;
-        keys.RowCount = 3;
+        keys.RowCount = 2;
         keys.RowStyles.Clear();
-        keys.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         keys.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         keys.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         lastRecipeKey = KeyField(keys, "直前の設定で再撮影", "LastRecipeShortcut", settings.LastRecipeShortcut, 0);
-        lastRegionKey = KeyField(keys, "前回の範囲", "LastRegionShortcut", settings.LastRegionShortcut, 1);
         presetShortcutEditor = new PresetCaptureShortcutEditor(settings.PresetCaptureShortcuts ?? []);
-        keys.Controls.Add(presetShortcutEditor, 0, 2);
+        keys.Controls.Add(presetShortcutEditor, 0, 1);
         keys.SetColumnSpan(presetShortcutEditor, 2);
         captureBeforeKeys = new CaptureKeyEditor(settings.CaptureBeforeKeys, settings.CaptureMouse, beforeSelection: true,
             settings.ControlActivation, settings.WindowActivation);
@@ -475,6 +473,8 @@ internal sealed partial class SettingsForm : Form
         presetShortcutEditor.OpenForPreset(inputId, outputId);
     }
 
+    internal void UpdateLastRegion(SavedRegion? region) => inputPresetEditor.UpdateLastRegion(region);
+
     private void RefreshPresetShortcutChoices() => presetShortcutEditor.RefreshPresets(inputPresetEditor.Regions, presetEditor.Presets);
 
     public void SetStatus(StatusMessage? message)
@@ -562,7 +562,7 @@ internal sealed partial class SettingsForm : Form
                 CapturePresets = presetEditor.Presets,
                 SavedRegions = inputPresetEditor.Regions,
                 PresetCaptureShortcuts = presetShortcutEditor.Rows,
-                LastRegionShortcut = lastRegionKey.Value, LastRecipeShortcut = lastRecipeKey.Value, KeepHistory = keepHistory.Checked,
+                LastRecipeShortcut = lastRecipeKey.Value, KeepHistory = keepHistory.Checked,
                 CaptureKeys = captureKeys.Value,
                 CaptureBeforeKeys = captureBeforeKeys.Value,
                 ControlActivation = captureBeforeKeys.ControlActivation,

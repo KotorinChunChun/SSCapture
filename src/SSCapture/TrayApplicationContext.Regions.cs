@@ -9,12 +9,11 @@ namespace SSCapture;
 
 internal sealed partial class TrayApplicationContext
 {
-    private async Task TakeRegionAsync(string id, ResolvedPresetCapture? presetCapture = null)
+    private async Task TakeRegionAsync(SavedRegion region, ResolvedPresetCapture? presetCapture = null)
     {
-        var requested = presetCapture?.Input ?? settings.SavedRegions.FirstOrDefault(r => r.Id == id);
-        if (requested is { UseFixedCoordinates: false })
+        if (!region.UseFixedCoordinates)
         {
-            await TakeCaptureAsync(requested.Mode, CaptureIntent.Screenshot, requested, presetCapture: presetCapture);
+            await TakeCaptureAsync(region.Mode, CaptureIntent.Screenshot, region, presetCapture: presetCapture);
             return;
         }
         if (exiting || WindowVisibility.RestorePending(namingForm))
@@ -27,29 +26,14 @@ internal sealed partial class TrayApplicationContext
 
         if (busy)
             return;
-        if (id == AppSettings.LastRegionKeyId)
-        {
-            switch (recipes.LastRange)
-            {
-                case LastRangeReplay.TrackedTarget:
-                    await TakeSameSettingsAsync(useCurrentOutputs: true);
-                    return;
-                case LastRangeReplay.Reselect:
-                    Report("前回の撮影対象を特定できません。撮影範囲を選び直してください。", true);
-                    return;
-            }
-        }
         busy = true;
         RefreshMenu();
         try
         {
             PrepareCaptureUi();
-            var region = id == AppSettings.LastRegionKeyId ? lastRegion : settings.SavedRegions.FirstOrDefault(r => r.Id == id);
-            if (region is null)
-                throw new InvalidOperationException("撮影範囲がありません。先に矩形で撮影するか、範囲を登録してください。");
             Rectangle bounds = RegionCoordinates.Resolve(region, RegionCoordinates.ReadDisplays());
             DateTimeOffset capturedAt = DateTimeOffset.Now;
-            var regionSettings = presetCapture?.Settings ?? (region.ProfileVersion >= 1 && id != AppSettings.LastRegionKeyId ? region.Apply(settings) : settings);
+            var regionSettings = presetCapture?.Settings ?? (region.ProfileVersion >= 1 ? region.Apply(settings) : settings);
             var capture = await InstantCapture.TakeWithContextAsync(bounds, regionSettings);
             using var image = capture.Image;
             StoreStatus(await InstantCapture.DeliverAsync(image, regionSettings, capturedAt, output, regionName: region.Name, captureBounds: bounds, metadata: capture.Metadata, preserveOutputs: presetCapture is { LegacyInstantOutput: false }));

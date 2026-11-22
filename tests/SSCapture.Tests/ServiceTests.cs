@@ -333,7 +333,7 @@ internal static partial class Program
         });
         Run("空欄4枠は無効・旧hook constructorのAPIを保持", () =>
         {
-            var settings = new AppSettings { ScreenshotShortcut1 = "", ScreenshotShortcut2 = "", RecordingShortcut1 = "", RecordingShortcut2 = "", LastRegionShortcut = "" };
+            var settings = new AppSettings { ScreenshotShortcut1 = "", ScreenshotShortcut2 = "", RecordingShortcut1 = "", RecordingShortcut2 = "" };
             var state = new HotkeyState(HotkeyBinding.ReadAssignments(settings), KeyboardModifiers.LeftWindows | KeyboardModifiers.LeftShift);
             foreach (int key in new[] { 0x53, 0x52, 0x2C })
             {

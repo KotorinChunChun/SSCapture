@@ -131,7 +131,6 @@ internal static class SettingsHelp
             return "画像用・動画用の外部アプリを複数登録し、既定を1つ選びます。新規メニューから入力例を選べます。「保存」で一覧登録、設定の「保存」で確定します。参照中のアプリは削除できません。";
         if (name.StartsWith("InstantShortcut", StringComparison.Ordinal))
             return "指定モニタの全体を選択画面なしで即時撮影するキーです。画面1は主画面で、未接続の画面は撮影できません。" + ShortcutHelp;
-        if (name == "LastRegionShortcut") return "直前に確定した範囲を選択画面なしで再撮影するキーです。前回範囲がない場合は撮影できません。" + ShortcutHelp;
         if (name == "LastRecipeShortcut") return "成功した直前の静止画と同じ範囲・入出力設定（一時変更を含む）で新しく撮影します。画像履歴とは別で、終了時に記録を破棄します。初期値は未割当です。" + ShortcutHelp;
         if (name.StartsWith("Region", StringComparison.Ordinal) || name is "SavedRegions" or "NewNumericRegion" or "AddLastRegion" or "DrawRegion" or "PickFixedRegion" or "PreviewRegion" or "SaveRegion" or "DeleteRegion" or "CloseRegions")
             return "入力プリセットの名前・物理pxの位置と寸法を編集します。設定画面では変更確定時に自動保存します。固定サイズは撮影時に位置を選び、固定位置とサイズは保存した場所を動かさず使用します。";

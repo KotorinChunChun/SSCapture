@@ -84,16 +84,6 @@ internal sealed partial class TrayApplicationContext
         CaptureSettingsLink? settingsLink = null;
         bool showPrevious = false;
         DateTimeOffset capturedAt = DateTimeOffset.Now;
-        long sequence = ++captureSerial;
-        IReadOnlyList<DisplayLayout>? captureDisplays = null;
-        try
-        {
-            captureDisplays = RegionCoordinates.ReadDisplays();
-        }
-        catch (Exception)
-        { /* Capture remains available without reusable coordinates. */
-        }
-
         try
         {
             PrepareCaptureUi();
@@ -155,21 +145,6 @@ internal sealed partial class TrayApplicationContext
             }
             else if (outcome.Image is not null)
             {
-                SavedRegion? remembered = null;
-                if (mode is CaptureMode.Rectangle or CaptureMode.FixedRegion && outcome.Selection.Polygon is null
-                    && outcome.Selection.ReplaySource is null && captureDisplays is not null)
-                {
-                    try
-                    {
-                        remembered = RegionCoordinates.FromBounds("前回範囲", outcome.Selection.Bounds, captureDisplays);
-                        _ = RegionCoordinates.Resolve(remembered, RegionCoordinates.ReadDisplays());
-                    }
-                    catch (Exception)
-                    {
-                        remembered = null;
-                    }
-                }
-
                 var namingFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 Func<Bitmap, Task<ScreenshotFileName?>>? requestFileName = outcome.Selection.Destination.HasFlag(OutputDestination.File) && FileNamePattern.UsesOcr(captureSettings.FileNamePattern) ? async namingImage =>
                 {
@@ -183,7 +158,10 @@ internal sealed partial class TrayApplicationContext
                     }
                 }
                 : null;
-                var delivery = DeliverAndRememberAsync(outcome.Image, outcome.Selection.Destination, captureSettings, fileName, namePlan, remembered, sequence, capturedAt, outcome.Selection, requestFileName, outcome.Metadata);
+                var selection = outcome.Selection;
+                var delivery = output.ScreenshotAsync(outcome.Image, selection.Destination, captureSettings, fileName, namePlan, capturedAt,
+                    captureBounds: selection.Bounds, requestFileNameForImage: requestFileName, metadata: outcome.Metadata,
+                    capturePolygon: selection.Polygon, windowTitle: selection.WindowTitle, replaySource: selection.ReplaySource);
                 Report(await AwaitDeliveryAsync(delivery, requestFileName is null ? null : namingFinished.Task), false);
             }
         }
@@ -212,35 +190,13 @@ internal sealed partial class TrayApplicationContext
         namingForm = naming;
         try
         {
-            return Task.FromResult<ScreenshotFileName?>(naming.ShowDialog() == DialogResult.OK ? new(naming.FileName, naming.NamePlan, naming.OutputSettings.OpenFolderAfterSave) : null);
+            if (naming.ShowDialog() != DialogResult.OK) return Task.FromResult<ScreenshotFileName?>(null);
+            var confirmed = naming.OutputSettings;
+            return Task.FromResult<ScreenshotFileName?>(new(naming.FileName, naming.NamePlan, confirmed.OpenFolderAfterSave, confirmed.OcrSeparator));
         }
         finally
         {
             namingForm = null;
         }
-    }
-
-    private async Task<string> DeliverAndRememberAsync(Bitmap image, OutputDestination destination, AppSettings captureSettings, string? fileName, FileNamePlan? namePlan, SavedRegion? remembered, long sequence, DateTimeOffset capturedAt, CaptureSelection selection, Func<Bitmap, Task<ScreenshotFileName?>>? requestFileName, CaptureMetadata? metadata)
-    {
-        string warning = "";
-        string result = await output.ScreenshotAsync(image, destination, captureSettings, fileName, namePlan, capturedAt, () =>
-        {
-            if (remembered is null || sequence <= lastRememberedSerial)
-                return;
-            try
-            {
-                regionStore.Save(remembered);
-                lastRegion = remembered;
-                lastRememberedSerial = sequence;
-                if (!exiting)
-                    RefreshMenu();
-            }
-            catch (Exception ex)
-            {
-                warning = Environment.NewLine + "前回範囲を保存できませんでした: " + ex.Message;
-            }
-        }, captureBounds: selection.Bounds, requestFileNameForImage: requestFileName, metadata: metadata, capturePolygon: selection.Polygon,
-            windowTitle: selection.WindowTitle, replaySource: selection.ReplaySource);
-        return result + warning;
     }
 }

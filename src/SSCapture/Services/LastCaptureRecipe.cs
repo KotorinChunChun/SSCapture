@@ -7,7 +7,7 @@ namespace SSCapture.Services;
 // 画像履歴とは独立した、成功した静止画の対象と入出力条件の記録。
 internal sealed class LastCaptureRecipe
 {
-    private readonly AppSettings settings;
+    private AppSettings settings;
     private readonly SavedRegion? region;
     private readonly CaptureWindowIdentity[]? windows;
     private readonly string[]? monitors;
@@ -15,7 +15,6 @@ internal sealed class LastCaptureRecipe
     internal Rectangle Bounds { get; }
     internal bool TracksWindows => windows is not null;
     internal bool TracksMonitors => monitors is not null;
-    internal bool HasTrackedTarget => TracksWindows || TracksMonitors;
     internal bool UseIsolatedWindow { get; }
     internal bool TracksControl { get; }
     internal ControlIdentity? ControlIdentity { get; }
@@ -24,6 +23,15 @@ internal sealed class LastCaptureRecipe
     internal int? TargetMargin { get; }
     internal IReadOnlyList<Point>? Polygon { get; }
     internal AppSettings Settings => CaptureSettingsSnapshot.Copy(settings);
+    internal SavedRegion? RectangularRegion => Polygon is null ? region : null;
+
+    // 成功記録を公開する前に、命名画面で確定した保存条件を反映する。
+    internal void ConfirmNaming(ScreenshotFileName requested) => settings = settings with
+    {
+        OpenFolderAfterSave = requested.OpenFolderAfterSave,
+        FileNamePattern = requested.NamePlan?.Pattern ?? settings.FileNamePattern,
+        OcrSeparator = requested.OcrSeparator ?? settings.OcrSeparator
+    };
 
     private LastCaptureRecipe(long sequence, Rectangle bounds, SavedRegion? region, IReadOnlyList<Point>? polygon, AppSettings settings,
         CaptureReplaySource? source, IReadOnlyList<DisplayLayout> displays, Func<uint, long?> processStart)

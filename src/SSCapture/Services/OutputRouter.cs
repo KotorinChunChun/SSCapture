@@ -4,7 +4,7 @@ using SSCapture.Capture;
 
 namespace SSCapture.Services;
 
-internal sealed record ScreenshotFileName(string? FileName, FileNamePlan? NamePlan, bool OpenFolderAfterSave);
+internal sealed record ScreenshotFileName(string? FileName, FileNamePlan? NamePlan, bool OpenFolderAfterSave, string? OcrSeparator = null);
 
 internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? copyImage = null,
     Func<string, Task>? copyFile = null, Action<ProcessStartInfo>? launch = null, Action<Bitmap, string?, DateTimeOffset>? captured = null,
@@ -38,7 +38,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         if (captureSucceeded is not null && captureBounds is Rectangle recordedBounds)
         {
             try { recipe = LastCaptureRecipe.Create(sequence, recordedBounds, capturePolygon, settings with { DefaultDestination = destination },
-                replaySource is CaptureReplaySource.Windows ? [] : (readCaptureLayout ?? RegionCoordinates.ReadDisplays)(), replaySource); }
+                replaySource is CaptureReplaySource.Windows or CaptureReplaySource.Control ? [] : (readCaptureLayout ?? RegionCoordinates.ReadDisplays)(), replaySource); }
             catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException) { /* 再撮影できない最新範囲は成功時に無効化し、旧範囲と取り違えない。 */ }
         }
         ValidateDestination(destination);
@@ -77,6 +77,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         {
             var requested = requestFileNameForImage is not null ? await requestFileNameForImage(retry.NamingImage ?? owned) : await requestFileName!();
             if (requested is null) { fileCancelled = true; return null; }
+            if (!retry.IsRetry) recipe?.ConfirmNaming(requested);
             naming = new(requested.NamePlan ?? defaultPlan, requested.NamePlan is null ? requested.FileName : null, settings.OneOcrDirectory,
                 confirmed: requested.NamePlan is not null, recognize: recognizeForHandoff);
             if (!naming.NeedsOcr) retry.ReleaseNamingImage();

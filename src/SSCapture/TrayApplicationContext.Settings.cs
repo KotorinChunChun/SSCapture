@@ -20,13 +20,14 @@ internal sealed partial class TrayApplicationContext
         if (form is null || form.IsDisposed)
         {
             form = new SettingsForm(settings, SaveSettings, OpenFolder,
-                openHistory: ShowHistory, lastRegion: lastRegion, selectInputRegion: PickRegionAsync,
+                openHistory: ShowHistory, lastRegion: recipes.LastRegion, selectInputRegion: PickRegionAsync,
                 lastOutputSettings: recipes.Current?.Settings, exportSettings: path => SettingsTransfer.Export(path, settings),
                 importSettings: ImportSettings);
             form.FormClosed += (sender, _) => { if (ReferenceEquals(sender, form)) form = null; };
             form.SetStatus(lastStatus);
         }
 
+        form.UpdateLastRegion(recipes.LastRegion);
         form.UpdateLastOutputSettings(recipes.Current?.Settings);
         WindowVisibility.Show(form);
         if (form.WindowState == FormWindowState.Minimized)
@@ -152,16 +153,10 @@ internal sealed partial class TrayApplicationContext
         foreach (ToolStripItem item in savedRegionMenu.DropDownItems.Cast<ToolStripItem>().ToArray())
             item.Dispose();
         savedRegionMenu.DropDownItems.Clear();
-        var lastItem = new ToolStripMenuItem("前回の範囲", null, (_, _) => _ = TakeRegionAsync(AppSettings.LastRegionKeyId))
-        {
-            Enabled = lastRegion is not null || recipes.LastRange != LastRangeReplay.SavedRectangle
-        };
-        lastItem.ShortcutKeyDisplayString = HotkeyBinding.Parse(settings.LastRegionShortcut) is { } last ? KeyDisplay.Binding(last) : "";
         sameSettingsItem.ShortcutKeyDisplayString = HotkeyBinding.Parse(settings.LastRecipeShortcut) is { } repeat ? KeyDisplay.Binding(repeat) : "";
-        savedRegionMenu.DropDownItems.Add(lastItem);
         foreach (var region in settings.SavedRegions)
-            savedRegionMenu.DropDownItems.Add(new ToolStripMenuItem(region.Name, null, (_, _) => _ = TakeRegionAsync(region.Id)));
-        savedRegionMenu.Enabled = !busy && pendingRecording is null;
+            savedRegionMenu.DropDownItems.Add(new ToolStripMenuItem(region.Name, null, (_, _) => _ = TakeRegionAsync(region)));
+        savedRegionMenu.Enabled = !busy && pendingRecording is null && savedRegionMenu.DropDownItems.Count > 0;
         tray.Text = recorder?.IsPaused == true ? "SSCapture — 録画一時停止中" : recorder?.IsRecording == true ? "SSCapture — 録画中" : pause.Checked ? "SSCapture — ショートカット停止中" : "SSCapture";
     }
 

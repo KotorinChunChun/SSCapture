@@ -24,9 +24,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
     private readonly CaptureHistory history = new();
     private readonly CaptureRecipeBook recipes = new();
     private readonly ToolStripMenuItem sameSettingsItem;
-    private readonly RegionStore regionStore;
     private readonly ToolStripMenuItem savedRegionMenu;
-    private SavedRegion? lastRegion;
     private HistoryForm? historyForm;
     private readonly EventWaitHandle settingsSignal;
     private readonly RegisteredWaitHandle signalWait;
@@ -43,7 +41,6 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
     private string? recordingFileName;
     private FileNamePlan? recordingNamePlan;
     private bool busy, recordingTransition, exiting;
-    private long captureSerial, lastRememberedSerial;
     private string? recordingFailure;
     private StatusMessage? lastStatus;
     private TrayOperationPolicy OperationPolicy => new(
@@ -61,12 +58,17 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
             if (settings?.KeepHistory == true)
                 history.Add(image, path, time, bounds);
         }, delivered: DispatchDelivery, retryChanged: () => Post(RefreshMenu),
-            captureSucceeded: (sequence, recipe) => { recipes.Remember(sequence, recipe); Post(RefreshMenu); },
+            captureSucceeded: (sequence, recipe) =>
+            {
+                recipes.Remember(sequence, recipe);
+                Post(() =>
+                {
+                    form?.UpdateLastRegion(recipes.LastRegion);
+                    RefreshMenu();
+                });
+            },
             pinImage: pinnedImages.Show);
         settings = store.Load(out var warning);
-        regionStore = new RegionStore(Path.Combine(AppContext.BaseDirectory, "data", "last-region.json"));
-        lastRegion = regionStore.Load(out var regionWarning);
-        warning ??= regionWarning;
         icon = AppIcon.Create();
         menu = new ContextMenuStrip
         {
@@ -87,7 +89,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         savedRegionMenu = new ToolStripMenuItem("範囲を再撮影");
         menu.Items.Add(savedRegionMenu);
         menu.Items.Add(presetCaptureMenu);
-        sameSettingsItem = new ToolStripMenuItem("直前と同じ設定で再撮影", null, (_, _) => _ = TakeSameSettingsAsync());
+        sameSettingsItem = new ToolStripMenuItem("直前の設定で再撮影", null, (_, _) => _ = TakeSameSettingsAsync());
         menu.Items.Add(sameSettingsItem);
         menu.Items.Add("入力プリセット", null, (_, _) => ShowRegions());
         AddPreviousCaptureMenu();

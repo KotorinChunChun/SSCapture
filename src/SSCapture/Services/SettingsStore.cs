@@ -57,7 +57,7 @@ internal sealed class SettingsStore(string path)
                     _ => throw new JsonException("旧設定の送信先が正しくありません。")
                 } };
             if (root.TryGetProperty("ShortcutEnabled", out var enabled) && enabled.ValueKind == JsonValueKind.False)
-                settings = settings with { ScreenshotShortcut1 = "", ScreenshotShortcut2 = "", RecordingShortcut1 = "", RecordingShortcut2 = "", InstantShortcuts = Enumerable.Repeat("", 10).ToArray(), LastRegionShortcut = "" };
+                settings = settings with { ScreenshotShortcut1 = "", ScreenshotShortcut2 = "", RecordingShortcut1 = "", RecordingShortcut2 = "", InstantShortcuts = Enumerable.Repeat("", 10).ToArray() };
             settings = settings with { SchemaVersion = 2 };
         }
         if (!root.TryGetProperty(nameof(AppSettings.InstantShortcuts), out _))
@@ -69,12 +69,6 @@ internal sealed class SettingsStore(string path)
                 .Append(settings.LastRecipeShortcut);
             var existing = keys.Select(HotkeyBinding.Parse).Where(binding => binding is not null).ToHashSet();
             settings = settings with { InstantShortcuts = settings.InstantShortcuts.Select(key => existing.Contains(HotkeyBinding.Parse(key)) ? "" : key).ToArray() };
-        }
-        if (!root.TryGetProperty(nameof(AppSettings.LastRegionShortcut), out _))
-        {
-            var assigned = HotkeyBinding.ReadAssignments(settings with { LastRegionShortcut = "" });
-            if (HotkeyBinding.Parse(settings.LastRegionShortcut) is { } repeat && assigned.Any(a => a.Binding == repeat))
-                settings = settings with { LastRegionShortcut = "" };
         }
         if (!root.TryGetProperty("SchemaVersion", out var editorVersion) || editorVersion.GetInt32() < 3)
             settings = settings.MigrateEditors();

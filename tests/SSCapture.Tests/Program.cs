@@ -38,6 +38,11 @@ internal static partial class Program
             CaptureOpticsTests(); SnapTests(); RecipeTests();
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }
+        if (args.SequenceEqual(["--replay-tests"]))
+        {
+            RecipeTests(); SnapshotRefactorTests(); RepeatTests();
+            Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
+        }
         if (args.SequenceEqual(["--recipe-tests"]))
         {
             RecipeTests(); SnapshotRefactorTests(); RepeatTests(); InstantTests();

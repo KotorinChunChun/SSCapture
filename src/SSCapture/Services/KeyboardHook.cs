@@ -29,7 +29,7 @@ internal sealed class KeyboardHook : IDisposable
     public KeyboardHook(Action onCapture) : this(WrapLegacyCallback(onCapture), new AppSettings
     {
         ScreenshotShortcut1 = "Win+Shift+S", ScreenshotShortcut2 = "",
-        RecordingShortcut1 = "", RecordingShortcut2 = "", InstantShortcuts = Enumerable.Repeat("", 10).ToArray(), LastRegionShortcut = ""
+        RecordingShortcut1 = "", RecordingShortcut2 = "", InstantShortcuts = Enumerable.Repeat("", 10).ToArray()
     }) { }
 
     public KeyboardHook(Action<CaptureIntent> onCapture, AppSettings settings) : this(onCapture, settings, true) { }

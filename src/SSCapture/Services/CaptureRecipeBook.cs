@@ -1,29 +1,22 @@
 namespace SSCapture.Services;
 
-internal enum LastRangeReplay { SavedRectangle, TrackedTarget, Reselect }
-
 // 完了順が逆転しても新しい撮影を優先する。画像や設定の複製はレシピ側が担う。
 internal sealed class CaptureRecipeBook
 {
     private readonly object gate = new();
     private long sequence;
     private LastCaptureRecipe? current;
+    private SavedRegion? lastRegion;
 
     internal LastCaptureRecipe? Current
     {
         get { lock (gate) return current; }
     }
 
-    internal LastRangeReplay LastRange
+    // 入力プリセットへの追加用。直前がウィンドウ等でも、最後の矩形は追加できる。
+    internal SavedRegion? LastRegion
     {
-        get
-        {
-            lock (gate)
-            {
-                if (current?.HasTrackedTarget == true) return LastRangeReplay.TrackedTarget;
-                return sequence != 0 && current is null ? LastRangeReplay.Reselect : LastRangeReplay.SavedRectangle;
-            }
-        }
+        get { lock (gate) return lastRegion; }
     }
 
     internal void Remember(long generation, LastCaptureRecipe? recipe)
@@ -33,6 +26,7 @@ internal sealed class CaptureRecipeBook
             if (generation <= sequence) return;
             sequence = generation;
             current = recipe;
+            lastRegion = recipe?.RectangularRegion ?? lastRegion;
         }
     }
 }

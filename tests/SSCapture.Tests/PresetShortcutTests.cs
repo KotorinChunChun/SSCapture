@@ -74,7 +74,7 @@ internal static partial class Program
                 "撮影するだけで既定を変更した");
             string? used = PresetCaptureShortcut.ReferenceError(rows, input.Id, input: true);
             Check(used?.Contains("Ctrl＋F6") == true && used.Contains("Ctrl＋F7") && !used.Contains("Ctrl＋F8"), "使用中の行を正しく案内しない");
-            foreach (string competing in new[] { settings.InstantShortcuts[0], settings.LastRegionShortcut, "Ctrl+F6" })
+            foreach (string competing in new[] { settings.InstantShortcuts[0], "Ctrl+F6" })
                 CaptureCommandReject(() => (settings with { PresetCaptureShortcuts = [.. rows, new(competing)] }).Validate());
             CaptureCommandReject(() => (settings with { PresetCaptureShortcuts = [new("Ctrl+F6", "missing")] }).Validate());
             CaptureCommandReject(() => (settings with { PresetCaptureShortcuts = [new("Ctrl+F6", OutputPresetId: "missing")] }).Validate());

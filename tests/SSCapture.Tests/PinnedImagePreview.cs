@@ -11,7 +11,7 @@ internal static partial class Program
         directory = Path.GetFullPath(directory); Directory.CreateDirectory(directory);
         var settings = new AppSettings { SaveDirectory = Path.Combine(directory, "saved"), FileNamePattern = "pin_{##}.{ext}",
             ScreenshotShortcut1 = "", ScreenshotShortcut2 = "", RecordingShortcut1 = "", RecordingShortcut2 = "",
-            LastRegionShortcut = "", InstantShortcuts = Enumerable.Repeat("", 10).ToArray(), NotificationDurationSeconds = 0 }.ApplyDefaults();
+            InstantShortcuts = Enumerable.Repeat("", 10).ToArray(), NotificationDurationSeconds = 0 }.ApplyDefaults();
         void Log(string action, object? value = null) => File.AppendAllText(Path.Combine(directory, "operations.jsonl"),
             JsonSerializer.Serialize(new { at = DateTimeOffset.Now, action, value }) + Environment.NewLine);
         using var host = new Form { Name = "PinnedPreviewHost", Text = WindowTitle.Create("ピン留め検証"),

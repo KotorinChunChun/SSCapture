@@ -24,7 +24,7 @@ internal sealed partial class TrayApplicationContext
             {
                 if (capture.Settings.DefaultDestination == OutputDestination.None)
                     throw new ArgumentException("出力先がすべてOFFです。出力プリセットを確認してください。");
-                await TakeRegionAsync(capture.Input.Id, capture);
+                await TakeRegionAsync(capture.Input, capture);
             }
             else
             {

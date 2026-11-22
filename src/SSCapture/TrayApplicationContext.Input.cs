@@ -76,7 +76,7 @@ internal sealed partial class TrayApplicationContext
         {
             source = new(intent => PostCurrent(() => OnCaptureKey(intent)), value, enabled,
                 number => PostCurrent(() => _ = TakeInstantAsync(number)),
-                id => PostCurrent(() => _ = id == AppSettings.LastRecipeKeyId ? TakeSameSettingsAsync() : TakeRegionAsync(id)),
+                id => PostCurrent(() => { if (id == AppSettings.LastRecipeKeyId) _ = TakeSameSettingsAsync(); }),
                 key => PostCurrent(() => _ = TakePresetShortcutAsync(key)));
             return source;
         }

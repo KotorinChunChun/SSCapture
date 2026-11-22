@@ -46,6 +46,28 @@ internal static partial class Program
                 Check(rejected, "別のウィンドウを再撮影対象にした");
             }
         });
+        Run("コントロール撮影はモニター構成に依存せず元の親ウィンドウと部品IDを記録", () => WithOutputDirectory(directory => RunOutputTask(async () =>
+        {
+            var book = new CaptureRecipeBook();
+            using var router = new OutputRouter(Path.Combine(directory, "work"), _ => Task.CompletedTask,
+                captureSucceeded: book.Remember, readCaptureLayout: () => throw new IOException("モニターを取得できない"));
+            using var image = OutputImage();
+            var window = new CaptureWindow(new(20, 30, 200, 100), "対象", 8, 0, 3, ClassName: "Editor");
+            var control = new ControlIdentity("target-control", 50000);
+            await router.ScreenshotAsync(image, OutputDestination.Clipboard, OutputSettings(directory),
+                captureBounds: new(25, 35, image.Width, image.Height), replaySource: new CaptureReplaySource.Control(window, control, Isolated: true));
+            var recipe = book.Current!;
+            Check(recipe.TracksControl && recipe.UseIsolatedWindow && book.LastRegion is null, "コントロールを矩形として記録した");
+            Equal(control, recipe.ControlIdentity);
+            var moved = window with { Bounds = new(40, 50, 200, 100) };
+            Equal(moved, recipe.ResolveWindows([moved], requireOriginalWindow: true).Single());
+            try
+            {
+                _ = recipe.ResolveWindows([moved with { Handle = 9 }], requireOriginalWindow: true);
+                throw new Exception("別の親ウィンドウを代用した");
+            }
+            catch (InvalidOperationException) { }
+        })));
         Run("モニターの再撮影は座標が同じ別のモニターで代用しない", () =>
         {
             DisplayLayout display = new("元のモニター", "左", new(-1920, 0, 1920, 1080), 96, 96);
@@ -68,14 +90,16 @@ internal static partial class Program
                 captureBounds: new(1, 1, image.Width, image.Height), requestFileName: () => Task.FromResult<ScreenshotFileName?>(null));
             Equal(1, copies); Equal(0, remembers);
         })));
-        Run("直前設定キーは未割当で前回範囲と独立し重複を拒否", () =>
+        Run("直前設定キーの初期値は未割当で押し続けや同じキーの二重登録を防ぐ", () =>
         {
             Equal("", new AppSettings().LastRecipeShortcut);
             var settings = new AppSettings { LastRecipeShortcut = "Ctrl+F11" };
             var state = new HotkeyState(HotkeyBinding.ReadAssignments(settings), KeyboardModifiers.LeftControl);
-            Equal(AppSettings.LastRecipeKeyId, state.Process((int)Keys.F11, true, true).RegionId);
+            Equal(new HotkeyDecision(true, true, CaptureIntent.Screenshot, RegionId: AppSettings.LastRecipeKeyId), state.Process((int)Keys.F11, true, true));
+            Equal(new HotkeyDecision(true, false, CaptureIntent.Screenshot, RegionId: AppSettings.LastRecipeKeyId), state.Process((int)Keys.F11, true, true));
+            Equal(new HotkeyDecision(true, false, CaptureIntent.Screenshot, RegionId: AppSettings.LastRecipeKeyId), state.Process((int)Keys.F11, false, true));
             bool rejected = false;
-            try { (settings with { LastRecipeShortcut = settings.LastRegionShortcut }).Validate(); } catch (ArgumentException) { rejected = true; }
+            try { (settings with { LastRecipeShortcut = settings.ScreenshotShortcut1 }).Validate(); } catch (ArgumentException) { rejected = true; }
             Check(rejected, "重複が通過");
         });
         Run("直前設定は配列と自由形状を独立保持し負座標・構成変更を検証", () =>
@@ -114,11 +138,11 @@ internal static partial class Program
         {
             var book = new CaptureRecipeBook(); var first = LastCaptureRecipe.Create(1, new(1, 1, 2, 2), null, new(), RegionLayout);
             var second = LastCaptureRecipe.Create(2, new(3, 3, 2, 2), null, new(), RegionLayout);
-            Equal(LastRangeReplay.SavedRectangle, book.LastRange);
+            Check(book.Current is null && book.LastRegion is null, "起動直後に前回範囲がある");
             book.Remember(2, second); book.Remember(1, first); Equal(second, book.Current);
             book.Remember(3, null); book.Remember(2, second);
             Check(book.Current is null, "古い範囲へ誤復帰");
-            Equal(LastRangeReplay.Reselect, book.LastRange);
+            Equal(second.Bounds, RegionCoordinates.Resolve(book.LastRegion!, RegionLayout));
         });
         Run("モニター撮影成功後に識別できなかった場合は前回矩形の代わりに選び直す", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {
@@ -132,14 +156,15 @@ internal static partial class Program
             Rectangle monitor = RegionLayout[0].Bounds;
             var source = new CaptureReplaySource.Monitors([monitor]);
             await router.ScreenshotAsync(image, OutputDestination.Clipboard, settings, captureBounds: new(1, 1, 2, 2));
-            Equal(LastRangeReplay.SavedRectangle, book.LastRange);
+            Equal(new Rectangle(1, 1, 2, 2), RegionCoordinates.Resolve(book.LastRegion!, RegionLayout));
             lookupFailure = true;
             await router.ScreenshotAsync(image, OutputDestination.Clipboard, settings, captureBounds: monitor, replaySource: source);
             Equal(2, copied);
-            Equal(LastRangeReplay.Reselect, book.LastRange);
+            Check(book.Current is null, "識別できない対象の代わりに以前の撮影を再撮影する");
             lookupFailure = false;
             await router.ScreenshotAsync(image, OutputDestination.Clipboard, settings, captureBounds: monitor, replaySource: source);
-            Equal(LastRangeReplay.TrackedTarget, book.LastRange);
+            Equal(monitor, book.Current!.RegionsFor(RegionLayout)!.Single());
+            Equal(new Rectangle(1, 1, 2, 2), RegionCoordinates.Resolve(book.LastRegion!, RegionLayout));
         })));
         Run("出力全失敗は直前設定を変更せず部分成功は履歴OFFでも記録", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {
@@ -152,6 +177,32 @@ internal static partial class Program
             try { await router.ScreenshotAsync(image, OutputDestination.File | OutputDestination.Clipboard, settings, captureBounds: new(2, 2, image.Width, image.Height)); } catch (IOException) { }
             Equal(1, remembered); Equal(OutputDestination.File | OutputDestination.Clipboard, book.Current!.Settings.DefaultDestination);
             Equal(2, book.Current.Bounds.X);
+        })));
+        Run("登録範囲の成功を記録し、命名の一時変更と出力先を次の再撮影に引き継ぐ", () => WithOutputDirectory(directory => RunOutputTask(async () =>
+        {
+            var book = new CaptureRecipeBook();
+            int folderOpens = 0;
+            using var router = new OutputRouter(Path.Combine(directory, "work"), _ => Task.CompletedTask,
+                launch: _ => folderOpens++, captureSucceeded: book.Remember, readCaptureLayout: () => RegionLayout);
+            using var image = OutputImage();
+            var settings = OutputSettings(directory) with { FileNamePattern = "変更前_{ocr}_{##}.{ext}", ScreenshotPaddingPixels = 2, IncludeCursor = true };
+            var capturedAt = new DateTimeOffset(2026, 10, 23, 1, 2, 3, TimeSpan.Zero);
+            var input = RegionCoordinates.FromBounds("登録位置", new(10, 20, image.Width, image.Height), RegionLayout);
+            Rectangle bounds = RegionCoordinates.Resolve(input, RegionLayout);
+            var destination = OutputDestination.File | OutputDestination.Clipboard;
+            var confirmed = new FileNamePlan("変更後_{ocr}_{##}.{ext}", capturedAt, CaptureIntent.Screenshot, "選んだ文字");
+            await router.ScreenshotAsync(image, destination, settings, captureBounds: bounds,
+                requestFileName: () => Task.FromResult<ScreenshotFileName?>(new(null, confirmed, true, "-")));
+            var replay = book.Current!.SettingsForReplay(new AppSettings());
+            Equal(bounds, RegionCoordinates.Resolve(book.LastRegion!, RegionLayout));
+            Equal(confirmed.Pattern, replay.FileNamePattern); Equal("-", replay.OcrSeparator);
+            Check(replay.OpenFolderAfterSave && replay.IncludeCursor, "確定時の保存動作・入力条件を引き継がない");
+            Equal(destination, replay.DefaultDestination); Equal(2, replay.ScreenshotPaddingPixels);
+            await InstantCapture.DeliverAsync(image, replay, capturedAt.AddMinutes(1), router,
+                (_, _, _) => Task.FromResult(new OcrResult(["再認識"], null)), captureBounds: bounds, preserveOutputs: true);
+            Equal(2, folderOpens);
+            Check(File.Exists(Path.Combine(settings.SaveDirectory, "変更後_選んだ文字_01.png")), "一時変更で保存していない");
+            Check(File.Exists(Path.Combine(settings.SaveDirectory, "変更後_再認識_01.png")), "一時変更で再出力できない");
         })));
         Run("直前設定の再出力は外部アプリも含め新しいOCR・日時・連番で作成", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {

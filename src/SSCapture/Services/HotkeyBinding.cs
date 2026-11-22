@@ -76,8 +76,7 @@ internal readonly record struct HotkeyBinding(int VirtualKey, HotkeyModifiers Mo
         if (settings.SavedRegions is null || settings.SavedRegions.Any(region => region is null)) throw new ArgumentException("登録範囲が不正です。");
         List<(string Label, string? Text, CaptureIntent Intent, int DisplayNumber, string? RegionId)> slots =
         [
-            ("前回範囲", settings.LastRegionShortcut, CaptureIntent.Screenshot, 0, AppSettings.LastRegionKeyId),
-            ("直前と同じ設定で再撮影", settings.LastRecipeShortcut, CaptureIntent.Screenshot, 0, AppSettings.LastRecipeKeyId)
+            ("直前の設定で再撮影", settings.LastRecipeShortcut, CaptureIntent.Screenshot, 0, AppSettings.LastRecipeKeyId)
         ];
         slots.AddRange(PresetCaptureShortcut.LegacySlots(settings).Select(slot => (slot.Label, (string?)slot.Key, slot.Intent, 0, (string?)null)));
         slots.AddRange(settings.InstantShortcuts.Select((text, index) => ($"即時撮影 {index + 1}", (string?)text, CaptureIntent.Screenshot, index + 1, (string?)null)));

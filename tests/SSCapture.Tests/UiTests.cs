@@ -177,7 +177,7 @@ internal static partial class Program
             var measured = TextRenderer.MeasureText(info.Text, info.Font, new Size(info.Width, int.MaxValue), TextFormatFlags.WordBreak);
             Check(measured.Height <= info.Height, "通知の制限表示が切れる");
         });
-        Run("固定ピクセル・基点・カーソル・履歴・前回キーの設定を保存", () =>
+        Run("固定ピクセル・基点・カーソル・履歴・再撮影キーの設定を保存", () =>
         {
             AppSettings? saved = null;
             using var form = new SettingsForm(new AppSettings { FixedCaptureAnchor = CaptureAnchor.TopRight }, value => { saved = value; return null; }, () => { }, () => []);
@@ -189,11 +189,12 @@ internal static partial class Program
             anchor.SelectedIndex = (int)CaptureAnchor.BottomRight;
             ((CheckBox)form.Controls.Find("IncludeCursor", true).Single()).Checked = true;
             ((CheckBox)form.Controls.Find("KeepHistory", true).Single()).Checked = false;
+            ((HotkeyEditor)form.Controls.Find("LastRecipeShortcut", true).Single()).Value = "Ctrl+F11";
             typeof(SettingsForm).GetMethod("SaveSettings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(form, null);
             Check(saved is not null, "設定未保存"); Equal(321, saved!.FixedWidth); Equal(123, saved.FixedHeight);
             Check(saved.IncludeCursor && !saved.KeepHistory, "チェック項目が反映されない");
             Equal(CaptureAnchor.BottomRight, saved.FixedCaptureAnchor);
-            Equal("Win+Ctrl+Shift+S", saved.LastRegionShortcut);
+            Equal("Ctrl+F11", saved.LastRecipeShortcut);
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
             tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "入力プリセット");
             form.Size = form.MinimumSize;
@@ -236,7 +237,7 @@ internal static partial class Program
                 ["PC作業中", "即時撮影キー", "撮影範囲設定前", "撮影ドラッグ中"]), "ショートカットの分類が不正");
             var pc = groups.TabPages[0];
             Check(Descendants(pc).OfType<HotkeyEditor>().Select(editor => editor.Name).ToHashSet().SetEquals(
-                ["LastRegionShortcut", "LastRecipeShortcut", "PresetCaptureShortcut"]),
+                ["LastRecipeShortcut", "PresetCaptureShortcut"]),
                 "PC作業中のショートカット欄が不正");
             Check(!Descendants(pc).Any(control => control.Name.StartsWith("CaptureMouse", StringComparison.Ordinal)), "PC作業中にクリック欄がある");
 
