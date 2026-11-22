@@ -38,7 +38,7 @@ internal static partial class CaptureContextWorker
                             Console.WriteLine(response);
                             continue;
                         }
-                        PixelPoint point = request.Point ?? throw new InvalidDataException("UIA座標がありません。");
+                        PixelPoint point = request.Point ?? throw new InvalidDataException("画面部品の情報を取得する位置がありません。");
                         DateTimeOffset observed = DateTimeOffset.Now;
                         nint before = GetForegroundWindow(); GetWindowThreadProcessId(before, out uint beforePid);
                         ElementMetadata focused = ReadElement(() => automation.Focused());
@@ -189,9 +189,9 @@ internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory 
                     StandardInputEncoding = new UTF8Encoding(false), StandardOutputEncoding = new UTF8Encoding(false) };
                 if (!appHost) start.ArgumentList.Add(typeof(CaptureContextWorker).Assembly.Location);
                 start.ArgumentList.Add("--capture-context-worker");
-                process = Process.Start(startFactory?.Invoke() ?? start) ?? throw new IOException("UIA workerを開始できません。");
+                process = Process.Start(startFactory?.Invoke() ?? start) ?? throw new IOException("画面部品の情報を取得する処理を開始できません。");
                 _ = process.StandardError.BaseStream.CopyToAsync(Stream.Null);
-                if (await ReadBoundedAsync(process.StandardOutput, 64, timeout.Token) != "ready") throw new IOException("UIA workerが応答しません。");
+                if (await ReadBoundedAsync(process.StandardOutput, 64, timeout.Token) != "ready") throw new IOException("画面部品の情報を取得する処理が応答しません。");
             }
             await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(request).AsMemory(), timeout.Token);
             await process.StandardInput.FlushAsync(timeout.Token);
@@ -208,11 +208,11 @@ internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory 
         var result = new StringBuilder(); var buffer = new char[1];
         while (result.Length <= limit)
         {
-            if (await reader.ReadAsync(buffer.AsMemory(), token) == 0) throw new IOException("UIA workerが終了しました。");
+            if (await reader.ReadAsync(buffer.AsMemory(), token) == 0) throw new IOException("画面部品の情報を取得する処理が途中で終了しました。");
             if (buffer[0] == '\n') return result.ToString().TrimEnd('\r');
             result.Append(buffer[0]);
         }
-        throw new IOException("UIA workerの応答が上限を超えました。");
+        throw new IOException("画面部品の情報が大きすぎるため、取得を中止しました。");
     }
     private void DisposeProcess()
     {

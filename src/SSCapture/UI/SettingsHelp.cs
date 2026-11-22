@@ -11,8 +11,8 @@ internal static class SettingsHelp
         ["GitHubReleases"] = "GitHubのリリース一覧から配布ファイルや変更点を確認できます。",
         ["GitHubIssues"] = "GitHub Issuesで不具合を確認・報告できます。",
         ["ResetSettingsPage"] = "表示中のページの設定を初期値に戻します。ショートカットは選択中のタブだけが対象です。入力・出力プリセットは確認後に自動保存し、自作登録を保持します。",
-        ["StartupSettings"] = "Windowsサインイン時の自動起動です。初期設定はOFFです。KotorinToysと同じ所有予約を参照します。変更は「自動起動を適用」で確定します。設定全体の保存やビルドでは予約を変更しません。",
-        ["StartWithWindows"] = "ONにして「自動起動を適用」を押すと、次回のWindowsサインイン時から設定画面を表示せず起動します。正式インストール版だけが登録できます。本体経由の予約はKotorinToysで変更してください。",
+        ["StartupSettings"] = "Windowsサインイン時の自動起動です。初期設定はOFFです。KotorinToysと同じ自動起動の登録を使います。変更は「自動起動を適用」で確定します。設定全体の保存やビルドでは登録を変更しません。",
+        ["StartWithWindows"] = "ONにして「自動起動を適用」を押すと、次回のWindowsサインイン時から設定画面を表示せず起動します。正式インストール版だけが登録できます。KotorinToysから登録した自動起動は、KotorinToysで変更してください。",
         ["ApplyStartup"] = "自動起動のON/OFFだけを適用します。他の設定編集中の値は保存しません。OFFにしても現在のアプリは終了しません。",
         ["ExportSettings"] = "保存済みの設定とプリセットを新規のJSONファイルに書き出します。外部アプリの実行先や保存先も含まれます。",
         ["ImportSettings"] = "書き出したJSONや旧版の設定を確認します。「適用」で現在の設定を置き換えます。",
@@ -61,12 +61,12 @@ internal static class SettingsHelp
         ["MagnifierZoom"] = "拡大鏡の1ドットを何倍の大きさで表示するか指定します。2～20倍で、既定は10倍です。",
         ["SelectionGuideDisplay"] = "画面右下の操作ガイドを、撮影を始めたモニターまたはメイン画面に表示します。",
         ["ShareCapturePresentation"] = "モニター全体の画面共有や配信に、選択枠・暗転・表示中の操作ガイド・拡大鏡・ウィンドウプレビューを重ねます。",
-        ["WhitePaddingPixels"] = "静止画の外側に上下左右同じ幅の白枠を追加します。0～4096物理px、0で余白なし。空欄は旧入力の余白を引き継ぎ、旧設定がなければ0pxです。",
+        ["WhitePaddingPixels"] = "静止画の外側に上下左右同じ幅の白枠を追加します。0～4096物理px、0で余白なし。空欄のときは0pxです。旧版で入力プリセットに余白を設定していた場合は、空欄のままならその値を使います。",
         ["ScreenshotColorDepth"] = "静止画を最大256色（8ビット）または16色（4ビット）へ減色します。PNGはパレット形式で保存。コピー・外部アプリ・履歴にも同じ色を使用します。寸法・白余白・完全透明領域を保持し、録画は変更しません。写真やグラデーションは色が変わります。",
         ["CapturePresetEditor"] = "出力先・白い余白・減色・外部アプリ・保存先・命名・OCR・撮影情報の組合せを登録し、変更確定時に自動保存します。撮影中の適用や個別変更は今回だけです。",
         ["FileNamePattern"] = "保存ファイルや受け渡しキャッシュの名前を組み立てます。{yyyymmdd}は年月日、{hhmmss}は時分秒、{ocr}は画像から選んだ文字列、{region}は範囲名です。{#}は連番、{##}は2桁の連番です。例: {yyyymmdd}_{hhmmss}_{##}.png。録画は.mp4で保存します。",
         ["OcrSeparator"] = "OCRで選んだ複数の文字列の間に入れる文字です。例: _ を指定すると、文字列をアンダースコアでつなぎます。ファイル名に使用できない文字は指定できません。",
-        ["OneOcrDirectory"] = "OneOCRのエンジンとモデルがあるフォルダの完全パスです。空欄のときはSnipping Toolから自動検出します。OCRを使う命名パターンで必要になります。",
+        ["OneOcrDirectory"] = "OneOCRのエンジンとモデルがあるフォルダの完全パスです。すべての出力プリセットで共通です。空欄のときはSnipping Toolから自動検出します。OCRを使う命名パターンで必要になります。",
         ["FixedWidth"] = "固定サイズモードの横幅です。単位は画像の物理ピクセルで、1～32768pxを指定できます。幅と高さの積は1億画素以内にしてください。",
         ["FixedHeight"] = "固定サイズモードの高さです。単位は画像の物理ピクセルで、1～32768pxを指定できます。幅と高さの積は1億画素以内にしてください。",
         ["FixedCaptureAnchor"] = "固定サイズの枠でポインタに合わせる隅または中心です。画面外にはみ出した枠は確定できません。",
@@ -90,7 +90,7 @@ internal static class SettingsHelp
         ["CaptureKeysSpace"] = "対角移動、時計回りに四隅を切り替える四方移動、四隅に中心を加えた切り替えを選べます。矩形では切り替え時に範囲を保ちます。",
         ["ApplyPageSettings"] = "この欄の変更を以後の撮影に適用します。入力に問題がある場合は、画面下に理由を表示します。",
         ["CloseSettings"] = "設定画面を閉じます。未適用の設定や未登録の編集内容は引き継ぎません。アプリは常駐を続けます。",
-        ["OpenFolder"] = "選択中の出力プリセットの「保存フォルダー」を開きます。ファイル保存またはピン留め表示を選び、フォルダーの絶対パスを指定してください。"
+        ["OpenFolder"] = "選択中の出力プリセットの「保存フォルダ」を開きます。ファイル保存またはピン留め表示を選び、フォルダの絶対パスを指定してください。"
     };
 
     internal static void Apply(Control root, ToolTip tips)
@@ -147,7 +147,7 @@ internal static class SettingsHelp
         if (name == "InputFixedCoordinates") return "ONは登録した位置へ固定枠を表示します。OFFは撮影モードに従い位置や範囲を選びます。再撮影キーはONなら即時撮影、OFFなら選択開始です。";
         if (name.Contains("InputPreset", StringComparison.Ordinal)) return "入力プリセットを追加・複製し、通常撮影の既定を選べます。録画音声も含めて変更確定時に自動保存します。暗転・モニター制限は基本設定です。";
         if (name is "AddCapturePreset" or "DeleteCapturePreset" or "DefaultCapturePreset" or "CapturePresetName") return "出力プリセットを追加・削除し、既定を選びます。変更確定時に自動保存します。追加では新規と直前の出力設定を選べます。";
-        if (name is "MetadataMode" or "PresetMetadataMode") return "静止画をファイルに保存する場合の撮影情報です。記録しない・PNG内XMP・別JSON・両方から選択します。UI名・アプリのパス・タイトル等を含むため共有時には注意してください。";
+        if (name is "MetadataMode" or "PresetMetadataMode") return "静止画をファイルに保存する場合の撮影情報です。記録しない・PNG内XMP・別JSON・両方から選択します。画面部品の名前・アプリのパス・ウィンドウ名などを含むため、共有するときは注意してください。";
         if (name.EndsWith("EditorArguments", StringComparison.Ordinal)) return Services.EditorArguments.Help;
         if (name.Contains("Editor", StringComparison.Ordinal) || name.Contains("SelectedEditor", StringComparison.Ordinal))
             return "画像用・動画用の外部アプリを複数登録し、既定を1つ選びます。追加メニューから入力例を選べます。この画面の「保存」で登録を確定します。参照中のアプリは削除できません。";

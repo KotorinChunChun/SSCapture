@@ -8,7 +8,7 @@ using Windows.Graphics.DirectX.Direct3D11;
 
 namespace SSCapture.Capture;
 
-/// <summary>Windows SDKのCOM ABIだけを扱う。各ポインターは取得した参照1件を所有する。</summary>
+/// <summary>Windows SDKのCOM ABIだけを扱う。各ポインタは取得した参照1件を所有する。</summary>
 internal sealed unsafe class CaptureDirect3D : IDisposable
 {
     private nint device;
@@ -92,7 +92,7 @@ internal sealed unsafe class CaptureDirect3D : IDisposable
             var getDescription = (delegate* unmanaged[Stdcall]<nint, TextureDescription*, void>)(*(nint**)texture)[10];
             getDescription(texture, &description);
             if (description.Format != 87 || description.Width < width || description.Height < height)
-                throw new InvalidOperationException("WGCフレームの形式またはサイズが取得対象と一致しません。");
+                throw new InvalidOperationException("ウィンドウの画像の形式またはサイズが取得対象と一致しません。");
             CreateStaging(description, out staging);
             var copy = (delegate* unmanaged[Stdcall]<nint, nint, nint, void>)(*(nint**)context)[47];
             copy(context, staging, texture);

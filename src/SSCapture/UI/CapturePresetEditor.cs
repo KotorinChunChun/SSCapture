@@ -96,7 +96,7 @@ internal sealed class CapturePresetEditor : UserControl
         output.SetColumnSpan(output.Controls[output.Controls.Count - 1], 2);
         output.Controls.Add(cropFields, 0, 5); output.SetColumnSpan(cropFields, 2);
         output.RowStyles[5].Height = 62;
-        whitePadding = new TextBox { Name = "WhitePaddingPixels", MaxLength = 4, PlaceholderText = "旧入力の値を引き継ぐ（未指定の場合は0）" };
+        whitePadding = new TextBox { Name = "WhitePaddingPixels", MaxLength = 4, PlaceholderText = "空欄は0px（旧版で入力プリセットに設定した余白があればその値）" };
         Add(output, "白い余白（px）", whitePadding, 6);
         NumericUpDown AddCrop(string title, string edge, int column)
         {
@@ -105,13 +105,13 @@ internal sealed class CapturePresetEditor : UserControl
             cropFields.Controls.Add(input, column, 1);
             return input;
         }
-        directory = new TextBox { Name = "SaveDirectory" }; Add(naming, "保存フォルダー", directory, 0);
+        directory = new TextBox { Name = "SaveDirectory" }; Add(naming, "保存フォルダ", directory, 0);
         pattern = new TextBox { Name = "FileNamePattern" }; Add(naming, "命名パターン", pattern, 1);
         separator = new TextBox { Name = "OcrSeparator" }; Add(naming, "OCR区切り", separator, 2);
         openFolder = Toggle("保存フォルダを開く", "OpenFolderAfterSave"); Add(naming, "保存後", openFolder, 3);
         var help = new Label { Text = "{yyyymmdd} 年月日 / {hhmmss} 時分秒 / {ext} png・mp4\n{ocr} OCR文字列 / {region} 範囲名 / {#}・{##} 連番", Dock = DockStyle.Fill }; naming.Controls.Add(help, 0, 6); naming.SetColumnSpan(help, 2); naming.SetRowSpan(help, 2);
         metadataMode = new ComboBox { Name = "MetadataMode", DropDownStyle = ComboBoxStyle.DropDownList }; metadataMode.Items.AddRange(["記録しない", "PNG内XMP", "別JSON", "PNG内XMPと別JSON"]); Add(metadata, "保存形式", metadataMode, 0);
-        var warning = new Label { Dock = DockStyle.Fill, Text = "静止画のファイル保存時に座標・UIA・exe/class/titleを記録します。\n共有時はウィンドウ名やパスにご注意ください。\nパスワードの名前・値の本文・UI全体のツリーは採取しません。\n画像とUIAは同時刻ではなく、未取得時は理由を記録します。" }; metadata.Controls.Add(warning, 0, 1); metadata.SetColumnSpan(warning, 2); metadata.SetRowSpan(warning, 4);
+        var warning = new Label { Dock = DockStyle.Fill, Text = "静止画をファイルに保存するときに、ポインタの位置、指していた画面部品の名前、アプリの実行ファイル名・ウィンドウ名を記録します。\n画像を共有する前に、ウィンドウ名やパスが含まれていないか確認してください。\nパスワード欄の名前、入力欄の値、画面全体の部品の一覧は記録しません。\n部品の情報は撮影と同じ瞬間のものとは限りません。取得できなかったときは理由を記録します。" }; metadata.Controls.Add(warning, 0, 1); metadata.SetColumnSpan(warning, 2); metadata.SetRowSpan(warning, 4);
         var add = SettingsForm.MakeButton("追加 ▼", "AddCapturePreset");
         var choices = new ContextMenuStrip { Name = "AddCapturePresetMenu" };
         add.ContextMenuStrip = choices;
@@ -178,7 +178,7 @@ internal sealed class CapturePresetEditor : UserControl
     private AppSettings CurrentSettings() => IsHandleCreated ? readSettings() : initialSettings;
     internal FlowLayoutPanel AddSaveTools(Control ocrDirectory, Action<string> openDirectory)
     {
-        Add(naming, "OCRエンジン（共通）", ocrDirectory, 4);
+        Add(naming, "OCRエンジンの場所", ocrDirectory, 4);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Margin = new Padding(3, 0, 0, 0), WrapContents = false };
         naming.RowStyles[5].Height = SettingsEditorActions.Height;
         naming.Controls.Add(actions, 1, 5);

@@ -371,7 +371,7 @@ internal static partial class Program
             Equal("別モニターへの移動を許可", Choice("CaptureKeys8").Text);
             Check(!Choice("CaptureKeys9").Items.Cast<object>().Any(item => item.ToString()!.StartsWith("ウィンドウ撮影", StringComparison.Ordinal)),
                 "ドラッグ中にウィンドウ撮影の選択肢がある");
-            Check(!Choice("CaptureBeforeKeys9").Items.Cast<object>().Any(item => item.ToString() is "上下に変更" or "左右に変更"),
+            Check(!Choice("CaptureBeforeKeys9").Items.Cast<object>().Any(item => item.ToString() is "高さだけ変更" or "幅だけ変更"),
                 "1点目にドラッグの寸法固定がある");
             var beforeMirror = Choice("CaptureBeforeKeys5Mirror");
             var beforePrimary = Choice("CaptureBeforeKeys5");

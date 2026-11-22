@@ -84,7 +84,7 @@ internal static class SelectionGuideText
             else if (!dragging && chord == CaptureModifiers.Alt && action == CaptureKeyAction.Snap)
                 modifiers.Add($"{label}を短押し　スナップのON/OFF");
             else if (action == CaptureKeyAction.SelectDesktop)
-                modifiers.Add($"{label}を押しながら　デスクトップの選択");
+                modifiers.Add($"{label}を押しながら　モニター全体を選択");
             else if (action == CaptureKeyAction.CrossMonitor)
                 modifiers.Add($"{label}を押しながら　別のモニターへ移動");
             else if (action == CaptureKeyAction.SelectControl)

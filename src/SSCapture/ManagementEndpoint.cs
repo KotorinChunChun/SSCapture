@@ -89,7 +89,7 @@ internal sealed class ManagementEndpoint : IDisposable
                                 if (!expectedPid.HasValue || settings.ValueKind != JsonValueKind.Object)
                                 { result = "refused"; detail = "設定または対象PIDが指定されていません。"; }
                                 else if (!string.Equals(expectedDirectory, AppContext.BaseDirectory, StringComparison.OrdinalIgnoreCase))
-                                { result = "refused"; detail = "設定の対象フォルダーが一致しません。"; }
+                                { result = "refused"; detail = "設定の対象フォルダが一致しません。"; }
                                 else if (importSettings(settings) is { } error)
                                 { result = "failed"; detail = error; }
                             }

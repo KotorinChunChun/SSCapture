@@ -29,14 +29,14 @@ internal static partial class Program
                 .SequenceEqual(["アプリ名", "通知", "出力プリセット"]), "一覧の列が違う");
             Equal(7, table.Rows.Count);
             Equal(6, table.DisplayedRowCount(false));
-            Equal("プリセット経由", table.Rows[0].Cells[1].Value);
+            Equal("出力プリセットのアプリを使う", table.Rows[0].Cells[1].Value);
             Equal("★ クリップボード、資料用", table.Rows[0].Cells[2].Value);
             Check(table.Rows[0].Cells[2].ToolTipText.Contains("自動で開く：OFF"), "自動起動OFFの説明がない");
             Equal("保存用", table.Rows[1].Cells[2].Value);
             notification = editors[1].Id;
             editor.RefreshUsage();
             Equal("—", table.Rows[0].Cells[1].Value);
-            Equal("直接指定", table.Rows[1].Cells[1].Value);
+            Equal("通知用に指定", table.Rows[1].Cells[1].Value);
             table.CurrentCell = table.Rows[1].Cells[0];
             Equal(editors[1].Name, editor.Controls.Find("ImageEditorName", true).Single().Text);
         });
@@ -116,7 +116,7 @@ internal static partial class Program
             AppSettings? saved = null;
             using var form = new SettingsForm(settings, next => { saved = next; return null; }, _ => { }, () => []);
             var appTable = (DataGridView)form.Controls.Find("ImageEditorList", true).Single();
-            Equal("プリセット経由", appTable.Rows[0].Cells[1].Value);
+            Equal("出力プリセットのアプリを使う", appTable.Rows[0].Cells[1].Value);
             var list = (ListBox)form.Controls.Find("CapturePresetList", true).Single(); list.SelectedIndex = 1;
             string? nonDefaultApp = ((CapturePreset)list.SelectedItem!).ImageEditorId;
             form.Controls.Find("CapturePresetName", true).Single().Text = "別出力を編集中";

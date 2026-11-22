@@ -1531,7 +1531,7 @@ internal sealed partial class SessionController
                 }
                 else if (useWindowSource)
                 {
-                    if (target is null) throw new InvalidOperationException("WGCで撮影するウィンドウを選択してください。");
+                    if (target is null) throw new InvalidOperationException("撮影するウィンドウを選択してください。");
                     var capture = await IsolatedWindowCapture.TakeAsync(target, OutputSettings with { DefaultDestination = Destination },
                         Snapshot.Context?.FocusedElement, confirmedPreview, groupWindows ? group : [target], roots);
                     if (control is not null || selection.TargetMargin is not null)

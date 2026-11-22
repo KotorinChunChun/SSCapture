@@ -8,7 +8,7 @@ internal static partial class Program
 {
     private static void OutputConditionTests()
     {
-        Run("保存先とフォルダー表示はFileに従い命名欄は未保存でも編集できる", () =>
+        Run("保存先とフォルダ表示はFileに従い命名欄は未保存でも編集できる", () =>
         {
             for (int bits = 0; bits < 8; bits++)
             {

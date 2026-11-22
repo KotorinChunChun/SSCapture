@@ -15,7 +15,7 @@ internal static class SafeFiles
         if (root.Length < 4 || new[] { Environment.SpecialFolder.UserProfile, Environment.SpecialFolder.LocalApplicationData,
             Environment.SpecialFolder.Windows, Environment.SpecialFolder.DesktopDirectory, Environment.SpecialFolder.MyDocuments }
             .Any(folder => string.Equals(root, Environment.GetFolderPath(folder), StringComparison.OrdinalIgnoreCase)))
-            throw new IOException("広いシステム・利用者フォルダーを製品の対象にできません。");
+            throw new IOException("広いシステム・利用者フォルダを製品の対象にできません。");
         CheckLinks(root);
         return root;
     }

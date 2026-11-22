@@ -2,6 +2,23 @@
 
 Windows 11用の軽快な常駐スクリーンショット・領域録画ツールです。Windows標準の **Win＋Shift＋S（Snipping Tool）** を置き換え、範囲の決めやすさ、繰り返し撮影、撮影後の出力を重視しています。
 
+## 撮影中の画面
+
+![資料のグラフを矩形で囲んでいる途中の撮影画面。選択範囲の外が暗くなり、ポインタ横に座標と寸法、その近くに拡大鏡、画面右下に操作ガイドが表示されている](docs/images/readme/capture-scene-drag.png)
+
+撮影キーを押すと、その時点の画面を止めて範囲を選びます。上は、1点目を決めてドラッグしている途中の画面です。
+
+- 選択範囲の外側を暗くし、選んでいる範囲だけを明るく表示します。
+- ポインタ横に、いまの操作と取り消し方、範囲の左上の座標と幅・高さを表示します。
+- 拡大鏡で、ポインタ付近の画素と撮影範囲の境界（赤線）を確かめられます。
+- 画面右下の操作ガイドに、いま使えるキー（Spaceで基点の切り替え、ホイールで範囲の調整など）を表示します。
+
+| 2回のクリックで終点を待つ | ウィンドウを選ぶ | 固定サイズの枠を置く |
+| --- | --- | --- |
+| ![1点目をクリックした後、ポインタの位置まで範囲が広がり、終点のクリックを待っている画面](docs/images/readme/capture-scene-two-clicks.png) | ![資料の窓を指して、その窓全体が撮影対象として明るく表示されている画面](docs/images/readme/capture-scene-window.png) | ![960×540pxの固定サイズの枠を、ポインタの位置に合わせて置こうとしている画面](docs/images/readme/capture-scene-fixed.png) |
+
+画像は、架空のデスクトップで撮影したものです。ポインタ横の操作ガイドと画面右下の操作ガイドは初期設定でON、拡大鏡は初期設定でOFFで、設定の「基本」→「操作ガイド」で切り替えられます。[設定画面一覧](docs/settings.md)
+
 ## 想定活用フロー
 
 ### インプット
@@ -19,7 +36,7 @@ flowchart LR
 ```mermaid
 flowchart LR
     clipboard["クリップボード"] --> document["資料へ貼り付け"]
-    clipboard --> currentFolder["開いているフォルダーへ貼り付け"]
+    clipboard --> currentFolder["開いているフォルダへ貼り付け"]
     file["ファイル保存"] --> editor["画像を編集"]
     file --> manual["画像付き手順書を作成"]
     file --> openFolder["通知から保存先を開く"]
@@ -71,7 +88,7 @@ flowchart LR
 | 前回と同じ範囲や入出力設定で再撮影 | 〇 | × |
 | 入力・出力プリセットを撮影中に切り替え | 〇 | × |
 | 撮影時に指定した外部編集アプリを自動で開く | 〇 | × |
-| 通知の小画像をドラッグしてフォルダーや他のアプリへ渡す | 〇 | × |
+| 通知の小画像をドラッグしてフォルダや他のアプリへ渡す | 〇 | × |
 | 静止画を最前面にピン留めして表示 | 〇 | × |
 | 指定した幅の白い余白を付ける・256色や16色に減色する | 〇 | × |
 | 撮影時のポインタ位置やウィンドウ名をXMP・JSONに記録 | 〇 | × |
@@ -184,7 +201,7 @@ Windows 11用の常駐スクリーンショット・領域録画ツールです�
 - **[PPPaint](https://github.com/KotorinChunChun/PPPaint)**は、撮影画像に文字や図形を書き込んだり、レイヤーを使って編集したりできます。SSCaptureの外部アプリに登録して通知の編集先に指定すると、通知の小画像をダブルクリックして開けます。
 - **[MdVisualizer](https://github.com/KotorinChunChun/MdVisualizer)**は、SSCaptureで撮った画像を添えて、Markdown（.md）で手順書を執筆できます。プレビューで文章と画像の配置を確認しながら編集できます。
 - **[ChunapTool](https://github.com/KotorinChunChun/ChunapTool)**は、撮影前に指定ウィンドウの幅・高さをピクセル単位で微調整できます。同じ寸法のウィンドウを並べて比較したり、複数の撮影で画像サイズを揃えたりする用途に使えます。
-- **[SmartPaste](https://github.com/KotorinChunChun/SmartPaste)**を起動しておくと、SSCaptureでコピーした画像をエクスプローラーのフォルダー内で **Ctrl＋V** してPNGに保存できます。保存画面の「OCR」で読み取った文字をファイル名の候補にできます。
+- **[SmartPaste](https://github.com/KotorinChunChun/SmartPaste)**を起動しておくと、SSCaptureでコピーした画像をエクスプローラーのフォルダ内で **Ctrl＋V** してPNGに保存できます。保存画面の「OCR」で読み取った文字をファイル名の候補にできます。
 - **[OfficeAssist](https://github.com/KotorinChunChun/OfficeAssist)**を起動しておくと、SSCaptureの撮影通知にある小画像をデスクトップ版Excelのシートへドラッグ＆ドロップして、画像を直接配置できます。
 
 ```mermaid
@@ -200,6 +217,7 @@ flowchart LR
 ## 案内
 
 - [使い方](docs/usage.md)：撮影・録画・OCR命名・プリセット・履歴・通知
+- [設定画面一覧](docs/settings.md)：設定画面の全ページの画像と項目
 - [コマンドライン](docs/cli.md)：CLIからの撮影・時限／定期撮影・設定の書き出しと取り込み
 - [KotorinToysでSSCaptureを認識できない場合](docs/recovery.md)：v0.1.2の公開setupからの復旧
 - [第三者ライセンス・配布元](THIRD_PARTY.md)

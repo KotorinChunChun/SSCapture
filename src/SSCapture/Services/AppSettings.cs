@@ -150,7 +150,7 @@ internal sealed record AppSettings
             (PresetCaptureShortcuts is null || region.Shortcut == "" ? region : region with { Shortcut = "" }).Validate();
         if (PresetSchemaVersion >= 1 && (SavedRegions.Count(p => p.IsDefault) != 1 || CapturePresets.Count(p => p.IsDefault) != 1))
             throw new ArgumentException("入力・出力それぞれ1件の既定プリセットを指定してください。");
-        if (SavedRegions.Any(r => r.Id is LastRegionKeyId or LastRecipeKeyId)) throw new ArgumentException("登録範囲のIDが予約値です。");
+        if (SavedRegions.Any(r => r.Id is LastRegionKeyId or LastRecipeKeyId)) throw new ArgumentException("入力プリセットのIDに、アプリが内部で使うIDは指定できません。");
         if (SavedRegions.Select(r => r.Id).Distinct(StringComparer.Ordinal).Count() != SavedRegions.Length)
             throw new ArgumentException("登録範囲のIDが重複しています。");
         if (FixedWidth is < 1 or > 32768 || FixedHeight is < 1 or > 32768 || (long)FixedWidth * FixedHeight > 100_000_000)
