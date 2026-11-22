@@ -8,6 +8,36 @@ internal static partial class Program
 {
     static void SettingsTransferTests()
     {
+        Run("旧開発版の廃止された編集先だけを設定の読込と取込で除く", () => WithSettingsDirectory(directory =>
+        {
+            var retired = new ExternalApplication { Id = "old-editor", Name = "旧編集アプリ", Launch = (ExternalApplicationLaunch)2 };
+            var defaults = new AppSettings().ApplyDefaults();
+            var options = defaults with
+            {
+                DefaultDestination = OutputDestination.File | OutputDestination.ExternalApp,
+                ImageEditors = [..defaults.ImageEditors, retired],
+                SelectedImageEditorId = retired.Id,
+                NotificationApplicationId = retired.Id,
+                NotificationClickAction = NotificationClickAction.ExternalApplication,
+                CapturePresets = defaults.CapturePresets.Select(preset => preset.IsDefault
+                    ? preset with { ImageEditorId = retired.Id, Destination = OutputDestination.File | OutputDestination.ExternalApp }
+                    : preset).ToArray()
+            };
+            string path = Path.Combine(directory, "old-preview.json");
+            File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(options, SettingsStore.Options));
+            var read = new SettingsStore(path).Load(out string? warning);
+            Equal<string?>(null, warning);
+            foreach (var settings in new[] { read, SettingsTransfer.Read(path) })
+            {
+                Check(defaults.ImageEditors.SequenceEqual(settings.ImageEditors), "別の編集アプリに影響した");
+                Equal("", settings.SelectedImageEditorId);
+                Equal("", settings.NotificationApplicationId);
+                Equal(NotificationClickAction.None, settings.NotificationClickAction);
+                Equal(OutputDestination.File, settings.DefaultDestination);
+                Check(string.IsNullOrEmpty(settings.CapturePresets.Single(preset => preset.IsDefault).ImageEditorId), "廃止済みの編集先がプリセットに残った");
+            }
+        }));
+
         Run("設定ファイルはUTF-8で往復し、端末固有の指定を起動せず確認する", () => WithSettingsDirectory(directory =>
         {
             var legacyPath = Path.Combine(directory, "legacy.json");

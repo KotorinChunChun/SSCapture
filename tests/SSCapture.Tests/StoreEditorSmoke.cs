@@ -9,9 +9,9 @@ internal static partial class Program
 {
     private static int OpenStoreEditorSmoke(string[] args)
     {
-        if (args.Length != 3 || args[1] is not ("photos" or "clipchamp" or "snipping" or "screenpresso"))
+        if (args.Length != 3 || args[1] is not ("photos" or "clipchamp" or "snipping"))
         {
-            Console.Error.WriteLine("使い方: --store-editor-open photos|clipchamp|snipping|screenpresso <検証用ファイル>");
+            Console.Error.WriteLine("使い方: --store-editor-open photos|clipchamp|snipping <検証用ファイル>");
             return 2;
         }
 
@@ -19,11 +19,9 @@ internal static partial class Program
         {
             string path = Path.GetFullPath(args[2]);
             if (!File.Exists(path)) throw new FileNotFoundException("検証用ファイルが見つかりません。", path);
-            if (args[1] is "snipping" or "screenpresso")
+            if (args[1] == "snipping")
             {
-                bool snipping = args[1] == "snipping";
-                var app = new ExternalApplication { Name = snipping ? "Snipping Tool" : "Screenpresso",
-                    Launch = snipping ? ExternalApplicationLaunch.SnippingToolPng : ExternalApplicationLaunch.ScreenpressoPng };
+                var app = new ExternalApplication { Name = "Snipping Tool", Launch = ExternalApplicationLaunch.SnippingToolPng };
                 new ExternalEditor().Resolve(app)(path);
             }
             else

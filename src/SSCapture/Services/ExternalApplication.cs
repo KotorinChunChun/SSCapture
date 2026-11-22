@@ -1,6 +1,6 @@
 namespace SSCapture.Services;
 
-internal enum ExternalApplicationLaunch { Executable, SnippingToolPng, ScreenpressoPng }
+internal enum ExternalApplicationLaunch { Executable, SnippingToolPng }
 
 internal sealed record ExternalApplication
 {

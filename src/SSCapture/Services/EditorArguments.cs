@@ -74,7 +74,6 @@ internal static class EditorPresets
             ];
             if (EditorExecutable.FindPPPaint() is string path) presets.Add(new("PPPaint", path, EditorArguments.Default));
             presets.Add(new("Snipping Tool", "", EditorArguments.Default, ExternalApplicationLaunch.SnippingToolPng));
-            presets.Add(new("Screenpresso", "", EditorArguments.Default, ExternalApplicationLaunch.ScreenpressoPng));
             return presets;
         }
     }

@@ -17,7 +17,7 @@ internal static partial class Program
                 var toast = new FakeCaptureToast();
                 var opened = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
                 var valid = new ExternalApplication { Name = "静止画", Executable = Environment.ProcessPath! };
-                var missing = new ExternalApplication { Name = "削除済み", Launch = ExternalApplicationLaunch.ScreenpressoPng };
+                var missing = new ExternalApplication { Name = "削除済み", Launch = ExternalApplicationLaunch.SnippingToolPng };
                 var video = new ExternalApplication { Name = "動画", Executable = Environment.ProcessPath! };
                 var settings = new AppSettings { ImageEditors = [valid, missing], VideoEditors = [video], NotificationApplicationId = video.Id };
                 using var feedback = new CaptureFeedback(createToast: () => toast, sound: new FakeCompletionSound(),

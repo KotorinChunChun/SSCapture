@@ -135,7 +135,7 @@ internal static class SettingsHelp
         if (name.StartsWith("Region", StringComparison.Ordinal) || name is "SavedRegions" or "NewNumericRegion" or "AddLastRegion" or "DrawRegion" or "PickFixedRegion" or "PreviewRegion" or "SaveRegion" or "DeleteRegion" or "CloseRegions")
             return "入力プリセットの名前・物理pxの位置と寸法を編集します。設定画面では変更確定時に自動保存します。固定サイズは撮影時に位置を選び、固定位置とサイズは保存した場所を動かさず使用します。";
         if (name is "ImageEditorPreset" or "VideoEditorPreset") return "外部編集アプリの実行ファイルとパラメータの入力例です。選ぶと入力欄へ反映します。実際のインストール先に合わせて変更し、保存してください。";
-        if (name is "ImageEditorPath" or "VideoEditorPath") return "撮影結果を渡す編集アプリの.exeファイルの完全パスです。外部アプリへの出力がONのときに使用します。登録したSnipping ToolとScreenpressoはWindowsのPNG関連付けで開きます。";
+        if (name is "ImageEditorPath" or "VideoEditorPath") return "撮影結果を渡す編集アプリの.exeファイルの完全パスです。外部アプリへの出力がONのときに使用します。登録したSnipping ToolはWindowsのPNG関連付けで開きます。";
         if (name is "ImageEditorArguments" or "VideoEditorArguments") return "外部アプリへ渡す起動引数です。{file}は完全パス、{directory}はフォルダ、{filename}はファイル名に置換します。空白を含むパスを渡せるよう、\"{file}\"のように引用符で囲んでください。";
         return null;
     }

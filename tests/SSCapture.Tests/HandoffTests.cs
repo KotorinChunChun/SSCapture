@@ -123,15 +123,11 @@ internal static partial class Program
                 }
             }));
 
-        Run("PNG編集アプリ識別は特定のパッケージ・実在するOpen Withコマンドを要求", () =>
+        Run("PNG編集アプリはSnipping Toolのパッケージを識別する", () =>
         {
-            Check(PngEditorAssociation.Matches(ExternalApplicationLaunch.SnippingToolPng, PngEditorAssociation.SnippingToolAppId, null, _ => false), "Snipping Toolを識別できない");
-            Check(!PngEditorAssociation.Matches(ExternalApplicationLaunch.SnippingToolPng, "Other!App", null, _ => true), "別のPNGハンドラーを選んだ");
-            string exe = Path.Combine(Path.GetTempPath(), "Screenpresso.exe");
-            string command = $"\"{exe}\" /open \"%1\"";
-            Check(PngEditorAssociation.Matches(ExternalApplicationLaunch.ScreenpressoPng, null, command, path => path == exe), "ScreenpressoのPNGハンドラーを識別できない");
-            Check(!PngEditorAssociation.Matches(ExternalApplicationLaunch.ScreenpressoPng, null, command, _ => false), "削除されたアプリを選んだ");
-            Check(!PngEditorAssociation.Matches(ExternalApplicationLaunch.ScreenpressoPng, null, $"\"{exe}\" /capture", _ => true), "撮影コマンドを選んだ");
+            Check(PngEditorAssociation.Matches(PngEditorAssociation.SnippingToolAppId), "Snipping Toolを識別できない");
+            Check(!PngEditorAssociation.Matches("Other!App"), "別のPNGハンドラーを選んだ");
+            Equal(1, EditorPresets.Images.Count(preset => preset.Launch != ExternalApplicationLaunch.Executable));
             var old = JsonSerializer.Deserialize<ExternalApplication>("{\"Id\":\"legacy\",\"Name\":\"旧登録\"}")!;
             Equal(ExternalApplicationLaunch.Executable, old.Launch);
         });

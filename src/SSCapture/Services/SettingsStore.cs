@@ -74,10 +74,40 @@ internal sealed class SettingsStore(string path)
         }
         if (!root.TryGetProperty("SchemaVersion", out var editorVersion) || editorVersion.GetInt32() < 3)
             settings = settings.MigrateEditors();
+        settings = RemoveRetiredEditor(settings);
         settings.Validate();
         settings = settings.ApplyDefaults();
         settings.Validate();
         return settings;
+    }
+
+    private static AppSettings RemoveRetiredEditor(AppSettings settings)
+    {
+        // 旧開発版がJSONに保存した専用起動方式の値。
+        const ExternalApplicationLaunch retiredLaunch = (ExternalApplicationLaunch)2;
+        if (settings.ImageEditors is not { Length: > 0 } || settings.VideoEditors is null || settings.CapturePresets is null)
+            return settings;
+        var retiredIds = settings.ImageEditors.Where(app => app?.Launch == retiredLaunch)
+            .Select(app => app.Id).ToHashSet(StringComparer.Ordinal);
+        if (retiredIds.Count == 0) return settings;
+
+        bool selected = retiredIds.Contains(settings.SelectedImageEditorId);
+        bool notification = retiredIds.Contains(settings.NotificationApplicationId)
+            && !settings.VideoEditors.Any(app => app?.Id == settings.NotificationApplicationId);
+        return settings with
+        {
+            ImageEditors = settings.ImageEditors.Where(app => app?.Launch != retiredLaunch).ToArray(),
+            SelectedImageEditorId = selected ? "" : settings.SelectedImageEditorId,
+            ImageEditorPath = selected ? "" : settings.ImageEditorPath,
+            ImageEditorArguments = selected ? EditorArguments.Default : settings.ImageEditorArguments,
+            DefaultDestination = selected ? settings.DefaultDestination & ~OutputDestination.ExternalApp : settings.DefaultDestination,
+            NotificationApplicationId = notification ? "" : settings.NotificationApplicationId,
+            NotificationClickAction = notification && settings.NotificationClickAction == NotificationClickAction.ExternalApplication
+                ? NotificationClickAction.None : settings.NotificationClickAction,
+            CapturePresets = settings.CapturePresets.Select(preset => preset is { ImageEditorId: string id } && retiredIds.Contains(id)
+                ? preset with { ImageEditorId = null, Destination = preset.Destination & ~OutputDestination.ExternalApp }
+                : preset).ToArray()
+        };
     }
 
     public void Save(AppSettings settings) => Save(settings, import: false);

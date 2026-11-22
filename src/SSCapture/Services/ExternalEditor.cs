@@ -62,16 +62,14 @@ internal static class PngEditorAssociation
 
     internal static string? Find(ExternalApplicationLaunch kind)
     {
+        if (kind != ExternalApplicationLaunch.SnippingToolPng) return null;
         try
         {
             using var classes = Registry.ClassesRoot;
             using var png = classes.OpenSubKey(".png");
             using var user = Registry.CurrentUser.OpenSubKey(PerUserPng);
-            using var registeredApps = classes.OpenSubKey(@"Applications\Screenpresso.exe\SupportedTypes");
             var candidates = ReadCandidates(png).Concat(ReadCandidates(user))
                 .Concat(ReadCapabilities(Registry.CurrentUser)).Concat(ReadCapabilities(Registry.LocalMachine));
-            if (registeredApps?.GetValueNames().Contains(".png", StringComparer.OrdinalIgnoreCase) == true)
-                candidates = candidates.Append(@"Applications\Screenpresso.exe");
             foreach (string candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 using var association = classes.OpenSubKey(candidate);
@@ -79,7 +77,7 @@ internal static class PngEditorAssociation
                 if (open is null) continue;
                 using var application = association?.OpenSubKey("Application");
                 string? appId = application?.GetValue("AppUserModelID") as string;
-                if (Matches(kind, appId, open.GetValue(null) as string, File.Exists)) return candidate;
+                if (Matches(appId)) return candidate;
             }
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { }
@@ -91,11 +89,6 @@ internal static class PngEditorAssociation
         using var progIds = extension?.OpenSubKey("OpenWithProgids");
         foreach (string id in progIds?.GetValueNames() ?? [])
             if (id.Length != 0) yield return id;
-
-        using var openWith = extension?.OpenSubKey("OpenWithList");
-        if (openWith?.GetSubKeyNames().Contains("Screenpresso.exe", StringComparer.OrdinalIgnoreCase) == true ||
-            openWith?.GetValueNames().Any(name => string.Equals(openWith.GetValue(name) as string, "Screenpresso.exe", StringComparison.OrdinalIgnoreCase)) == true)
-            yield return @"Applications\Screenpresso.exe";
 
         string? defaultClass = extension?.GetValue(null) as string;
         if (!string.IsNullOrWhiteSpace(defaultClass)) yield return defaultClass;
@@ -114,19 +107,7 @@ internal static class PngEditorAssociation
         }
     }
 
-    internal static bool Matches(ExternalApplicationLaunch kind, string? appId, string? command, Func<string, bool> exists)
-    {
-        if (kind == ExternalApplicationLaunch.SnippingToolPng)
-            return string.Equals(appId, SnippingToolAppId, StringComparison.OrdinalIgnoreCase);
-        if (kind != ExternalApplicationLaunch.ScreenpressoPng || string.IsNullOrWhiteSpace(command)) return false;
-
-        string[] args;
-        try { args = EditorArguments.Parse(command); }
-        catch (ArgumentException) { return false; }
-        return args.Length >= 2 && Path.IsPathFullyQualified(args[0])
-            && string.Equals(Path.GetFileName(args[0]), "Screenpresso.exe", StringComparison.OrdinalIgnoreCase)
-            && args.Skip(1).Any(arg => arg is "%1" or "%L" or "%l") && exists(args[0]);
-    }
+    internal static bool Matches(string? appId) => string.Equals(appId, SnippingToolAppId, StringComparison.OrdinalIgnoreCase);
 
     internal static void Open(string association, string path)
     {
