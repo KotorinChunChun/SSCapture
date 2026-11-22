@@ -34,11 +34,11 @@ flowchart TB
 ```mermaid
 flowchart TB
     clipboard["クリップボード"] --> document["資料へ貼り付け"]
-    clipboard --> currentFolder["開いているフォルダへ貼り付け"]
     file["ファイル保存"] --> editor["画像を編集"]
     file --> manual["画像付き手順書を作成"]
     file --> openFolder["通知から保存先を開く"]
     notice["撮影通知"] --> spreadsheet["表計算シートへ画像を配置"]
+    notice --> drop["フォルダ・アプリへドロップ"]
 ```
 
 出力方法と保存先は出力プリセットで指定します。[おすすめ連携ツール](#おすすめ連携ツール)・[用途別の操作例](docs/usage.md#用途別の操作例)
