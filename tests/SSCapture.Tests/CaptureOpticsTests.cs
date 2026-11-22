@@ -8,25 +8,32 @@ internal static partial class Program
 {
     private static void CaptureOpticsTests()
     {
-        Run("起点の拡大鏡は中央の1画素だけを赤線で囲う", () =>
+        Run("拡大鏡の起点は偶数ドットを赤い十字で四等分し各画素の色を保つ", () =>
         {
-            Rectangle viewport = new(0, 0, 90, 90);
-            using var frame = new Bitmap(90, 90);
-            using (Graphics graphics = Graphics.FromImage(frame)) graphics.Clear(Color.Lime);
-            using var image = new Bitmap(90, 90);
+            const int dots = 6, zoom = 7, size = dots * zoom, center = size / 2;
+            Rectangle source = new(-20, -30, 40, 40), lens = new(0, 0, size, size);
+            Point boundary = new(-3, -4);
+            using var frame = new Bitmap(source.Width, source.Height);
+            Color[] colors = [Color.Lime, Color.Cyan, Color.Yellow, Color.Magenta];
+            for (int y = 0; y < frame.Height; y++)
+                for (int x = 0; x < frame.Width; x++)
+                    frame.SetPixel(x, y, colors[(x < boundary.X - source.X ? 0 : 1) + (y < boundary.Y - source.Y ? 0 : 2)]);
+            using var image = new Bitmap(size, size);
             using (Graphics graphics = Graphics.FromImage(image))
-                CaptureMagnifier.Draw(graphics, viewport, frame, viewport, new(45, 45), new(42, 42, 3, 3), markOrigin: true);
-            for (int y = 1; y < 89; y++)
-                for (int x = 1; x < 89; x++)
+                CaptureMagnifier.Draw(graphics, lens, frame, source, boundary, new(-4, -5, 2, 2), markOrigin: true,
+                    dotCount: dots, zoom: zoom);
+            for (int y = 1; y < size - 1; y++)
+                for (int x = 1; x < size - 1; x++)
                 {
-                    bool outline = x is >= 40 and <= 49 && y is >= 40 and <= 49
-                        && (x is 40 or 49 || y is 40 or 49);
-                    Equal((outline ? Color.Red : Color.Lime).ToArgb(), image.GetPixel(x, y).ToArgb());
+                    Color expected = x == center || y == center ? Color.Red
+                        : colors[(x < center ? 0 : 1) + (y < center ? 0 : 2)];
+                    Equal(expected.ToArgb(), image.GetPixel(x, y).ToArgb());
                 }
         });
-        Run("四方向の矩形で拡大鏡中央の画素と赤線が実際の切り抜き端に合う", () =>
+        Run("四方向の矩形で拡大鏡の赤線と明るい象限が実際の切り抜き端に合う", () =>
         {
-            Rectangle source = new(-10, -9, 20, 18), lens = new(0, 0, 90, 90);
+            const int dots = 8, zoom = 8, size = dots * zoom, center = size / 2;
+            Rectangle source = new(-10, -9, 20, 18), lens = new(0, 0, size, size);
             using var frame = new Bitmap(source.Width, source.Height);
             using (Graphics graphics = Graphics.FromImage(frame)) graphics.Clear(Color.Lime);
             Rectangle selection = new(-3, -2, 6, 4);
@@ -39,26 +46,54 @@ internal static partial class Program
                     var gesture = new SelectionGesture(CaptureMode.Rectangle, [source], []);
                     gesture.Begin(start, new(2, 2));
                     gesture.Move(end);
-                    Point sample = gesture.MagnifierPoint;
-                    Equal(new Point(x - (endsRight ? 1 : 0), y - (endsBottom ? 1 : 0)), sample);
-                    frame.SetPixel(sample.X - source.X, sample.Y - source.Y, Color.Cyan);
-                    using var image = new Bitmap(90, 90);
+                    Equal(end, gesture.MagnifierPoint);
+                    Point inside = new(x - (endsRight ? 1 : 0), y - (endsBottom ? 1 : 0));
+                    frame.SetPixel(inside.X - source.X, inside.Y - source.Y, Color.Cyan);
+                    using var image = new Bitmap(size, size);
                     using (Graphics graphics = Graphics.FromImage(image))
-                        CaptureMagnifier.Draw(graphics, lens, frame, source, sample, gesture.Selection);
+                        CaptureMagnifier.Draw(graphics, lens, frame, source, gesture.MagnifierPoint, gesture.Selection,
+                            dotCount: dots, zoom: zoom);
                     var confirmed = gesture.End(end, OutputDestination.Clipboard)!;
                     Equal(selection, confirmed.Bounds);
                     using var cropped = CaptureGeometry.Crop(frame, source, confirmed.Bounds)!;
-                    int inX = endsRight ? cropped.Width - 1 : 0, inY = endsBottom ? cropped.Height - 1 : 0;
-                    Equal(cropped.GetPixel(inX, inY).ToArgb(), image.GetPixel(45, 45).ToArgb());
-                    Equal(Color.Cyan.ToArgb(), image.GetPixel(45, 45).ToArgb());
-                    Equal(Color.Red.ToArgb(), image.GetPixel(endsRight ? 50 : 40, 45).ToArgb());
-                    Equal(Color.Red.ToArgb(), image.GetPixel(45, endsBottom ? 50 : 40).ToArgb());
-                    Equal(Color.White.ToArgb(), image.GetPixel(41, 45).ToArgb());
-                    Color outside = image.GetPixel(endsRight ? 55 : 35, endsBottom ? 55 : 35);
-                    Check(outside.G is > 0 and < 255 && outside.B == 0, "範囲外の画素の減光が一致しない");
-                    frame.SetPixel(sample.X - source.X, sample.Y - source.Y, Color.Lime);
+                    int inX = endsRight ? center - zoom / 2 : center + zoom / 2;
+                    int inY = endsBottom ? center - zoom / 2 : center + zoom / 2;
+                    Equal(cropped.GetPixel(endsRight ? cropped.Width - 1 : 0, endsBottom ? cropped.Height - 1 : 0).ToArgb(),
+                        image.GetPixel(inX, inY).ToArgb());
+                    Equal(Color.Cyan.ToArgb(), image.GetPixel(inX, inY).ToArgb());
+                    Equal(Color.Red.ToArgb(), image.GetPixel(center, inY).ToArgb());
+                    Equal(Color.Red.ToArgb(), image.GetPixel(inX, center).ToArgb());
+                    int outX = 2 * center - inX, outY = 2 * center - inY;
+                    foreach (Point outside in new Point[] { new(outX, outY), new(inX, outY), new(outX, inY) })
+                    {
+                        Color shaded = image.GetPixel(outside.X, outside.Y);
+                        Check(shaded.G is > 0 and < 255 && shaded.B == 0, "撮影範囲外の象限が明るい");
+                    }
+                    frame.SetPixel(inside.X - source.X, inside.Y - source.Y, Color.Lime);
                 }
         });
+        Run("旧設定の拡大鏡には10×10ドットと10倍を補い奇数・範囲外は拒否する", () => WithServiceDirectory(directory =>
+        {
+            string path = Path.Combine(directory, "settings.json");
+            File.WriteAllText(path, """{"ShowMagnifier":true}""");
+            var store = new SettingsStore(path);
+            AppSettings old = store.Load(out string? warning);
+            Equal<string?>(null, warning);
+            Equal(10, old.MagnifierDotCount);
+            Equal(10, old.MagnifierZoom);
+            store.Save(old with { MagnifierDotCount = 18, MagnifierZoom = 7 });
+            AppSettings current = store.Load(out warning);
+            Equal<string?>(null, warning);
+            Equal(18, current.MagnifierDotCount);
+            Equal(7, current.MagnifierZoom);
+            foreach (AppSettings invalid in new[]
+            {
+                current with { MagnifierDotCount = 9 }, current with { MagnifierDotCount = 34 },
+                current with { MagnifierZoom = 1 }, current with { MagnifierZoom = 21 }
+            })
+                ExpectSettingsFailure<ArgumentException>(() => store.Save(invalid));
+            Equal(18, store.Load(out _).MagnifierDotCount);
+        }));
         Run("拡大鏡は離れたウィンドウ・モニター境界とグリッドの補正済み端点を使う", () =>
         {
             Rectangle monitor = new(-400, -400, 400, 400), window = new(-288, -258, 100, 100);
@@ -66,12 +101,12 @@ internal static partial class Program
             gesture.Begin(new(-298, -240), new(2, 2), snap: true);
             Equal(new Point(-288, -240), gesture.MagnifierPoint);
             gesture.Move(new(-199, -167), snap: true);
-            Equal(new Point(-189, -159), gesture.MagnifierPoint);
+            Equal(new Point(-188, -158), gesture.MagnifierPoint);
             Equal(new Rectangle(-288, -240, 100, 82), gesture.Selection);
             gesture.Move(new(-4, -1), snap: true);
-            Equal(new Point(-1, -1), gesture.MagnifierPoint);
+            Equal(Point.Empty, gesture.MagnifierPoint);
             gesture.Move(new(-253, -191), action: CaptureKeyAction.Grid);
-            Equal(new Point(-249, -201), gesture.MagnifierPoint);
+            Equal(new Point(-248, -200), gesture.MagnifierPoint);
             Equal(new Point(-253, -191), gesture.RawCurrent);
         });
         Run("拡大鏡は画面四隅・四辺でガイドを避け、空きが戻ると再表示する", () =>
@@ -90,6 +125,10 @@ internal static partial class Program
                 }
             Point center = new(-250, -150);
             var placed = CaptureMagnifier.Place(viewport, center, [], previousQuadrant: 3);
+            var larger = CaptureMagnifier.Place(viewport, center, [], previousQuadrant: 3, lensSize: 24 * 8);
+            Equal(new Size(192, 192), larger.Bounds.Size);
+            Check(viewport.Contains(larger.Bounds), "倍率変更後の拡大鏡が画面外");
+            Equal(Rectangle.Empty, CaptureMagnifier.Place(viewport, center, [], -1, lensSize: 640).Bounds);
             Equal(3, placed.Quadrant);
             Equal(3, CaptureMagnifier.Place(viewport, center + new Size(1, -2), [], placed.Quadrant).Quadrant);
             Equal(Rectangle.Empty, CaptureMagnifier.Place(viewport, center, [viewport], placed.Quadrant).Bounds);
@@ -104,7 +143,7 @@ internal static partial class Program
             // now centered above the pointer between the two upper guides.
             labels[2] = new(0, 184, 105, 90);
             labels[3] = new(215, 184, 105, 90);
-            var placement = CaptureMagnifier.Place(viewport, pointer, labels, -1);
+            var placement = CaptureMagnifier.Place(viewport, pointer, labels, -1, lensSize: 90);
             Check(!placement.Bounds.IsEmpty, "空き領域を見つけられない");
             Equal(-1, placement.Quadrant);
             var occupied = labels.Append(new Rectangle(pointer, new Size(1, 1)))

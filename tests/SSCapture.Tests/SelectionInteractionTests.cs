@@ -6,6 +6,9 @@ internal static partial class Program
 {
     private static void SelectionInteractionTests()
     {
+        static SessionController RectangleSelectionSession(Services.AppSettings settings) =>
+            OutputSession(settings with { CaptureKeys = new(), CaptureBeforeKeys = new() });
+
         Run("ポインタ横のガイドは左単押しのウィンドウ名を負座標のドラッグ範囲に切り替える", () =>
         {
             Rectangle monitor = new(-400, -100, 400, 300);
@@ -89,21 +92,21 @@ internal static partial class Program
         });
         Run("矩形の2点クリックは1点目で確定せず終点まで同じ始点を使う", () =>
         {
-            var session = OutputSession(new Services.AppSettings { SelectionMethod = CaptureSelectionMethod.TwoClicks });
+            var session = RectangleSelectionSession(new Services.AppSettings { SelectionMethod = CaptureSelectionMethod.TwoClicks });
             using var overlay = new CaptureOverlay(session, new(0, 0, 400, 300));
             try
             {
                 _ = overlay.Handle;
-                Check(session.MagnifierMarksOrigin, "起点を選ぶ前に赤枠がない");
+                Check(session.MagnifierMarksOrigin, "起点を選ぶ前に十字線がない");
                 Click(new(240, 180));
                 Check(!session.Completion.IsCompleted && session.Dragging, "1点目で選択を終えた");
-                Check(session.MagnifierMarksOrigin, "起点を決めた直後に赤枠が消えた");
+                Check(session.MagnifierMarksOrigin, "起点を決めた直後に十字線が消えた");
                 Equal(new Point(240, 180), session.MagnifierSample);
                 Click(new(240, 180));
                 Check(!session.Completion.IsCompleted, "ゼロ寸法を確定した");
                 session.MoveTo(new(40, 50));
                 Equal(new Rectangle(40, 50, 200, 130), session.DisplaySelection);
-                Check(!session.MagnifierMarksOrigin, "終点でも起点用の赤枠が表示された");
+                Check(!session.MagnifierMarksOrigin, "終点でも起点用の十字線が表示された");
                 Equal(new Point(40, 50), session.MagnifierSample);
                 Click(new(40, 50));
                 using var result = session.Completion.GetAwaiter().GetResult();
@@ -119,7 +122,7 @@ internal static partial class Program
         });
         Run("2点目の待機をEscで取り消すと次の左クリックが新しい始点になる", () =>
         {
-            var session = OutputSession(new Services.AppSettings { SelectionMethod = CaptureSelectionMethod.TwoClicks });
+            var session = RectangleSelectionSession(new Services.AppSettings { SelectionMethod = CaptureSelectionMethod.TwoClicks });
             using var overlay = new CaptureOverlay(session, new(0, 0, 400, 300));
             try
             {
@@ -137,7 +140,7 @@ internal static partial class Program
         });
         Run("矢印の1ドット調整はグリッドを一時的に使わず元の始点を維持する", () =>
         {
-            var session = OutputSession(new Services.AppSettings { SelectionMethod = CaptureSelectionMethod.TwoClicks, GridStepPixels = 20 });
+            var session = RectangleSelectionSession(new Services.AppSettings { SelectionMethod = CaptureSelectionMethod.TwoClicks, GridStepPixels = 20 });
             using var overlay = new CaptureOverlay(session, new(0, 0, 400, 300));
             try
             {
@@ -154,7 +157,7 @@ internal static partial class Program
         });
         Run("高速ドラッグのDown/Upは現在カーソル位置ではなくイベント座標で確定", () =>
         {
-            var session = OutputSession(new Services.AppSettings());
+            var session = RectangleSelectionSession(new Services.AppSettings());
             using var overlay = new CaptureOverlay(session, new(0, 0, 400, 300));
             try
             {

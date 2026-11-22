@@ -38,7 +38,8 @@ internal sealed partial class SettingsForm : Form
     private readonly NumericUpDown snapDistance, gridStep;
     private readonly CheckBox gridEnabled, guideEnabled, pointerGuideEnabled;
     private readonly CheckBox magnifierEnabled, shareCapturePresentation;
-    private readonly ComboBox guideDisplay;
+    private readonly ComboBox guideDisplay, magnifierDotCount;
+    private readonly NumericUpDown magnifierZoom;
     private readonly StartupSettingsControl startupSettings;
     private readonly CaptureCommandControl captureCommand;
 
@@ -289,7 +290,7 @@ internal sealed partial class SettingsForm : Form
         // 旧単独ページを廃止し、プリセットの編集欄だけを公開する。
         basic.Controls.Clear();
         basic.RowStyles.Clear(); basic.RowCount = 5;
-        foreach (int height in new[] { 108, 120, 108, 84, 46 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        foreach (int height in new[] { 108, 120, 188, 84, 46 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
         basic.Dock = DockStyle.Top;
         basic.AutoSize = true;
         basic.AutoSizeMode = AutoSizeMode.GrowAndShrink;
@@ -311,7 +312,7 @@ internal sealed partial class SettingsForm : Form
         snapDistance = PixelField(precisionOptions, "ウィンドウスナップ距離（px）", "SnapDistancePixels", settings.SnapDistancePixels, 2);
         Add(basic, "位置・寸法の補正", precisionOptions, 1);
 
-        var guideOptions = BasicFields(34, 34, 34);
+        var guideOptions = BasicFields(34, 34, 34, 40, 40);
         guideEnabled = BasicCheckBox("ShowSelectionGuide", "画面右下に操作ガイドを表示する", settings.ShowSelectionGuide);
         pointerGuideEnabled = BasicCheckBox("ShowPointerGuide", "ポインタ横に操作ガイドを表示する", settings.ShowPointerGuide);
         magnifierEnabled = BasicCheckBox("ShowMagnifier", "拡大鏡を表示する", settings.ShowMagnifier);
@@ -323,6 +324,15 @@ internal sealed partial class SettingsForm : Form
         guideOptions.Controls.Add(guideDisplay, 1, 0);
         AddFullRow(guideOptions, pointerGuideEnabled, 1);
         AddFullRow(guideOptions, magnifierEnabled, 2);
+        magnifierDotCount = Combo(guideOptions, "拡大鏡の表示ドット数", "MagnifierDotCount", 3);
+        for (int dots = CaptureMagnifier.MinDotCount; dots <= CaptureMagnifier.MaxDotCount; dots += 2)
+            magnifierDotCount.Items.Add(dots);
+        magnifierDotCount.FormattingEnabled = true;
+        magnifierDotCount.Format += (_, e) => { if (e.ListItem is int dots) e.Value = $"{dots} × {dots}"; };
+        magnifierDotCount.SelectedItem = settings.MagnifierDotCount;
+        magnifierZoom = new NumericUpDown { Name = "MagnifierZoom", Minimum = CaptureMagnifier.MinZoom,
+            Maximum = CaptureMagnifier.MaxZoom, Value = settings.MagnifierZoom };
+        Add(guideOptions, "拡大鏡の拡大倍率（倍）", magnifierZoom, 4);
         Add(basic, "操作ガイド", guideOptions, 2);
 
         startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration());
@@ -536,6 +546,7 @@ internal sealed partial class SettingsForm : Form
         Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked, ShowPointerGuide = pointerGuideEnabled.Checked,
         SelectionGuideDisplay = (SelectionGuideDisplay)guideDisplay.SelectedIndex,
         ShowMagnifier = magnifierEnabled.Checked, ShareCapturePresentation = shareCapturePresentation.Checked,
+        MagnifierDotCount = (int)magnifierDotCount.SelectedItem!, MagnifierZoom = SettingNumber(magnifierZoom),
         SnapDistancePixels = SettingNumber(snapDistance), GridStepPixels = SettingNumber(gridStep)
     };
     private string NotificationAppId() => (notificationApplication?.SelectedItem as NotificationAppItem)?.Id ?? committed.NotificationApplicationId;

@@ -77,7 +77,7 @@ internal static partial class Program
                 finally { session.Cancel(); }
             }
         });
-        Run("拡大鏡は負座標の画面でポインタ下の物理1pxを中心に表示する", () =>
+        Run("拡大鏡は負座標の画面端で境界両側の物理画素を表示する", () =>
         {
             Rectangle frameBounds = new(-400, -200, 320, 240);
             var viewport = new Rectangle(Point.Empty, frameBounds.Size);
@@ -90,9 +90,9 @@ internal static partial class Program
             source.SetPixel(318, 0, Color.Red);
             using (Graphics graphics = Graphics.FromImage(destination))
                 CaptureMagnifier.Draw(graphics, lens, source, frameBounds, pointer);
-            Equal(Color.Lime.ToArgb(), destination.GetPixel(lens.Left + 45, lens.Top + 45).ToArgb());
-            Equal(Color.Red.ToArgb(), destination.GetPixel(lens.Left + 35, lens.Top + 45).ToArgb());
-            Equal(Color.DimGray.ToArgb(), destination.GetPixel(lens.Left + 45, lens.Top + 35).ToArgb());
+            Equal(Color.Lime.ToArgb(), destination.GetPixel(lens.Left + 55, lens.Top + 55).ToArgb());
+            Equal(Color.Red.ToArgb(), destination.GetPixel(lens.Left + 45, lens.Top + 55).ToArgb());
+            Equal(Color.DimGray.ToArgb(), destination.GetPixel(lens.Left + 55, lens.Top + 45).ToArgb());
         });
         Run("暗転OFFでは左押下中もドラッグ中も暗転しない", () =>
         {

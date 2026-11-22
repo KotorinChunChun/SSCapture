@@ -9,7 +9,7 @@ internal static partial class Program
     {
         Run("基本と履歴の初期化は各ページの下書きだけを変更し保存で確定する", () =>
         {
-            var initial = new AppSettings { GridStepPixels = 27, ShowMagnifier = true, KeepHistory = false,
+            var initial = new AppSettings { GridStepPixels = 27, ShowMagnifier = true, MagnifierDotCount = 16, MagnifierZoom = 8, KeepHistory = false,
                 NotificationDurationSeconds = 17, SelectionGuideDisplay = SelectionGuideDisplay.Main };
             var saved = new List<AppSettings>();
             using var form = new SettingsForm(initial, next => { saved.Add(next); return null; }, _ => { }, () => []);
@@ -27,6 +27,8 @@ internal static partial class Program
             Equal(20m, Field<NumericUpDown>(form, "GridStepPixels").Value);
             Equal(0, Field<ComboBox>(form, "SelectionGuideDisplay").SelectedIndex);
             Check(!Field<CheckBox>(form, "ShowMagnifier").Checked, "拡大鏡が初期値に戻っていない");
+            Equal(10, (int)Field<ComboBox>(form, "MagnifierDotCount").SelectedItem!);
+            Equal(10m, Field<NumericUpDown>(form, "MagnifierZoom").Value);
             Check(!Field<CheckBox>(form, "KeepHistory").Checked, "履歴の設定が変わった");
             Equal(17m, Field<NumericUpDown>(form, "NotificationDurationSeconds").Value);
 

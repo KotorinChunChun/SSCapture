@@ -60,6 +60,8 @@ internal sealed record AppSettings
     public SelectionGuideDisplay SelectionGuideDisplay { get; init; }
     public bool ShowPointerGuide { get; init; } = true;
     public bool ShowMagnifier { get; init; }
+    public int MagnifierDotCount { get; init; } = Capture.CaptureMagnifier.DefaultDotCount;
+    public int MagnifierZoom { get; init; } = Capture.CaptureMagnifier.DefaultZoom;
     public bool ShareCapturePresentation { get; init; }
     public OutputDestination DefaultDestination { get; init; } = OutputDestination.Clipboard;
     public bool RecordSystemAudio { get; init; }
@@ -120,6 +122,10 @@ internal sealed record AppSettings
         if (CaptureMouse is null) throw new ArgumentException("撮影中のマウス割り当てが正しくありません。");
         if (SnapDistancePixels is < 1 or > 32768 || GridStepPixels is < 1 or > 32768)
             throw new ArgumentException("ウィンドウスナップ距離とグリッド間隔は1～32768pxで指定してください。");
+        if (MagnifierDotCount is < Capture.CaptureMagnifier.MinDotCount or > Capture.CaptureMagnifier.MaxDotCount || MagnifierDotCount % 2 != 0)
+            throw new ArgumentException($"拡大鏡の表示ドット数は{Capture.CaptureMagnifier.MinDotCount}～{Capture.CaptureMagnifier.MaxDotCount}の偶数で指定してください。");
+        if (MagnifierZoom is < Capture.CaptureMagnifier.MinZoom or > Capture.CaptureMagnifier.MaxZoom)
+            throw new ArgumentException($"拡大鏡の拡大倍率は{Capture.CaptureMagnifier.MinZoom}～{Capture.CaptureMagnifier.MaxZoom}倍で指定してください。");
         ExternalApplication.ValidateList(ImageEditors, SelectedImageEditorId);
         ExternalApplication.ValidateList(VideoEditors, SelectedVideoEditorId);
         if (VideoEditors.Any(app => app.Launch != ExternalApplicationLaunch.Executable))

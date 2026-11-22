@@ -110,6 +110,8 @@ internal sealed partial class SettingsForm
         guideDisplay.SelectedIndex = (int)defaults.SelectionGuideDisplay;
         pointerGuideEnabled.Checked = defaults.ShowPointerGuide;
         magnifierEnabled.Checked = defaults.ShowMagnifier;
+        magnifierDotCount.SelectedItem = defaults.MagnifierDotCount;
+        magnifierZoom.Value = defaults.MagnifierZoom;
         startupSettings.ResetDraft();
     }
 

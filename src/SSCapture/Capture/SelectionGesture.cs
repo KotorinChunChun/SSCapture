@@ -37,18 +37,7 @@ internal sealed class SelectionGesture
     internal bool HasDragged { get; private set; }
     internal Point Current { get; private set; }
     internal Point RawCurrent { get; private set; }
-    internal Point MagnifierPoint
-    {
-        get
-        {
-            if (mode != CaptureMode.Rectangle || !IsPressed) return Current;
-            if (!HasDragged) return start;
-            if (Selection.Width <= 0 || Selection.Height <= 0) return Current;
-            // Right/Bottom can be exact snap boundaries. Sample the last included pixel.
-            return new(Math.Clamp(Current.X, Selection.Left, Selection.Right - 1),
-                Math.Clamp(Current.Y, Selection.Top, Selection.Bottom - 1));
-        }
-    }
+    internal Point MagnifierPoint => mode == CaptureMode.Rectangle && IsPressed && !HasDragged ? start : Current;
     internal Point WindowTargetPoint => IsPressed && !HasDragged ? rawStart : RawCurrent;
     internal Rectangle Selection { get; private set; }
     internal Rectangle PressedWindow => IsPressed && !HasDragged && mode is (CaptureMode.Rectangle or CaptureMode.Freeform)

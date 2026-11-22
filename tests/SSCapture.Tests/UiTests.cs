@@ -17,6 +17,7 @@ internal static partial class Program
                 settings => { saved = settings; return null; }, _ => { }, () => []);
             form.Size = form.MinimumSize;
             _ = form.Handle;
+            foreach (var control in Descendants(form)) _ = control.Handle;
             LayoutTree(form);
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
             var basic = tabs.TabPages[0].Controls.OfType<TableLayoutPanel>().Single();
@@ -46,6 +47,16 @@ internal static partial class Program
             var screenGuide = Box("ShowSelectionGuide");
             var pointerGuide = Box("ShowPointerGuide");
             var magnifier = Box("ShowMagnifier");
+            var dots = (ComboBox)form.Controls.Find("MagnifierDotCount", true).Single();
+            var zoom = (NumericUpDown)form.Controls.Find("MagnifierZoom", true).Single();
+            Equal(10, (int)dots.SelectedItem!);
+            Equal(10m, zoom.Value);
+            Check(dots.Items.Cast<int>().SequenceEqual(Enumerable.Range(1, 16).Select(value => value * 2)),
+                "拡大鏡のドット数に奇数が含まれる");
+            Check(dots.Top >= magnifier.Bottom && zoom.Top >= dots.Bottom && zoom.Parent!.ClientRectangle.Contains(zoom.Bounds),
+                $"拡大鏡の表示設定が収まらない: 表示={magnifier.Bounds} ドット数={dots.Bounds} 倍率={zoom.Bounds} 操作ガイド={zoom.Parent!.ClientRectangle}");
+            dots.SelectedItem = 18;
+            zoom.Value = 7;
             var display = (ComboBox)form.Controls.Find("SelectionGuideDisplay", true).Single();
             Equal(0, display.SelectedIndex);
             display.SelectedIndex = 1;
@@ -66,7 +77,7 @@ internal static partial class Program
             step.Value = 10;
             ApplySettingsPage(form, "基本");
             Check(saved is { ShowSelectionGuide: false, ShowPointerGuide: true, Grid20: false, GridStepPixels: 10,
-                SelectionGuideDisplay: SelectionGuideDisplay.Main }, "ガイド、表示先またはグリッド間隔が保存されない");
+                SelectionGuideDisplay: SelectionGuideDisplay.Main, MagnifierDotCount: 18, MagnifierZoom: 7 }, "ガイド、表示先、グリッド間隔または拡大鏡が保存されない");
             screenGuide.Checked = true;
             pointerGuide.Checked = false;
             ApplySettingsPage(form, "基本");

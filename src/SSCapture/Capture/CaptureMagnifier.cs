@@ -4,9 +4,12 @@ namespace SSCapture.Capture;
 
 internal static class CaptureMagnifier
 {
-    private const int Radius = 4;
-    private const int Scale = 10;
-    private const int LensSize = (Radius * 2 + 1) * Scale;
+    internal const int DefaultDotCount = 10;
+    internal const int MinDotCount = 2;
+    internal const int MaxDotCount = 32;
+    internal const int DefaultZoom = 10;
+    internal const int MinZoom = 2;
+    internal const int MaxZoom = 20;
     private const int Offset = 24;
     private const int Clearance = 8;
 
@@ -14,18 +17,19 @@ internal static class CaptureMagnifier
 
     internal static Rectangle Place(Rectangle viewport, Point pointer) => Place(viewport, pointer, [], -1).Bounds;
 
-    internal static Placement Place(Rectangle viewport, Point pointer, IReadOnlyList<Rectangle> reserved, int previousQuadrant)
+    internal static Placement Place(Rectangle viewport, Point pointer, IReadOnlyList<Rectangle> reserved, int previousQuadrant,
+        int lensSize = DefaultDotCount * DefaultZoom)
     {
-        if (viewport.Width < LensSize || viewport.Height < LensSize) return new(Rectangle.Empty);
+        if (viewport.Width < lensSize || viewport.Height < lensSize) return new(Rectangle.Empty);
         var obstacles = reserved.Where(rect => rect.Width > 0 && rect.Height > 0 && rect.IntersectsWith(viewport))
             .Append(new Rectangle(pointer, new Size(1, 1)))
             .Select(rect => Rectangle.Inflate(rect, Clearance, Clearance)).ToArray();
         Point[] candidates =
         [
-            new(pointer.X + Offset, pointer.Y - Offset - LensSize),
-            new(pointer.X - Offset - LensSize, pointer.Y - Offset - LensSize),
+            new(pointer.X + Offset, pointer.Y - Offset - lensSize),
+            new(pointer.X - Offset - lensSize, pointer.Y - Offset - lensSize),
             new(pointer.X + Offset, pointer.Y + Offset),
-            new(pointer.X - Offset - LensSize, pointer.Y + Offset)
+            new(pointer.X - Offset - lensSize, pointer.Y + Offset)
         ];
 
         if (previousQuadrant is >= 0 and < 4 && Fits(candidates[previousQuadrant]))
@@ -35,15 +39,15 @@ internal static class CaptureMagnifier
 
         // In top-left coordinates, each obstacle excludes a rectangle. The closest free
         // point must lie at the preferred coordinate or at an edge on each axis.
-        int right = viewport.Right - LensSize, bottom = viewport.Bottom - LensSize;
-        Point preferred = new(pointer.X - LensSize / 2, pointer.Y - LensSize / 2);
+        int right = viewport.Right - lensSize, bottom = viewport.Bottom - lensSize;
+        Point preferred = new(pointer.X - lensSize / 2, pointer.Y - lensSize / 2);
         HashSet<int> xs = [viewport.Left, right, Math.Clamp(preferred.X, viewport.Left, right)];
         HashSet<int> ys = [viewport.Top, bottom, Math.Clamp(preferred.Y, viewport.Top, bottom)];
         foreach (Rectangle obstacle in obstacles)
         {
-            xs.Add(Math.Clamp(obstacle.Left - LensSize, viewport.Left, right));
+            xs.Add(Math.Clamp(obstacle.Left - lensSize, viewport.Left, right));
             xs.Add(Math.Clamp(obstacle.Right, viewport.Left, right));
-            ys.Add(Math.Clamp(obstacle.Top - LensSize, viewport.Top, bottom));
+            ys.Add(Math.Clamp(obstacle.Top - lensSize, viewport.Top, bottom));
             ys.Add(Math.Clamp(obstacle.Bottom, viewport.Top, bottom));
         }
 
@@ -64,23 +68,23 @@ internal static class CaptureMagnifier
 
         bool Fits(Point point)
         {
-            var bounds = new Rectangle(point, new Size(LensSize, LensSize));
+            var bounds = new Rectangle(point, new Size(lensSize, lensSize));
             return viewport.Contains(bounds) && !obstacles.Any(bounds.IntersectsWith);
         }
-        static Placement At(Point point, int quadrant = -1) => new(new Rectangle(point, new Size(LensSize, LensSize)), quadrant);
+        Placement At(Point point, int quadrant = -1) => new(new Rectangle(point, new Size(lensSize, lensSize)), quadrant);
     }
 
-    internal static void Draw(Graphics graphics, Rectangle lens, Bitmap frame, Rectangle frameBounds, Point sample,
-        Rectangle selection = default, IReadOnlyList<Point>? polygon = null, bool markOrigin = false)
+    internal static void Draw(Graphics graphics, Rectangle lens, Bitmap frame, Rectangle frameBounds, Point boundary,
+        Rectangle selection = default, IReadOnlyList<Point>? polygon = null, bool markOrigin = false,
+        int dotCount = DefaultDotCount, int zoom = DefaultZoom)
     {
-        const int pixels = Radius * 2 + 1;
-        Rectangle requested = new(sample.X - Radius, sample.Y - Radius, pixels, pixels);
+        int half = dotCount / 2;
+        Rectangle requested = new(boundary.X - half, boundary.Y - half, dotCount, dotCount);
         Rectangle available = Rectangle.Intersect(requested, frameBounds);
         graphics.FillRectangle(Brushes.DimGray, lens);
         if (available.Width > 0 && available.Height > 0)
         {
-            Rectangle destination = new(lens.X + (available.X - requested.X) * Scale, lens.Y + (available.Y - requested.Y) * Scale,
-                available.Width * Scale, available.Height * Scale);
+            Rectangle destination = InLens(available, requested, lens, zoom);
             available.Offset(-frameBounds.X, -frameBounds.Y);
             GraphicsState state = graphics.Save();
             graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
@@ -89,33 +93,80 @@ internal static class CaptureMagnifier
             graphics.Restore(state);
         }
 
-        if (!markOrigin && selection.Width > 0 && selection.Height > 0)
+        if (markOrigin)
         {
-            using var shape = polygon is { Count: >= 3 } ? new GraphicsPath(FillMode.Alternate) : null;
-            if (shape is not null) shape.AddPolygon(polygon!.ToArray());
-            using var dim = new SolidBrush(Color.FromArgb(72, Color.Black));
-            Span<bool> included = stackalloc bool[pixels * pixels];
-            for (int y = 0; y < pixels; y++)
-                for (int x = 0; x < pixels; x++)
-                {
-                    int sx = requested.X + x, sy = requested.Y + y;
-                    bool inside = selection.Contains(sx, sy) && (shape?.IsVisible(sx + 0.5f, sy + 0.5f) ?? true);
-                    included[y * pixels + x] = inside;
-                    if (!inside) graphics.FillRectangle(dim, lens.X + x * Scale, lens.Y + y * Scale, Scale, Scale);
-                }
-            for (int y = 0; y < pixels; y++)
-                for (int x = 0; x < pixels; x++)
-                {
-                    int i = y * pixels + x, left = lens.X + x * Scale, top = lens.Y + y * Scale;
-                    if (x > 0 && included[i - 1] != included[i])
-                        graphics.FillRectangle(Brushes.Red, left, top, 1, Scale);
-                    if (y > 0 && included[i - pixels] != included[i])
-                        graphics.FillRectangle(Brushes.Red, left, top, Scale, 1);
-                }
+            // Each axis is between source pixels. None of the four quadrants is selected yet.
+            graphics.FillRectangle(Brushes.Red, lens.Left + half * zoom, lens.Top, 1, lens.Height);
+            graphics.FillRectangle(Brushes.Red, lens.Left, lens.Top + half * zoom, lens.Width, 1);
         }
-        graphics.DrawRectangle(Pens.Black, lens.X, lens.Y, lens.Width - 1, lens.Height - 1);
-        int centerX = lens.X + Radius * Scale, centerY = lens.Y + Radius * Scale;
-        if (markOrigin) graphics.DrawRectangle(Pens.Red, centerX, centerY, Scale - 1, Scale - 1);
-        else graphics.DrawRectangle(Pens.White, centerX + 1, centerY + 1, Scale - 3, Scale - 3);
+        else if (selection.Width > 0 && selection.Height > 0)
+        {
+            using var dim = new SolidBrush(Color.FromArgb(72, Color.Black));
+            if (polygon is { Count: >= 3 })
+                DrawPolygonBoundary(graphics, lens, requested, selection, polygon, zoom, dim);
+            else
+                DrawRectangleBoundary(graphics, lens, requested, selection, zoom, dim);
+        }
+
+        graphics.DrawRectangle(Pens.Black, lens.Left, lens.Top, lens.Width - 1, lens.Height - 1);
+    }
+
+    private static Rectangle InLens(Rectangle area, Rectangle requested, Rectangle lens, int zoom) =>
+        new(lens.X + (area.X - requested.X) * zoom, lens.Y + (area.Y - requested.Y) * zoom,
+            area.Width * zoom, area.Height * zoom);
+
+    private static void DrawRectangleBoundary(Graphics graphics, Rectangle lens, Rectangle requested, Rectangle selection,
+        int zoom, Brush dim)
+    {
+        Rectangle selected = Rectangle.Intersect(requested, selection);
+        if (selected.Width <= 0 || selected.Height <= 0)
+        {
+            graphics.FillRectangle(dim, lens);
+            return;
+        }
+
+        Rectangle inside = InLens(selected, requested, lens, zoom);
+        graphics.FillRectangle(dim, lens.Left, lens.Top, lens.Width, inside.Top - lens.Top);
+        graphics.FillRectangle(dim, lens.Left, inside.Bottom, lens.Width, lens.Bottom - inside.Bottom);
+        graphics.FillRectangle(dim, lens.Left, inside.Top, inside.Left - lens.Left, inside.Height);
+        graphics.FillRectangle(dim, inside.Right, inside.Top, lens.Right - inside.Right, inside.Height);
+
+        if (inside.Left > lens.Left)
+            graphics.FillRectangle(Brushes.Red, inside.Left, inside.Top, 1, inside.Height);
+        if (inside.Right < lens.Right)
+            graphics.FillRectangle(Brushes.Red, inside.Right, inside.Top, 1, inside.Height);
+        if (inside.Top > lens.Top)
+            graphics.FillRectangle(Brushes.Red, inside.Left, inside.Top, inside.Width, 1);
+        if (inside.Bottom < lens.Bottom)
+            graphics.FillRectangle(Brushes.Red, inside.Left, inside.Bottom, inside.Width, 1);
+        if (inside.Right < lens.Right && inside.Bottom < lens.Bottom)
+            graphics.FillRectangle(Brushes.Red, inside.Right, inside.Bottom, 1, 1);
+    }
+
+    private static void DrawPolygonBoundary(Graphics graphics, Rectangle lens, Rectangle requested, Rectangle selection,
+        IReadOnlyList<Point> polygon, int zoom, Brush dim)
+    {
+        using var shape = new GraphicsPath(FillMode.Alternate);
+        shape.AddPolygon(polygon.ToArray());
+        int count = requested.Width;
+        Span<bool> included = stackalloc bool[count * count];
+        for (int y = 0; y < count; y++)
+            for (int x = 0; x < count; x++)
+            {
+                int sx = requested.X + x, sy = requested.Y + y;
+                bool inside = selection.Contains(sx, sy) && shape.IsVisible(sx + 0.5f, sy + 0.5f);
+                included[y * count + x] = inside;
+                if (!inside) graphics.FillRectangle(dim, lens.X + x * zoom, lens.Y + y * zoom, zoom, zoom);
+            }
+
+        for (int y = 0; y < count; y++)
+            for (int x = 0; x < count; x++)
+            {
+                int index = y * count + x, left = lens.X + x * zoom, top = lens.Y + y * zoom;
+                if (x > 0 && included[index - 1] != included[index])
+                    graphics.FillRectangle(Brushes.Red, left, top, 1, zoom);
+                if (y > 0 && included[index - count] != included[index])
+                    graphics.FillRectangle(Brushes.Red, left, top, zoom, 1);
+            }
     }
 }
