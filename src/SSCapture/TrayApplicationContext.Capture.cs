@@ -79,7 +79,8 @@ internal sealed partial class TrayApplicationContext
             IncludeCursor: startSettings.IncludeCursor, FixedSize: new Size(startSettings.FixedWidth, startSettings.FixedHeight),
             FixedAnchor: startSettings.FixedCaptureAnchor, LimitToStartingMonitor: startSettings.LimitToStartingMonitor,
             Grid20: startSettings.Grid20, ShowSelectionGuide: startSettings.ShowSelectionGuide, OutputSettings: startSettings,
-            DimCaptureBackground: startSettings.DimCaptureBackground, InitialInputPreset: inputPreset, InitialOutputPreset: outputPreset);
+            DimCaptureBackground: startSettings.DimCaptureBackground, InitialInputPreset: inputPreset, InitialOutputPreset: outputPreset)
+        { EnableStartDelay = true };
 
     // 既定または登録済みの出力プリセットのどれかがOCR命名でファイル保存する場合、録画開始時の画像を残す。
     private static bool RecordingNeedsOcrImage(AppSettings startSettings) =>
@@ -106,6 +107,7 @@ internal sealed partial class TrayApplicationContext
             using CaptureOutcome outcome = await CaptureSession.SelectAsync(
                 CreateCaptureOptions(mode, intent, startSettings, inputPreset ?? settings.SavedRegions.FirstOrDefault(p => p.IsDefault), presetCapture?.Output),
                 SaveGrid20, SaveGuideVisibility);
+            capturedAt = outcome.CaptureStartedAt ?? capturedAt;
             if (outcome.OpenSettings)
                 settingsLink = outcome.SettingsLink ?? new(CaptureSettingsDestination.General);
             if (outcome.Selection is null)

@@ -1,6 +1,19 @@
 namespace SSCapture.Capture;
 
 internal enum CaptureSelectionMethod { Drag, TwoClicks }
+internal enum CaptureStartDelay { None = 0, ThreeSeconds = 3, FiveSeconds = 5, TenSeconds = 10 }
+
+internal static class CaptureDelay
+{
+    internal static string Label(CaptureStartDelay delay) => delay == CaptureStartDelay.None ? "待ち時間なし" : $"{(int)delay}秒遅延";
+
+    internal static Task WaitAsync(CaptureStartDelay delay, Func<TimeSpan, Task>? wait = null) =>
+        delay == CaptureStartDelay.None ? Task.CompletedTask : (wait ?? Task.Delay)(TimeSpan.FromSeconds((int)delay));
+}
+
+internal sealed record CaptureRestartState(bool UseFixedCoordinates, bool ExclusiveWindow,
+    CaptureAspectRatio AspectRatio, int? TemporaryPadding);
+internal sealed record DelayedCaptureRestart(CaptureStartDelay Delay, CaptureOptions Options);
 
 internal sealed record CaptureOptions(
     CaptureMode Mode,
@@ -20,6 +33,10 @@ internal sealed record CaptureOptions(
     SSCapture.Services.CapturePreset? InitialOutputPreset = null)
 {
     internal bool SelectionOnly { get; init; }
+    internal bool EnableStartDelay { get; init; }
+    internal bool StartWasDelayed { get; init; }
+    internal bool AllowStartDelay => EnableStartDelay && !SelectionOnly && Intent == CaptureIntent.Screenshot;
+    internal CaptureRestartState? RestartState { get; init; }
     internal bool RequireExactFixedSize { get; init; }
     internal bool AllowScroll => !SelectionOnly && Intent == CaptureIntent.Screenshot;
     internal static CaptureOptions ForInputSelection(SSCapture.Services.AppSettings settings, Size? size, CaptureAnchor anchor) => new(
@@ -50,8 +67,11 @@ internal sealed record CaptureSettingsLink(CaptureSettingsDestination Destinatio
 
 internal sealed class CaptureOutcome(Bitmap? image, CaptureSelection? selection, bool openSettings = false,
     SSCapture.Services.AppSettings? outputSettings = null, SSCapture.Services.CaptureMetadata? metadata = null,
-    bool escapedBeforeSelectionInput = false, CaptureSettingsLink? settingsLink = null) : IDisposable
+    bool escapedBeforeSelectionInput = false, CaptureSettingsLink? settingsLink = null,
+    DelayedCaptureRestart? delayedRestart = null, DateTimeOffset? captureStartedAt = null) : IDisposable
 {
+    internal DelayedCaptureRestart? DelayedRestart { get; } = delayedRestart;
+    internal DateTimeOffset? CaptureStartedAt { get; } = captureStartedAt;
     public Bitmap? Image { get; } = image;
     public CaptureSelection? Selection { get; } = selection;
     public bool OpenSettings { get; } = openSettings;

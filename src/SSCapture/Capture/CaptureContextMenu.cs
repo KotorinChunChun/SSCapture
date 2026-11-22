@@ -57,7 +57,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         int defaultPadding = 0, Action<int>? changePadding = null, IReadOnlyList<CapturePreset>? presets = null, Action<CapturePreset>? applyPreset = null,
         IReadOnlyList<ExternalApplication>? applications = null, string selectedApplication = "", Action<string>? changeApplication = null,
         IReadOnlyList<SavedRegion>? inputPresets = null, Action<SavedRegion>? applyInputPreset = null, CaptureMenuEditing? editing = null,
-        Action<bool>? changeWindowSource = null, Action<CaptureSettingsDestination, string?>? openSettingsLink = null, bool allowScroll = true)
+        Action<bool>? changeWindowSource = null, Action<CaptureSettingsDestination, string?>? openSettingsLink = null, bool allowScroll = true, Action<CaptureStartDelay>? restartAfterDelay = null)
     {
         this.cancel = cancel;
         Font = menuFont;
@@ -75,6 +75,13 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         var range = Menu("一時入力カスタマイズ", "CaptureRangeGroup", Items);
         var output = Menu("一時出力カスタマイズ", "CaptureOutputGroup", Items);
         var operation = Menu("表示・操作", "CaptureOperationGroup", Items);
+        if (restartAfterDelay is not null)
+        {
+            var timer = Menu("タイマー", "CaptureTimerMenu", Items);
+            timer.ToolTipText = "撮影画面を閉じ、指定時間後の画面で選択を開始します。";
+            foreach (var delay in Enum.GetValues<CaptureStartDelay>())
+                Item(CaptureDelay.Label(delay), "CaptureDelay" + (int)delay, () => restartAfterDelay(delay), timer.DropDownItems);
+        }
         if (changeMode is not null)
         {
             var parent = Menu("撮影モード", "CaptureModeMenu", range.DropDownItems);

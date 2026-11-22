@@ -68,7 +68,7 @@ internal static class PresetSettings
         var baseline = new AppSettings();
         bool Untouched(SavedRegion p, CaptureMode mode, string name) => p.Name == name && !p.UseFixedCoordinates && p.Mode == mode &&
             (p.Bounds == new Rectangle(Point.Empty, InitialFixedSize) || p.Bounds == new Rectangle(0, 0, 1280, 720)) && p.Shortcut == "" &&
-            p.FixedAnchor == CaptureAnchor.TopLeft && p.FreezeFrame && !p.IncludeCursor && p.PaddingPixels == 0;
+            p.FixedAnchor == CaptureAnchor.TopLeft && p.FreezeFrame && !p.IncludeCursor && p.PaddingPixels == 0 && p.StartDelay == Capture.CaptureStartDelay.None;
         var inputs = settings.SavedRegions.Where(p => !(p.Id == InitialWindowKey && !p.IsDefault && Untouched(p, CaptureMode.Window, "ウィンドウ")))
             .Select(p =>
             {

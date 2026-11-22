@@ -28,7 +28,8 @@ internal sealed record ResolvedCaptureCommand(CaptureCommandRequest Request, App
             IncludeCursor: Settings.IncludeCursor, FixedSize: new(Settings.FixedWidth, Settings.FixedHeight),
             FixedAnchor: Settings.FixedCaptureAnchor, LimitToStartingMonitor: Settings.LimitToStartingMonitor,
             Grid20: Settings.Grid20, ShowSelectionGuide: Settings.ShowSelectionGuide, OutputSettings: Settings,
-            DimCaptureBackground: Settings.DimCaptureBackground, InitialInputPreset: input, InitialOutputPreset: OutputPreset);
+            DimCaptureBackground: Settings.DimCaptureBackground, InitialInputPreset: input, InitialOutputPreset: OutputPreset)
+        { EnableStartDelay = Request.Schedule is null };
     }
 }
 
@@ -152,7 +153,7 @@ internal static partial class CaptureCommandRunner
     internal static async Task<int> ExecuteAsync(ResolvedCaptureCommand command, OutputRouter output,
         Func<Rectangle, AppSettings, Task<(Bitmap Image, CaptureMetadata? Metadata)>>? take = null,
         Func<CaptureOptions, Task<CaptureOutcome>>? select = null, Action<string, bool>? report = null,
-        Func<IReadOnlyList<DisplayLayout>>? readPresetDisplays = null)
+        Func<IReadOnlyList<DisplayLayout>>? readPresetDisplays = null, Func<TimeSpan, Task>? wait = null)
     {
         try
         {
@@ -162,8 +163,14 @@ internal static partial class CaptureCommandRunner
             if (settings.DefaultDestination == OutputDestination.None) throw new ArgumentException("出力先がすべてOFFです。");
             DateTimeOffset capturedAt = DateTimeOffset.Now;
             bool delivered = false;
-            if (command.DirectBounds(readPresetDisplays) is Rectangle bounds)
+            if (command.Request.Region.HasValue || command.Request.UsePresetMode && command.InputPreset.UseFixedCoordinates)
             {
+                if (command.InputPreset.StartDelay != CaptureStartDelay.None)
+                {
+                    await CaptureDelay.WaitAsync(command.InputPreset.StartDelay, wait);
+                    capturedAt = DateTimeOffset.Now;
+                }
+                var bounds = command.DirectBounds(readPresetDisplays)!.Value;
                 CaptureCommandLine.ValidateRegion(bounds);
                 var capture = await (take ?? InstantCapture.TakeWithContextAsync)(bounds, settings);
                 using var image = capture.Image;
@@ -174,7 +181,10 @@ internal static partial class CaptureCommandRunner
             }
             else
             {
-                using CaptureOutcome outcome = await (select ?? (options => CaptureSession.SelectAsync(options)))(command.SelectionOptions());
+                var options = command.SelectionOptions();
+                using CaptureOutcome outcome = select is null ? await CaptureSession.SelectAsync(options)
+                    : await CaptureSession.SelectWithDelayAsync(options, select, wait);
+                capturedAt = outcome.CaptureStartedAt ?? capturedAt;
                 if (outcome.Selection is null) return 2;
                 if (outcome.Image is null) throw new InvalidOperationException("撮影画像がありません。");
                 settings = (outcome.OutputSettings ?? settings) with { DefaultDestination = outcome.Selection.Destination };

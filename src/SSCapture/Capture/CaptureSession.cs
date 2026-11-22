@@ -6,8 +6,32 @@ internal static class CaptureSession
     public static async Task<CaptureOutcome> SelectAsync(CaptureOptions options, Action<bool>? gridChanged = null, Action<bool>? guideChanged = null)
     {
         ValidateCall(options);
+        return await SelectWithDelayAsync(options, current => SelectOnceAsync(current, gridChanged, guideChanged));
+    }
+
+    internal static async Task<CaptureOutcome> SelectWithDelayAsync(CaptureOptions options,
+        Func<CaptureOptions, Task<CaptureOutcome>> select, Func<TimeSpan, Task>? wait = null)
+    {
+        var delay = options.AllowStartDelay ? options.InitialInputPreset?.StartDelay ?? CaptureStartDelay.None : CaptureStartDelay.None;
+        while (true)
+        {
+            if (delay != CaptureStartDelay.None)
+            {
+                await CaptureDelay.WaitAsync(delay, wait);
+                options = options with { StartWasDelayed = true };
+            }
+            CaptureOutcome outcome = await select(options);
+            if (outcome.DelayedRestart is not { } restart) return outcome;
+            outcome.Dispose();
+            options = restart.Options;
+            delay = restart.Delay;
+        }
+    }
+
+    private static async Task<CaptureOutcome> SelectOnceAsync(CaptureOptions options, Action<bool>? gridChanged, Action<bool>? guideChanged)
+    {
         Point initialPointer = CaptureNative.CursorPosition();
-        // Freeze before showing any overlay or menu, with no intentional capture delay.
+        // Freeze the current desktop before showing the selection overlays.
         bool metadata = !options.SelectionOnly && options.Intent == CaptureIntent.Screenshot && options.OutputSettings is { } settings && Services.CaptureMetadata.RequiresPreparation(settings);
         DesktopSnapshot snapshot = DesktopSnapshot.Take(options.IncludeCursor, metadata);
         if (metadata)
@@ -50,7 +74,8 @@ internal static class CaptureSession
                 initialPointer ?? snapshot.Monitors.FirstOrDefault().Location, gridChanged: gridChanged, guideChanged: guideChanged, recapture: recapture, readWindows: readWindows,
                 readTitle: readTitle, captureWindowsKey: captureWindowsKey, findWindow: findWindow, findWindowGroup: findWindowGroup,
                 readGuideDisplays: readGuideDisplays);
-            if (options.InitialInputPreset is { UseFixedCoordinates: true } preset) session.ApplyInputPreset(preset);
+            if (options.InitialInputPreset is { UseFixedCoordinates: true } preset && options.RestartState?.UseFixedCoordinates != false)
+                _ = session.ApplyInputPresetAsync(preset, restorePositionOnly: options.RestartState is not null);
             session.Start();
             return session.Completion;
         }
@@ -215,6 +240,13 @@ internal sealed partial class SessionController
         this.findWindowGroup = findWindowGroup ?? (root => [root]);
         this.readGuideDisplays = readGuideDisplays;
         activeAnchor = options.FixedAnchor;
+        if (options.RestartState is { } restart)
+        {
+            AspectRatio = restart.AspectRatio;
+            exclusiveWindow = restart.ExclusiveWindow;
+            temporaryPadding = restart.TemporaryPadding;
+            hasSelectionInput = true;
+        }
         activeFixedSize = options.FixedSize ?? Services.PresetSettings.InitialFixedSize;
         this.readPresetDisplays = readPresetDisplays ?? Services.RegionCoordinates.ReadDisplays;
         Mode = options.Mode == CaptureMode.Scroll && !options.AllowScroll ? CaptureMode.Rectangle : options.Mode;
@@ -263,7 +295,8 @@ internal sealed partial class SessionController
                 enabled => ApplyMenuSetting(OutputSettings with { RecordMicrophone = enabled })),
             changeWindowSource: IsScreenshot && findWindow is not null
                 ? enabled => { exclusiveWindow = enabled; UpdateMenu(); RefreshOverlays(); } : null,
-            openSettingsLink: OpenCaptureSettings, allowScroll: options.AllowScroll);
+            openSettingsLink: OpenCaptureSettings, allowScroll: options.AllowScroll,
+            restartAfterDelay: options.AllowStartDelay ? RestartAfterDelay : null);
         menu.AddRectangleSelectionMethods(
             () => ChangeSelectionMethod(CaptureSelectionMethod.Drag), () => ChangeSelectionMethod(CaptureSelectionMethod.TwoClicks));
         menu.AddPresentationOptions(OutputSettings.ShowMagnifier, ChangeMagnifierVisibility,
@@ -467,7 +500,7 @@ internal sealed partial class SessionController
     }
 
     internal void ApplyInputPreset(Services.SavedRegion preset) => _ = ApplyInputPresetAsync(preset);
-    internal async Task ApplyInputPresetAsync(Services.SavedRegion preset)
+    internal async Task ApplyInputPresetAsync(Services.SavedRegion preset, bool restorePositionOnly = false)
     {
         if (completed || refreshing || preset.Mode == CaptureMode.Scroll && !options.AllowScroll) return;
         try
@@ -488,7 +521,7 @@ internal sealed partial class SessionController
             if (!CaptureSession.SameMonitors(displays.Select(d => d.Bounds), Snapshot.Monitors))
                 throw new InvalidOperationException("選択開始後に画面構成が変わりました。撮影を開始し直してください。");
             Rectangle bounds = Services.RegionCoordinates.Resolve(preset, displays);
-            if (preset.ProfileVersion >= 1)
+            if (preset.ProfileVersion >= 1 && !restorePositionOnly)
             {
                 if (!await ApplyInputPresetSettingsAsync(preset)) return;
                 activeAnchor = preset.FixedAnchor;
@@ -511,7 +544,8 @@ internal sealed partial class SessionController
                 pointer = new(Math.Clamp(pointer.X, pointerLimit.Left, pointerLimit.Right - 1), Math.Clamp(pointer.Y, pointerLimit.Top, pointerLimit.Bottom - 1));
             gesture.PlaceFixed(bounds, pointer);
             gesture.FixedPosition = bounds;
-            OutputSettings = OutputSettings with { ScreenshotPaddingPixels = EffectivePadding(selectedOutput, preset) };
+            if (!restorePositionOnly)
+                OutputSettings = OutputSettings with { ScreenshotPaddingPixels = EffectivePadding(selectedOutput, preset) };
             SelectionMenu.SetPadding(OutputSettings.ScreenshotPaddingPixels);
             selectedInput = preset; selectedInputBounds = bounds; AspectRatio = CaptureAspectRatio.Free; gesture.AspectRatio = AspectRatio;
             lastPointerPosition = pointer;
@@ -1466,7 +1500,8 @@ internal sealed partial class SessionController
                     completion.TrySetResult(new CaptureOutcome(capture.Image, selection with
                     {
                         ReplaySource = new CaptureReplaySource.Scroll(viewport)
-                    }, outputSettings: settings, metadata: capture.Metadata));
+                    }, outputSettings: settings, metadata: capture.Metadata,
+                        captureStartedAt: options.StartWasDelayed ? Snapshot.CapturedAt : null));
                 else
                     completion.TrySetResult(new CaptureOutcome(null, null));
                 return;
@@ -1525,14 +1560,32 @@ internal sealed partial class SessionController
                     : CaptureGeometry.Crop(frame.Image, frame.Bounds, selection.Bounds, control is not null || Mode == CaptureMode.FixedRegion ? 1 : CaptureGeometry.MinimumSize);
                 if (result is null) { completion.TrySetResult(new CaptureOutcome(null, null)); return; }
             }
-            completion.TrySetResult(new CaptureOutcome(result, selection, outputSettings: OutputSettings with { DefaultDestination = Destination }, metadata: metadata));
+            completion.TrySetResult(new CaptureOutcome(result, selection, outputSettings: OutputSettings with { DefaultDestination = Destination },
+                metadata: metadata, captureStartedAt: options.StartWasDelayed ? Snapshot.CapturedAt : null));
             result = null;
         }
         catch (Exception ex) { completion.TrySetException(ex); }
         finally { result?.Dispose(); Snapshot.Dispose(); }
     }
 
-    private void FinishCommand(bool openSettings, bool escapedBeforeSelectionInput = false, CaptureSettingsLink? settingsLink = null)
+    private void RestartAfterDelay(CaptureStartDelay delay)
+    {
+        if (completed || refreshing || delay == CaptureStartDelay.None) return;
+
+        var current = options with
+        {
+            Mode = Mode, Destination = Destination, FreezeFrame = OutputSettings.FreezeFrame,
+            IncludeCursor = OutputSettings.IncludeCursor, FixedSize = activeFixedSize, FixedAnchor = activeAnchor,
+            LimitToStartingMonitor = selectionBounds is not null, Grid20 = Grid20, ShowSelectionGuide = ShowSelectionGuide,
+            OutputSettings = OutputSettings, DimCaptureBackground = DimCaptureBackground,
+            InitialInputPreset = selectedInput, InitialOutputPreset = selectedOutput,
+            RestartState = new(gesture.FixedPosition is not null, exclusiveWindow, AspectRatio, temporaryPadding)
+        };
+        FinishCommand(false, delayedRestart: new(delay, current));
+    }
+
+    private void FinishCommand(bool openSettings, bool escapedBeforeSelectionInput = false, CaptureSettingsLink? settingsLink = null,
+        DelayedCaptureRestart? delayedRestart = null)
     {
         if (completed) return;
         completed = true;
@@ -1540,7 +1593,7 @@ internal sealed partial class SessionController
         {
             CloseOverlays();
             completion.TrySetResult(new CaptureOutcome(null, null, openSettings,
-                escapedBeforeSelectionInput: escapedBeforeSelectionInput, settingsLink: settingsLink));
+                escapedBeforeSelectionInput: escapedBeforeSelectionInput, settingsLink: settingsLink, delayedRestart: delayedRestart));
         }
         catch (Exception ex) { completion.TrySetException(ex); }
         finally { Snapshot.Dispose(); }

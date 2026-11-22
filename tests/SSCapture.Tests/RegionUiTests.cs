@@ -24,8 +24,15 @@ internal static partial class Program
             var presetList = (ListBox)editor.Controls.Find("SavedRegions", true).Single();
             presetList.SelectedItem = presetList.Items.Cast<SavedRegion>().Single(p => p.Id == initial.Id);
             ((TextBox)editor.Controls.Find("RegionName", true).Single()).Text = "変更済み";
+            var timer = (ComboBox)editor.Controls.Find("CaptureStartDelay", true).Single();
+            Equal("待ち時間なし,3秒遅延,5秒遅延,10秒遅延", string.Join(',', timer.Items.Cast<string>()));
+            Equal(0, timer.SelectedIndex);
+            timer.SelectedIndex = 3;
             Call(editor, "SaveRegion"); Check(saved is not null, "確定した入力を自動保存しない");
-            Equal("変更済み", saved!.SavedRegions.Single(p => p.Id == initial.Id).Name);
+            var updated = saved!.SavedRegions.Single(p => p.Id == initial.Id);
+            Equal("変更済み", updated.Name);
+            Equal(SSCapture.Capture.CaptureStartDelay.TenSeconds, updated.StartDelay);
+            Equal(3, timer.SelectedIndex);
         });
 
         Run("登録範囲画面の一覧・数値欄・キーが最小サイズで収まる", () =>

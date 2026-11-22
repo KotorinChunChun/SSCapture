@@ -13,7 +13,8 @@ internal sealed class SettingsStore(string path)
             new JsonStringEnumConverter<CaptureIntent>(), new JsonStringEnumConverter<NotificationCorner>(), new JsonStringEnumConverter<NotificationDisplay>(),
             new JsonStringEnumConverter<SelectionGuideDisplay>(),
             new JsonStringEnumConverter<CaptureAnchor>(), new JsonStringEnumConverter<Capture.CaptureKeyAction>(),
-            new JsonStringEnumConverter<Capture.CaptureClickAction>(), new JsonStringEnumConverter<Capture.CaptureAnchorCycle>(), new JsonStringEnumConverter<Capture.CaptureSelectionMethod>(), new JsonStringEnumConverter<Capture.CaptureActivation>() }
+            new JsonStringEnumConverter<Capture.CaptureClickAction>(), new JsonStringEnumConverter<Capture.CaptureAnchorCycle>(), new JsonStringEnumConverter<Capture.CaptureSelectionMethod>(), new JsonStringEnumConverter<Capture.CaptureStartDelay>(),
+            new JsonStringEnumConverter<Capture.CaptureActivation>() }
     };
     private static readonly JsonSerializerOptions StrictReadOptions = new(Options) { RespectNullableAnnotations = true };
     private readonly string filePath = Path.GetFullPath(path);

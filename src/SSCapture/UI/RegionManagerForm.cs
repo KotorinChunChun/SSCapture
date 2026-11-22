@@ -1,3 +1,4 @@
+using SSCapture.Capture;
 using SSCapture.Services;
 
 namespace SSCapture.UI;
@@ -18,7 +19,7 @@ internal sealed class RegionManagerForm : Form
     private readonly Label displayInfo, status;
     private readonly Button delete, addLast, previewBounds;
     private static readonly int FixedCoordinatesModeIndex = Enum.GetValues<CaptureMode>().Length;
-    private readonly ComboBox captureMode;
+    private readonly ComboBox captureMode, startDelay;
     private readonly ComboBox selectionMethod;
     private readonly CheckBox coordinates, freezeFrame, includeCursor;
     private readonly AppSettings? profileSettings;
@@ -209,6 +210,10 @@ internal sealed class RegionManagerForm : Form
         selectionMethod.Items.AddRange(["ドラッグ", "2点クリック"]);
         selectionMethod.SelectedIndex = 0;
         AddField(conditions, "選択方法", selectionMethod, 4);
+        startDelay = new ComboBox { Name = "CaptureStartDelay", Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+        foreach (var delay in Enum.GetValues<CaptureStartDelay>()) startDelay.Items.Add(CaptureDelay.Label(delay));
+        startDelay.SelectedIndex = 0;
+        AddField(conditions, "タイマー", startDelay, 5);
         void UpdateCoordinates()
         {
             x.Enabled = y.Enabled = previewBounds.Enabled = coordinates.Checked;
@@ -397,6 +402,7 @@ internal sealed class RegionManagerForm : Form
             captureMode.SelectedIndex = (int)(profileSettings?.DefaultMode ?? CaptureMode.FixedRegion);
             coordinates.Checked = profileSettings is null; freezeFrame.Checked = profileSettings?.FreezeFrame ?? true; includeCursor.Checked = profileSettings?.IncludeCursor ?? false;
             selectionMethod.SelectedIndex = (int)(profileSettings?.SelectionMethod ?? SSCapture.Capture.CaptureSelectionMethod.Drag);
+            startDelay.SelectedIndex = 0;
             if (systemAudio is not null && profileSettings is not null) LoadAudio(SavedRegion.FromSettings("新規", profileSettings));
             var connected = displays();
             Rectangle screen = connected.Count > 0 ? connected[0].Bounds : new Rectangle(0, 0, 640, 480);
@@ -441,6 +447,7 @@ internal sealed class RegionManagerForm : Form
         name.Text = region.Name; shortcut.Value = region.Shortcut;
         captureMode.SelectedIndex = profileSettings is not null && region.UseFixedCoordinates ? FixedCoordinatesModeIndex : (int)region.Mode; coordinates.Checked = region.UseFixedCoordinates; freezeFrame.Checked = region.FreezeFrame; includeCursor.Checked = region.IncludeCursor; anchor.SelectedIndex = (int)region.FixedAnchor;
         selectionMethod.SelectedIndex = (int)region.SelectionMethod;
+        startDelay.SelectedIndex = Array.IndexOf(Enum.GetValues<CaptureStartDelay>(), region.StartDelay);
         LoadAudio(region);
         try
         {
@@ -489,6 +496,7 @@ internal sealed class RegionManagerForm : Form
             Mode = captureMode.SelectedIndex == FixedCoordinatesModeIndex ? CaptureMode.FixedRegion : (CaptureMode)captureMode.SelectedIndex, FixedAnchor = ((AnchorItem)anchor.SelectedItem!).Value,
             FreezeFrame = freezeFrame.Checked, IncludeCursor = includeCursor.Checked, PaddingPixels = editing?.PaddingPixels ?? 0,
             SelectionMethod = (Capture.CaptureSelectionMethod)selectionMethod.SelectedIndex,
+            StartDelay = startDelay.SelectedIndex >= 0 ? Enum.GetValues<CaptureStartDelay>()[startDelay.SelectedIndex] : CaptureStartDelay.None,
             IsDefault = editing?.IsDefault == true || (profileSettings is not null && regions.Count == 0),
             RecordSystemAudio = systemAudio?.Checked ?? editing?.RecordSystemAudio ?? profileSettings?.RecordSystemAudio ?? false,
             RecordMicrophone = micAudio?.Checked ?? editing?.RecordMicrophone ?? profileSettings?.RecordMicrophone ?? false,

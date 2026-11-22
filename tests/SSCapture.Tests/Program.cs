@@ -123,7 +123,7 @@ internal static partial class Program
         if (args.SequenceEqual(["--pinned-tests"]))
         { PinnedImageTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
         if (args.SequenceEqual(["--command-tests"]))
-        { CaptureCommandTests(); CaptureTimerTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
+        { CaptureCommandTests(); CaptureTimerTests(); CaptureStartDelayTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
         if (args.SequenceEqual(["--output-tests"]))
         {
             OutputTests(); OutputConditionTests(); ScreenshotPaddingTests(); ScreenshotColorTests();
@@ -146,6 +146,7 @@ internal static partial class Program
         PinnedImageTests();
         CaptureCommandTests();
         CaptureTimerTests();
+        CaptureStartDelayTests();
         CaptureTests();
         CaptureMenuEditingTests();
         PresetConsolidationTests();

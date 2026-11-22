@@ -17,6 +17,8 @@ internal sealed record SavedRegion
     public CaptureMode Mode { get; init; } = CaptureMode.FixedRegion;
     public CaptureAnchor FixedAnchor { get; init; } = CaptureAnchor.TopLeft;
     public bool FreezeFrame { get; init; } = true;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public Capture.CaptureStartDelay StartDelay { get; init; }
     public bool IncludeCursor { get; init; }
     public Capture.CaptureSelectionMethod SelectionMethod { get; init; }
     public int PaddingPixels { get; init; }
@@ -30,7 +32,7 @@ internal sealed record SavedRegion
 
     internal void Validate()
     {
-        if (!Enum.IsDefined(Mode) || !Enum.IsDefined(FixedAnchor) || !Enum.IsDefined(SelectionMethod)
+        if (!Enum.IsDefined(Mode) || !Enum.IsDefined(FixedAnchor) || !Enum.IsDefined(SelectionMethod) || !Enum.IsDefined(StartDelay)
             || PaddingPixels is < 0 or > ScreenshotPadding.MaximumPixels)
             throw new ArgumentException("入力プリセットの取得条件が正しくありません。");
         if (MicrophoneDeviceId is null || MicrophoneDeviceId.Length > 4096 || MicrophoneDeviceId.Any(char.IsControl))
