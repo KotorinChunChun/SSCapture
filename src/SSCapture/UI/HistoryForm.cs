@@ -6,19 +6,17 @@ namespace SSCapture.UI;
 internal sealed class HistoryForm : Form
 {
     private readonly CaptureHistory history;
-    private readonly Func<Guid, Task<string>> copy, edit;
     private readonly ListBox list;
     private readonly PictureBox picture;
     private readonly Label details, status;
     private readonly Button copyButton, editButton, clearButton;
+    private readonly ContextMenuStrip editMenu = new() { Name = "HistoryEditMenu" };
     private bool operating, refreshPending, disposedResources;
 
-    public HistoryForm(CaptureHistory history, Func<Guid, Task<string>> copy, Func<Guid, Task<string>> edit,
-        Func<IReadOnlyList<ExternalApplication>>? applications = null, Func<Guid, string, Task<string>>? editWithApplication = null)
+    public HistoryForm(CaptureHistory history, Func<Guid, Task<string>> copy,
+        Func<IReadOnlyList<ExternalApplication>> applications, Func<Guid, string, Task<string>> editWithApplication)
     {
         this.history = history;
-        this.copy = copy;
-        this.edit = edit;
         Name = "HistoryForm";
         Text = WindowTitle.Create("撮影履歴");
         MinimizeBox = MaximizeBox = false;
@@ -67,18 +65,32 @@ internal sealed class HistoryForm : Form
         close.Click += (_, _) => Close();
         clearButton = Button("履歴を消去", "ClearHistory", 138, ButtonRole.Danger);
         clearButton.Click += (_, _) => ClearHistory();
-        editButton = Button("画像編集アプリへ送る", "EditHistoryImage", 212, ButtonRole.Secondary);
-        editButton.Click += async (_, _) =>
+        editButton = Button("画像編集アプリを選ぶ ▾", "EditHistoryImage", 212, ButtonRole.Secondary);
+        editButton.ContextMenuStrip = editMenu;
+        editButton.Click += (_, _) => editMenu.Show(editButton, new Point(0, editButton.Height));
+        editMenu.Opening += (_, e) =>
         {
-            var apps = applications?.Invoke() ?? [];
-            if (apps.Count == 0 || editWithApplication is null) { await SendAsync(edit); return; }
-            var choices = new ContextMenuStrip();
+            while (editMenu.Items.Count > 0) editMenu.Items[0].Dispose();
+            if (operating || list.SelectedItem is not Item target || picture.Image is null) { e.Cancel = true; return; }
+            var apps = applications();
+            if (apps.Count == 0)
+            {
+                SetStatus("設定の「外部アプリ」で画像編集アプリを登録してください。");
+                e.Cancel = true;
+                return;
+            }
             foreach (var app in apps)
             {
                 string appId = app.Id;
-                choices.Items.Add(app.Name, null, async (_, _) => await SendAsync(id => editWithApplication(id, appId)));
+                var choice = new ToolStripMenuItem { Text = app.Name.Replace("&", "&&"), Name = appId };
+                choice.Click += async (_, _) =>
+                {
+                    if ((list.SelectedItem as Item)?.Entry.Id == target.Entry.Id)
+                        await SendAsync(id => editWithApplication(id, appId));
+                };
+                editMenu.Items.Add(choice);
             }
-            choices.Closed += (_, _) => choices.Dispose(); choices.Show(editButton, new Point(0, editButton.Height));
+            e.Cancel = false;
         };
         copyButton = Button("再コピー", "CopyHistoryImage", 124, ButtonRole.Primary);
         copyButton.Click += async (_, _) => await SendAsync(copy);
@@ -226,6 +238,7 @@ internal sealed class HistoryForm : Form
         if (disposing && !disposedResources)
         {
             disposedResources = true;
+            editMenu.Dispose();
             ReleaseItems();
             Image? image = picture.Image; picture.Image = null; image?.Dispose();
         }

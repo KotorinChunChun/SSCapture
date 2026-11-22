@@ -94,7 +94,8 @@ internal static partial class Program
             history.Add(first, null, new DateTimeOffset(2026, 10, 10, 14, 25, 10, TimeSpan.FromHours(9)));
             history.Add(second, null, new DateTimeOffset(2026, 10, 10, 14, 26, 35, TimeSpan.FromHours(9)));
             using var form = new HistoryForm(history, _ => Task.FromResult("検証用のため出力しません。"),
-                _ => Task.FromResult("検証用のため出力しません。"));
+                () => [new ExternalApplication { Name = "ペイント", Executable = EditorExecutable.PaintPreset }],
+                (_, _) => Task.FromResult("検証用のため出力しません。"));
             Application.Run(form);
             return 0;
         }

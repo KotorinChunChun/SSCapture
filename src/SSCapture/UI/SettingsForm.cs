@@ -200,10 +200,12 @@ internal sealed class SettingsForm : Form
         var externalPage = new TabPage("外部アプリ") { BackColor = BackColor };
         var appTabs = new TabControl { Name = "ExternalApplicationTabs", Dock = DockStyle.Fill };
         externalPage.Controls.Add(appTabs); tabs.TabPages.Add(externalPage);
-        imageApps = new ExternalApplicationsEditor("Image", settings.ImageEditors, settings.SelectedImageEditorId,
-            settings.ImageEditorPath, settings.ImageEditorArguments, EditorPresets.Images, () => (presetEditor?.Presets.Select(p => p.ImageEditorId) ?? []).Append(NotificationAppId()));
-        videoApps = new ExternalApplicationsEditor("Video", settings.VideoEditors, settings.SelectedVideoEditorId,
-            settings.VideoEditorPath, settings.VideoEditorArguments, EditorPresets.Videos, () => (presetEditor?.Presets.Select(p => p.VideoEditorId) ?? []).Append(NotificationAppId()));
+        (IReadOnlyList<CapturePreset> Presets, string NotificationId) ReadApplicationUsage() =>
+            (presetEditor?.Presets ?? settings.CapturePresets, NotificationAppId());
+        imageApps = new ExternalApplicationsEditor(CaptureIntent.Screenshot, settings.ImageEditors, settings.SelectedImageEditorId,
+            settings.ImageEditorPath, settings.ImageEditorArguments, EditorPresets.Images, ReadApplicationUsage);
+        videoApps = new ExternalApplicationsEditor(CaptureIntent.Recording, settings.VideoEditors, settings.SelectedVideoEditorId,
+            settings.VideoEditorPath, settings.VideoEditorArguments, EditorPresets.Videos, ReadApplicationUsage);
         var imagePage = new TabPage("画像"); imagePage.Controls.Add(imageApps); appTabs.TabPages.Add(imagePage);
         var videoPage = new TabPage("動画"); videoPage.Controls.Add(videoApps); appTabs.TabPages.Add(videoPage);
         imageEditor = imageApps.Executable; imageArguments = imageApps.Arguments;
@@ -255,6 +257,13 @@ internal sealed class SettingsForm : Form
         {
             imageApps.SelectApplication(image ?? ""); videoApps.SelectApplication(video ?? "");
         };
+        notificationApplication.SelectedIndexChanged += (_, _) =>
+        {
+            imageApps.RefreshUsage();
+            videoApps.RefreshUsage();
+        };
+        imageApps.RefreshUsage();
+        videoApps.RefreshUsage();
         presetPage.Controls.Add(presetEditor); tabs.TabPages.Add(presetPage);
         var inputPresetPage = new TabPage("入力プリセット") { BackColor = BackColor, Padding = new Padding(4) };
         inputPresetEditor = new RegionManagerForm(settings.SavedRegions, lastRegion,

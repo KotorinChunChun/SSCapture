@@ -96,7 +96,7 @@ internal static partial class Program
         if (args.SequenceEqual(["--output-tests"]))
         {
             OutputTests(); OutputConditionTests(); ScreenshotPaddingTests(); ScreenshotColorTests();
-            ExternalApplicationTests(); MetadataStorageTests(); SaveCancellationTests();
+            ExternalApplicationTests(); MetadataStorageTests(); SaveCancellationTests(); HistoryUiTests();
             DeliveryTests(); DeliveryWaitTests(); NamingTests(); OutputRetryTests();
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }

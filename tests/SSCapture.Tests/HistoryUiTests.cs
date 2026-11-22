@@ -8,6 +8,43 @@ internal static partial class Program
 {
     static partial void HistoryUiTests()
     {
+        Run("履歴から選んだアプリと撮影画像だけを編集処理に渡す", () =>
+        {
+            using var history = new CaptureHistory();
+            using var image = new Bitmap(4, 4);
+            history.Add(image, null);
+            history.Add(image, null);
+            var first = new ExternalApplication { Id = "first", Name = "編集 A" };
+            var second = new ExternalApplication { Id = "second", Name = "編集 B" };
+            ExternalApplication[] apps = [first, second];
+            var sent = new List<(Guid, string)>();
+            using var form = new HistoryForm(history, _ => Task.FromResult("コピー完了"), () => apps, (id, app) =>
+            {
+                sent.Add((id, app)); return Task.FromResult("編集完了");
+            });
+            var menu = form.Controls.Find("EditHistoryImage", true).Single().ContextMenuStrip!;
+            Equal(false, OpenMenu());
+            Equal(2, menu.Items.Count);
+            Equal(0, sent.Count);
+            menu.Items["second"]!.PerformClick();
+            Equal((history.Entries[0].Id, "second"), sent.Single());
+            var list = (ListBox)form.Controls.Find("HistoryEntries", true).Single();
+            list.SelectedIndex = 1;
+            menu.Items["first"]!.PerformClick();
+            Equal(1, sent.Count);
+            apps = [];
+            Equal(true, OpenMenu());
+            Equal(0, menu.Items.Count);
+            Equal(1, sent.Count);
+
+            bool OpenMenu()
+            {
+                var args = new System.ComponentModel.CancelEventArgs(true);
+                typeof(ContextMenuStrip).GetMethod("OnOpening", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(menu, [args]);
+                return args.Cancel;
+            }
+        });
+
         Run("履歴画面の一覧・画像・ボタンが最小サイズで収まる", () =>
         {
             using var history = new CaptureHistory();
@@ -114,7 +151,7 @@ internal static partial class Program
             Check(form.Controls.Find("CopyHistoryImage", true).Single().Enabled, "エラー後も操作不可");
         });
 
-        static HistoryForm Form(CaptureHistory history) => new(history, _ => Task.FromResult("コピー完了"), _ => Task.FromResult("編集完了"));
+        static HistoryForm Form(CaptureHistory history) => new(history, _ => Task.FromResult("コピー完了"), () => [], (_, _) => Task.FromResult("編集完了"));
     }
 
     private static Task SendHistory(HistoryForm form, Func<Guid, Task<string>> action) => (Task)typeof(HistoryForm)

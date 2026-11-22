@@ -7,6 +7,40 @@ internal static partial class Program
 {
     private static void ExternalApplicationTests()
     {
+        Run("外部アプリ表は6件分の高さと通知・複数プリセットの使用先を表示する", () =>
+        {
+            var editors = Enumerable.Range(1, 7).Select(i => new ExternalApplication
+                { Id = $"editor-{i}", Name = $"編集アプリ {i}", Executable = $@"C:\editor-{i}.exe" }).ToArray();
+            CapturePreset[] presets =
+            [
+                new() { Name = "クリップボード", IsDefault = true, ImageEditorId = editors[0].Id },
+                new() { Name = "資料用", Destination = OutputDestination.ExternalApp, ImageEditorId = editors[0].Id, VideoEditorId = editors[1].Id },
+                new() { Name = "保存用", ImageEditorId = editors[1].Id }
+            ];
+            string notification = "";
+            using var host = new Form { ClientSize = new Size(900, 500) };
+            using var editor = new ExternalApplicationsEditor(CaptureIntent.Screenshot, editors, editors[0].Id, "", EditorArguments.Default,
+                EditorPresets.Images, () => (presets, notification));
+            host.Controls.Add(editor);
+            _ = host.Handle; foreach (Control control in Descendants(host)) _ = control.Handle;
+            LayoutTree(host);
+            var table = (DataGridView)editor.Controls.Find("ImageEditorList", true).Single();
+            Check(table.Columns.Cast<DataGridViewColumn>().Select(c => c.HeaderText)
+                .SequenceEqual(["アプリ名", "通知", "出力プリセット"]), "一覧の列が違う");
+            Equal(7, table.Rows.Count);
+            Equal(6, table.DisplayedRowCount(false));
+            Equal("プリセット経由", table.Rows[0].Cells[1].Value);
+            Equal("★ クリップボード、資料用", table.Rows[0].Cells[2].Value);
+            Check(table.Rows[0].Cells[2].ToolTipText.Contains("自動で開く：OFF"), "自動起動OFFの説明がない");
+            Equal("保存用", table.Rows[1].Cells[2].Value);
+            notification = editors[1].Id;
+            editor.RefreshUsage();
+            Equal("—", table.Rows[0].Cells[1].Value);
+            Equal("直接指定", table.Rows[1].Cells[1].Value);
+            table.CurrentCell = table.Rows[1].Cells[0];
+            Equal(editors[1].Name, editor.Controls.Find("ImageEditorName", true).Single().Text);
+        });
+
         Run("PPPaintは既存の実行ファイルがある導入先だけを候補にする", () =>
         {
             const string installed = @"C:\KotorinToys\.installed\PPPaint\PPPaint.exe";
@@ -57,7 +91,8 @@ internal static partial class Program
             var a = new ExternalApplication { Id = "a", Name = "A", Executable = @"C:\a.exe" };
             var b = a with { Id = "b", Name = "B", Executable = @"C:\b.exe" };
             var settings = new AppSettings { ImageEditors = [a, b], SelectedImageEditorId = "a" }.ApplyDefaults();
-            using var apps = new ExternalApplicationsEditor("Image", settings.ImageEditors, "a", "", EditorArguments.Default, EditorPresets.Images, () => []);
+            using var apps = new ExternalApplicationsEditor(CaptureIntent.Screenshot, settings.ImageEditors, "a", "", EditorArguments.Default,
+                EditorPresets.Images, () => ([], ""));
             using var presets = new CapturePresetEditor(settings, () => settings with { ImageEditors = apps.Applications });
             apps.SelectedChanged += id => presets.SetDefaultApplication(true, id);
             presets.DefaultApplicationsChanged += (image, _) => apps.SelectApplication(image ?? "");
@@ -80,11 +115,14 @@ internal static partial class Program
             var settings = new AppSettings { ImageEditors = [a, b], VideoEditors = [a, b], SelectedImageEditorId = "a", SelectedVideoEditorId = "a" }.ApplyDefaults();
             AppSettings? saved = null;
             using var form = new SettingsForm(settings, next => { saved = next; return null; }, () => { }, () => []);
+            var appTable = (DataGridView)form.Controls.Find("ImageEditorList", true).Single();
+            Equal("プリセット経由", appTable.Rows[0].Cells[1].Value);
             var list = (ListBox)form.Controls.Find("CapturePresetList", true).Single(); list.SelectedIndex = 1;
             string? nonDefaultApp = ((CapturePreset)list.SelectedItem!).ImageEditorId;
             form.Controls.Find("CapturePresetName", true).Single().Text = "別出力を編集中";
             ((ComboBox)form.Controls.Find("ImageSelectedEditor", true).Single()).SelectedIndex = 2;
             ((ComboBox)form.Controls.Find("VideoSelectedEditor", true).Single()).SelectedIndex = 2;
+            Check(appTable.Rows[1].Cells[2].Value is string usage && usage.StartsWith("★ ", StringComparison.Ordinal), "既定出力の変更を表に反映しない");
             Equal("別出力を編集中", form.Controls.Find("CapturePresetName", true).Single().Text);
             SaveConsolidation(form); Check(saved is not null, "設定を保存しない");
             Equal("b", saved!.SelectedImageEditorId); Equal("b", saved.SelectedVideoEditorId);
@@ -136,7 +174,8 @@ internal static partial class Program
         });
         Run("登録UIは複数登録・既定選択・参照中の削除拒否", () =>
         {
-            using var ui = new ExternalApplicationsEditor("Image", [], "", "", EditorArguments.Default, EditorPresets.Images, () => ["referenced"]);
+            using var ui = new ExternalApplicationsEditor(CaptureIntent.Screenshot, [], "", "", EditorArguments.Default,
+                EditorPresets.Images, () => ([], ""));
             var name = (TextBox)ui.Controls.Find("ImageEditorName", true).Single();
             name.Text = "A"; ui.Executable.Text = @"C:\a.exe";
             ((Button)ui.Controls.Find("ImageEditorStore", true).Single()).PerformClick();
@@ -148,7 +187,8 @@ internal static partial class Program
         });
         Run("新規メニューは入力例から別の登録名とexeを入力するだけ", () =>
         {
-            using var ui = new ExternalApplicationsEditor("Image", [], "", "", EditorArguments.Default, EditorPresets.Images, () => []);
+            using var ui = new ExternalApplicationsEditor(CaptureIntent.Screenshot, [], "", "", EditorArguments.Default,
+                EditorPresets.Images, () => ([], ""));
             var newButton = ui.Controls.Find("ImageEditorNew", true).Single();
             Check(!ui.Controls.Find("ImageEditorPreset", true).Any(), "旧コンボが残る");
             ((ToolStripMenuItem)newButton.ContextMenuStrip!.Items["MS ペイント"]!).PerformClick();

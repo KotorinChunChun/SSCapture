@@ -14,8 +14,7 @@ internal sealed partial class TrayApplicationContext
             return;
         if (historyForm is null || historyForm.IsDisposed)
         {
-            historyForm = new HistoryForm(history, CopyHistoryAsync, id => EditHistoryAsync(id), () => settings.ImageEditors,
-                (id, appId) => EditHistoryAsync(id, appId));
+            historyForm = new HistoryForm(history, CopyHistoryAsync, () => settings.ImageEditors, EditHistoryAsync);
             historyForm.FormClosed += (_, _) => historyForm = null;
         }
 
@@ -41,15 +40,17 @@ internal sealed partial class TrayApplicationContext
         return "コピーしました。";
     }
 
-    private async Task<string> EditHistoryAsync(Guid id, string? applicationId = null)
+    private async Task<string> EditHistoryAsync(Guid id, string applicationId)
     {
-        var editorSettings = (applicationId is null ? settings : settings with { SelectedImageEditorId = applicationId }).ResolveEditors();
+        var application = settings.ImageEditors.FirstOrDefault(app => app.Id == applicationId)
+            ?? throw new InvalidOperationException("選んだ画像編集アプリは登録されていません。選び直してください。");
+        var editorSettings = (settings with { SelectedImageEditorId = applicationId }).ResolveEditors();
         var entry = history.Entries.FirstOrDefault(e => e.Id == id) ?? throw new InvalidOperationException("この画像は履歴から削除されています。");
         if (entry.SavedPath is string saved && File.Exists(saved))
         {
             try
             {
-                new ExternalEditor().Resolve(editorSettings.EditorFor(CaptureIntent.Screenshot))(saved);
+                new ExternalEditor().Resolve(application)(saved);
             }
             catch
             {
