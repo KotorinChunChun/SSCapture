@@ -40,6 +40,7 @@ internal sealed class SettingsForm : Form
     private readonly NumericUpDown snapDistance, gridStep;
     private readonly CheckBox gridEnabled, guideEnabled, pointerGuideEnabled;
     private readonly CheckBox magnifierEnabled, shareCapturePresentation;
+    private readonly ComboBox guideDisplay;
 
     public SettingsForm(AppSettings settings, Func<AppSettings, string?> onSave, Action openFolder,
         Func<IReadOnlyList<MicrophoneInfo>>? listMicrophones = null, Action? openRegions = null, Action? openHistory = null,
@@ -312,7 +313,12 @@ internal sealed class SettingsForm : Form
         guideEnabled = BasicCheckBox("ShowSelectionGuide", "画面右下に操作ガイドを表示する", settings.ShowSelectionGuide);
         pointerGuideEnabled = BasicCheckBox("ShowPointerGuide", "ポインタ横に操作ガイドを表示する", settings.ShowPointerGuide);
         magnifierEnabled = BasicCheckBox("ShowMagnifier", "拡大鏡を表示する", settings.ShowMagnifier);
-        AddFullRow(guideOptions, guideEnabled, 0);
+        guideOptions.Controls.Add(guideEnabled, 0, 0);
+        guideDisplay = new ComboBox { Name = "SelectionGuideDisplay", AccessibleName = "画面右下の操作ガイドの表示先",
+            DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill, Margin = new Padding(3, 2, 0, 2) };
+        guideDisplay.Items.AddRange(["撮影モニター", "メイン画面"]);
+        guideDisplay.SelectedIndex = (int)settings.SelectionGuideDisplay;
+        guideOptions.Controls.Add(guideDisplay, 1, 0);
         AddFullRow(guideOptions, pointerGuideEnabled, 1);
         AddFullRow(guideOptions, magnifierEnabled, 2);
         Add(basic, "操作ガイド", guideOptions, 2);
@@ -539,6 +545,7 @@ internal sealed class SettingsForm : Form
                 OneOcrDirectory = Expand(oneOcrDirectory.Text),
                 DimCaptureBackground = dimCaptureBackground.Checked, LimitToStartingMonitor = limitToStartingMonitor.Checked,
                 Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked, ShowPointerGuide = pointerGuideEnabled.Checked,
+                SelectionGuideDisplay = (SelectionGuideDisplay)guideDisplay.SelectedIndex,
                 ShowMagnifier = magnifierEnabled.Checked, ShareCapturePresentation = shareCapturePresentation.Checked,
                 SnapDistancePixels = (int)snapDistance.Value, GridStepPixels = (int)gridStep.Value,
                 CapturePresets = presetEditor.Presets,
@@ -575,6 +582,7 @@ internal sealed class SettingsForm : Form
     {
         LimitToStartingMonitor = limitToStartingMonitor.Checked, DimCaptureBackground = dimCaptureBackground.Checked,
         Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked, ShowPointerGuide = pointerGuideEnabled.Checked,
+        SelectionGuideDisplay = (SelectionGuideDisplay)guideDisplay.SelectedIndex,
         ShowMagnifier = magnifierEnabled.Checked, ShareCapturePresentation = shareCapturePresentation.Checked,
         SnapDistancePixels = (int)snapDistance.Value, GridStepPixels = (int)gridStep.Value
     };

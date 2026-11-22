@@ -667,14 +667,18 @@ internal sealed partial class SessionController
         guide = null;
         if (overlays.Count == 0 || !ShowSelectionGuide) return;
         CaptureOverlay owner = preferredOwner ?? menuOwner ?? overlays.FirstOrDefault(o => o.MonitorBounds.Contains(gesture.RawCurrent)) ?? overlays[0];
-        guide = new UI.SelectionGuideForm(owner.MonitorBounds, options.Intent, () => { if (!refreshing) ApplicationDeactivated(); },
+        Rectangle display = ResolveGuideMonitor(OutputSettings.SelectionGuideDisplay, Screen.PrimaryScreen?.Bounds, CaptureMonitorForGuide);
+        guide = new UI.SelectionGuideForm(display, options.Intent, () => { if (!refreshing) ApplicationDeactivated(); },
             Mode == CaptureMode.FixedRegion ? activeFixedSize : null, HandleCommandKey, activeAnchor, AltKeyChanged, Mode,
             dismiss: () => ChangeGuideVisibility(false), spaceEnabled: OutputSettings.CaptureKeys.SpaceEnabled,
-            workingArea: Screen.GetWorkingArea(owner.MonitorBounds), beforeKeys: OutputSettings.CaptureBeforeKeys,
+            workingArea: Screen.GetWorkingArea(display), beforeKeys: OutputSettings.CaptureBeforeKeys,
             dragKeys: OutputSettings.CaptureKeys, mouse: OutputSettings.CaptureMouse, canCrossMonitors: CanGuideCrossMonitors,
             selectionMethod: OutputSettings.SelectionMethod,
             controlActivation: OutputSettings.ControlActivation, windowActivation: OutputSettings.WindowActivation);
         guide.SetShared(OutputSettings.ShareCapturePresentation);
+        guide.LocationChanged += (_, _) => overlayUpdatePending = true;
+        guide.SizeChanged += (_, _) => overlayUpdatePending = true;
+        guide.VisibleChanged += (_, _) => overlayUpdatePending = true;
         guide.Show(owner);
         UpdateGuidePointer();
         owner.BeginInvoke((Action)(() =>
@@ -867,6 +871,7 @@ internal sealed partial class SessionController
         owner.Focus();
         foreach (var overlay in overlays)
             if (overlay != owner && overlay.Visible) overlay.Hide();
+        TrackGuideMonitor(pointer, reposition: false);
         ReplaceGuide(owner);
     }
 
@@ -932,6 +937,9 @@ internal sealed partial class SessionController
         bool width = action == CaptureKeyAction.LockWidth;
         if ((idleWindowsMove || movingWhileIdle) && !HasPointerPress && !dragging && selectionBounds is not null)
             FollowIdleWindowsPointer(pointer);
+        else if (!HasPointerPress && !dragging && selectionBounds is null && modifiers == CaptureModifiers.Win
+            && action is CaptureKeyAction.HighlightWindow or CaptureKeyAction.CrossMonitor)
+            TrackGuideMonitor(pointer, reposition: true);
         idleWindowsMove = movingWhileIdle;
         if (movingWhileIdle)
         {

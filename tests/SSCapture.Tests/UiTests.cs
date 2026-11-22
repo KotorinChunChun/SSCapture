@@ -62,6 +62,9 @@ internal static partial class Program
             var screenGuide = Box("ShowSelectionGuide");
             var pointerGuide = Box("ShowPointerGuide");
             var magnifier = Box("ShowMagnifier");
+            var display = (ComboBox)form.Controls.Find("SelectionGuideDisplay", true).Single();
+            Equal(0, display.SelectedIndex);
+            display.SelectedIndex = 1;
             Equal(screenGuide.Left, pointerGuide.Left);
             Equal(pointerGuide.Left, magnifier.Left);
             Check(screenGuide.Bottom <= pointerGuide.Top && pointerGuide.Bottom <= magnifier.Top &&
@@ -78,7 +81,8 @@ internal static partial class Program
             screenGuide.Checked = false;
             step.Value = 10;
             SaveConsolidation(form);
-            Check(saved is { ShowSelectionGuide: false, ShowPointerGuide: true, Grid20: false, GridStepPixels: 10 }, "画面右下だけOFFにできないか、間隔が保存されない");
+            Check(saved is { ShowSelectionGuide: false, ShowPointerGuide: true, Grid20: false, GridStepPixels: 10,
+                SelectionGuideDisplay: SelectionGuideDisplay.Main }, "ガイド、表示先またはグリッド間隔が保存されない");
             screenGuide.Checked = true;
             pointerGuide.Checked = false;
             SaveConsolidation(form);

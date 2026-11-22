@@ -58,6 +58,7 @@ internal sealed record AppSettings
     public Capture.CaptureActivation WindowActivation { get; init; } = Capture.CaptureKeyDefaults.Current.WindowActivation;
     public Capture.CaptureMouseMap CaptureMouse { get; init; } = new();
     public bool ShowSelectionGuide { get; init; } = true;
+    public SelectionGuideDisplay SelectionGuideDisplay { get; init; }
     public bool ShowPointerGuide { get; init; } = true;
     public bool ShowMagnifier { get; init; }
     public bool ShareCapturePresentation { get; init; }
@@ -109,6 +110,8 @@ internal sealed record AppSettings
     {
         if (!Enum.IsDefined(SelectionMethod))
             throw new ArgumentException("矩形の選択方法が無効です。");
+        if (!Enum.IsDefined(SelectionGuideDisplay))
+            throw new ArgumentException("操作ガイドの表示先が正しくありません。");
         if (CaptureKeys is null || Capture.CaptureKeyMap.Combinations.Any(keys => !Enum.IsDefined(CaptureKeys.Resolve(keys))))
             throw new ArgumentException("撮影中のキー割り当てが正しくありません。");
         if (CaptureBeforeKeys is null || Capture.CaptureKeyMap.Combinations.Any(keys => !Capture.CaptureKeyMap.IsBeforeAction(CaptureBeforeKeys.Resolve(keys))))

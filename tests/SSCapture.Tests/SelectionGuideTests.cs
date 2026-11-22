@@ -8,6 +8,14 @@ internal static partial class Program
 {
     private static void SelectionGuideTests()
     {
+        Run("右下の操作ガイドは撮影モニターとメイン画面を選べる", () =>
+        {
+            Rectangle main = new(0, 0, 1920, 1080), capture = new(-1600, -90, 1600, 900);
+            Equal(SelectionGuideDisplay.Captured, new AppSettings().SelectionGuideDisplay);
+            Equal(capture, SessionController.ResolveGuideMonitor(SelectionGuideDisplay.Captured, main, capture));
+            Equal(main, SessionController.ResolveGuideMonitor(SelectionGuideDisplay.Main, main, capture));
+            Equal(capture, SessionController.ResolveGuideMonitor(SelectionGuideDisplay.Main, null, capture));
+        });
         Run("選択ガイドは新旧設定で既定ON・OFFと再表示を保存", () => WithServiceDirectory(directory =>
         {
             string path = Path.Combine(directory, "settings.json");
