@@ -240,7 +240,16 @@ internal static partial class Program
                 value => { copied = value; return Task.CompletedTask; });
             CaptureCommandClick(control, "CaptureCommandGenerate");
             var text = (TextBox)control.Controls.Find("CaptureCommandText", true).Single();
-            Equal("& 'C:\\SSCapture.exe' '--capture-select'", text.Text); Check(text.ReadOnly && text.Multiline, "コマンド欄の編集が可能");
+            Equal(@"& 'C:\SSCapture.exe' '--capture-select'", text.Text);
+            Check(text.ReadOnly && text.Multiline && text.WordWrap && text.ScrollBars == ScrollBars.Vertical, "コマンド欄の表示または読み取り専用設定が異なる");
+            Equal("本ツールをコマンドライン実行するためのスクリプトを作成する画面です。", control.Controls.Find("CaptureCommandIntro", true).Single().Text);
+            Equal("静止画", control.Controls.Find("CaptureCommandIntent", true).Single().Text);
+            control.Size = new Size(880, 700);
+            _ = control.Handle;
+            LayoutTree(control);
+            var timing = control.Controls.Find("CaptureScheduleMode", true).Single();
+            var format = control.Controls.Find("CaptureCommandOutput", true).Single();
+            Equal(format.Parent!.PointToScreen(format.Location).X, timing.Parent!.PointToScreen(timing.Location).X);
             Equal<string?>(null, copied);
             CaptureCommandClick(control, "CaptureCommandCopy"); Equal(text.Text, copied);
             var method = (ComboBox)control.Controls.Find("CaptureCommandMethod", true).Single();

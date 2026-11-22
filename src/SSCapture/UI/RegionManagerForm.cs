@@ -209,13 +209,6 @@ internal sealed class RegionManagerForm : Form
         selectionMethod.Items.AddRange(["ドラッグ", "2点クリック"]);
         selectionMethod.SelectedIndex = 0;
         AddField(conditions, "選択方法", selectionMethod, 5);
-        var profileButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false }; conditions.Controls.Add(profileButtons, 0, 6); conditions.SetColumnSpan(profileButtons, 2);
-        var duplicate = Button("複製", "DuplicateInputPreset", ButtonRole.Secondary); duplicate.Width = 120; duplicate.Dock = DockStyle.None;
-        duplicate.Click += (_, _) => { string copiedName = name.Text; list.ClearSelected(); editing = null; automaticName = false; name.Text = copiedName + "のコピー"; }; profileButtons.Controls.Add(duplicate);
-        var makeDefault = Button("★既定にする", "DefaultInputPreset", ButtonRole.Secondary); makeDefault.Width = 144; makeDefault.Dock = DockStyle.None;
-        foreach (var button in new[] { duplicate, makeDefault })
-        { button.AutoSize = true; button.MinimumSize = new Size(button.Width, 36); button.Height = Math.Max(36, button.GetPreferredSize(Size.Empty).Height); }
-        makeDefault.Click += (_, _) => MakeDefault(); profileButtons.Controls.Add(makeDefault);
         void UpdateCoordinates()
         {
             x.Enabled = y.Enabled = previewBounds.Enabled = coordinates.Checked;
@@ -268,33 +261,58 @@ internal sealed class RegionManagerForm : Form
             conditions.Controls.Remove(conditions.GetControlFromPosition(0, 1)!); conditions.Controls.Remove(coordinates); conditions.RowStyles[1].Height = 0;
             captureMode.SelectedIndexChanged += (_, _) => { if (!updatingFields) coordinates.Checked = captureMode.SelectedIndex == 5; };
             if (editing?.UseFixedCoordinates == true) captureMode.SelectedIndex = 5;
-            left.Controls.Remove(addNumeric); left.Controls.Remove(addLast); left.RowStyles[1].Height = left.RowStyles[2].Height = 0;
-            conditions.Controls.Remove(profileButtons); profileButtons.Controls.Remove(makeDefault);
-            actions.Controls.Clear(); body.Controls.Remove(actions); body.Controls.Add(actions, 0, 1); body.SetColumnSpan(actions, 2);
-            body.SetRowSpan(left, 1); body.RowStyles[1].Height = 44;
-            actions.ColumnCount = 3; actions.ColumnStyles.Clear();
-            foreach (int i in Enumerable.Range(0, 3)) actions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-            var add = Button("追加 ▼", "AddInputPreset", ButtonRole.Secondary);
+            body.ColumnStyles[0] = new ColumnStyle(SizeType.Absolute, SettingsEditorActions.PresetListWidth + SettingsEditorActions.PresetListGap);
+            body.ColumnStyles[1] = new ColumnStyle(SizeType.Percent, 100);
+            left.Margin = new Padding(0, 0, SettingsEditorActions.PresetListGap, 0);
+            left.Controls.Remove(addNumeric);
+            left.Controls.Remove(addLast);
+            left.RowCount = 2;
+            left.RowStyles.RemoveAt(2);
+            left.RowStyles[1].Height = 40;
+            addNumeric.Dispose();
+            Disposed += (_, _) => addLast.Dispose();
+            SettingsEditorActions.AddDefaultButton(left, "DefaultInputPreset", MakeDefault);
+
+            actions.Controls.Clear();
+            actions.Dispose();
+            body.SetRowSpan(left, 1);
+            body.RowStyles[1].Height = SettingsEditorActions.Height;
+            var add = SettingsForm.MakeButton("追加 ▼", "AddInputPreset");
             var choices = new ContextMenuStrip { Name = "AddInputPresetMenu" };
             add.ContextMenuStrip = choices;
             void Choice(string text, string id, Action action)
             {
                 var item = new ToolStripMenuItem(text) { Name = id };
-                item.Click += (_, _) => { bool previous = updatingFields; updatingFields = true; try { action(); } finally { updatingFields = previous; } StoreCurrent(); };
+                item.Click += (_, _) => SaveNew(action);
                 choices.Items.Add(item);
             }
             Choice("新規", "NewInputPreset", NewRegion);
-            Choice("前回の撮影範囲", "AddLastRegion", AddLast); addLastCommand = (ToolStripMenuItem)choices.Items[1]; addLastCommand.Enabled = lastRegion is not null;
-            Choice("選択を複製", "DuplicateInputPreset", () =>
-            {
-                var source = ReadRegion(); string seed = source.Name + "のコピー", nextName = seed;
-                for (int suffix = 2; this.regions.Any(r => r.Name == nextName); suffix++) nextName = seed + " " + suffix;
-                LoadRegion(source with { Id = Guid.NewGuid().ToString("N"), Name = nextName, Shortcut = "", IsDefault = false, BuiltInKey = null });
-            });
-            add.Click += (_, _) => { choices.Items[2].Enabled = editing is not null; choices.Show(add, new Point(0, add.Height)); };
+            Choice("前回の撮影範囲", "AddLastRegion", AddLast);
+            addLastCommand = (ToolStripMenuItem)choices.Items[1];
+            addLastCommand.Enabled = lastRegion is not null;
+            add.Click += (_, _) => choices.Show(add, new Point(0, add.Height));
             Disposed += (_, _) => choices.Dispose();
-            delete.Text = "削除"; makeDefault.Dock = DockStyle.Fill; makeDefault.AutoSize = false; makeDefault.MinimumSize = Size.Empty;
-            actions.Controls.Add(add, 0, 0); actions.Controls.Add(delete, 1, 0); actions.Controls.Add(makeDefault, 2, 0);
+            var duplicate = SettingsEditorActions.CreateButton("複製", "DuplicateInputPreset", () => SaveNew(() =>
+            {
+                var source = ReadRegion();
+                string name = PresetSettings.UniqueName(source.Name + "のコピー", this.regions.Select(region => region.Name));
+                LoadRegion(source with { Id = Guid.NewGuid().ToString("N"), Name = name, Shortcut = "", IsDefault = false, BuiltInKey = null });
+            }));
+            saveSelected.Text = "保存";
+            delete.Text = "削除";
+            var buttons = SettingsEditorActions.CreateRow("InputPresetActions", add, duplicate, saveSelected, delete);
+            body.Controls.Add(buttons, 0, 1);
+            body.SetColumnSpan(buttons, 2);
+
+            void SaveNew(Action prepare)
+            {
+                bool previous = updatingFields;
+                updatingFields = true;
+                try { prepare(); }
+                catch (ArgumentException ex) { SetStatus(ex.Message, true); return; }
+                finally { updatingFields = previous; }
+                StoreCurrent();
+            }
         }
 
         void Dimension(string label, Control control, int column, int row)

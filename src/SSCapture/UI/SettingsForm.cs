@@ -129,7 +129,7 @@ internal sealed partial class SettingsForm : Form
         keys.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         keys.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         lastRecipeKey = KeyField(keys, "直前の設定で再撮影", "LastRecipeShortcut", settings.LastRecipeShortcut, 0);
-        presetShortcutEditor = new PresetCaptureShortcutEditor(settings.PresetCaptureShortcuts ?? []);
+        presetShortcutEditor = new PresetCaptureShortcutEditor(settings.PresetCaptureShortcuts ?? [], SaveWorkingShortcuts);
         keys.Controls.Add(presetShortcutEditor, 0, 1);
         keys.SetColumnSpan(presetShortcutEditor, 2);
         captureBeforeKeys = new CaptureKeyEditor(settings.CaptureBeforeKeys, settings.CaptureMouse, beforeSelection: true,
@@ -207,9 +207,11 @@ internal sealed partial class SettingsForm : Form
         (IReadOnlyList<CapturePreset> Presets, string NotificationId) ReadApplicationUsage() =>
             (presetEditor?.Presets ?? settings.CapturePresets, NotificationAppId());
         imageApps = new ExternalApplicationsEditor(CaptureIntent.Screenshot, settings.ImageEditors, settings.SelectedImageEditorId,
-            settings.ImageEditorPath, settings.ImageEditorArguments, EditorPresets.Images, ReadApplicationUsage);
+            settings.ImageEditorPath, settings.ImageEditorArguments, EditorPresets.Images, ReadApplicationUsage,
+            (apps, id) => CommitExternalApplications(CaptureIntent.Screenshot, apps, id));
         videoApps = new ExternalApplicationsEditor(CaptureIntent.Recording, settings.VideoEditors, settings.SelectedVideoEditorId,
-            settings.VideoEditorPath, settings.VideoEditorArguments, EditorPresets.Videos, ReadApplicationUsage);
+            settings.VideoEditorPath, settings.VideoEditorArguments, EditorPresets.Videos, ReadApplicationUsage,
+            (apps, id) => CommitExternalApplications(CaptureIntent.Recording, apps, id));
         var imagePage = new TabPage("画像"); imagePage.Controls.Add(imageApps); appTabs.TabPages.Add(imagePage);
         var videoPage = new TabPage("動画"); videoPage.Controls.Add(videoApps); appTabs.TabPages.Add(videoPage);
         imageEditor = imageApps.Executable; imageArguments = imageApps.Arguments;
@@ -360,12 +362,20 @@ internal sealed partial class SettingsForm : Form
         clipboardOutput = (CheckBox)presetEditor.Controls.Find("ClipboardOutput", true).Single(); fileOutput = (CheckBox)presetEditor.Controls.Find("FileOutput", true).Single(); externalOutput = (CheckBox)presetEditor.Controls.Find("ExternalOutput", true).Single();
         openFolderAfterSave = (CheckBox)presetEditor.Controls.Find("OpenFolderAfterSave", true).Single(); screenshotColorDepth = (ComboBox)presetEditor.Controls.Find("ScreenshotColorDepth", true).Single(); metadataMode = (ComboBox)presetEditor.Controls.Find("MetadataMode", true).Single();
         screenshotPadding = (NumericUpDown)inputPresetEditor.Controls.Find("ScreenshotPaddingPixels", true).Single();
-        var commandPage = new TabPage("撮影コマンド") { BackColor = BackColor, Padding = new Padding(8) };
+        var commandPage = new TabPage("コマンド生成") { BackColor = BackColor, Padding = new Padding(8) };
         captureCommand = new CaptureCommandControl(() => committed, SetStatus);
         commandPage.Controls.Add(captureCommand); tabs.TabPages.Add(commandPage);
-        string[] order = ["基本", "入力プリセット", "出力プリセット", "外部アプリ", "ショートカット", "撮影コマンド", "通知", "履歴"];
+        string[] order = ["基本", "入力プリセット", "出力プリセット", "外部アプリ", "ショートカット", "コマンド生成", "通知", "履歴"];
         var ordered = order.Select(title => tabs.TabPages.Cast<TabPage>().Single(p => p.Text == title)).ToArray();
         tabs.TabPages.Clear(); tabs.TabPages.AddRange(ordered);
+        foreach (var page in ordered)
+        {
+            if (page == shortcutPage)
+            {
+                foreach (TabPage group in shortcutTabs.TabPages) AddResetButton(group);
+            }
+            else AddResetButton(page);
+        }
         status = new TextBox { Name = "Status", Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
             WordWrap = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None,
             BackColor = BackColor, TabStop = false, Margin = new Padding(8, 6, 8, 6) };
@@ -379,11 +389,7 @@ internal sealed partial class SettingsForm : Form
         var folderButton = MakeButton("保存先を開く", "OpenFolder", ButtonRole.Secondary);
         folderButton.Width = 144;
         folderButton.Click += (_, _) => openFolder();
-        var resetButton = MakeButton("初期設定に戻す", "ResetSettingsPage");
-        resetButton.Width = 168;
-        resetButton.CausesValidation = false;
-        resetButton.Click += (_, _) => ResetSelectedPage();
-        buttons.Controls.AddRange([saveButton, closeButton, folderButton, resetButton]);
+        buttons.Controls.AddRange([saveButton, closeButton, folderButton]);
         layout.Controls.Add(buttons, 0, 2);
         AcceptButton = saveButton;
         CancelButton = closeButton;
@@ -507,24 +513,48 @@ internal sealed partial class SettingsForm : Form
         { SetStatus("保存できませんでした: " + ex.Message, true); }
         finally { manualSave = false; }
     }
+    private void SaveWorkingShortcuts()
+    {
+        var error = CommitEditorSettings(committed with
+        {
+            PresetCaptureShortcuts = presetShortcutEditor.Rows,
+            LastRecipeShortcut = lastRecipeKey.Value
+        });
+        SetStatus(error ?? "PC作業中のショートカットを保存しました。", error is not null);
+    }
+
+    private string? CommitExternalApplications(CaptureIntent intent, ExternalApplication[] apps, string id)
+    {
+        bool image = intent == CaptureIntent.Screenshot;
+        var presets = committed.CapturePresets.Select(preset => !preset.IsDefault ? preset :
+            image ? preset with { ImageEditorId = id } : preset with { VideoEditorId = id }).ToArray();
+        var selected = apps.FirstOrDefault(app => app.Id == id);
+        string executable = selected?.Executable ?? "";
+        string arguments = selected?.Arguments ?? EditorArguments.Default;
+        var next = image
+            ? committed with { ImageEditors = apps, ImageEditorPath = executable, ImageEditorArguments = arguments, CapturePresets = presets }
+            : committed with { VideoEditors = apps, VideoEditorPath = executable, VideoEditorArguments = arguments, CapturePresets = presets };
+        return CommitEditorSettings(next);
+    }
+
     private string? CommitInputs(SavedRegion[] regions)
     {
         foreach (var removed in committed.SavedRegions.Where(old => regions.All(p => p.Id != old.Id)))
             if (PresetRemovalError(removed.Id, input: true) is { } error) return error;
-        return CommitPresetChanges(committed with { SavedRegions = regions });
+        return CommitEditorSettings(committed with { SavedRegions = regions });
     }
 
     private string? CommitOutputs(CapturePreset[] presets)
     {
         foreach (var removed in committed.CapturePresets.Where(old => presets.All(p => p.Id != old.Id)))
             if (PresetRemovalError(removed.Id, input: false) is { } error) return error;
-        return CommitPresetChanges(committed with { CapturePresets = presets });
+        return CommitEditorSettings(committed with { CapturePresets = presets });
     }
 
     private string? PresetRemovalError(string id, bool input) =>
         PresetCaptureShortcut.ReferenceError(presetShortcutEditor.Rows, id, input)
         ?? PresetCaptureShortcut.ReferenceError(committed.PresetCaptureShortcuts ?? [], id, input);
-    private string? CommitPresetChanges(AppSettings next)
+    private string? CommitEditorSettings(AppSettings next)
     {
         if (manualSave) return null;
         try
@@ -533,7 +563,7 @@ internal sealed partial class SettingsForm : Form
             string? error = save(next); if (error is null) committed = next;
             return error;
         }
-        catch (Exception ex) { return "自動保存できません: " + ex.Message; }
+        catch (Exception ex) { return "保存できません: " + ex.Message; }
     }
     private AppSettings ReadSettings() => (committed with
             {

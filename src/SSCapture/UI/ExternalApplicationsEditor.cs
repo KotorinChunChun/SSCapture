@@ -22,6 +22,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
     private ExternalApplication? EditingApplication => list.SelectedRows.Count == 1
         ? list.SelectedRows[0].Tag as ExternalApplication : null;
     private bool refreshing;
+    private readonly Func<ExternalApplication[], string, string?>? saveApplications;
     private ExternalApplicationLaunch launch;
     internal event Action<string>? SelectedChanged;
     internal void SelectApplication(string id)
@@ -32,12 +33,14 @@ internal sealed class ExternalApplicationsEditor : UserControl
     }
 
     internal ExternalApplicationsEditor(CaptureIntent intent, ExternalApplication[] apps, string selectedId, string legacyPath,
-        string legacyArgs, IReadOnlyList<EditorPreset> examples, Func<(IReadOnlyList<CapturePreset> Presets, string NotificationId)> readUsage)
+        string legacyArgs, IReadOnlyList<EditorPreset> examples, Func<(IReadOnlyList<CapturePreset> Presets, string NotificationId)> readUsage,
+        Func<ExternalApplication[], string, string?>? saveApplications = null)
     {
         string prefix = intent == CaptureIntent.Screenshot ? "Image" : "Video";
         Name = prefix + "ApplicationsEditor"; Dock = DockStyle.Fill;
         this.intent = intent;
         this.readUsage = readUsage;
+        this.saveApplications = saveApplications;
         applications = apps.ToList();
         if (apps.Length == 0 && !string.IsNullOrWhiteSpace(legacyPath))
         {
@@ -47,7 +50,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 7 };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 148)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         for (int row = 0; row < 5; row++) root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, SettingsEditorActions.Height)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         Controls.Add(root);
         selected = new ComboBox { Name = prefix + "SelectedEditor", DropDownStyle = ComboBoxStyle.DropDownList };
         Add("既定出力のアプリ", selected, 0);
@@ -76,9 +79,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
         appName = new TextBox { Name = prefix + "EditorName", MaxLength = 80 }; Add("登録名", appName, 2);
         Executable = new TextBox { Name = prefix + "EditorPath", Text = legacyPath }; Add("実行ファイル", Executable, 3);
         Arguments = new TextBox { Name = prefix + "EditorArguments", Text = legacyArgs }; Add("引数", Arguments, 4);
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
-        root.Controls.Add(buttons, 0, 5); root.SetColumnSpan(buttons, 2);
-        var newButton = SettingsForm.MakeButton("新規 ▾", prefix + "EditorNew"); newButton.Width = 92;
+        var newButton = SettingsForm.MakeButton("追加 ▼", prefix + "EditorNew");
         newButton.ContextMenuStrip = newMenu;
         foreach (var preset in examples)
         {
@@ -89,7 +90,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
                 SetLaunch(preset.Launch, preset.Executable, preset.Arguments);
                 appName.Text = preset.Launch != ExternalApplicationLaunch.Executable ? preset.Name
                     : string.IsNullOrWhiteSpace(preset.Executable) ? "" : Path.GetFileNameWithoutExtension(preset.Executable);
-                status.Text = "新規入力です。「保存」で一覧に登録し、設定の「保存」で確定します。";
+                status.Text = "新規入力です。［保存］で登録します。";
             };
             newMenu.Items.Add(item);
         }
@@ -105,16 +106,34 @@ internal sealed class ExternalApplicationsEditor : UserControl
             }
         };
         newButton.Click += (_, _) => newMenu.Show(newButton, 0, newButton.Height);
-        buttons.Controls.Add(newButton);
-        Button("複製", "Duplicate", () => { list.ClearSelection(); appName.Text += " コピー"; });
-        Button("保存", "Store", Store);
-        Button("削除", "Delete", Delete);
-        status = new Label { Name = prefix + "EditorStatus", Dock = DockStyle.Fill, Text = "「保存」で一覧登録、設定の「保存」で確定。引数欄のツールチップで置換語を確認できます。" };
+        var duplicate = SettingsEditorActions.CreateButton("複製", prefix + "EditorDuplicate", () =>
+        {
+            if (EditingApplication is null) return;
+            string name = PresetSettings.UniqueName(appName.Text.Trim() + "のコピー", applications.Select(app => app.Name));
+            list.ClearSelection();
+            appName.Text = name;
+            appName.Select();
+        });
+        var store = SettingsEditorActions.CreateButton("保存", prefix + "EditorStore", () => Edit(Store), ButtonRole.Primary);
+        var delete = SettingsEditorActions.CreateButton("削除", prefix + "EditorDelete", () => Edit(Delete), ButtonRole.Danger);
+        var buttons = SettingsEditorActions.CreateRow(prefix + "EditorActions", newButton, duplicate, store, delete);
+        root.Controls.Add(buttons, 0, 5);
+        root.SetColumnSpan(buttons, 2);
+        status = new Label { Name = prefix + "EditorStatus", Dock = DockStyle.Fill };
         argumentTips.SetToolTip(Arguments, EditorArguments.Help);
         root.Controls.Add(status, 0, 6); root.SetColumnSpan(status, 2);
-        list.SelectionChanged += (_, _) => { if (!refreshing && EditingApplication is { } app) { appName.Text = app.Name; SetLaunch(app.Launch, app.Executable, app.Arguments); } };
+        list.SelectionChanged += (_, _) =>
+        {
+            if (refreshing) return;
+            var app = EditingApplication;
+            duplicate.Enabled = delete.Enabled = app is not null;
+            if (app is null) return;
+            appName.Text = app.Name;
+            SetLaunch(app.Launch, app.Executable, app.Arguments);
+        };
         Refresh(selectedId);
         if (applications.Count > 0) SelectRow(applications[Math.Max(0, applications.FindIndex(a => a.Id == selectedId))].Id);
+        duplicate.Enabled = delete.Enabled = EditingApplication is not null;
 
         static DataGridViewTextBoxColumn Column(string name, string heading, float fillWeight) =>
             new() { Name = name, HeaderText = heading, FillWeight = fillWeight, SortMode = DataGridViewColumnSortMode.NotSortable };
@@ -133,12 +152,6 @@ internal sealed class ExternalApplicationsEditor : UserControl
         {
             root.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left }, 0, row);
             control.Dock = DockStyle.Fill; root.Controls.Add(control, 1, row);
-        }
-        void Button(string text, string suffix, Action action)
-        {
-            var button = SettingsForm.MakeButton(text, prefix + "Editor" + suffix); button.Width = suffix == "Store" ? 132 : 84;
-            button.Click += (_, _) => { try { action(); status.Text = "変更しました。設定の保存で確定します。"; } catch (ArgumentException e) { status.Text = e.Message; } };
-            buttons.Controls.Add(button);
         }
     }
     protected override void Dispose(bool disposing)
@@ -209,23 +222,47 @@ internal sealed class ExternalApplicationsEditor : UserControl
         Executable.ReadOnly = Arguments.ReadOnly = kind != ExternalApplicationLaunch.Executable;
         Executable.PlaceholderText = Executable.ReadOnly ? "WindowsのPNG関連付け" : "";
     }
+    private void Edit(Action update)
+    {
+        try { update(); }
+        catch (ArgumentException ex) { status.Text = ex.Message; }
+    }
+
     private void Store()
     {
         var prior = EditingApplication;
         var app = new ExternalApplication { Id = prior?.Id ?? Guid.NewGuid().ToString("N"), Name = appName.Text.Trim(), BuiltInKey = prior?.BuiltInKey,
             Launch = launch, Executable = Environment.ExpandEnvironmentVariables(Executable.Text.Trim().Trim('"')), Arguments = Arguments.Text };
-        var next = applications.Where(a => a.Id != app.Id).Append(app).ToArray();
-        ExternalApplication.ValidateList(next, "");
+        var next = applications.ToList();
+        int index = next.FindIndex(candidate => candidate.Id == app.Id);
+        if (index < 0) next.Add(app);
+        else next[index] = app;
         string id = SelectedId;
-        if (prior is not null) applications[applications.FindIndex(a => a.Id == prior.Id)] = app; else applications.Add(app);
-        Refresh(string.IsNullOrEmpty(id) ? app.Id : id); SelectRow(app.Id);
+        ApplyApplications(next.ToArray(), string.IsNullOrEmpty(id) ? app.Id : id, app.Id);
     }
+
     private void Delete()
     {
         if (EditingApplication is not { } app) return;
         var (presets, notificationId) = readUsage();
         if (SelectedId == app.Id || notificationId == app.Id || presets.Any(preset => EditorId(preset) == app.Id))
             throw new ArgumentException("通知または出力プリセットで参照中です。先に指定を変更してください。");
-        string id = SelectedId; applications.Remove(app); Refresh(id);
+        ExternalApplication[] next = applications.Where(candidate => candidate.Id != app.Id).ToArray();
+        ApplyApplications(next, SelectedId, next.FirstOrDefault()?.Id);
+        if (next.Length == 0)
+        {
+            appName.Clear();
+            SetLaunch(ExternalApplicationLaunch.Executable, "", EditorArguments.Default);
+        }
+    }
+    private void ApplyApplications(ExternalApplication[] next, string selectedId, string? editingId)
+    {
+        ExternalApplication.ValidateList(next, selectedId);
+        if (saveApplications?.Invoke(next, selectedId) is { } error) throw new ArgumentException(error);
+        applications.Clear();
+        applications.AddRange(next);
+        Refresh(selectedId);
+        if (editingId is not null) SelectRow(editingId);
+        status.Text = saveApplications is null ? "一覧を更新しました。" : "外部アプリの設定を保存しました。";
     }
 }

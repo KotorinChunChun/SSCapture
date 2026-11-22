@@ -4,6 +4,19 @@ namespace SSCapture.UI;
 
 internal sealed partial class SettingsForm
 {
+    private void AddResetButton(TabPage page)
+    {
+        var actions = new FlowLayoutPanel { Name = "PageResetActions", Dock = DockStyle.Bottom,
+            Height = SettingsEditorActions.Height, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Margin = Padding.Empty };
+        var reset = MakeButton("初期設定に戻す", "ResetSettingsPage");
+        reset.Width = 168;
+        reset.Margin = new Padding(0, 4, 3, 4);
+        reset.CausesValidation = false;
+        reset.Click += (_, _) => ResetSelectedPage();
+        actions.Controls.Add(reset);
+        page.Controls.Add(actions);
+    }
+
     internal void ResetSelectedPage(Func<bool>? confirm = null)
     {
         var defaults = new AppSettings();
@@ -22,7 +35,7 @@ internal sealed partial class SettingsForm
                     if (ConfirmPresetReset())
                     {
                         var next = StandardRegistrationReset.RestoreOutputs(committed) with { OneOcrDirectory = defaults.OneOcrDirectory };
-                        CompletePresetReset(CommitPresetChanges(next), () =>
+                        CompletePresetReset(CommitEditorSettings(next), () =>
                         {
                             presetEditor.LoadPresets(committed.CapturePresets, committed.CapturePresets.Single(preset => preset.IsDefault).Id);
                             oneOcrDirectory.Text = defaults.OneOcrDirectory;
@@ -52,9 +65,9 @@ internal sealed partial class SettingsForm
                 case "ショートカット":
                     ResetShortcutDraft(defaults);
                     break;
-                case "撮影コマンド":
+                case "コマンド生成":
                     captureCommand.ResetDraft();
-                    SetStatus("撮影コマンドの入力を初期値に戻しました。");
+                    SetStatus("コマンド生成の入力を初期値に戻しました。");
                     return;
                 default:
                     return;

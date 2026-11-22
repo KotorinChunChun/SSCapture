@@ -23,8 +23,8 @@ internal sealed class CaptureCommandControl : UserControl
     private readonly Button copy = new() { Name = "CaptureCommandCopy", Text = "コピー", AutoSize = true, Enabled = false };
     private readonly TextBox command = new()
     {
-        Name = "CaptureCommandText", ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Both,
-        WordWrap = false, Dock = DockStyle.Fill, MinimumSize = new(0, 130), AccessibleName = "PowerShellコマンド"
+        Name = "CaptureCommandText", ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Vertical,
+        WordWrap = true, Dock = DockStyle.Fill, MinimumSize = new(0, 130), AccessibleName = "PowerShellコマンド"
     };
     private readonly CaptureScheduleEditor schedule = new(allowImmediate: true, allowUnlimited: false);
     private bool refreshing;
@@ -36,29 +36,42 @@ internal sealed class CaptureCommandControl : UserControl
         this.executable = executable ?? Path.Combine(AppContext.BaseDirectory, "SSCapture.exe");
         this.copyCommand = copyCommand ?? (text => { Clipboard.SetText(text); return Task.CompletedTask; });
         Name = "CaptureCommandControl";
-        AccessibleName = "撮影コマンド";
+        AccessibleName = "コマンド生成";
         Dock = DockStyle.Fill;
         AutoScroll = true;
         method.Items.AddRange(["範囲選択", "固定範囲", "入力プリセットに従う"]);
         method.SelectedIndex = 0;
-        var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, RowCount = 11, Padding = new(8) };
-        layout.ColumnStyles.Add(new(SizeType.AutoSize));
+        var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, RowCount = 13, Padding = new(8) };
+        layout.ColumnStyles.Add(new(SizeType.Absolute));
         layout.ColumnStyles.Add(new(SizeType.Percent, 100));
         void Row(string label, Control value, int row)
         {
             layout.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new(3, 8, 12, 8) }, 0, row);
             layout.Controls.Add(value, 1, row);
         }
-        Row("方式", method, 0);
-        Row("入力プリセット", input, 1);
-        Row("出力プリセット", output, 2);
-        Row("X", x, 3); Row("Y", y, 4); Row("幅", width, 5); Row("高さ", height, 6);
-        layout.Controls.Add(import, 1, 7);
-        layout.Controls.Add(schedule, 0, 8); layout.SetColumnSpan(schedule, 2);
+        var intro = new Label { Name = "CaptureCommandIntro", Text = "本ツールをコマンドライン実行するためのスクリプトを作成する画面です。",
+            AutoSize = true, Margin = new Padding(3, 3, 3, 12) };
+        layout.Controls.Add(intro, 0, 0);
+        layout.SetColumnSpan(intro, 2);
+        Row("撮影種別", new Label { Name = "CaptureCommandIntent", Text = "静止画", AutoSize = true, Anchor = AnchorStyles.Left }, 1);
+        Row("方式", method, 2);
+        Row("入力プリセット", input, 3);
+        Row("出力プリセット", output, 4);
+        Row("X", x, 5); Row("Y", y, 6); Row("幅", width, 7); Row("高さ", height, 8);
+        layout.Controls.Add(import, 1, 9);
+        layout.Controls.Add(schedule, 0, 10); layout.SetColumnSpan(schedule, 2);
         var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Margin = Padding.Empty };
         buttons.Controls.AddRange([generate, copy]);
-        layout.Controls.Add(buttons, 1, 9);
-        layout.Controls.Add(command, 0, 10); layout.SetColumnSpan(command, 2);
+        layout.Controls.Add(buttons, 1, 11);
+        layout.Controls.Add(command, 0, 12); layout.SetColumnSpan(command, 2);
+        void AlignLabels()
+        {
+            int width = LogicalToDeviceUnits(172);
+            layout.ColumnStyles[0].Width = width;
+            schedule.AlignLabelColumn(width);
+        }
+        AlignLabels();
+        DpiChangedAfterParent += (_, _) => AlignLabels();
         Controls.Add(layout);
         ButtonTheme.Apply(generate, ButtonRole.Primary);
         ButtonTheme.Apply(copy, ButtonRole.Secondary);

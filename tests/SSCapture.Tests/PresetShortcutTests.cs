@@ -211,9 +211,24 @@ internal static partial class Program
             Find<ComboBox>("ShortcutCaptureIntent").SelectedIndex = (int)CaptureIntent.Recording;
             Find<ComboBox>("ShortcutInputPreset").SelectedIndex = 0;
             Find<ComboBox>("ShortcutOutputPreset").SelectedIndex = Array.FindIndex(defaults.CapturePresets, p => p.Id == output.Id) + 1;
-            SaveConsolidation(form);
-            Equal(new PresetCaptureShortcut("Ctrl+F9", OutputPresetId: output.Id, Intent: CaptureIntent.Recording)
-                { SelectRangeWithDefaultInput = true }, persisted.PresetCaptureShortcuts!.Single());
+            Click("SavePresetCaptureShortcuts");
+            var recording = new PresetCaptureShortcut("Ctrl+F9", OutputPresetId: output.Id, Intent: CaptureIntent.Recording)
+                { SelectRangeWithDefaultInput = true };
+            Equal(recording, persisted.PresetCaptureShortcuts!.Single());
+
+            bool previousDim = persisted.DimCaptureBackground;
+            Find<CheckBox>("DimCaptureBackground").Checked = !previousDim;
+            Click("DuplicatePresetCaptureShortcut");
+            Equal(2, grid.Rows.Count);
+            Equal("", key.Value);
+            Equal("録画", (string?)grid.Rows[1].Cells[1].Value);
+            Equal(output.Name, (string?)grid.Rows[1].Cells[3].Value);
+            Click("SavePresetCaptureShortcuts");
+            Equal(recording, persisted.PresetCaptureShortcuts!.Single());
+            key.Value = "Ctrl+F10";
+            Click("SavePresetCaptureShortcuts");
+            Equal(recording with { Key = "Ctrl+F10" }, persisted.PresetCaptureShortcuts![1]);
+            Equal(previousDim, persisted.DimCaptureBackground);
         });
     }
 }

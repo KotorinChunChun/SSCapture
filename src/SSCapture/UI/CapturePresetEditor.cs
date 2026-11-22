@@ -51,10 +51,18 @@ internal sealed class CapturePresetEditor : UserControl
         this.readSettings = readSettings; initialSettings = initial;
         Name = "CapturePresetEditor"; Dock = DockStyle.Fill;
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Margin = Padding.Empty };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44)); Controls.Add(root);
-        list = new ListBox { Name = "CapturePresetList", Dock = DockStyle.Fill, IntegralHeight = false, FormattingEnabled = true };
-        list.Format += (_, e) => { if (e.ListItem is CapturePreset p) e.Value = (p.IsDefault ? "★ " : "") + p.Name; }; root.Controls.Add(list, 0, 0);
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, SettingsEditorActions.PresetListWidth + SettingsEditorActions.PresetListGap)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, SettingsEditorActions.Height)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44)); Controls.Add(root);
+        var listColumn = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+            Margin = new Padding(0, 0, SettingsEditorActions.PresetListGap, 0) };
+        listColumn.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        listColumn.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        listColumn.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        root.Controls.Add(listColumn, 0, 0);
+        list = new ListBox { Name = "CapturePresetList", Dock = DockStyle.Fill, Margin = Padding.Empty,
+            IntegralHeight = false, FormattingEnabled = true, HorizontalScrollbar = true };
+        list.Format += (_, e) => { if (e.ListItem is CapturePreset p) e.Value = (p.IsDefault ? "★ " : "") + p.Name; };
+        listColumn.Controls.Add(list, 0, 0);
         var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 }; right.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); right.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.Controls.Add(right, 1, 0);
         var header = Fields(); header.RowCount = 1; presetName = new TextBox { Name = "CapturePresetName", MaxLength = 80 }; Add(header, "名前", presetName, 0); right.Controls.Add(header, 0, 0);
         if (openPresetShortcuts is not null)
@@ -102,20 +110,43 @@ internal sealed class CapturePresetEditor : UserControl
         var help = new Label { Text = "{yyyymmdd} 年月日 / {hhmmss} 時分秒 / {ext} png・mp4\n{ocr} OCR文字列 / {region} 範囲名 / {#}・{##} 連番", Dock = DockStyle.Fill }; naming.Controls.Add(help, 0, 5); naming.SetColumnSpan(help, 2); naming.SetRowSpan(help, 2);
         metadataMode = new ComboBox { Name = "MetadataMode", DropDownStyle = ComboBoxStyle.DropDownList }; metadataMode.Items.AddRange(["記録しない", "PNG内XMP", "別JSON", "PNG内XMPと別JSON"]); Add(metadata, "保存形式", metadataMode, 0);
         var warning = new Label { Dock = DockStyle.Fill, Text = "静止画のファイル保存時に座標・UIA・exe/class/titleを記録します。\n共有時はウィンドウ名やパスにご注意ください。\nパスワードの名前・値の本文・UI全体のツリーは採取しません。\n画像とUIAは同時刻ではなく、未取得時は理由を記録します。" }; metadata.Controls.Add(warning, 0, 1); metadata.SetColumnSpan(warning, 2); metadata.SetRowSpan(warning, 4);
-        var buttons = new TableLayoutPanel { Name = "OutputPresetActions", Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = Padding.Empty };
-        foreach (int _ in Enumerable.Range(0, 3)) buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150)); buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.Controls.Add(buttons, 0, 1); root.SetColumnSpan(buttons, 2);
-        var add = SettingsForm.MakeButton("追加 ▼", "AddCapturePreset"); add.Width = 144;
-        var choices = new ContextMenuStrip { Name = "AddCapturePresetMenu" }; add.ContextMenuStrip = choices;
+        var add = SettingsForm.MakeButton("追加 ▼", "AddCapturePreset");
+        var choices = new ContextMenuStrip { Name = "AddCapturePresetMenu" };
+        add.ContextMenuStrip = choices;
         void Choice(string text, string id, Action action)
-        { var item = new ToolStripMenuItem(text) { Name = id }; item.Click += (_, _) => { try { action(); StoreCurrent(); } catch (ArgumentException ex) { ShowError(ex.Message); } }; choices.Items.Add(item); }
+        {
+            var item = new ToolStripMenuItem(text) { Name = id };
+            item.Click += (_, _) => SaveNew(action);
+            choices.Items.Add(item);
+        }
         Choice("新規", "NewCapturePreset", () => Fill(CapturePreset.FromSettings(UniqueName("出力プリセット"), CurrentSettings())));
-        Choice("直前の出力設定", "PreviousCapturePreset", () => { if (PreviousOutput is not null) Fill(CapturePreset.FromSettings(UniqueName("直前の出力設定"), PreviousOutput)); });
-        Choice("選択を複製", "DuplicateCapturePreset", () => { var source = ReadCurrent(); Fill(source with { Id = Guid.NewGuid().ToString("N"), Name = UniqueName(source.Name + "のコピー"), IsDefault = false, BuiltInKey = null }); });
-        add.Click += (_, _) => { choices.Items[1].Enabled = PreviousOutput is not null; choices.Items[2].Enabled = editing is not null; choices.Show(add, new Point(0, add.Height)); }; add.Dock = DockStyle.Fill; add.Margin = new Padding(3); buttons.Controls.Add(add, 0, 0);
+        Choice("直前の出力設定", "PreviousCapturePreset", () =>
+        {
+            if (PreviousOutput is not null) Fill(CapturePreset.FromSettings(UniqueName("直前の出力設定"), PreviousOutput));
+        });
+        add.Click += (_, _) => { choices.Items[1].Enabled = PreviousOutput is not null; choices.Show(add, new Point(0, add.Height)); };
         Disposed += (_, _) => choices.Dispose();
-        Button("削除", "DeleteCapturePreset", () => { if (editing is CapturePreset p) { if (p.IsDefault) { ShowError("別のプリセットを既定にしてから削除してください。"); return; } ApplyCandidates(Presets.Where(x => x.Id != p.Id).ToArray(), null); } });
-        Button("★既定にする", "DefaultCapturePreset", () => { StoreCurrent(); if (Error is not null || editing is not CapturePreset p) return; ApplyCandidates(Presets.Select(x => x with { IsDefault = x.Id == p.Id }).ToArray(), p.Id); });
+        var duplicate = SettingsEditorActions.CreateButton("複製", "DuplicateCapturePreset", () => SaveNew(() =>
+        {
+            var source = ReadCurrent();
+            Fill(source with { Id = Guid.NewGuid().ToString("N"), Name = UniqueName(source.Name + "のコピー"), IsDefault = false, BuiltInKey = null });
+        }));
+        var store = SettingsEditorActions.CreateButton("保存", "StoreCapturePreset", StoreCurrent, ButtonRole.Primary);
+        var delete = SettingsEditorActions.CreateButton("削除", "DeleteCapturePreset", () =>
+        {
+            if (editing is not CapturePreset preset) return;
+            if (preset.IsDefault) { ShowError("別のプリセットを既定にしてから削除してください。"); return; }
+            ApplyCandidates(Presets.Where(candidate => candidate.Id != preset.Id).ToArray(), null);
+        }, ButtonRole.Danger);
+        var buttons = SettingsEditorActions.CreateRow("OutputPresetActions", add, duplicate, store, delete);
+        root.Controls.Add(buttons, 0, 1);
+        root.SetColumnSpan(buttons, 2);
+        SettingsEditorActions.AddDefaultButton(listColumn, "DefaultCapturePreset", () =>
+        {
+            StoreCurrent();
+            if (Error is not null || editing is not CapturePreset preset) return;
+            ApplyCandidates(Presets.Select(candidate => candidate with { IsDefault = candidate.Id == preset.Id }).ToArray(), preset.Id);
+        });
         status = new Label { Name = "PresetEditorStatus", Dock = DockStyle.Fill, Text = "編集内容は設定画面の「保存」で確定します。" }; root.Controls.Add(status, 0, 2); root.SetColumnSpan(status, 2);
         list.SelectedIndexChanged += (_, _) =>
         {
@@ -135,8 +166,13 @@ internal sealed class CapturePresetEditor : UserControl
         imageApp.SelectedIndexChanged += (_, _) => NotifyDefaultApplications();
         videoApp.SelectedIndexChanged += (_, _) => NotifyDefaultApplications();
         TableLayoutPanel Page(string title) { var page = new TabPage(title); var fields = Fields(); page.Controls.Add(fields); tabs.TabPages.Add(page); return fields; }
-        void Button(string text, string name, Action action) { var b = SettingsForm.MakeButton(text, name); b.Dock = DockStyle.Fill; b.Margin = new Padding(3); b.Click += (_, _) => { try { action(); } catch (ArgumentException ex) { ShowError(ex.Message); } }; buttons.Controls.Add(b, buttons.Controls.Count, 0); }
     }
+    private void SaveNew(Action prepare)
+    {
+        try { prepare(); StoreCurrent(); }
+        catch (ArgumentException ex) { ShowError(ex.Message); }
+    }
+
     private AppSettings CurrentSettings() => IsHandleCreated ? readSettings() : initialSettings;
     internal void AddSharedOcr(Control control) => Add(naming, "OCRエンジン（共通）", control, 4);
     private void UpdateFileFields()

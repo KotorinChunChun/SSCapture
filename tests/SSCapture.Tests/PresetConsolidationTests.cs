@@ -40,20 +40,57 @@ internal static partial class Program
             var help = tips.GetToolTip(form.Controls.Find("CapturePresetEditor", true).Single()) ?? "";
             Check(help.Contains("白い余白は入力プリセット") && !help.Contains("登録・更新"), "旧説明のまま");
         });
-        Run("複製と既定ボタンは最小画面でも36px以上で文字と操作領域が収まる", () =>
+        Run("4画面の登録ボタンの並び・寸法と入出力の一覧幅を統一する", () =>
         {
             using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
-            form.SelectCategory("入力プリセット"); form.Size = form.MinimumSize; _ = form.Handle;
-            foreach (Control child in Descendants(form)) _ = child.Handle; LayoutTree(form);
-            foreach (string name in new[] { "AddInputPreset", "DeleteRegion", "DefaultInputPreset" })
+            form.Size = form.MinimumSize;
+            _ = form.Handle;
+            foreach (Control child in Descendants(form)) _ = child.Handle;
+
+            (string Category, string Name)[] bars = [
+                ("入力プリセット", "InputPresetActions"), ("出力プリセット", "OutputPresetActions"),
+                ("外部アプリ", "ImageEditorActions"), ("外部アプリ", "VideoEditorActions"),
+                ("ショートカット", "ShortcutAssignmentActions")
+            ];
+            Size? standard = null;
+            foreach (var (category, name) in bars)
             {
-                var button = (Button)form.Controls.Find(name, true).Single();
-                Size text = TextRenderer.MeasureText(button.Text, button.Font);
-                Check(button.Height >= 36 && button.Height >= text.Height + 6, $"{name}の高さ不足: {button.Size} / 文字{text}");
-                Check(button.Width >= text.Width + 8 && button.Parent!.ClientRectangle.Contains(button.Bounds), $"{name}が親領域外か文字幅不足");
+                form.SelectCategory(category);
+                LayoutTree(form);
+                var row = form.Controls.Find(name, true).Single();
+                var buttons = row.Controls.OfType<Button>().ToArray();
+                Check(buttons.Select(b => b.Text.TrimEnd(' ', '▼')).SequenceEqual(["追加", "複製", "保存", "削除"]), "ボタンの順序が異なる");
+                standard ??= buttons[0].Size;
+                foreach (var button in buttons)
+                {
+                    Equal(standard.Value, button.Size);
+                    Check(button.Height >= TextRenderer.MeasureText(button.Text, button.Font).Height + 6, $"{button.Name}の高さ不足");
+                    Check(row.ClientRectangle.Contains(button.Bounds) && button.FlatStyle == FlatStyle.Flat, $"{button.Name}の位置またはスタイルが異なる");
+                }
+                Check(buttons.Zip(buttons.Skip(1)).All(pair => pair.First.Right < pair.Second.Left && pair.First.Top == pair.Second.Top),
+                    "登録ボタンが横一列に収まらない");
             }
-            var first = form.Controls.Find("AddInputPreset", true).Single(); var second = form.Controls.Find("DefaultInputPreset", true).Single();
-            Check(first.Right <= second.Left && first.Top == second.Top, "ボタンが重なるか並びがずれる");
+
+            int? listWidth = null;
+            foreach (var (category, listName, buttonName) in new[]
+            {
+                ("入力プリセット", "SavedRegions", "DefaultInputPreset"), ("出力プリセット", "CapturePresetList", "DefaultCapturePreset")
+            })
+            {
+                form.SelectCategory(category);
+                LayoutTree(form);
+                var list = form.Controls.Find(listName, true).Single();
+                var button = form.Controls.Find(buttonName, true).Single();
+                listWidth ??= list.Width;
+                Equal(listWidth.Value, list.Width);
+                Equal(list.Width, button.Width);
+                Check(list.Parent == button.Parent && list.Left == button.Left && button.Top - list.Bottom is >= 0 and <= 8,
+                    "既定にするボタンがリスト直下に揃わない");
+            }
+
+            var group = form.Controls.Find("SelectedShortcutAssignment", true).Single();
+            Check(group is GroupBox && group.Contains(form.Controls.Find("PresetCaptureShortcut", true).Single()) &&
+                !group.Contains(form.Controls.Find("PresetCaptureShortcuts", true).Single()), "ショートカットの一覧と編集欄の区別がない");
         });
         Run("新規は入力5件・出力3件と矩形コピー既定・暗転ON", () =>
         {
@@ -125,7 +162,7 @@ internal static partial class Program
         {
             using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
-            Equal("基本,入力プリセット,出力プリセット,外部アプリ,ショートカット,撮影コマンド,通知,履歴", string.Join(',', tabs.TabPages.Cast<TabPage>().Select(p => p.Text)));
+            Equal("基本,入力プリセット,出力プリセット,外部アプリ,ショートカット,コマンド生成,通知,履歴", string.Join(',', tabs.TabPages.Cast<TabPage>().Select(p => p.Text)));
             var input = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "入力プリセット"); var output = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "出力プリセット");
             Check(input.Contains(form.Controls.Find("ScreenshotPaddingPixels", true).Single()), "入力に余白がない");
             Check(output.Contains(form.Controls.Find("ScreenshotColorDepth", true).Single()), "出力に減色がない");
@@ -159,6 +196,25 @@ internal static partial class Program
             SaveConsolidation(form); Check(saved is not null, "出力の既定が保存されない");
             Equal(ScreenshotColorDepth.Indexed4, saved!.ScreenshotColorDepth); Equal("sample.{ext}", saved.FileNamePattern); Equal(12, saved.ScreenshotPaddingPixels);
             Equal("16色", saved.CapturePresets.Single(p => p.IsDefault).Name);
+        });
+        Run("外部アプリの複製と保存は一覧だけを確定し基本設定の下書きを保つ", () =>
+        {
+            var initial = new AppSettings().ApplyDefaults();
+            AppSettings saved = initial;
+            using var form = new SettingsForm(initial, next => { saved = next; return null; }, () => { }, () => []);
+            form.SelectCategory("外部アプリ");
+            ((CheckBox)form.Controls.Find("DimCaptureBackground", true).Single()).Checked = !initial.DimCaptureBackground;
+            string originalId = initial.ImageEditors.Single().Id;
+            ConsolidationClick(form, "ImageEditorDuplicate");
+            Equal(initial.ImageEditors.Single().Name + "のコピー", form.Controls.Find("ImageEditorName", true).Single().Text);
+            ConsolidationClick(form, "ImageEditorStore");
+            Equal(2, saved.ImageEditors.Length);
+            Equal(initial.ImageEditors.Single(), saved.ImageEditors.Single(app => app.Id == originalId));
+            Equal(originalId, saved.SelectedImageEditorId);
+            Equal(initial.DimCaptureBackground, saved.DimCaptureBackground);
+            string newId = saved.ImageEditors.Single(app => app.Id != originalId).Id;
+            ConsolidationClick(form, "ImageEditorDelete");
+            Check(saved.ImageEditors.All(app => app.Id != newId), "複製したアプリの削除が保存されない");
         });
         Run("スナップ数値と共通表示設定を保存してプリセットと独立維持", () =>
         {

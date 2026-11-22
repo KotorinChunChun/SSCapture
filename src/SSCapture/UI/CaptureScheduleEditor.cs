@@ -57,6 +57,12 @@ internal sealed class CaptureScheduleEditor : TableLayoutPanel
         Changed();
     }
 
+    internal void AlignLabelColumn(int width)
+    {
+        ColumnStyles[0].SizeType = SizeType.Absolute;
+        ColumnStyles[0].Width = width;
+    }
+
     internal void ResetDraft()
     {
         mode.SelectedIndex = 0;

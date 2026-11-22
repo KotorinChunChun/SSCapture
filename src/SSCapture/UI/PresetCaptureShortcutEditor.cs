@@ -20,62 +20,68 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
     private readonly ComboBox intent = PresetChoice("ShortcutCaptureIntent", "撮影種別");
     private readonly ComboBox input = PresetChoice("ShortcutInputPreset", "入力プリセット");
     private readonly ComboBox output = PresetChoice("ShortcutOutputPreset", "出力プリセット");
-    private readonly Button remove = SettingsForm.MakeButton("削除", "DeletePresetCaptureShortcut");
+    private readonly Button duplicate, remove;
     private PresetItem[] inputs = [], outputs = [];
     private string? defaultInput, defaultOutput;
     private bool loading;
     private int selected = -1;
     private string? initialInput, initialOutput;
 
-    internal PresetCaptureShortcutEditor(PresetCaptureShortcut[] shortcuts)
+    internal PresetCaptureShortcutEditor(PresetCaptureShortcut[] shortcuts, Action save)
     {
         Dock = DockStyle.Fill;
         rows = shortcuts.ToList();
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 6 };
-        foreach (int width in new[] { 20, 40, 40 })
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, width));
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         Controls.Add(layout);
-
         layout.Controls.Add(list, 0, 0);
-        layout.SetColumnSpan(list, 3);
+
+        var group = new GroupBox { Name = "SelectedShortcutAssignment", Text = "選択した割り当ての編集", Dock = DockStyle.Fill,
+            AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(8, 6, 8, 8) };
+        var fields = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3, RowCount = 5, Margin = Padding.Empty };
+        foreach (int width in new[] { 20, 40, 40 })
+            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, width));
+        fields.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        fields.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        fields.RowStyles.Add(new RowStyle(SizeType.Absolute, SettingsEditorActions.Height));
+        group.Controls.Add(fields);
+        layout.Controls.Add(group, 0, 1);
+
         string[] labels = ["ショートカットキー", "撮影種別", "入力プリセット", "出力プリセット"];
         for (int column = 0; column < labels.Length; column++)
         {
             int index = list.Columns.Add("PresetCaptureColumn" + column, labels[column]);
             list.Columns[index].SortMode = DataGridViewColumnSortMode.NotSortable;
-            layout.Controls.Add(new Label { Name = "PresetCaptureFieldLabel" + column, Text = labels[column], AutoSize = true },
-                Math.Max(0, column - 1), column == 0 ? 1 : 3);
+            fields.Controls.Add(new Label { Name = "PresetCaptureFieldLabel" + column, Text = labels[column], AutoSize = true },
+                Math.Max(0, column - 1), column == 0 ? 0 : 2);
         }
-        layout.Controls.Add(key, 0, 2);
-        layout.SetColumnSpan(key, 3);
+        fields.Controls.Add(key, 0, 1);
+        fields.SetColumnSpan(key, 3);
         intent.Items.AddRange(["静止画", "録画"]);
-        layout.Controls.Add(intent, 0, 4);
-        layout.Controls.Add(input, 1, 4);
-        layout.Controls.Add(output, 2, 4);
+        fields.Controls.Add(intent, 0, 3);
+        fields.Controls.Add(input, 1, 3);
+        fields.Controls.Add(output, 2, 3);
 
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
-        layout.Controls.Add(buttons, 0, 5);
-        layout.SetColumnSpan(buttons, 3);
-        var add = SettingsForm.MakeButton("追加", "AddPresetCaptureShortcut");
-        add.Click += (_, _) =>
+        var add = SettingsEditorActions.CreateButton("追加", "AddPresetCaptureShortcut",
+            () => AddDraft(new("", initialInput, initialOutput) { SelectRangeWithDefaultInput = true }));
+        duplicate = SettingsEditorActions.CreateButton("複製", "DuplicatePresetCaptureShortcut", () =>
         {
-            rows.Add(new("", initialInput, initialOutput) { SelectRangeWithDefaultInput = true });
-            RefreshRows(rows.Count - 1);
-            key.SelectNextControl(null, true, true, true, false);
-        };
-        remove.Click += (_, _) =>
+            if (selected >= 0) AddDraft(rows[selected] with { Key = "" });
+        });
+        var store = SettingsEditorActions.CreateButton("保存", "SavePresetCaptureShortcuts", save, ButtonRole.Primary);
+        remove = SettingsEditorActions.CreateButton("削除", "DeletePresetCaptureShortcut", () =>
         {
             if (selected < 0) return;
             rows.RemoveAt(selected);
             RefreshRows(Math.Min(selected, rows.Count - 1));
-        };
-        buttons.Controls.AddRange([add, remove]);
+        }, ButtonRole.Danger);
+        var buttons = SettingsEditorActions.CreateRow("ShortcutAssignmentActions", add, duplicate, store, remove);
+        fields.Controls.Add(buttons, 0, 4);
+        fields.SetColumnSpan(buttons, 3);
 
         list.SelectionChanged += (_, _) =>
         {
@@ -86,6 +92,13 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
         input.SelectedIndexChanged += (_, _) => UpdateRow();
         output.SelectedIndexChanged += (_, _) => UpdateRow();
         RefreshRows(rows.Count > 0 ? 0 : -1);
+    }
+
+    private void AddDraft(PresetCaptureShortcut row)
+    {
+        rows.Add(row);
+        RefreshRows(rows.Count - 1);
+        key.SelectNextControl(null, true, true, true, false);
     }
 
     internal PresetCaptureShortcut[] Rows => rows.ToArray();
@@ -143,7 +156,7 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
         try
         {
             var row = index >= 0 ? rows[index] : null;
-            remove.Enabled = key.Enabled = intent.Enabled = input.Enabled = output.Enabled = row is not null;
+            duplicate.Enabled = remove.Enabled = key.Enabled = intent.Enabled = input.Enabled = output.Enabled = row is not null;
             key.Value = row?.Key ?? "";
             intent.SelectedIndex = row is null ? -1 : (int)row.Intent;
             SetChoices(input, inputs, row?.InputPresetId);

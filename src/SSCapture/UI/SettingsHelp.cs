@@ -15,14 +15,17 @@ internal static class SettingsHelp
         ["ImportSettings"] = "書き出したJSONや旧版の設定を確認します。「適用」で現在の設定を置き換えます。",
         ["SaveDirectory"] = "ファイル保存とピン留め窓のCtrl+Sで使う保存先です。フォルダの完全パスを指定してください。存在しない場合は保存時に作成します。",
         ["PinnedOutput"] = "静止画を撮影位置へ枠なし・常に最前面の窓として残します。複数枚を並べられます。Ctrlで描画、Shiftでコピー範囲、通常ドラッグで移動します。録画には適用しません。",
+        ["CaptureCommandIntent"] = "コマンドを生成できるのは静止画です。録画はトレイまたは録画ショートカットから開始します。",
         ["CaptureCommandMethod"] = "範囲選択は実行時に範囲を選びます。固定範囲では座標を指定し、入力プリセットに従う場合は登録した撮影方式を使います。",
-        ["PresetCaptureShortcuts"] = "設定済みの組み合わせです。一覧で行を選ぶと下の項目で編集できます。",
+        ["PresetCaptureShortcuts"] = "設定済みの組み合わせです。一覧で行を選ぶと「選択した割り当ての編集」に表示します。",
         ["PresetCaptureShortcut"] = "選んだ組み合わせで静止画撮影または録画を開始するキーです。Windows キー・Ctrl・Alt・Shiftと最後のキーを選びます。",
         ["ShortcutCaptureIntent"] = "静止画または録画を選びます。録画中に録画のキーを押すと停止します。",
         ["ShortcutInputPreset"] = "「既定を使う」は撮影時点の既定入力を使います。静止画で固定座標のプリセットを指定すると、その範囲をすぐに撮影します。",
         ["ShortcutOutputPreset"] = "このキーで撮影するときの出力です。「既定を使う」は撮影時点の既定出力を参照します。",
-        ["AddPresetCaptureShortcut"] = "組み合わせの行を追加します。キーと入出力を選び、設定の「保存」で確定します。",
-        ["DeletePresetCaptureShortcut"] = "選んだ行を削除します。設定の「保存」でキーの登録解除が確定します。",
+        ["AddPresetCaptureShortcut"] = "組み合わせの行を追加します。キーと入出力を選び、編集欄の「保存」で確定します。",
+        ["DuplicatePresetCaptureShortcut"] = "選んだ行の撮影種別とプリセットを引き継ぎます。複製先には新しいキーを指定してください。",
+        ["SavePresetCaptureShortcuts"] = "PC作業中のショートカット割り当てを確定します。",
+        ["DeletePresetCaptureShortcut"] = "選んだ行を削除します。編集欄の「保存」でキーの登録解除が確定します。",
         ["OpenInputPresetShortcuts"] = "この入力を使うプリセット撮影の割り当てを開きます。",
         ["OpenOutputPresetShortcuts"] = "この出力を使うプリセット撮影の割り当てを開きます。",
         ["CaptureCommandInput"] = "撮影条件を使う入力プリセット。既定を選ぶとコマンド実行時の既定入力を使います。",
@@ -122,11 +125,11 @@ internal static class SettingsHelp
         if (name == "ShowPointerGuide") return "現在の操作、押しているキーの効果、取り消し方法と撮影対象をポインタの近くに表示します。";
         if (name == "InputFixedCoordinates") return "ONは登録した位置へ固定枠を表示します。OFFは撮影モードに従い位置や範囲を選びます。再撮影キーはONなら即時撮影、OFFなら選択開始です。";
         if (name.Contains("InputPreset", StringComparison.Ordinal)) return "入力プリセットを追加・複製し、通常撮影の既定を選べます。録画音声も含めて変更確定時に自動保存します。暗転・モニタ制限は基本設定です。";
-        if (name is "AddCapturePreset" or "DeleteCapturePreset" or "DefaultCapturePreset" or "CapturePresetName") return "出力プリセットを追加・削除し、既定を選びます。変更確定時に自動保存します。追加は新規・直前の出力設定・選択を複製から選べます。";
+        if (name is "AddCapturePreset" or "DeleteCapturePreset" or "DefaultCapturePreset" or "CapturePresetName") return "出力プリセットを追加・削除し、既定を選びます。変更確定時に自動保存します。追加では新規と直前の出力設定を選べます。";
         if (name is "MetadataMode" or "PresetMetadataMode") return "静止画をファイルに保存する場合の撮影情報です。記録しない・PNG内XMP・別JSON・両方から選択します。UI名・アプリのパス・タイトル等を含むため共有時には注意してください。";
         if (name.EndsWith("EditorArguments", StringComparison.Ordinal)) return Services.EditorArguments.Help;
         if (name.Contains("Editor", StringComparison.Ordinal) || name.Contains("SelectedEditor", StringComparison.Ordinal))
-            return "画像用・動画用の外部アプリを複数登録し、既定を1つ選びます。新規メニューから入力例を選べます。「保存」で一覧登録、設定の「保存」で確定します。参照中のアプリは削除できません。";
+            return "画像用・動画用の外部アプリを複数登録し、既定を1つ選びます。追加メニューから入力例を選べます。この画面の「保存」で登録を確定します。参照中のアプリは削除できません。";
         if (name.StartsWith("InstantShortcut", StringComparison.Ordinal))
             return "指定モニタの全体を選択画面なしで即時撮影するキーです。画面1は主画面で、未接続の画面は撮影できません。" + ShortcutHelp;
         if (name == "LastRecipeShortcut") return "成功した直前の静止画と同じ範囲・入出力設定（一時変更を含む）で新しく撮影します。画像履歴とは別で、終了時に記録を破棄します。初期値は未割当です。" + ShortcutHelp;

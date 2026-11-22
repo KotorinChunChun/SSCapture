@@ -56,7 +56,7 @@ internal static partial class Program
         {
             var form = new SettingsForm(settings, next => { settings = next; Log("settings-saved"); return null; }, () => { }, () => []);
             form.StartPosition = FormStartPosition.Manual; form.Bounds = right;
-            form.FormClosed += (_, _) => form.Dispose(); form.Show(); form.SelectCategory("撮影コマンド");
+            form.FormClosed += (_, _) => form.Dispose(); form.Show(); form.SelectCategory("コマンド生成");
         });
         host.FormClosed += (_, _) => pins.CloseAll();
         Application.Run(host); return 0;

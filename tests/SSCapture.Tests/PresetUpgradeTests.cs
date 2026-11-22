@@ -72,7 +72,7 @@ internal static partial class Program
             ((ListBox)form.Controls.Find("SavedRegions", true).Single()).SelectedIndex = 1;
             Check(!((CheckBox)form.Controls.Find("SystemAudio", true).Single()).Checked, "別の入力へ音声が漏れた");
         });
-        Run("入出力の可視アクションは追加・削除・既定だけでプリセットページに全体保存を出さない", () =>
+        Run("入出力はプリセット単位の保存・追加・複製・削除と既定指定を使う", () =>
         {
             using var form = new SettingsForm(new AppSettings(), _ => null, () => { }, () => []);
             foreach (string category in new[] { "入力プリセット", "出力プリセット" })
@@ -80,7 +80,8 @@ internal static partial class Program
                 form.SelectCategory(category);
                 Check(!form.Controls.Find("SaveSettings", true).Single().Visible && form.AcceptButton is null, "全体保存がプリセットに残る");
             }
-            Check(form.Controls.Find("SaveRegion", true).Length == 0 && form.Controls.Find("StoreCapturePreset", true).Length == 0, "旧保存ボタンが残る");
+            Equal("保存", form.Controls.Find("SaveRegion", true).Single().Text);
+            Equal("保存", form.Controls.Find("StoreCapturePreset", true).Single().Text);
             foreach (string name in new[] { "AddInputPreset", "DeleteRegion", "DefaultInputPreset", "AddCapturePreset", "DeleteCapturePreset", "DefaultCapturePreset" })
                 Equal(1, form.Controls.Find(name, true).Length);
         });

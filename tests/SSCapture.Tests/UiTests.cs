@@ -348,6 +348,13 @@ internal static partial class Program
             void CheckFields(TabPage page)
             {
                 LayoutTree(form);
+                if (page.Controls.Find("ResetSettingsPage", true).SingleOrDefault() is Button reset)
+                {
+                    var actions = reset.Parent!;
+                    Check(actions.ClientRectangle.Contains(reset.Bounds), "初期化ボタンが領域外");
+                    Check(page.Controls.Cast<Control>().Where(control => control != actions).All(control => control.Bottom <= actions.Top),
+                        "ページの項目が初期化ボタンの領域と重なる: " + page.Text);
+                }
                 if (page.Controls.Find("PresetCaptureShortcuts", true).SingleOrDefault() is DataGridView grid)
                     CheckShortcutHeaders(grid);
                 foreach (var input in Descendants(page).Where(c => c is TextBox or ComboBox && c.Parent is not UpDownBase))
@@ -374,7 +381,7 @@ internal static partial class Program
                     Check(label.Width >= preferred.Width && label.Height >= preferred.Height, $"項目名 {label.Text} が切れる: {label.Size} preferred={preferred}");
                 }
             }
-            foreach (string name in new[] { "SaveSettings", "CloseSettings", "OpenFolder", "ResetSettingsPage" })
+            foreach (string name in new[] { "SaveSettings", "CloseSettings", "OpenFolder" })
             {
                 var button = form.Controls.Find(name, true).Single();
                 Check(button.Width >= 90 && button.Height >= 32, $"{name} サイズ不正");

@@ -14,8 +14,15 @@ internal static partial class Program
             var saved = new List<AppSettings>();
             using var form = new SettingsForm(initial, next => { saved.Add(next); return null; }, () => { }, () => []);
             _ = form.Handle;
-            Equal("初期設定に戻す", form.Controls.Find("ResetSettingsPage", true).Single().Text);
-            form.ResetSelectedPage(() => throw new InvalidOperationException("基本ページで確認が出た"));
+            var pages = Field<TabControl>(form, "SettingsTabs").TabPages.Cast<TabPage>()
+                .Where(page => page.Text != "ショートカット").Concat(Field<TabControl>(form, "ShortcutGroups").TabPages.Cast<TabPage>());
+            foreach (TabPage page in pages)
+            {
+                var reset = page.Controls.Find("ResetSettingsPage", true).Single();
+                Equal("初期設定に戻す", reset.Text);
+                Check(reset.Parent?.Parent == page && ((Button)reset).CausesValidation == false, "初期化が画面内の専用ボタンになっていない");
+            }
+            CaptureCommandClick(Field<TabControl>(form, "SettingsTabs").TabPages[0], "ResetSettingsPage");
             Equal(0, saved.Count);
             Equal(20m, Field<NumericUpDown>(form, "GridStepPixels").Value);
             Equal(0, Field<ComboBox>(form, "SelectionGuideDisplay").SelectedIndex);
@@ -86,7 +93,7 @@ internal static partial class Program
             Equal(1, ((DataGridView)editor).Rows.Count);
             Equal("Ctrl+F12", Field<HotkeyEditor>(form, "LastRecipeShortcut").Value);
             tabs.SelectedIndex = 1;
-            form.ResetSelectedPage();
+            CaptureCommandClick(tabs.TabPages[1], "ResetSettingsPage");
             Equal("Ctrl+F12", Field<HotkeyEditor>(form, "LastRecipeShortcut").Value);
             tabs.SelectedIndex = 0;
             form.ResetSelectedPage();
