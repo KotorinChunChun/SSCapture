@@ -4,6 +4,10 @@ Windows 11用の汎用スクリーンショットツールです。Windows標準
 
 インストールは [Releases](https://github.com/KotorinChunChun/SSCapture/releases) から行ってください。
 
+![SSCaptureのインフォグラフィック。範囲選択、入出力プリセット、白い余白と減色、撮影通知を紹介](docs/images/sscapture-infographic-16x9-20261024.png)
+
+図中のキー操作と固定サイズは作成時点の例です。現行版の初期設定は[設定画面一覧](docs/settings.md)で確認できます。
+
 ![資料のグラフを矩形で囲んでいる途中の撮影画面。選択範囲の外が暗くなり、ポインタ横に座標と寸法、その近くに拡大鏡、画面右下に操作ガイドが表示されている](docs/images/readme/capture-scene-drag.png)
 
 [撮影中の画面例と操作ガイド](docs/usage.md#撮影中の画面)
