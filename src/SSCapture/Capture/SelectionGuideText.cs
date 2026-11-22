@@ -8,7 +8,7 @@ internal static class SelectionGuideText
         CaptureKeyMap keys, CaptureMouseMap mouse, bool dragging, bool spaceEnabled, bool canCrossMonitors,
         CaptureSelectionMethod selectionMethod = CaptureSelectionMethod.Drag,
         CaptureActivation controlActivation = CaptureActivation.Push, CaptureActivation windowActivation = CaptureActivation.Push,
-        CaptureAnchorCycle spaceCycle = CaptureAnchorCycle.Legacy)
+        CaptureAnchorCycle spaceCycle = CaptureAnchorCycle.Legacy, bool registeredFrame = false, bool fixedWheelEnabled = true)
     {
         string esc = KeyDisplay.Key(Keys.Escape);
         var lines = new List<string>();
@@ -18,8 +18,11 @@ internal static class SelectionGuideText
         string select = string.Join(" / ", buttons.Where(button => mouse.Before(button) == CaptureClickAction.Select).Select(CaptureMouseMap.Label));
         if (mode == CaptureMode.FixedRegion && fixedSize is Size size)
         {
-            lines.Add($"固定サイズ {size.Width} × {size.Height} px　基点: {anchor.Label()}");
-            lines.Add($"{(select.Length > 0 ? select + " / " : "")}Enter　確定　　矢印　1px　　Shift＋矢印　10px");
+            string name = registeredFrame ? "固定位置とサイズ" : "固定サイズ";
+            lines.Add($"{name}　基準 {size.Width} × {size.Height} px　基点: {anchor.Label()}");
+            string keysToConfirm = $"{(select.Length > 0 ? select + " / " : "")}Enter　確定";
+            lines.Add(registeredFrame ? keysToConfirm : keysToConfirm + "　　矢印　1px　　Shift＋矢印　10px");
+            if (fixedWheelEnabled) lines.Add("ホイール　撮影範囲の調整");
             if (spaceEnabled) lines.Add(SpaceOperation(spaceCycle == CaptureAnchorCycle.Legacy ? CaptureAnchorCycle.CornersAndCenter : spaceCycle));
         }
         else if (dragging && rectangle)

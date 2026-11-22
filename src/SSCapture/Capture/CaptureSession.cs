@@ -701,7 +701,8 @@ internal sealed partial class SessionController
             workingArea: Screen.GetWorkingArea(display), beforeKeys: OutputSettings.CaptureBeforeKeys,
             dragKeys: OutputSettings.CaptureKeys, mouse: OutputSettings.CaptureMouse, canCrossMonitors: CanGuideCrossMonitors,
             selectionMethod: OutputSettings.SelectionMethod,
-            controlActivation: OutputSettings.ControlActivation, windowActivation: OutputSettings.WindowActivation);
+            controlActivation: OutputSettings.ControlActivation, windowActivation: OutputSettings.WindowActivation,
+            registeredFrame: gesture.FixedPosition is not null, fixedWheelEnabled: FixedWheelEnabled);
         guide.SetShared(OutputSettings.ShareCapturePresentation);
         guide.Show(owner);
         WatchGuideBounds(guide);
@@ -1300,7 +1301,7 @@ internal sealed partial class SessionController
             pendingModeTap = null;
             RestoreWindowPush();
             ExitControlSelection();
-            gesture.Reset();
+            gesture.Reset(keepFixedWheel: true);
             ReleasePointer();
             // WinForms may have implicitly captured the right button before OnMouseDown.
             overlay.Capture = false;
@@ -1458,9 +1459,8 @@ internal sealed partial class SessionController
         if (!entireMonitor && !(useWindowSource && targetOffset.HasValue)
             && selection.Composite is null && selectionBounds is Rectangle bounds && (!bounds.Contains(selection.Bounds)
             || selection.Polygon?.Any(point => !bounds.Contains(point)) == true)) return;
-        Size fixedSize = activeFixedSize;
-        if (control is null && controlGroup is null && Mode == CaptureMode.FixedRegion && !entireMonitor && (selection.Polygon is not null
-            || selection.Bounds.Size != fixedSize || !CaptureGeometry.IsFullyCovered(selection.Bounds, SelectionMonitors))) return;
+        if (control is null && controlGroup is null && Mode == CaptureMode.FixedRegion && !entireMonitor
+            && (selection.Polygon is not null || gesture.FixedSelection(Destination)?.Bounds != selection.Bounds)) return;
         if (options.Intent == CaptureIntent.Screenshot)
         {
             if (controlGroup is null && (entireMonitor || Mode == CaptureMode.FullScreen))

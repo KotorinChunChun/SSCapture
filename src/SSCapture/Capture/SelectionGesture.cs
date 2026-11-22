@@ -15,8 +15,11 @@ internal sealed class SelectionGesture
     internal CaptureAspectRatio AspectRatio { get; set; }
     private Point? swappedPointer;
     private Rectangle rectangleBase;
+    private Rectangle movableFixedBase;
+    private int fixedWheelMargin;
+    private Rectangle FixedBase => FixedPosition ?? movableFixedBase;
     private Size rectangleWheelOffset;
-    private int rectangleWheelRemainder;
+    private int wheelRemainder;
     private (Rectangle Bounds, Point Pointer)? centerMove;
     private Point start;
     private Point rawStart;
@@ -71,10 +74,13 @@ internal sealed class SelectionGesture
         threshold = dragThreshold;
         IsPressed = true;
         HasDragged = false;
-        swappedPointer = null;
-        ResetRectangleAdjustments();
-        dragAspect = null;
-        if (mode == CaptureMode.Rectangle) Selection = Rectangle.Empty;
+        if (mode != CaptureMode.FixedRegion)
+        {
+            swappedPointer = null;
+            ResetRectangleAdjustments();
+            dragAspect = null;
+            if (mode == CaptureMode.Rectangle) Selection = Rectangle.Empty;
+        }
         horizontal.Reset();
         vertical.Reset();
         Points.Clear();
@@ -88,12 +94,12 @@ internal sealed class SelectionGesture
         RawCurrent = point;
         previousSnap = snap;
         pointerInitialized = true;
-        if (swappedPointer == point && rectangleAction == action) return;
+        if (swappedPointer == point && (mode == CaptureMode.FixedRegion || rectangleAction == action)) return;
         swappedPointer = null;
         rectangleAction = action;
         if (mode == CaptureMode.FixedRegion)
         {
-            if (FixedPosition is Rectangle fixedPosition) { Selection = fixedPosition; return; }
+            if (FixedPosition is not null) { Current = point; UpdateFixedSelection(); return; }
             // Repeated pointer messages and the confirming click retain arrow nudges.
             // A physical move or Alt transition deliberately returns to the pointer.
             if (!unchanged) PositionFixed(Resolve(point, snap));
@@ -202,11 +208,13 @@ internal sealed class SelectionGesture
     internal void UpdateTargets(IReadOnlyList<Rectangle> monitors, IReadOnlyList<Rectangle> windows, Rectangle? limit)
     {
         this.windows = windows.ToArray(); ExpandMonitors(monitors); WindowLimit = limit;
+        if (mode == CaptureMode.FixedRegion) UpdateFixedSelection();
     }
     internal void ChangeAnchor(CaptureAnchor anchor)
     {
         if (!Enum.IsDefined(anchor)) throw new ArgumentOutOfRangeException(nameof(anchor));
         FixedAnchor = anchor;
+        swappedPointer = null;
         anchorOffset = OffsetFor(anchor);
         if (mode == CaptureMode.FixedRegion && FixedPosition is null) PositionFixed(Resolve(RawCurrent, previousSnap));
     }
@@ -214,6 +222,7 @@ internal sealed class SelectionGesture
     internal void ResumeFixedPointer()
     {
         anchorOffset = OffsetFor(FixedAnchor);
+        swappedPointer = null;
         pointerInitialized = false;
     }
 
@@ -228,26 +237,32 @@ internal sealed class SelectionGesture
 
     internal bool Space(Func<Point, Point?>? movePointer = null, CaptureAnchorCycle cycle = CaptureAnchorCycle.Legacy)
     {
-        if (FixedPosition is not null) return true;
         if (mode == CaptureMode.FixedRegion)
         {
-            ChangeAnchor(NextAnchor(FixedAnchor, cycle == CaptureAnchorCycle.Legacy ? CaptureAnchorCycle.CornersAndCenter : cycle));
+            Rectangle basis = FixedBase;
+            if (basis.Width <= 0 || basis.Height <= 0) return false;
+            CaptureAnchor nextFixed = NextAnchor(FixedAnchor, cycle == CaptureAnchorCycle.Legacy ? CaptureAnchorCycle.CornersAndCenter : cycle);
+            Point fixedTarget = AnchorPoint(basis, nextFixed);
+            Point? actual = movePointer is null ? fixedTarget : movePointer(fixedTarget);
+            if (actual is not { } actualPoint) return false;
+
+            FixedAnchor = nextFixed;
+            anchorOffset = new Size(actualPoint.X - basis.X, actualPoint.Y - basis.Y);
+            Current = RawCurrent = actualPoint;
+            swappedPointer = actualPoint;
             return true;
         }
         if (mode != CaptureMode.Rectangle || !IsPressed || !HasDragged || !CaptureGeometry.IsUsable(Selection)) return false;
 
         CaptureAnchor current = centerMove is not null ? CaptureAnchor.Center : PointerCorner(rectangleBase, Current);
         CaptureAnchor next = NextAnchor(current, cycle == CaptureAnchorCycle.Legacy ? CaptureAnchorCycle.Diagonal : cycle);
-        Point target = AnchorPoint(Selection, next);
+        Point target = AnchorPoint(rectangleBase, next);
         Point? pointer = movePointer is null ? target : movePointer(target);
         if (pointer is null) return false;
 
-        ResetRectangleAdjustments();
-        rectangleBase = Selection;
-        if (next == CaptureAnchor.Center)
-            centerMove = (Selection, pointer.Value);
-        else
-            start = AnchorPoint(Selection, IsCentered ? CaptureAnchor.Center : NextAnchor(next, CaptureAnchorCycle.Diagonal));
+        centerMove = next == CaptureAnchor.Center ? (rectangleBase, pointer.Value) : null;
+        if (centerMove is null)
+            start = AnchorPoint(rectangleBase, IsCentered ? CaptureAnchor.Center : NextAnchor(next, CaptureAnchorCycle.Diagonal));
         Current = target;
         RawCurrent = pointer.Value;
         swappedPointer = pointer;
@@ -256,10 +271,25 @@ internal sealed class SelectionGesture
         return true;
     }
 
+    internal bool ResizeFixedFrame(int wheelDelta)
+    {
+        if (mode != CaptureMode.FixedRegion || desktopBounds is not Rectangle desktop
+            || FixedBase.Width <= 0 || FixedBase.Height <= 0) return false;
+        (int steps, wheelRemainder) = CaptureTargetMargin.WheelSteps(wheelRemainder, wheelDelta);
+        if (steps != 0)
+        {
+            int effective = (Selection.Width - FixedBase.Width) / 2;
+            var adjusted = CaptureTargetMargin.Apply(FixedBase, ClampOffset(effective + steps), desktop, 1, monitors);
+            fixedWheelMargin = adjusted.Margin;
+            Selection = adjusted.Bounds;
+        }
+        return true;
+    }
+
     internal bool ResizeRectangle(int wheelDelta)
     {
         if (mode != CaptureMode.Rectangle || !IsPressed || !HasDragged || !CaptureGeometry.IsUsable(rectangleBase)) return false;
-        (int steps, rectangleWheelRemainder) = CaptureTargetMargin.WheelSteps(rectangleWheelRemainder, wheelDelta);
+        (int steps, wheelRemainder) = CaptureTargetMargin.WheelSteps(wheelRemainder, wheelDelta);
         if (steps != 0)
         {
             if (HasWheelAspect)
@@ -279,7 +309,7 @@ internal sealed class SelectionGesture
         return true;
     }
 
-    private bool HasWheelAspect => centerMove is null && (dragAspect.HasValue || AspectRatio != CaptureAspectRatio.Free);
+    private bool HasWheelAspect => dragAspect.HasValue || AspectRatio != CaptureAspectRatio.Free;
     private bool WheelLocksWidth => centerMove is null && horizontal.IsLocked;
     private bool WheelLocksHeight => centerMove is null && vertical.IsLocked;
 
@@ -329,7 +359,7 @@ internal sealed class SelectionGesture
     private void ResetRectangleAdjustments()
     {
         rectangleWheelOffset = Size.Empty;
-        rectangleWheelRemainder = 0;
+        wheelRemainder = 0;
         centerMove = null;
     }
 
@@ -381,7 +411,7 @@ internal sealed class SelectionGesture
         return true;
     }
 
-    internal void Reset()
+    internal void Reset(bool keepFixedWheel = false)
     {
         IsPressed = false;
         HasDragged = false;
@@ -390,7 +420,12 @@ internal sealed class SelectionGesture
         dragAspect = null;
         horizontal.Reset();
         vertical.Reset();
-        if (mode != CaptureMode.FixedRegion) Selection = Rectangle.Empty;
+        if (mode == CaptureMode.FixedRegion)
+        {
+            if (!keepFixedWheel) fixedWheelMargin = 0;
+            UpdateFixedSelection();
+        }
+        else Selection = Rectangle.Empty;
         Points.Clear();
     }
 
@@ -446,7 +481,7 @@ internal sealed class SelectionGesture
             return raw;
         }
 
-        internal void Reset() => IsLocked = false;
+        internal void Reset(bool keepFixedWheel = false) => IsLocked = false;
     }
 
     private void PositionFixed(Point point) => PositionFixed(point.X, point.Y);
@@ -455,7 +490,16 @@ internal sealed class SelectionGesture
     {
         Current = new Point((int)Math.Clamp(x, (long)int.MinValue + anchorOffset.Width, (long)int.MaxValue - fixedDimensions.Width + anchorOffset.Width),
             (int)Math.Clamp(y, (long)int.MinValue + anchorOffset.Height, (long)int.MaxValue - fixedDimensions.Height + anchorOffset.Height));
-        Selection = new Rectangle(Current.X - anchorOffset.Width, Current.Y - anchorOffset.Height, fixedDimensions.Width, fixedDimensions.Height);
+        movableFixedBase = new Rectangle(Current.X - anchorOffset.Width, Current.Y - anchorOffset.Height, fixedDimensions.Width, fixedDimensions.Height);
+        UpdateFixedSelection();
+    }
+
+    private void UpdateFixedSelection()
+    {
+        Rectangle basis = FixedBase;
+        Selection = fixedWheelMargin != 0 && desktopBounds is Rectangle desktop
+            ? CaptureTargetMargin.Apply(basis, fixedWheelMargin, desktop, 1, monitors).Bounds
+            : basis;
     }
 
     private static CaptureSelection? FromBounds(Rectangle bounds, OutputDestination destination) =>

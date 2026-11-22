@@ -312,7 +312,14 @@ internal static partial class Program
             gesture.Move(new(300, 200));
             gesture.Move(new(300, 200), action: CaptureKeyAction.LockAspectRatio);
             gesture.ResizeRectangle(120);
-            Equal(new Rectangle(98, 99, 204, 102), gesture.Selection);
+            var adjusted = new Rectangle(98, 99, 204, 102);
+            Equal(adjusted, gesture.Selection);
+            gesture.Space(cycle: CaptureAnchorCycle.CornersAndCenter);
+            gesture.Space(cycle: CaptureAnchorCycle.CornersAndCenter);
+            Equal(new Point(200, 150), gesture.RawCurrent);
+            Equal(adjusted, gesture.Selection);
+            gesture.ResizeRectangle(-120);
+            Equal(new Rectangle(100, 100, 200, 100), gesture.Selection);
         });
         Run("矩形Spaceは選択を保ちポインタを対角へ移し逆側を操作する", () =>
         {
@@ -336,16 +343,16 @@ internal static partial class Program
             gesture.Move(new(100, 120));
             Equal(new Rectangle(100, 120, 100, 80), gesture.Selection);
         });
-        Run("固定Spaceは時計回りの四隅と中心で寸法とポインタを維持", () =>
+        Run("固定Spaceは枠を維持してポインタを時計回りの基点へ移動", () =>
         {
             var gesture = new SelectionGesture(CaptureMode.FixedRegion, [new(-1000, -1000, 2000, 2000)], [], new(161, 91));
             Point pointer = new(100, 200); gesture.Move(pointer);
-            foreach (var (anchor, x, y) in new[] { (CaptureAnchor.TopRight, -61, 200), (CaptureAnchor.BottomRight, -61, 109),
-                (CaptureAnchor.BottomLeft, 100, 109), (CaptureAnchor.Center, 20, 155), (CaptureAnchor.TopLeft, 100, 200) })
+            foreach (var (anchor, x, y) in new[] { (CaptureAnchor.TopRight, 261, 200), (CaptureAnchor.BottomRight, 261, 291),
+                (CaptureAnchor.BottomLeft, 100, 291), (CaptureAnchor.Center, 180, 245), (CaptureAnchor.TopLeft, 100, 200) })
             {
                 Check(gesture.Space(), "Space未処理"); Equal(anchor, gesture.FixedAnchor);
-                Equal(pointer, gesture.Current);
-                Equal(new Rectangle(x, y, 161, 91), gesture.Selection);
+                Equal(new Point(x, y), gesture.RawCurrent);
+                Equal(new Rectangle(100, 200, 161, 91), gesture.Selection);
                 Equal(gesture.Selection, gesture.FixedSelection(OutputDestination.File)!.Bounds);
             }
         });
@@ -365,7 +372,7 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("固定Spaceは中心へ切り替えてもポインタが静止したままウィンドウスナップを維持", () =>
+        Run("固定Spaceはスナップ済みの基準枠を保ち基点移動後の実移動で配置を再開する", () =>
         {
             var gesture = new SelectionGesture(CaptureMode.FixedRegion, [new(0, 0, 1000, 1000)],
                 [new(100, 100, 220, 160)], new(81, 61), CaptureAnchor.BottomLeft);
@@ -374,9 +381,12 @@ internal static partial class Program
             Equal(new Point(320, 260), gesture.Current);
             Check(gesture.Space(), "固定枠のSpaceが無効");
             Equal(CaptureAnchor.Center, gesture.FixedAnchor);
-            Equal(new Rectangle(280, 230, 81, 61), gesture.FixedSelection(OutputDestination.Clipboard)!.Bounds);
-            gesture.Move(pointer, snap: false);
-            Equal(new Rectangle(272, 221, 81, 61), gesture.FixedSelection(OutputDestination.Clipboard)!.Bounds);
+            Equal(new Point(360, 229), gesture.RawCurrent);
+            Equal(new Rectangle(320, 199, 81, 61), gesture.FixedSelection(OutputDestination.Clipboard)!.Bounds);
+            gesture.Move(gesture.RawCurrent, snap: false);
+            Equal(new Rectangle(320, 199, 81, 61), gesture.Selection);
+            gesture.Move(new Point(370, 233), snap: false);
+            Equal(new Rectangle(330, 203, 81, 61), gesture.Selection);
         });
         Run("矩形縦横比は正負4方向とも正確な整数比", () =>
         {

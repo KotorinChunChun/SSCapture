@@ -200,9 +200,11 @@ internal static partial class Program
                     {
                         var session = OverlaySession(overlay);
                         await Move(overlay, 160, 140);
+                        Rectangle beforeSpace = session.Selection;
                         await Key(overlay, 0x20, true); await Key(overlay, 0x20, false);
                         Equal(CaptureAnchor.Center, session.FixedAnchor);
-                        Equal(FrameAt(P(160, 140)), session.Selection);
+                        Equal(beforeSpace, session.Selection);
+                        Equal(new Point(beforeSpace.X + 50, beforeSpace.Y + 40), CaptureNative.CursorPosition());
                         foreach (string command in new[] { "DestinationFile", "IncludeCursor" })
                         {
                             await OpenSelectionMenu(overlay, bounds, input, ct);

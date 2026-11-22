@@ -87,12 +87,15 @@ internal sealed partial class SessionController
         return new(window?.Handle ?? 0, original, source, CaptureGeometry.MinimumSize, false, false);
     }
 
+    private bool FixedWheelEnabled => !options.RequireExactFixedSize && OutputSettings.CaptureKeys.WheelAdjustRectangle;
+
     internal void MouseWheel(Point pointer, int delta)
     {
         if (completed || refreshing || menuOpen || menuTransition || confirmingControl || delta == 0) return;
         Move(true, pointer);
-        if (OutputSettings.CaptureKeys.WheelAdjustRectangle && (HasPointerPress || waitingForSecondPoint)
-            && !SelectingControl && !SelectingDesktop && gesture.ResizeRectangle(delta))
+        if (!SelectingControl && !SelectingDesktop && (Mode == CaptureMode.FixedRegion
+            ? FixedWheelEnabled && gesture.ResizeFixedFrame(delta)
+            : OutputSettings.CaptureKeys.WheelAdjustRectangle && (HasPointerPress || waitingForSecondPoint) && gesture.ResizeRectangle(delta)))
         {
             hasSelectionInput = true;
             RefreshOverlays();

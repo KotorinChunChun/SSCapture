@@ -181,6 +181,48 @@ internal static partial class Program
                 finally { session.Cancel(); }
             }
         });
+        Run("矩形ドラッグと2点クリックはSpaceを一巡してもホイール調整を基準枠へ取り込まない", () =>
+        {
+            Rectangle display = new(0, 0, 400, 300), basis = new(40, 50, 200, 130);
+            Point end = new(basis.Right, basis.Bottom);
+            foreach (var method in Enum.GetValues<CaptureSelectionMethod>())
+            {
+                var settings = new Services.AppSettings
+                {
+                    SelectionMethod = method, CaptureBeforeKeys = new(),
+                    CaptureKeys = new(SpaceEnabled: true, SpaceCycle: CaptureAnchorCycle.CornersAndCenter)
+                };
+                var session = OutputSession(settings);
+                using var overlay = new CaptureOverlay(session, display);
+                try
+                {
+                    _ = overlay.Handle;
+                    session.MouseDown(overlay, MouseButtons.Left, basis.Location, Keys.None);
+                    if (method == CaptureSelectionMethod.TwoClicks) session.MouseUp(MouseButtons.Left, basis.Location, Keys.None);
+                    session.MoveTo(end);
+                    session.MouseWheel(end, 240);
+                    Rectangle adjusted = Rectangle.Inflate(basis, 2, 2);
+                    Point[] anchors = [new(40, 180), new(140, 115), new(40, 50), new(240, 50), end];
+                    foreach (Point anchor in anchors)
+                    {
+                        Check(session.HandleCommandKey(Keys.Space), "矩形でSpaceを処理しない");
+                        Equal(anchor, session.Pointer);
+                        Equal(adjusted, session.DisplaySelection);
+                        session.MouseWheel(anchor, -240);
+                        Equal(basis, session.DisplaySelection);
+                        session.MouseWheel(anchor, 240);
+                        Equal(adjusted, session.DisplaySelection);
+                    }
+                    if (method == CaptureSelectionMethod.TwoClicks) session.MouseDown(overlay, MouseButtons.Left, end, Keys.None);
+                    session.MouseUp(MouseButtons.Left, end, Keys.None);
+                    Check(session.Completion.IsCompletedSuccessfully, "Spaceを使った矩形を確定できない");
+                    using var outcome = session.Completion.Result;
+                    Equal(adjusted, outcome.Selection!.Bounds);
+                    Equal(adjusted.Size, outcome.Image!.Size);
+                }
+                finally { session.Cancel(); }
+            }
+        });
         Run("矩形の2点クリックは1点目で確定せず終点まで同じ始点を使う", () =>
         {
             var session = RectangleSelectionSession(new Services.AppSettings { SelectionMethod = CaptureSelectionMethod.TwoClicks });

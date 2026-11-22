@@ -20,12 +20,13 @@ internal sealed record CaptureOptions(
     SSCapture.Services.CapturePreset? InitialOutputPreset = null)
 {
     internal bool SelectionOnly { get; init; }
+    internal bool RequireExactFixedSize { get; init; }
     internal bool AllowScroll => !SelectionOnly && Intent == CaptureIntent.Screenshot;
     internal static CaptureOptions ForInputSelection(SSCapture.Services.AppSettings settings, Size? size, CaptureAnchor anchor) => new(
         size is null ? CaptureMode.Rectangle : CaptureMode.FixedRegion, CaptureIntent.Recording, OutputDestination.None,
         FixedSize: size, FixedAnchor: anchor, LimitToStartingMonitor: settings.LimitToStartingMonitor,
         Grid20: settings.Grid20, ShowSelectionGuide: settings.ShowSelectionGuide, OutputSettings: settings,
-        DimCaptureBackground: settings.DimCaptureBackground);
+        DimCaptureBackground: settings.DimCaptureBackground) { RequireExactFixedSize = size.HasValue };
 }
 
 internal sealed record CaptureSelection(
