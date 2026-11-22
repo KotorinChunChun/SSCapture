@@ -130,10 +130,85 @@ internal static partial class Program
         throw new InvalidOperationException(error);
     }
 
+    private static int RunQuickControlOutputSmoke()
+    {
+        using var host = new Form
+        {
+            Text = WindowTitle.Create("コントロールの即時撮影を検証"), StartPosition = FormStartPosition.Manual,
+            Bounds = new Rectangle(Screen.PrimaryScreen!.WorkingArea.Location + new Size(100, 100), new Size(430, 300))
+        };
+        var button = new Button { Text = "保存", Bounds = new(50, 65, 178, 65) };
+        host.Controls.Add(button);
+        int clicks = 0;
+        button.Click += (_, _) => clicks++;
+        Exception? error = null;
+        host.Shown += (_, _) => host.BeginInvoke((Action)(async () =>
+        {
+            try
+            {
+                Rectangle area = host.RectangleToScreen(host.ClientRectangle);
+                Rectangle expected = button.RectangleToScreen(button.ClientRectangle);
+                Point hit = expected.Location + new Size(30, 25);
+                CaptureWindow target = CaptureNative.CaptureWindows(area).Single(window => window.Handle == host.Handle);
+                var settings = new AppSettings { DefaultDestination = OutputDestination.Clipboard, ShowSelectionGuide = false };
+                var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
+                    ShowSelectionGuide: false, OutputSettings: settings), new DesktopSnapshot(new Bitmap(area.Width, area.Height), area, [area]),
+                    [target.Bounds], initialPointer: hit, findWindow: point => area.Contains(point) ? target : null);
+                using var overlay = new CaptureOverlay(session, area);
+                try
+                {
+                    Point local = hit - new Size(area.Location);
+                    int coords = (local.Y << 16) | (local.X & 0xffff);
+                    NativeControlSmoke.SendMessage(overlay.Handle, 0x0201, 0x0009, coords);
+                    NativeControlSmoke.SendMessage(overlay.Handle, 0x0202, 0, coords);
+                    Check(!session.SelectingControl && !session.Completion.IsCompleted, "左ボタンより先にCtrlを離しても撮影が取り消されません。");
+                    // The HWND gets both mouse messages with MK_CONTROL. There is no physical Ctrl press.
+                    NativeControlSmoke.SendMessage(overlay.Handle, 0x0201, 0x0009, coords);
+                    Check(session.SelectingControl && session.HasPointerPress, "マウスメッセージのCtrlがコントロール選択に反映されません。");
+                    NativeControlSmoke.SendMessage(overlay.Handle, 0x0202, 0x0008, coords);
+                    Check(!session.Completion.IsCompleted && session.PointerHint?.Contains("コントロールを取得中", StringComparison.Ordinal) == true,
+                        "すぐにクリックすると確定が取り消されます。");
+                    session.ApplyPointerInput(hit, CaptureModifiers.None);
+                    using var outcome = await session.Completion.WaitAsync(TimeSpan.FromSeconds(6));
+                    Equal(expected, outcome.Selection!.Bounds);
+                    Equal(expected.Size, outcome.Image!.Size);
+                    Equal(0, clicks);
+                    int copies = 0, notifications = 0;
+                    using var router = new OutputRouter(Path.GetTempPath(), copyImage: image =>
+                    {
+                        Equal(expected.Size, image.Size);
+                        copies++;
+                        return Task.CompletedTask;
+                    }, delivered: delivery =>
+                    {
+                        using var thumbnail = delivery.NotificationImage;
+                        Equal(OutputDestination.Clipboard, delivery.Completed);
+                        Check(thumbnail is not null, "完了通知用のプレビューがありません。");
+                        notifications++;
+                    }, readDisplays: () => [new("検証用の画面", area, true)]);
+                    await router.ScreenshotAsync(outcome.Image, outcome.Selection.Destination, outcome.OutputSettings!,
+                        captureBounds: expected, replaySource: outcome.Selection.ReplaySource);
+                    Equal(1, copies);
+                    Equal(1, notifications);
+                }
+                finally { session.Cancel(); }
+                Console.WriteLine("CONTROL QUICK PASS Ctrl付きの即時クリックを保持し、画像・コピー・完了通知へ渡した");
+            }
+            catch (Exception ex) { error = ex; }
+            finally { host.Close(); }
+        }));
+        Application.Run(host);
+        if (error is null) return 0;
+        Console.Error.WriteLine(error);
+        return 1;
+    }
+
     private static class NativeControlSmoke
     {
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         internal static extern uint GetWindowThreadProcessId(nint window, nint process);
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
+        internal static extern nint SendMessage(nint window, uint message, nint flags, nint position);
     }
 
     private sealed class ControlOccluder : Form

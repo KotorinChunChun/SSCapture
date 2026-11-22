@@ -9,6 +9,7 @@ internal sealed class CaptureOverlay : Form
     private bool sessionNotifications;
     private CapturePresentation? sharedPresentation;
     private VisualState? rendered;
+    private Keys? mouseButtonModifiers;
     internal Rectangle MonitorBounds { get; }
     internal CaptureContextMenu SelectionMenu => session.SelectionMenu;
 
@@ -107,7 +108,16 @@ internal sealed class CaptureOverlay : Form
             session.ApplicationDeactivated();
             if (IsDisposed) return;
         }
-        base.WndProc(ref m);
+        if (m.Msg is 0x0201 or 0x0202 or 0x0203) // WM_LBUTTONDOWN / UP / DBLCLK
+        {
+            int state = m.WParam.ToInt32();
+            Keys? previous = mouseButtonModifiers;
+            mouseButtonModifiers = ((state & 0x0008) != 0 ? Keys.Control : Keys.None)
+                | ((state & 0x0004) != 0 ? Keys.Shift : Keys.None);
+            try { base.WndProc(ref m); }
+            finally { mouseButtonModifiers = previous; }
+        }
+        else base.WndProc(ref m);
         // WinForms can apply WM_DPICHANGED's suggested (scaled) bounds even with AutoScale=None.
         // Reassert this monitor's physical bounds after its internal DPI bookkeeping.
         if (m.Msg == CaptureNative.WmDpiChanged) FixPhysicalBounds();
@@ -119,9 +129,9 @@ internal sealed class CaptureOverlay : Form
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
-    protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); session.MouseDown(this, e.Button, new Point(MonitorBounds.X + e.X, MonitorBounds.Y + e.Y)); }
+    protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); session.MouseDown(this, e.Button, new Point(MonitorBounds.X + e.X, MonitorBounds.Y + e.Y), mouseButtonModifiers); }
     protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); session.Move(true, new Point(MonitorBounds.X + e.X, MonitorBounds.Y + e.Y)); }
-    protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); session.MouseUp(e.Button, new Point(MonitorBounds.X + e.X, MonitorBounds.Y + e.Y)); }
+    protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); session.MouseUp(e.Button, new Point(MonitorBounds.X + e.X, MonitorBounds.Y + e.Y), mouseButtonModifiers); }
     protected override void OnMouseCaptureChanged(EventArgs e) { base.OnMouseCaptureChanged(e); session.CaptureLost(this); }
     protected override void OnFormClosing(FormClosingEventArgs e) { base.OnFormClosing(e); session.Cancel(); }
 

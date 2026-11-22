@@ -174,10 +174,11 @@ internal sealed partial class SessionController
         {
             if (SelectingControl)
             {
-                string controlOperation = ControlBounds.IsEmpty ? "対象のコントロールが見つかりません"
+                string controlOperation = controlConfirmationError ?? (confirmingControl ? "コントロールを取得中"
+                    : ControlBounds.IsEmpty ? "対象のコントロールが見つかりません"
                     : UsesControlPreview && !ControlPreviewReady ? windowPreview?.Frame.IsFaulted == true
                         ? "コントロールのプレビューを取得できません" : "コントロールをプレビュー中"
-                    : "左ボタンを離してコントロールを撮影";
+                    : "左ボタンを離してコントロールを撮影");
                 return (ModifierHint is null ? "" : ModifierHint + "\n") + controlOperation + "　" +
                     SelectionGuideText.CancelHint(OutputSettings.CaptureMouse.DragRight);
             }
@@ -189,7 +190,7 @@ internal sealed partial class SessionController
             }
             if (!HasPointerPress)
             {
-                string? idleHint = ModifierHint ?? (windowPreview?.Frame switch
+                string? idleHint = controlConfirmationError ?? ModifierHint ?? (windowPreview?.Frame switch
                 {
                     { IsFaulted: true } => windowPreview.Frame.Exception?.GetBaseException().Message,
                     { IsCompleted: false } => "WGCプレビューを取得中",
@@ -746,7 +747,8 @@ internal sealed partial class SessionController
                 snapTimer.Tick += (_, _) =>
                 {
                     if (windowsKey?.TakeEscape() == true) HandleCommandKey(Keys.Escape);
-                    if (SelectingControl && !CaptureNative.OwnsForegroundWindow() && CaptureNative.GetForegroundWindow() != focusBeforeSelection)
+                    nint foreground = SelectingControl ? CaptureNative.GetForegroundWindow() : 0;
+                    if (foreground != 0 && foreground != focusBeforeSelection && !CaptureNative.OwnsForegroundWindow())
                     {
                         Cancel();
                         return;
@@ -761,14 +763,15 @@ internal sealed partial class SessionController
         catch (Exception ex) { Fail(ex); }
     }
 
-    internal void Move(bool queuedKeyState = false, Point? eventPosition = null)
+    internal void Move(bool queuedKeyState = false, Point? eventPosition = null, Keys? mouseModifiers = null)
     {
         if (completed || refreshing || menuOpen || menuTransition) return;
         try
         {
             Point position = eventPosition ?? CaptureNative.CursorPosition();
             // キュー内のDown/Upを現在位置で読み替えると、高速ドラッグがクリックに化ける。
-            ApplyPointerInput(position, ReadModifiers(queuedKeyState && !SelectingControl), windowsKey?.TakeTap() == true, forceMove: true);
+            ApplyPointerInput(position, ReadModifiers(queuedKeyState && !SelectingControl, mouseModifiers),
+                windowsKey?.TakeTap() == true, forceMove: true);
         }
         catch (Exception ex) { Fail(ex); }
     }
@@ -861,6 +864,7 @@ internal sealed partial class SessionController
 
     internal void ApplyPointerInput(Point pointer, CaptureModifiers modifiers, bool windowsTap = false, bool forceMove = false)
     {
+        if (confirmingControl) return;
         windowsKey?.ObservePointer(pointer);
         bool dragging = gesture.IsPressed;
         var bindings = dragging ? OutputSettings.CaptureKeys : OutputSettings.CaptureBeforeKeys;
@@ -957,6 +961,7 @@ internal sealed partial class SessionController
             return true;
         }
         if (completed || menuOpen || menuTransition) return false;
+        if (confirmingControl) return true;
         if ((keyData & Keys.KeyCode) == Keys.Space && OutputSettings.CaptureKeys.SpaceEnabled)
             return repeated || SwitchSelectionAnchor();
         if (Mode == CaptureMode.FixedRegion && keyData == Keys.Enter)
@@ -1050,7 +1055,7 @@ internal sealed partial class SessionController
         old?.Dispose();
     }
 
-    internal void MouseDown(CaptureOverlay overlay, MouseButtons button, Point? eventPosition = null)
+    internal void MouseDown(CaptureOverlay overlay, MouseButtons button, Point? eventPosition = null, Keys? mouseModifiers = null)
     {
         if (menuTransition && !menuOpen)
         {
@@ -1081,15 +1086,16 @@ internal sealed partial class SessionController
             else ShowMenu(overlay, eventPosition);
             return;
         }
-        if (button is not (MouseButtons.Left or MouseButtons.Middle) || pressedButton != MouseButtons.None) return;
+        if (confirmingControl || button is not (MouseButtons.Left or MouseButtons.Middle) || pressedButton != MouseButtons.None) return;
         if (button == MouseButtons.Left ? !OutputSettings.CaptureMouse.BeforeLeft : !OutputSettings.CaptureMouse.BeforeMiddle)
         {
             overlay.Capture = false;
             return;
         }
         hasSelectionInput = true;
+        controlConfirmationError = null;
         if (button == MouseButtons.Middle && waitingForSecondPoint) AbortSelection();
-        Move(true, eventPosition);
+        Move(true, eventPosition, mouseModifiers);
         if (completed) return;
         dragOwner = overlay;
         pressedButton = button;
@@ -1112,7 +1118,7 @@ internal sealed partial class SessionController
         }
         if (button == MouseButtons.Left && !TwoPointSelection)
         {
-            CaptureModifiers modifiers = ReadModifiers(true);
+            CaptureModifiers modifiers = ReadModifiers(true, mouseModifiers);
             CaptureKeyAction action = ResolveCaptureAction(OutputSettings.CaptureKeys, modifiers, dragging: true);
             bool snapStart = altSnapEnabled || action == CaptureKeyAction.Snap || OutputSettings.CaptureBeforeKeys.Resolve(modifiers) == CaptureKeyAction.Snap;
             gesture.Begin(gesture.RawCurrent, CaptureNative.DragThreshold(overlay.DeviceDpi),
@@ -1123,11 +1129,13 @@ internal sealed partial class SessionController
         else RefreshOverlays();
     }
 
-    internal void MouseUp(MouseButtons button, Point? eventPosition = null)
+    internal void MouseUp(MouseButtons button, Point? eventPosition = null, Keys? mouseModifiers = null)
     {
         if ((suppressedButtons & button) != 0) { suppressedButtons &= ~button; return; }
         if (completed || refreshing || menuOpen || menuTransition || button != pressedButton || pressedButton == MouseButtons.None) return;
-        Move(true, eventPosition);
+        Move(true, eventPosition, mouseModifiers);
+        // A modifier release can cancel the gesture while processing this button-up message.
+        suppressedButtons &= ~button;
         if (completed || pressedButton != button) return;
         if (button == MouseButtons.Left && SelectingControl)
         {
@@ -1167,9 +1175,10 @@ internal sealed partial class SessionController
             Composite: new(WindowRoots: roots));
     }
 
-    private CaptureModifiers ReadModifiers(bool queuedKeyState)
+    private CaptureModifiers ReadModifiers(bool queuedKeyState, Keys? mouseModifiers = null)
     {
         Keys modifiers = CaptureNative.Modifiers(queuedKeyState);
+        if (mouseModifiers is Keys messageState) modifiers = (modifiers & Keys.Alt) | messageState;
         ignoredModifiers &= modifiers;
         return CaptureKeyMap.FromKeys(modifiers & ~ignoredModifiers) |
             (windowsKey?.IsHeld == true ? CaptureModifiers.Win : CaptureModifiers.None);
@@ -1180,6 +1189,7 @@ internal sealed partial class SessionController
         hasSelectionInput = true;
         suppressedButtons |= pressedButton;
         if (SelectingControl) controlHoldCancelled = true;
+        controlConfirmationError = null;
         controlToggled = false;
         pendingModeTap = null;
         ExitControlSelection();
