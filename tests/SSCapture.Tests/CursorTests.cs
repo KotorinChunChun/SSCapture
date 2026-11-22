@@ -55,7 +55,7 @@ internal static partial class Program
             Equal(Color.White.ToArgb(), target.GetPixel(0, 0).ToArgb());
             Equal(Color.White.ToArgb(), target.GetPixel(11, 11).ToArgb());
         });
-        Run("カーソルの透過とモニタ間のクリップを維持", () =>
+        Run("カーソルの透過とモニター間のクリップを維持", () =>
         {
             using Bitmap source = new(4, 4, PixelFormat.Format32bppArgb);
             source.SetPixel(0, 0, Color.FromArgb(128, 255, 0, 0));

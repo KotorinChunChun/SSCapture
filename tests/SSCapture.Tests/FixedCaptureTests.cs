@@ -200,7 +200,7 @@ internal static partial class Program
             gesture.Nudge(Keys.Up | Keys.Shift);
             Equal(new Point(int.MaxValue - 640, int.MinValue), gesture.Current);
         });
-        Run("固定サイズはモニタ間隙と外側を拒否し連続する複数画面を許容", () =>
+        Run("固定サイズはモニター間隙と外側を拒否し連続する複数画面を許容", () =>
         {
             Rectangle left = new(-100, 0, 100, 100), right = new(0, 0, 100, 100);
             Check(CaptureGeometry.IsFullyCovered(new(-10, 20, 20, 30), [left, right]), "連続画面を横断");

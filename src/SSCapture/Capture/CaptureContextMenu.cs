@@ -147,7 +147,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
             var freeze = Toggle("撮影開始時の画面を固定", "FreezeFrame", editing.Settings.FreezeFrame, editing.ChangeFreeze, range.DropDownItems, "切替時に画面を取り直します。ONはその画像、OFFは確定時の画像を出力します。");
             var cursor = Toggle("マウスカーソルを含める", "IncludeCursor", editing.Settings.IncludeCursor, editing.ChangeCursor, range.DropDownItems, "切替時に画面を取り直します。録画ではマウスカーソルの描画も今回だけ変更します。");
             freeze.Enabled = cursor.Enabled = editing.CanRefresh;
-            Toggle("選択中モニタの背景を暗くする", "DimCaptureBackground", editing.Settings.DimCaptureBackground, editing.ChangeDim, operation.DropDownItems);
+            Toggle("選択中モニターの背景を暗くする", "DimCaptureBackground", editing.Settings.DimCaptureBackground, editing.ChangeDim, operation.DropDownItems);
             if (editing.ChangePointerGuide is { } changePointerGuide)
                 Toggle("ポインタ横に操作ガイドを表示する", "ShowPointerGuide", editing.Settings.ShowPointerGuide, changePointerGuide, operation.DropDownItems);
             if (editing is { Screenshot: false, ChangeSystemAudio: { } changeSystemAudio, ChangeMicrophone: { } changeMicrophone })

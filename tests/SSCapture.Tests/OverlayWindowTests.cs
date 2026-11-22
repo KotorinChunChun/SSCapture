@@ -151,7 +151,7 @@ internal static partial class Program
             Equal(FormBorderStyle.None, overlay.FormBorderStyle);
             Check(!overlay.ShowInTaskbar && overlay.KeyPreview, "タスクバー非表示とキー入力を維持する");
         });
-        Run("解像度と原点が異なるモニタの背景はそれぞれの画像を表示する", () =>
+        Run("解像度と原点が異なるモニターの背景はそれぞれの画像を表示する", () =>
         {
             Rectangle[] monitors = [new(-400, -80, 400, 300), new(0, 0, 640, 480)];
             Rectangle desktop = monitors.Aggregate(Rectangle.Union);
@@ -179,7 +179,7 @@ internal static partial class Program
                 {
                     Color pixel = rendered.GetPixel(point.X, point.Y);
                     Check(index == 0 ? pixel.R > 100 && pixel.B == 0 : pixel.B > 100 && pixel.R == 0,
-                        $"モニタ{index + 1}の{point}に別モニタの画像または空白が描かれた: {pixel}");
+                        $"モニター{index + 1}の{point}に別モニターの画像または空白が描かれた: {pixel}");
                 }
             }
         });
@@ -216,12 +216,12 @@ internal static partial class Program
                     foreach (CaptureOverlay overlay in overlays) AssertOverlayPlacement(overlay);
                 }
                 foreach (CaptureOverlay overlay in overlays)
-                    Console.WriteLine($"PASS 実モニタ配置 {overlay.MonitorBounds} DPI={overlay.DeviceDpi} 自動移動なし");
+                    Console.WriteLine($"PASS 実モニター配置 {overlay.MonitorBounds} DPI={overlay.DeviceDpi} 自動移動なし");
                 return 0;
             }
             finally { foreach (CaptureOverlay overlay in overlays) overlay.Dispose(); }
         }
-        catch (Exception ex) { Console.Error.WriteLine($"FAIL 実モニタ配置: {ex.Message}"); return 1; }
+        catch (Exception ex) { Console.Error.WriteLine($"FAIL 実モニター配置: {ex.Message}"); return 1; }
     }
 
     private static void PumpOverlayMessages(TimeSpan duration)

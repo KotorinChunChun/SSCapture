@@ -57,7 +57,7 @@ internal sealed record CaptureKeyMap(
         CaptureKeyAction.LockHeight => "左右に変更",
         CaptureKeyAction.Snap => "ウィンドウスナップ",
         CaptureKeyAction.Grid => "一時グリッドスナップ",
-        CaptureKeyAction.CrossMonitor => "別モニタへの移動を許可",
+        CaptureKeyAction.CrossMonitor => "別モニターへの移動を許可",
         CaptureKeyAction.HighlightWindow => "ウィンドウ撮影に切り替え",
         CaptureKeyAction.SwitchAnchor => "基点を切り替える",
         CaptureKeyAction.LockAspectRatio => "縦横比を固定",

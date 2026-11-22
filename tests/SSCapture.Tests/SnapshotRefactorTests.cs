@@ -7,7 +7,7 @@ internal static partial class Program
 {
     private static void SnapshotRefactorTests()
     {
-        Run("再撮影設定は入出力配列・モニタ構成・即時キーを元の設定や返却値と共有しない", () =>
+        Run("再撮影設定は入出力配列・モニター構成・即時キーを元の設定や返却値と共有しない", () =>
         {
             var source = SnapshotFixtureSettings();
             var recipe = LastCaptureRecipe.Create(1, new(1, 1, 2, 2), null, source, RegionLayout);

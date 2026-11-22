@@ -22,7 +22,7 @@ internal sealed class DesktopSnapshot : IDisposable
         ArgumentNullException.ThrowIfNull(monitors);
         if (image.Size != bounds.Size || monitors.Count == 0 ||
             monitors.Any(monitor => monitor.Width <= 0 || monitor.Height <= 0 || !bounds.Contains(monitor)))
-            throw new ArgumentException("画像とモニタ領域の物理ピクセル寸法が一致しません。");
+            throw new ArgumentException("画像とモニター領域の物理ピクセル寸法が一致しません。");
         Image = image;
         Bounds = bounds;
         Monitors = monitors.ToArray();

@@ -65,7 +65,7 @@ internal static partial class Program
             Check(!CaptureGeometry.HasPolygonArea([new(0, 0), new(0, 0), new(2, 2), new(4, 4)]), "一直線は除外");
             Check(CaptureGeometry.HasPolygonArea([new(0, 0), new(10, 10), new(10, 0), new(0, 10)]), "自己交差の自由形状を許可");
         });
-        Run("モニタ間隙の透過を切り出しと自由形状で維持", () =>
+        Run("モニター間隙の透過を切り出しと自由形状で維持", () =>
         {
             using Bitmap source = PatternBitmap();
             source.SetPixel(4, 4, Color.Transparent);
@@ -96,7 +96,7 @@ internal static partial class Program
                 CaptureSelection? selection = gesture.End(new Point(-298, 42), OutputDestination.File);
                 Equal(left, selection!.Bounds);
                 Equal(OutputDestination.File, selection.Destination);
-                Check(selection.Polygon is null, "クリックは自由形状modeでもモニタ矩形");
+                Check(selection.Polygon is null, "クリックは自由形状modeでもモニター矩形");
             }
         });
         Run("DPI別の閾値と一度ドラッグした後の戻りを区別", () =>
@@ -111,7 +111,7 @@ internal static partial class Program
             scaled.Begin(new Point(100, 100), new Size(16, 16));
             scaled.Move(new Point(130, 130));
             Check(scaled.End(new Point(100, 100), OutputDestination.Clipboard) is null,
-                "一度ドラッグした選択をクリックの全モニタ撮影に戻さない");
+                "一度ドラッグした選択をクリックの全モニター撮影に戻さない");
         });
         Run("ウィンドウ判定は全modeで凍結Z順の最前面", () =>
         {

@@ -65,7 +65,7 @@ internal static partial class Program
                 foreach (string name in new[] { "LimitToStartingMonitor", "DimCaptureBackground", "Grid20", "ShowSelectionGuide", "ShowPointerGuide" })
                     Check(menu.Command("CaptureOperationGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
                 Equal("開始したモニター内で選択する", menu.Command("LimitToStartingMonitor").Text);
-                Equal("選択中モニタの背景を暗くする", menu.Command("DimCaptureBackground").Text);
+                Equal("選択中モニターの背景を暗くする", menu.Command("DimCaptureBackground").Text);
                 Equal("グリッドスナップを既定でON（20px）", menu.Command("Grid20").Text);
                 Equal("画面右下に操作ガイドを表示する", menu.Command("ShowSelectionGuide").Text);
                 Check(!menu.Command("FreezeFrame").Enabled && !menu.Command("IncludeCursor").Enabled, "再取得不可の入口を有効にした");
@@ -421,7 +421,7 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("モニタ制限は撮影中だけ切替しチェックを同期", () =>
+        Run("モニター制限は撮影中だけ切替しチェックを同期", () =>
         {
             var session = MonitorSession(true);
             try
@@ -435,7 +435,7 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("入力プリセットも今回解除したモニタ制限を再有効化しない", () =>
+        Run("入力プリセットも今回解除したモニター制限を再有効化しない", () =>
         {
             var displays = SelectionTestMonitors.Select((m, i) => new DisplayLayout("m" + i, "画面" + i, m, 96, 96)).ToArray();
             var desktop = SelectionTestMonitors.Aggregate(Rectangle.Union);
@@ -447,6 +447,30 @@ internal static partial class Program
                 session.ApplyInputPreset(RegionCoordinates.FromBounds("右の枠", new(20, 20, 100, 80), displays));
                 Equal(2, session.SelectionMonitors.Count);
                 Check(!session.SelectionMenu.Command("LimitToStartingMonitor").Checked, "入力プリセットが制限を復活させた");
+            }
+            finally { session.Cancel(); }
+        });
+        Run("固定座標の入力プリセットで制限先のモニターが変わると表示中のオーバーレイも切り替わる", () =>
+        {
+            var displays = SelectionTestMonitors.Select((m, i) => new DisplayLayout("m" + i, "画面" + i, m, 96, 96)).ToArray();
+            var desktop = SelectionTestMonitors.Aggregate(Rectangle.Union);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Recording, OutputDestination.None,
+                    LimitToStartingMonitor: true, ShowSelectionGuide: false),
+                new(new Bitmap(desktop.Width, desktop.Height), desktop, SelectionTestMonitors), [], initialPointer: new(-100, 20),
+                confineCursor: _ => new MemoryStream(), readPresetDisplays: () => displays);
+            try
+            {
+                session.Start();
+                IEnumerable<Rectangle> VisibleOverlays() => Application.OpenForms.OfType<CaptureOverlay>()
+                    .Where(overlay => overlay.SelectionMenu == session.SelectionMenu && overlay.Visible).Select(overlay => overlay.MonitorBounds);
+                session.ChangeMonitorLimit(false);
+                session.MoveTo(new(100, 100));
+                session.ChangeMonitorLimit(true);
+                Check(VisibleOverlays().SequenceEqual([SelectionTestMonitors[1]]), "制限先のモニターだけを表示していない");
+                session.ApplyInputPresetAsync(RegionCoordinates.FromBounds("左の枠", new(-300, 0, 100, 80), displays)).GetAwaiter().GetResult();
+                Equal(SelectionTestMonitors[0], session.SelectionMonitors.Single());
+                Check(VisibleOverlays().SequenceEqual([SelectionTestMonitors[0]]),
+                    "表示中のオーバーレイが制限先と一致しない: " + string.Join(", ", VisibleOverlays()));
             }
             finally { session.Cancel(); }
         });

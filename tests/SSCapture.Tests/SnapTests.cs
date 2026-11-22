@@ -8,7 +8,7 @@ internal static partial class Program
 {
     static partial void SnapTests()
     {
-        Run("モニタ角ぴったりの吸着成立は座標差ゼロでも刻みより優先する", () =>
+        Run("モニター角ぴったりの吸着成立は座標差ゼロでも刻みより優先する", () =>
         {
             foreach (var monitor in new[] { new Rectangle(0, 0, 1920, 1080), new Rectangle(-2560, -1440, 2560, 1440), new Rectangle(-1920, 200, 1920, 1080) })
             foreach (var target in new[] { monitor.Location, new Point(monitor.Right, monitor.Top), new Point(monitor.Left, monitor.Bottom), new Point(monitor.Right, monitor.Bottom) })
@@ -22,7 +22,7 @@ internal static partial class Program
             }
             Check(!new AppSettings().Grid20, "新規の刻み調整がON");
         });
-        Run("モニタ境界はより近いウィンドウ境界にも優先しAltなしではウィンドウ吸着しない", () =>
+        Run("モニター境界はより近いウィンドウ境界にも優先しAltなしではウィンドウ吸着しない", () =>
         {
             var snap = new SelectionSnap([new(0, 0, 1920, 1080)], [new(5, 5, 400, 300)]);
             Equal(new Point(0, 0), snap.Apply(new Point(5, 5)));

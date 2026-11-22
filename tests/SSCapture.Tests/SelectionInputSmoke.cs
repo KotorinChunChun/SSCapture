@@ -264,7 +264,7 @@ internal static partial class Program
                     }, token, showGuide: false);
                     Equal(bounds, result.Selection!.Bounds);
                 });
-                await Test("Shiftを押している間は明るいモニタ全体を撮影する", async token =>
+                await Test("Shiftを押している間は明るいモニター全体を撮影する", async token =>
                 {
                     using var result = await CaptureSyntheticOutcome(CaptureMode.FixedRegion, bounds, input, async (overlay, ct) =>
                     {

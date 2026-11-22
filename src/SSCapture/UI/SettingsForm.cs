@@ -294,7 +294,7 @@ internal sealed partial class SettingsForm : Form
 
         var selectionOptions = BasicFields(34, 34, 34);
         limitToStartingMonitor = BasicCheckBox("LimitToStartingMonitor", "開始したモニター内で選択する", settings.LimitToStartingMonitor);
-        dimCaptureBackground = BasicCheckBox("DimCaptureBackground", "選択中モニタの背景を暗くする", settings.DimCaptureBackground);
+        dimCaptureBackground = BasicCheckBox("DimCaptureBackground", "選択中モニターの背景を暗くする", settings.DimCaptureBackground);
         AddFullRow(selectionOptions, limitToStartingMonitor, 0);
         AddFullRow(selectionOptions, dimCaptureBackground, 1);
         shareCapturePresentation = BasicCheckBox("ShareCapturePresentation", "撮影操作を画面共有・配信に表示する", settings.ShareCapturePresentation);

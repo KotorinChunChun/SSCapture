@@ -33,7 +33,7 @@ internal static partial class Program
 
             CheckBox Box(string name) => (CheckBox)form.Controls.Find(name, true).Single();
             Equal("開始したモニター内で選択する", Box("LimitToStartingMonitor").Text);
-            Equal("選択中モニタの背景を暗くする", Box("DimCaptureBackground").Text);
+            Equal("選択中モニターの背景を暗くする", Box("DimCaptureBackground").Text);
             var grid = Box("GridEnabled");
             Equal("グリッドスナップを既定でON", grid.Text);
             var step = (NumericUpDown)form.Controls.Find("GridStepPixels", true).Single();
@@ -362,7 +362,7 @@ internal static partial class Program
             Equal("ウィンドウスナップ", Choice("CaptureBeforeKeys4").Text);
             Check(Choice("CaptureKeys4").Items.Cast<object>().Any(item => item.ToString() == "一時グリッドスナップ"),
                 "2点目にグリッドを割り当てられない");
-            Equal("別モニタへの移動を許可", Choice("CaptureKeys8").Text);
+            Equal("別モニターへの移動を許可", Choice("CaptureKeys8").Text);
             Check(!Choice("CaptureKeys9").Items.Cast<object>().Any(item => item.ToString() == "ウィンドウ撮影に切り替え"),
                 "ドラッグ中にウィンドウ撮影の選択肢がある");
             Check(!Choice("CaptureBeforeKeys9").Items.Cast<object>().Any(item => item.ToString() is "上下に変更" or "左右に変更"),

@@ -237,7 +237,7 @@ internal static partial class Program
             var input = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "入力プリセット"); var output = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "出力プリセット");
             Check(output.Contains(form.Controls.Find("WhitePaddingPixels", true).Single()), "出力に白い余白がない");
             Check(output.Contains(form.Controls.Find("ScreenshotColorDepth", true).Single()), "出力に減色がない");
-            Check(tabs.TabPages[0].Contains(form.Controls.Find("LimitToStartingMonitor", true).Single()), "モニタ制限が基本にない");
+            Check(tabs.TabPages[0].Contains(form.Controls.Find("LimitToStartingMonitor", true).Single()), "モニター制限が基本にない");
             Check(!((RegionManagerForm)input.Controls[0]).AutoScroll, "入力にスクロールがある");
             Check(input.Contains(form.Controls.Find("SystemAudio", true).Single()), "録画音声が入力にない");
             Equal("取得条件,座標・寸法,録画・音声", string.Join(',', ((TabControl)form.Controls.Find("InputPresetSections", true).Single()).TabPages.Cast<TabPage>().Select(p => p.Text)));

@@ -53,7 +53,7 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("割り当てたキーで実在する別モニタに移動した時だけ制限を解除する", () =>
+        Run("割り当てたキーで実在する別モニターに移動した時だけ制限を解除する", () =>
         {
             var session = MonitorSession(true);
             try
@@ -88,7 +88,7 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("モニタ拡張はドラッグの始点と選択を維持する", () =>
+        Run("モニター拡張はドラッグの始点と選択を維持する", () =>
         {
             var gesture = new SelectionGesture(CaptureMode.Rectangle, [SelectionTestMonitors[0]], []);
             gesture.Begin(new(-100, 20), new(4, 4)); gesture.Move(new(-20, 50));
@@ -157,7 +157,7 @@ internal static partial class Program
                 Equal(!limited, saved!.LimitToStartingMonitor);
             }
         });
-        Run("限定ONは開始モニタだけを選び画面外のポインタ座標と窓候補を制限", () =>
+        Run("限定ONは開始モニターだけを選び画面外のポインタ座標と窓候補を制限", () =>
         {
             var session = MonitorSession(true, CaptureMode.Window);
             try
@@ -176,7 +176,7 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("限定OFFは全モニタを維持し画面間の選択を許可", () =>
+        Run("限定OFFは全モニターを維持し画面間の選択を許可", () =>
         {
             var session = MonitorSession(false);
             try
@@ -269,7 +269,7 @@ internal static partial class Program
                 }
                 finally { session.Cancel(); }
             }
-            Console.WriteLine($"PASS 開始画面限定ON/OFF・{monitors.Count}モニタ・5終了経路・ポインタ4辺の制限と復元");
+            Console.WriteLine($"PASS 開始画面限定ON/OFF・{monitors.Count}モニター・5終了経路・ポインタ4辺の制限と復元");
             if (monitors.Count >= 2)
             {
                 Rectangle first = monitors[0], destination = monitors[1];

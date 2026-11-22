@@ -2,7 +2,7 @@ namespace SSCapture.Services;
 
 internal static class CaptureSettingsSnapshot
 {
-    // 各recordの値は不変だが、設定が公開する配列とモニタ構成配列は共有しない。
+    // 各recordの値は不変だが、設定が公開する配列とモニター構成配列は共有しない。
     internal static AppSettings Copy(AppSettings settings) => settings with
     {
         SavedRegions = settings.SavedRegions.Select(region => region with { Layout = region.Layout.ToArray() }).ToArray(),

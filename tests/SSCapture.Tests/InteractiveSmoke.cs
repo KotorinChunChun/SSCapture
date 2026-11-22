@@ -308,7 +308,7 @@ internal static partial class Program
                         }, ct);
                     Check(result is null, "Escapeはnullを返すこと");
                 })) return;
-                if (!await Test("右メニューで保存を追加 → 中央クリックでモニタ全体", async ct =>
+                if (!await Test("右メニューで保存を追加 → 中央クリックでモニター全体", async ct =>
                 {
                     using CaptureOutcome result = await CaptureSyntheticOutcome(CaptureMode.Rectangle, bounds, input,
                         async (overlay, token) =>

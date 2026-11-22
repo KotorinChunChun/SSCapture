@@ -30,8 +30,8 @@ internal static class SettingsHelp
         ["OpenOutputPresetShortcuts"] = "この出力を使うプリセット撮影の割り当てを開きます。",
         ["CaptureCommandInput"] = "撮影条件を使う入力プリセット。既定を選ぶとコマンド実行時の既定入力を使います。",
         ["CaptureCommandOutput"] = "コピー・保存・外部アプリ・ピン留めに使う出力プリセット。既定は実行時の既定出力を使います。",
-        ["CaptureCommandX"] = "固定範囲の物理X座標。左側のモニタなどの負座標も指定できます。",
-        ["CaptureCommandY"] = "固定範囲の物理Y座標。上側のモニタなどの負座標も指定できます。",
+        ["CaptureCommandX"] = "固定範囲の物理X座標。左側のモニターなどの負座標も指定できます。",
+        ["CaptureCommandY"] = "固定範囲の物理Y座標。上側のモニターなどの負座標も指定できます。",
         ["CaptureCommandWidth"] = "固定範囲の幅。1～32768物理px、幅と高さの積は1億画素以内です。",
         ["CaptureCommandHeight"] = "固定範囲の高さ。1～32768物理px、幅と高さの積は1億画素以内です。",
         ["CaptureCommandImport"] = "選択した入力プリセットの位置と寸法を固定範囲へ取り込みます。撮影や設定保存はしません。",
@@ -44,13 +44,13 @@ internal static class SettingsHelp
         ["CaptureScheduleInterval"] = "定期撮影の間隔を秒で指定します。初回は対象を確定した直後です。",
         ["CaptureScheduleCount"] = "定期撮影を終了するまでの成功枚数です。",
         ["DimCaptureBackground"] = "ONのときは、選択中のモニターで選択範囲の外側を暗くします。\nOFFのときは、クリック中・ドラッグ中・ウィンドウ選択中も背景を暗くしません。",
-        ["CaptureMode"] = "矩形はドラッグ、ウィンドウは対象をクリック、全画面は全モニタ、自由形状は輪郭を囲みます。固定サイズは位置を選ぶ枠、固定位置とサイズは保存した座標と寸法を使います。スクロール撮影は選んだ領域を縦にスクロールして1枚の静止画に合成します。",
+        ["CaptureMode"] = "矩形はドラッグ、ウィンドウは対象をクリック、全画面は全モニター、自由形状は輪郭を囲みます。固定サイズは位置を選ぶ枠、固定位置とサイズは保存した座標と寸法を使います。スクロール撮影は選んだ領域を縦にスクロールして1枚の静止画に合成します。",
         ["ClipboardOutput"] = "ONのときは撮影結果をクリップボードへコピーします。他の出力先と併用できます。録画では動画ファイルをコピーします。",
         ["FileOutput"] = "ONのときは保存先と命名パターンに従って画像・動画を保存します。他の出力先と併用できます。",
         ["ExternalOutput"] = "ONのときは撮影結果を指定した画像・動画編集アプリへ渡します。対応する実行ファイルとパラメータを設定してください。即時撮影には適用しません。",
         ["FreezeFrame"] = "ONのときは撮影開始時の画面を保存・コピーします。OFFのときは範囲確定後、選択画面を閉じてから画面を取得します。選択中の背景はどちらも開始時の静止画です。選択を中断してやり直しても開始画像は保持します。録画映像は固定しません。",
         ["OpenFolderAfterSave"] = "ONのときはファイル保存に成功した後、保存先フォルダを開いて保存ファイルを選択します。ファイル保存がOFFのときと即時撮影では実行しません。",
-        ["LimitToStartingMonitor"] = "ONのときは、撮影開始時にポインタがあったモニター内で選択します。\nONのままでも「別モニタへの移動を許可」に割り当てたキー（ドラッグ中の既定はShift）を押しながらポインタを動かすと、別のモニターへ移動できます。\nOFFのときは、キーを押さずにモニターをまたいで選択できます。",
+        ["LimitToStartingMonitor"] = "ONのときは、撮影開始時にポインタがあったモニター内で選択します。\nONのままでも「別モニターへの移動を許可」に割り当てたキー（ドラッグ中の既定はShift）を押しながらポインタを動かすと、別のモニターへ移動できます。\nOFFのときは、キーを押さずにモニターをまたいで選択できます。",
         ["SelectionMethod"] = "矩形の始点と終点をドラッグで指定するか、左クリック2回で指定するかを選びます。",
         ["ShowMagnifier"] = "画素の間を中央にして拡大します。矩形の起点は赤い十字、終点は撮影範囲と範囲外の境界を赤線で示します。",
         ["MagnifierDotCount"] = "縦横それぞれに表示するドット数です。2～32の偶数から選びます。既定は10×10ドットです。",
@@ -74,7 +74,7 @@ internal static class SettingsHelp
         ["MicrophoneAudio"] = "ONのときは選択したマイクの音を録画と一緒に録音します。PCの再生音と併用できます。録画中の操作画面でも切り替えられます。",
         ["MicrophoneDevice"] = "マイク録音に使用する入力機器です。「既定のマイク」はWindowsの既定機器を使用します。マイク録音がOFFのときは選択欄が無効になります。",
         ["NotificationDisplay"] = "撮影完了通知を表示するモニターです。初期値はメイン画面です。撮影操作の配信表示がONのときは、撮影したモニターへ表示します。指定画面が使えない場合はメイン画面へ表示します。",
-        ["NotificationCorner"] = "完了通知を表示する位置です。選択したモニタの作業領域内で、8方位と中央の9か所から選べます。",
+        ["NotificationCorner"] = "完了通知を表示する位置です。選択したモニターの作業領域内で、8方位と中央の9か所から選べます。",
         ["NotificationDurationSeconds"] = "完了通知を表示する時間です。単位は秒で、0～3600の整数を指定できます。0のときは通知を表示しません。効果音は別の設定です。",
         ["PlayCaptureSound"] = "ONのときは撮影完了時に短い効果音を鳴らします。通知を非表示にしていても鳴ります。PC音声の録音・共有に含まれる場合があります。",
         ["HoldNotificationWhileApproaching"] = "ONのとき、ポインタが通知へ近づく間や近接中は、表示残時間を設定秒数へ戻して維持します。OFFは通常の時間で消えます。",
@@ -139,14 +139,14 @@ internal static class SettingsHelp
         if (name == "ShowSelectionGuide") return "画面右下に操作一覧のウィンドウを表示します。ドラッグ中にポインタが近づくと一時的に隠れます。";
         if (name == "ShowPointerGuide") return "現在の操作、押しているキーの効果、取り消し方法と撮影対象をポインタの近くに表示します。";
         if (name == "InputFixedCoordinates") return "ONは登録した位置へ固定枠を表示します。OFFは撮影モードに従い位置や範囲を選びます。再撮影キーはONなら即時撮影、OFFなら選択開始です。";
-        if (name.Contains("InputPreset", StringComparison.Ordinal)) return "入力プリセットを追加・複製し、通常撮影の既定を選べます。録画音声も含めて変更確定時に自動保存します。暗転・モニタ制限は基本設定です。";
+        if (name.Contains("InputPreset", StringComparison.Ordinal)) return "入力プリセットを追加・複製し、通常撮影の既定を選べます。録画音声も含めて変更確定時に自動保存します。暗転・モニター制限は基本設定です。";
         if (name is "AddCapturePreset" or "DeleteCapturePreset" or "DefaultCapturePreset" or "CapturePresetName") return "出力プリセットを追加・削除し、既定を選びます。変更確定時に自動保存します。追加では新規と直前の出力設定を選べます。";
         if (name is "MetadataMode" or "PresetMetadataMode") return "静止画をファイルに保存する場合の撮影情報です。記録しない・PNG内XMP・別JSON・両方から選択します。UI名・アプリのパス・タイトル等を含むため共有時には注意してください。";
         if (name.EndsWith("EditorArguments", StringComparison.Ordinal)) return Services.EditorArguments.Help;
         if (name.Contains("Editor", StringComparison.Ordinal) || name.Contains("SelectedEditor", StringComparison.Ordinal))
             return "画像用・動画用の外部アプリを複数登録し、既定を1つ選びます。追加メニューから入力例を選べます。この画面の「保存」で登録を確定します。参照中のアプリは削除できません。";
         if (name.StartsWith("InstantShortcut", StringComparison.Ordinal))
-            return "指定モニタの全体を選択画面なしで即時撮影するキーです。画面1は主画面で、未接続の画面は撮影できません。" + ShortcutHelp;
+            return "指定モニターの全体を選択画面なしで即時撮影するキーです。画面1は主画面で、未接続の画面は撮影できません。" + ShortcutHelp;
         if (name == "LastRecipeShortcut") return "成功した直前の静止画と同じ範囲・入出力設定（一時変更を含む）で新しく撮影します。画像履歴とは別で、終了時に記録を破棄します。初期値は未割当です。" + ShortcutHelp;
         if (name.StartsWith("Region", StringComparison.Ordinal) || name is "SavedRegions" or "NewNumericRegion" or "AddLastRegion" or "DrawRegion" or "PickFixedRegion" or "PreviewRegion" or "SaveRegion" or "DeleteRegion" or "CloseRegions")
             return "入力プリセットの名前・物理pxの位置と寸法を編集します。設定画面では変更確定時に自動保存します。固定サイズは撮影時に位置を選び、固定位置とサイズは保存した場所を動かさず使用します。";

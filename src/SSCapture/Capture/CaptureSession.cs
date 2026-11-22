@@ -232,7 +232,7 @@ internal sealed partial class SessionController
         if (options.LimitToStartingMonitor && options.Mode != CaptureMode.FullScreen)
         {
             selectionBounds = snapshot.Monitors.FirstOrDefault(monitor => monitor.Contains(this.initialPointer));
-            if (selectionBounds.Value.IsEmpty) throw new InvalidOperationException("開始位置のモニタが見つかりません。もう一度選択してください。");
+            if (selectionBounds.Value.IsEmpty) throw new InvalidOperationException("開始位置のモニターが見つかりません。もう一度選択してください。");
             SelectionMonitors = [selectionBounds.Value];
         }
         else SelectionMonitors = snapshot.Monitors;
@@ -395,7 +395,7 @@ internal sealed partial class SessionController
         {
             Point pointer = menuOpen ? menuPointer : lastPointerPosition ?? initialPointer;
             Rectangle monitor = Snapshot.Monitors.FirstOrDefault(m => m.Contains(pointer));
-            if (monitor.IsEmpty) throw new InvalidOperationException("ポインタのあるモニタが見つかりません。");
+            if (monitor.IsEmpty) throw new InvalidOperationException("ポインタのあるモニターが見つかりません。");
             limit = monitor;
         }
         idleMonitorMove = desktopHeld = false;
@@ -405,8 +405,7 @@ internal sealed partial class SessionController
         OutputSettings = OutputSettings with { LimitToStartingMonitor = enabled };
         if (!starting)
         {
-            foreach (var overlay in overlays) { if (SelectionMonitors.Contains(overlay.MonitorBounds)) overlay.Show(); else overlay.Hide(); }
-            AddMissingOverlays();
+            ShowSelectionOverlays();
             if (limit is Rectangle clip) cursorConfinement = confineCursor(clip);
             ReplaceGuide();
         }
@@ -520,7 +519,7 @@ internal sealed partial class SessionController
             lastRectangleAction = CaptureKeyAction.None;
             if (!starting)
             {
-                AddMissingOverlays();
+                ShowSelectionOverlays();
                 ReplaceGuide();
             }
             SelectionMenu.SetMode(Mode); UpdateMenu(); RefreshOverlays();
@@ -828,9 +827,10 @@ internal sealed partial class SessionController
         else if (!starting && cursorConfinement is null) cursorConfinement = confineCursor(bounds);
     }
 
-    /// <summary>オーバーレイのない選択対象モニターにだけ追加して表示する。既存のオーバーレイの表示状態は変えない。</summary>
-    private void AddMissingOverlays()
+    /// <summary>選択対象のモニターのオーバーレイだけを表示する。足りないものは追加し、対象外は隠す。</summary>
+    private void ShowSelectionOverlays()
     {
+        foreach (var overlay in overlays) { if (SelectionMonitors.Contains(overlay.MonitorBounds)) overlay.Show(); else overlay.Hide(); }
         foreach (Rectangle monitor in SelectionMonitors.Where(m => overlays.All(o => o.MonitorBounds != m)))
         {
             var overlay = new CaptureOverlay(this, monitor);

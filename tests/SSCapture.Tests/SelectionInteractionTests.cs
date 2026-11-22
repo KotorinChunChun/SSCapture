@@ -372,7 +372,7 @@ internal static partial class Program
             Equal(new Size(80, 60), g.Selection.Size);
             g.Move(new(176, 162)); Equal(new Size(73, 55), g.Selection.Size);
             g.Grid20 = true; g.Move(new(46, 34)); Equal(new Rectangle(43, 27, 60, 80), g.Selection);
-            g.Move(new(999, 999)); Equal(new Size(897, 893), g.Selection.Size); // モニタ端1000をグリッドより優先。
+            g.Move(new(999, 999)); Equal(new Size(897, 893), g.Selection.Size); // モニター端1000をグリッドより優先。
         });
         Run("枠スナップはグリッドより優先し固定寸法を維持", () =>
         {
@@ -440,7 +440,7 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("固定サイズから対象モニタ全体を明示確定・限定OFFの位置", () =>
+        Run("固定サイズから対象モニター全体を明示確定・限定OFFの位置", () =>
         {
             foreach (bool limited in new[] { false, true })
             {
