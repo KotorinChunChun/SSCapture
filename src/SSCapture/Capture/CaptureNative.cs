@@ -80,6 +80,8 @@ internal static class CaptureNative
     [DllImport("user32.dll")]
     internal static extern nint GetForegroundWindow();
     [DllImport("user32.dll")]
+    internal static extern nint WindowFromPoint(Point point);
+    [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetForegroundWindow(nint window);
     [DllImport("user32.dll")]

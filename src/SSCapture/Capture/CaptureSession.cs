@@ -144,6 +144,7 @@ internal sealed partial class SessionController
     private System.Windows.Forms.Timer? snapTimer;
     private bool overlayUpdatePending;
     private CaptureWindowsKey? windowsKey;
+    private nint captureStartForeground;
     private bool idleWindowsMove;
     private CaptureModifiers activeModifiers;
     private bool activeDrag;
@@ -738,9 +739,13 @@ internal sealed partial class SessionController
             if (selectionBounds is Rectangle monitorBounds) cursorConfinement = confineCursor(monitorBounds);
             if (Mode != CaptureMode.FullScreen)
             {
-                if (captureWindowsKey) windowsKey = new CaptureWindowsKey(
-                    () => HasPointerPress || menuOpen || menuTransition || refreshing || SelectingControl,
-                    () => SelectingControl && CaptureNative.GetForegroundWindow() == focusBeforeSelection);
+                if (captureWindowsKey)
+                {
+                    captureStartForeground = CaptureNative.GetForegroundWindow();
+                    windowsKey = new CaptureWindowsKey(
+                        () => HasPointerPress || menuOpen || menuTransition || refreshing || SelectingControl,
+                        OwnsSelectionInputWithoutFocus);
+                }
                 // Key messages can be routed to the movable guide or a captured
                 // overlay. Only while selecting, poll Alt to cover either route.
                 snapTimer = new System.Windows.Forms.Timer { Interval = 16 };
@@ -761,6 +766,23 @@ internal sealed partial class SessionController
             Move();
         }
         catch (Exception ex) { Fail(ex); }
+    }
+
+    private bool OwnsSelectionInputWithoutFocus()
+    {
+        nint foreground = CaptureNative.GetForegroundWindow();
+        if (SelectingControl && foreground == focusBeforeSelection) return true;
+        return CaptureNative.TryCursorPosition(out Point pointer)
+            && OwnsCapturePointer(foreground, CaptureNative.WindowFromPoint(pointer));
+    }
+
+    internal bool OwnsCapturePointer(nint foreground, nint windowAtPointer)
+    {
+        if (starting || refreshing || completed || menuOpen || menuTransition || windowAtPointer == 0
+            || foreground != 0 && foreground != captureStartForeground) return false;
+        foreach (CaptureOverlay overlay in overlays)
+            if (overlay.Visible && overlay.IsHandleCreated && overlay.Handle == windowAtPointer) return true;
+        return false;
     }
 
     internal void Move(bool queuedKeyState = false, Point? eventPosition = null, Keys? mouseModifiers = null)

@@ -78,6 +78,7 @@ internal static partial class Program
         if (args.Contains("--selection-monitor-smoke")) return RunSelectionMonitorSmoke();
         if (args.Contains("--window-hit-smoke")) return RunWindowHitSmoke();
         if (args.Contains("--selection-input-smoke")) return RunSelectionInputSmoke();
+        if (args.Contains("--settings-win-smoke")) return RunSettingsWindowsKeySmoke();
         if (args.Contains("--paint-launch-smoke")) return RunPaintLaunchSmoke(args[1]);
         if (args.Contains("--capture-target-toast-smoke")) return RunCaptureTargetToastSmoke();
         if (args.Contains("--ocr-smoke")) return RunOcrSmoke();

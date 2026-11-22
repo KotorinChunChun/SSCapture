@@ -46,10 +46,11 @@ internal sealed class CaptureWindowsKey : IDisposable
     {
         this.ignoreTap = ignoreTap;
         this.ownsSelectionInput = ownsSelectionInput;
-        previouslyHeld = (CaptureNative.IsKeyDown(0x5b) ? 1 : 0) | (CaptureNative.IsKeyDown(0x5c) ? 2 : 0);
         callback = OnKey;
         hook = SetWindowsHookEx(13 /* WH_KEYBOARD_LL */, callback, GetModuleHandle(null), 0);
         if (hook == 0) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        // A release after this sample is already covered by the installed hook.
+        previouslyHeld = (CaptureNative.IsKeyDown(0x5b) ? 1 : 0) | (CaptureNative.IsKeyDown(0x5c) ? 2 : 0);
     }
 
     private nint OnKey(int code, nint message, nint data)

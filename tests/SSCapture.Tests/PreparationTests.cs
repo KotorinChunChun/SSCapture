@@ -70,6 +70,88 @@ internal static partial class Program
             SaveConsolidation(form);
             Check(saved is { Grid20: true, ShowSelectionGuide: false, ShowPointerGuide: false }, "古い値で撮影中の変更を上書きした");
         });
+        Run("設定画面を隠した後のフォーカス移動中も撮影画面だけがWinを受け取れる", () =>
+        {
+            using var form = new Form();
+            form.Show();
+            CaptureUiPreparation.Prepare([form], () => { }, disableTransitions: _ => { }, synchronize: () => { });
+            Rectangle bounds = new(0, 0, 360, 240);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.None,
+                ShowSelectionGuide: false, LimitToStartingMonitor: false),
+                new DesktopSnapshot(new Bitmap(bounds.Width, bounds.Height), bounds, [bounds]), [], captureWindowsKey: true);
+            try
+            {
+                session.Start();
+                var overlay = Application.OpenForms.OfType<CaptureOverlay>().Single(window => window.SelectionMenu == session.SelectionMenu);
+                nint input = overlay.Handle;
+                Check(session.OwnsCapturePointer(0, input), "フォーカスが切り替わる間のWin入力が失われる");
+                Check(!session.OwnsCapturePointer(0, form.Handle), "隠した設定画面へWin入力が送られる");
+                using var unrelated = new Form();
+                Check(!session.OwnsCapturePointer(unrelated.Handle, input), "撮影開始時と異なる前面ウィンドウからWinを受け取った");
+                session.Cancel();
+                Check(!session.OwnsCapturePointer(0, input), "終了した撮影がWinを受け取る");
+            }
+            finally
+            {
+                session.Cancel();
+                CaptureUiPreparation.Restore(form);
+            }
+        });
+    }
+
+    private static int RunSettingsWindowsKeySmoke()
+    {
+        var original = new AppSettings { ShowSelectionGuide = false, ShowPointerGuide = true };
+        AppSettings? saved = null;
+        using var settings = new SettingsForm(original, value => { saved = value; return null; }, () => { });
+        Exception? failure = null;
+        settings.Shown += (_, _) => settings.BeginInvoke((Action)(async () =>
+        {
+            try
+            {
+                using var input = new NativeSmokeInput();
+                NativeSmokeInput.FocusFixture(settings.Handle);
+                NativeSmokeInput.RequireForeground(settings.Handle);
+                var guide = (CheckBox)settings.Controls.Find("ShowPointerGuide", true).Single();
+                guide.Checked = false;
+                SaveConsolidation(settings);
+                Check(saved is { ShowPointerGuide: false }, "設定を保存できない");
+                Point location = Screen.FromControl(settings).WorkingArea.Location + new Size(80, 80);
+                Rectangle bounds = new(location, new Size(360, 240));
+                Point pointer = location + new Size(90, 70);
+                CaptureUiPreparation.Prepare([settings], () => { });
+                input.Move(pointer);
+                var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.None,
+                    ShowSelectionGuide: false, LimitToStartingMonitor: false, OutputSettings: saved),
+                    new DesktopSnapshot(new Bitmap(bounds.Width, bounds.Height), bounds, [bounds]), [],
+                    initialPointer: pointer, captureWindowsKey: true);
+                try
+                {
+                    session.Start();
+                    var overlay = Application.OpenForms.OfType<CaptureOverlay>().Single(window => window.SelectionMenu == session.SelectionMenu);
+                    NativeSmokeInput.RequirePointTarget(overlay.Handle, pointer);
+                    Check(CaptureNative.OwnsForegroundWindow() || session.OwnsCapturePointer(CaptureNative.GetForegroundWindow(), overlay.Handle),
+                        "撮影画面へWin入力を送れないため中止");
+                    input.KeyDown(0x5B);
+                    await WaitUntil(() => session.Mode == CaptureMode.Window, "設定を編集した直後のWin押下が届かない");
+                    input.KeyUp(0x5B);
+                    await WaitUntil(() => session.Mode == CaptureMode.Rectangle, "設定を編集した直後のWin解放が届かない");
+                }
+                finally
+                {
+                    session.Cancel();
+                    CaptureUiPreparation.Restore(settings);
+                }
+                Check(settings.Visible && !guide.Checked, "設定画面や変更した値が復元されない");
+                Console.WriteLine("SETTINGS WIN PASS 設定保存・非表示の直後のWin押下と解放、設定画面の復元");
+            }
+            catch (Exception error) { failure = error; }
+            finally { settings.Close(); }
+        }));
+        Application.Run(settings);
+        if (failure is null) return 0;
+        Console.Error.WriteLine(failure);
+        return 1;
     }
 
     // 明示実行専用。自作画面の範囲だけを取得し、隠した設定画面の残像を検査する。
