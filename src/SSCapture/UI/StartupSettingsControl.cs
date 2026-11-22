@@ -25,9 +25,9 @@ internal sealed class StartupSettingsControl : UserControl
         var title = new Label { Name = "StartupLabel", Text = "自動起動", AutoSize = true, Anchor = AnchorStyles.Left };
         enabled.Anchor = AnchorStyles.Left;
         ButtonTheme.Apply(apply, ButtonRole.StartupApply);
-        commands.Controls.AddRange([enabled, apply]);
-        layout.Controls.Add(title, 0, 0);
-        layout.Controls.Add(commands, 1, 0);
+        commands.Controls.AddRange([title, apply, enabled]);
+        layout.Controls.Add(commands, 0, 0);
+        layout.SetColumnSpan(commands, 2);
         layout.Controls.Add(state, 1, 1);
         Controls.Add(layout);
         SizeChanged += (_, _) => state.MaximumSize = new Size(Math.Max(1, ClientSize.Width - layout.GetColumnWidths().FirstOrDefault() - state.Margin.Horizontal), 0);
