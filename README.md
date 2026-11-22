@@ -12,16 +12,14 @@ Windows 11用の汎用スクリーンショットツールです。Windows標準
 
 ### インプット
 
-キャプチャー範囲は、修飾キーを押すだけで選択範囲を切り替えることができます。
-
-ドラッグすることで複数モニター、複数ウィンドウ、複数コントロールの撮影なども柔軟に選択できます。
+修飾キーで撮影対象を切り替え、ドラッグで複数モニター、複数ウィンドウ、複数コントロールを選べます。
 
 ```mermaid
 flowchart TB
-    area["任意範囲撮影(Alt:境界スナップ可)"] --> output["クリップボード／ファイル保存"]
-    monitor["Shift:モニタ撮影"] --> output
-    window["Win:ウィンドウ撮影(子ウィンドウ対応)"] --> output
-    ctrl["Ctrl:コントロール撮影"] --> output
+    area["任意範囲撮影（Altで境界にスナップ）"] --> output["クリップボード／ファイル保存"]
+    monitor["Shiftでモニター撮影"] --> output
+    window["Winでウィンドウ撮影（子ウィンドウ対応）"] --> output
+    ctrl["Ctrlでコントロール撮影"] --> output
     size["固定サイズ撮影"] --> output
     position["固定位置とサイズで撮影"] --> output
     repeat["直前と同じ範囲・対象物を再撮影"] --> output
@@ -29,16 +27,17 @@ flowchart TB
 
 ### アウトプット
 
-画像編集に関わる機能は、それに特化したツールを使って欲しいという思いもあり、敢えて実装していません。代わりに、かなり柔軟に他のツールへ作業が引き継げるような工夫をいくつも行っています。
+撮影した画像は、クリップボードや撮影通知から次の作業に渡せます。ピン留めした画像にはペンや図形で注釈を付けられます。
 
 ```mermaid
 flowchart TB
-    clipboard["クリップボード"] --> document["資料へ貼り付け"]
+    clipboard["クリップボード"] -->|Ctrl＋V| document["資料へ貼り付け"]
+    clipboard -->|Ctrl＋V・連携ツール使用| folder["開いているフォルダへ画像を保存"]
     file["ファイル保存"] --> save["指定フォルダに保存"]
     file --> manual["画像付き手順書を作成"]
-    file --> openFolder["通知から保存先を開く"]
-    notice["撮影通知"] --> openEditor["画像編集アプリで開く"]
-    notice --> drop["フォルダ・アプリへドロップ"]
+    file --> openFolder["通知のボタンで保存先を開く"]
+    notice["撮影通知"] -->|サムネイルをダブルクリック| openEditor["画像編集アプリで開く"]
+    notice -->|サムネイルをドラッグ| drop["フォルダ・アプリへドロップ"]
 ```
 
 出力方法と保存先は出力プリセットで指定します。[おすすめ連携ツール](#おすすめ連携ツール)・[用途別の操作例](docs/usage.md#用途別の操作例)
@@ -64,7 +63,7 @@ flowchart TB
 
 新規設定では、入力4件（囲った範囲＋960×540・800×600・320×240pxの固定サイズ）と出力3件を用意します。既定は矩形選択＋クリップボードのみで、画面固定ON・カーソルOFF・白余白なし・減色なし・グリッドOFF。暗転は基本設定で初期ONです。既存の編集済みプリセットやスナップ設定は保持します。
 
-この文書は開発中のv0.1.11 (beta) の内容を含みます。公開済みの最新版はv0.1.10です。[公開済みプレリリースのダウンロード](https://github.com/KotorinChunChun/SSCapture/releases)・[v0.1.10のリリースノート](docs/releases/v0.1.10.md)・[v0.1.11 (beta) の変更点（未公開）](docs/releases/v0.1.11.md)を参照してください。未署名のプレリリースです。KotorinToysのツール一覧からもインストール・更新できます。
+現在の公開版はv0.1.11 (beta) です。KotorinToysのツール一覧からもインストール・更新できます。[公開版のダウンロード](https://github.com/KotorinChunChun/SSCapture/releases/tag/v0.1.11)・[リリースノート](docs/releases/v0.1.11.md)
 
 ## Windows標準のSnipping Toolとの違い
 
@@ -122,7 +121,7 @@ flowchart TB
 
 ## CapchunScreenとの使い分け
 
-**特定のウィンドウ全体を対象にしたキャプチャや、特定ウィンドウの画面録画を重視する場合は、[CapchunScreen](https://github.com/KotorinChunChun/CapchunWindow)をおすすめします。**
+**特定のウィンドウ全体を対象にしたキャプチャや、特定ウィンドウの画面録画を重視する場合は、[CapchunScreen](https://github.com/KotorinChunChun/CapchunScreen)をおすすめします。**
 
 CapchunScreenのウィンドウ取得はWGC（Windows Graphics Capture）を使い、GPU上の対象ウィンドウの映像を取得します。他のウィンドウの重なりに影響されず、決まったウィンドウを安定して記録したい用途に適しています。ただし、最小化・保護された映像など、対象や環境による取得制約はあります。
 
@@ -198,3 +197,9 @@ Windows 11 x64が対象です。公開インストーラーには.NET 10 Desktop
 ## ライセンス
 
 SSCaptureの独自コードと文書には[MITライセンス](LICENSE)が適用されます。FFmpegなどの第三者コンポーネントには、それぞれのライセンスが適用されます。詳しくは[第三者コンポーネント](THIRD_PARTY.md)を参照してください。
+
+## 不具合報告と連絡先
+
+不具合や改善要望には、SSCaptureとWindowsのバージョン、再現手順、表示されたエラーを添えてください。ログや画像を添付するときは、ユーザー名や認証情報などを除いてください。[GitHub Issues](https://github.com/KotorinChunChun/SSCapture/issues)
+
+脆弱性は対象アプリ名を添えて非公開で報告できます。作者のほかのアプリや告知も各リンクから確認できます。[非公開報告](https://github.com/KotorinChunChun/KotorinToys/security/advisories/new)・[GitHubプロフィール](https://github.com/KotorinChunChun)・[X](https://x.com/KotorinChunChun)

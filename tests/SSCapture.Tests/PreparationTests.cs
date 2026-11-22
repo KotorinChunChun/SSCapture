@@ -33,31 +33,35 @@ internal static partial class Program
             CaptureUiPreparation.RestoreAll(visible);
             Check(settings.Visible && embedded.Visible, "入力プリセットを同じ状態に復元できない");
         });
-        Run("トップレベルのアニメーション抑止に失敗した場合は設定を閉じて再撮影するよう案内する", () =>
+        Run("非表示を維持できない場合は設定を閉じて再撮影するよう案内する", () =>
         {
             using var form = new Form(); form.Show();
-            var cause = new IOException("撮影前の画面アニメーションを抑止できません。");
             IOException? error = null;
+            bool synchronized = false;
             try
             {
-                CaptureUiPreparation.Prepare([form], () => throw new InvalidOperationException("失敗した後に撮影準備を続けた"),
-                    disableTransitions: _ => throw cause, synchronize: () => throw new InvalidOperationException("失敗した後に描画を同期した"));
+                CaptureUiPreparation.Prepare([form], form.Show, disableTransitions: _ => { },
+                    synchronize: () => synchronized = true);
             }
             catch (IOException ex) { error = ex; }
-            Check(error is not null && error.InnerException == cause && error.Message.Contains("設定画面を閉じてください。その後、もう一度撮影してください。"),
-                "失敗理由か再撮影の案内が欠けている");
-            Check(form.Visible, "抑止に失敗した後で設定を隠した");
+            Check(error is not null && error.Message.Contains("撮影前に自分の画面を非表示にできません。") &&
+                error.Message.Contains("設定画面を閉じてください。その後、もう一度撮影してください。"), "非表示失敗の理由か再撮影の案内が欠けている");
+            Check(!synchronized, "表示中の画面を同期した");
         });
         Run("撮影準備は同期失敗を隠さず取得を止める", () =>
         {
-            using var form = new Form(); form.Show(); bool captured = false;
+            using var form = new Form(); form.Show();
+            var cause = new IOException("同期fixture");
+            IOException? error = null;
             try
             {
-                CaptureUiPreparation.Prepare([form], () => { }, disableTransitions: _ => { }, synchronize: () => throw new IOException("同期fixture"));
-                captured = true;
+                CaptureUiPreparation.Prepare([form], () => { }, disableTransitions: _ => throw TransitionFailure(),
+                    synchronize: () => throw cause);
             }
-            catch (IOException) { }
-            Check(!captured && !form.Visible, "同期失敗後も撮影した");
+            catch (IOException ex) { error = ex; }
+            Check(!form.Visible, "抑止に失敗した後で設定を隠していない");
+            Check(error is not null && error.InnerException == cause &&
+                error.Message.Contains("設定画面を閉じてください。その後、もう一度撮影してください。"), "同期失敗の理由か再撮影の案内が欠けている");
         });
         Run("表示画面なしの撮影準備は不要な描画待ちを省く", () =>
         {
@@ -68,7 +72,10 @@ internal static partial class Program
             CaptureUiPreparation.Prepare([], () => { }, syncRequired: true, synchronize: () => synchronized++);
             Equal(1, synchronized);
         });
-        Run("撮影後は設定の同じ画面と編集中の値を再表示する", () =>
+        Run("撮影後は設定の同じ画面と編集中の値を再表示する", () => VerifySettingsRestored(false));
+        Run("アニメーション抑止に失敗しても、非表示と描画同期後に設定を復元する", () => VerifySettingsRestored(true));
+
+        void VerifySettingsRestored(bool simulateTransitionFailure)
         {
             using var settings = new SettingsForm(new AppSettings { ShowSelectionGuide = false, ShowPointerGuide = true }, _ => null, _ => { });
             settings.Show(); settings.SelectCategory("基本");
@@ -80,12 +87,24 @@ internal static partial class Program
             using var previous = new Form(); previous.Show();
             using var hidden = new Form();
             Form[] visible = [settings, previous];
-            CaptureUiPreparation.Prepare(visible, () => { }, disableTransitions: _ => { }, synchronize: () => { });
+            var attempted = new List<Form>();
+            int syncs = 0;
+            CaptureUiPreparation.Prepare(visible, () => { }, disableTransitions: window =>
+            {
+                attempted.Add(window);
+                if (simulateTransitionFailure && window == settings) throw TransitionFailure();
+            }, synchronize: () =>
+            {
+                Check(!settings.Visible && !previous.Visible, "表示中に同期した");
+                syncs++;
+            });
+            Check(attempted.SequenceEqual(visible), "抑止に失敗した後のウィンドウを処理していない");
+            Equal(1, syncs);
             Check(!settings.Visible && !previous.Visible, "撮影準備で表示中のウィンドウが隠れない");
             CaptureUiPreparation.RestoreAll(visible);
             Check(previous.Visible && !hidden.Visible, "撮影前の表示状態を復元できない");
             Check(settings.Visible && settings.Handle == originalHandle && !pointer.Checked && screen.Checked, "同じ設定画面を復元できない");
-        });
+        }
         Run("撮影中に変えた設定を同期し、設定画面の編集中の値を残す", () =>
         {
             AppSettings? saved = null;
@@ -183,23 +202,52 @@ internal static partial class Program
         return 1;
     }
 
+    private static IOException TransitionFailure() =>
+        new("撮影前の画面アニメーションを抑止できません。", new UnauthorizedAccessException());
+
     // 明示実行専用。自作画面の範囲だけを取得し、隠した設定画面の残像を検査する。
-    private static int PreparationSmoke(string directory)
+    private static int PreparationSmoke(string directory, bool simulateTransitionFailure)
     {
         directory = Path.GetFullPath(directory); Directory.CreateDirectory(directory);
-        Rectangle work = Screen.PrimaryScreen!.WorkingArea;
-        var target = new Rectangle(work.Right - Math.Min(work.Width, 980), work.Top, Math.Min(work.Width, 980), Math.Min(work.Height, 1000));
         using var pattern = new Form { Text = WindowTitle.Create("撮影準備検証"), FormBorderStyle = FormBorderStyle.None,
-            StartPosition = FormStartPosition.Manual, Bounds = target, BackColor = Color.FromArgb(37, 79, 131), TopMost = true };
+            StartPosition = FormStartPosition.Manual, BackColor = Color.FromArgb(37, 79, 131), TopMost = true };
         Exception? failure = null;
+
+        int CountDifferentPixels(Rectangle target, string? imagePath = null)
+        {
+            using var image = InstantCapture.Take(target);
+            int different = 0;
+            int expected = pattern.BackColor.ToArgb();
+            for (int y = 0; y < image.Height; y++)
+                for (int x = 0; x < image.Width; x++)
+                    if (image.GetPixel(x, y).ToArgb() != expected) different++;
+            if (different == 0 && imagePath is not null) image.Save(imagePath, ImageFormat.Png);
+            return different;
+        }
+
+        Rectangle FindFixtureTarget()
+        {
+            foreach (var screen in Screen.AllScreens.OrderBy(screen => screen.Primary))
+            {
+                Rectangle work = screen.WorkingArea;
+                pattern.Bounds = new Rectangle(work.Left + work.Width / 3, work.Top + work.Height / 3, 280, 220);
+                pattern.Refresh();
+                CaptureNative.SynchronizeDesktop();
+                var sample = new Rectangle(pattern.PointToScreen(new Point(40, 60)), new Size(120, 80));
+                if (CountDifferentPixels(sample) == 0) return sample;
+            }
+            throw new IOException("検証用の背景が見える撮影範囲を確保できません。");
+        }
+
         pattern.Shown += (_, _) => pattern.BeginInvoke((Action)(() =>
         {
             try
             {
-                pattern.Update();
+                Rectangle target = FindFixtureTarget();
                 int commits = 0;
                 using var settings = new SettingsForm(new AppSettings(), _ => { commits++; return null; }, _ => { });
-                settings.StartPosition = FormStartPosition.Manual; settings.Location = new Point(target.Left + 12, target.Top + 12);
+                settings.StartPosition = FormStartPosition.Manual;
+                settings.Location = new Point(target.Left - 24, target.Top - 48);
                 settings.TopMost = true; settings.Show();
                 var tabs = (TabControl)settings.Controls.Find("SettingsTabs", true).Single();
                 var results = new List<string>();
@@ -208,23 +256,21 @@ internal static partial class Program
                     settings.SelectCategory(page.Text);
                     int before = commits;
                     ChangePreparationSetting(settings, page.Text);
-                    if (page.Text != "コマンド生成") Check(commits > before, $"{page.Text}の設定変更を保存できない");
+                    if (page.Text is not ("コマンド生成" or "バージョン情報"))
+                        Check(commits > before, $"{page.Text}の設定変更を保存できない");
                     settings.Update();
                     CaptureNative.SynchronizeDesktop();
+                    Check(settings.Bounds.Contains(target) && CountDifferentPixels(target) > 0, "撮影前に設定画面が検証範囲を覆っていない");
                     var windows = Application.OpenForms.OfType<Form>().Where(form => form != pattern);
                     Form[] toRestore = CaptureUiPreparation.VisibleTopLevelWindows(windows);
                     Check(toRestore.SequenceEqual([settings]), "設定の親ウィンドウ以外が復元対象に含まれた");
                     try
                     {
-                        CaptureUiPreparation.Prepare(windows, () => { });
-                        using var image = InstantCapture.Take(target);
-                        int different = 0;
-                        int expected = pattern.BackColor.ToArgb();
-                        for (int y = 2; y < image.Height - 2; y++)
-                            for (int x = 2; x < image.Width - 2; x++)
-                                if (image.GetPixel(x, y).ToArgb() != expected) different++;
+                        CaptureUiPreparation.Prepare(windows, () => { },
+                            disableTransitions: simulateTransitionFailure ? _ => throw TransitionFailure() : null);
+                        string? imagePath = page.Text == "入力プリセット" ? Path.Combine(directory, "after-hide.png") : null;
+                        int different = CountDifferentPixels(target, imagePath);
                         if (different != 0) throw new IOException($"設定画面の残像等が{different}画素あります。");
-                        if (page.Text == "入力プリセット") image.Save(Path.Combine(directory, "after-hide.png"), ImageFormat.Png);
                     }
                     catch (IOException ex) { throw new IOException($"{page.Text}の撮影準備: {ex.Message}", ex); }
                     finally { CaptureUiPreparation.RestoreAll(toRestore); }

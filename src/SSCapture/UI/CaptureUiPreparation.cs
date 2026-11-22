@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using SSCapture.Capture;
 
 namespace SSCapture.UI;
@@ -26,21 +27,29 @@ internal static class CaptureUiPreparation
         Action<Form>? disableTransitions = null, Action? synchronize = null)
     {
         var visible = VisibleTopLevelWindows(windows);
+        foreach (Form window in visible)
+        {
+            if (!IsVisibleTopLevelWindow(window)) continue;
+            try { (disableTransitions ?? CaptureNative.DisableTransitions)(window); }
+            catch (IOException ex)
+            {
+                // Hiding the window and draining the compositor are still required.
+                int result = ex.InnerException?.HResult ?? ex.HResult;
+                Trace.TraceWarning($"撮影前の画面アニメーション抑止に失敗しました。{window.GetType().Name} HRESULT=0x{result:X8}");
+            }
+        }
+
         try
         {
             foreach (Form window in visible)
-                if (IsVisibleTopLevelWindow(window))
-                    (disableTransitions ?? CaptureNative.DisableTransitions)(window);
+                if (IsVisibleTopLevelWindow(window)) window.Hide();
+            hideExtras();
+            if (visible.Any(IsVisibleTopLevelWindow)) throw new IOException("撮影前に自分の画面を非表示にできません。");
+            if (syncRequired || visible.Length > 0) (synchronize ?? CaptureNative.SynchronizeDesktop)();
         }
         catch (IOException ex)
         {
             throw new IOException(ex.Message + " 設定画面を閉じてください。その後、もう一度撮影してください。", ex);
         }
-
-        foreach (Form window in visible)
-            if (IsVisibleTopLevelWindow(window)) window.Hide();
-        hideExtras();
-        if (visible.Any(IsVisibleTopLevelWindow)) throw new IOException("撮影前に自分の画面を非表示にできません。");
-        if (syncRequired || visible.Length > 0) (synchronize ?? CaptureNative.SynchronizeDesktop)();
     }
 }

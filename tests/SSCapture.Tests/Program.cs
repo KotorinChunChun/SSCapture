@@ -80,7 +80,7 @@ internal static partial class Program
             catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
         }
         if (args.Contains("--clipboard-color-smoke")) return ClipboardColorSmoke(args[1], args[2]);
-        if (args.Contains("--preparation-smoke")) return PreparationSmoke(args[1]);
+        if (args.Contains("--preparation-smoke")) return PreparationSmoke(args[1], args.Contains("--simulate-transition-failure"));
         if (args.Contains("--context-smoke")) return ContextSmoke(args[1]);
         if (args.Contains("--upgrade-ui-preview")) return UpgradeUiPreview(args[1]);
         if (args.Contains("--capture-menu-preview")) return CaptureMenuPreview(args[1]);
