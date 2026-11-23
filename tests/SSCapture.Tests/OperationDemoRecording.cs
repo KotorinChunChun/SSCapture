@@ -19,8 +19,13 @@ internal static partial class Program
     private static Rectangle RecordArea => Screen.PrimaryScreen!.WorkingArea is var area ? area with { Width = area.Width & ~1, Height = area.Height & ~1 } : default;
     private const string DemoMarkerFile = "operation-demo.marker";
     private const int DemoSnapPixels = 100;
+    private const int DemoMagnifierZoom = 20;
 
-    private sealed record DemoScene(string Id, string Title, string Detail, Func<DemoDriver, DemoStage, Task> Run);
+    private sealed record DemoScene(string Id, string Title, string Detail, Func<DemoDriver, DemoStage, Task> Run, DemoLayout Layout = DemoLayout.Normal);
+
+    // 架空のデスクトップの窓の配置。Dialogは申請フォームに確認ダイアログ（所有ウィンドウ）を重ね、
+    // Overlapは資料の窓を申請フォームの右側に重ねて手前に置く。
+    private enum DemoLayout { Normal, Dialog, Overlap }
 
     internal static int OperationDemoRecording(string[] args)
     {
@@ -110,9 +115,11 @@ internal static partial class Program
             ShareCapturePresentation = true,
             PlayCaptureSound = false,
             KeepHistory = false,
-            // 既定の20pxでは吸着やグリッドの変化が動画で見分けにくいため、100pxにする。動画の説明にもこの値を書く。
+            // 既定の20pxではグリッドの変化が動画で見分けにくいため、100pxにする。動画の説明にもこの値を書く。
+            // ウィンドウスナップ距離は既定の20pxのままにする。100pxにすると、窓の辺より先にモニターの端へ吸着してしまう。
             GridStepPixels = DemoSnapPixels,
-            SnapDistancePixels = DemoSnapPixels
+            // 拡大鏡は既定の10倍だと動画では小さいため、倍の20倍にする（表示の切り替えは中クリック）。
+            MagnifierZoom = DemoMagnifierZoom
         }).ApplyDefaults();
         new SettingsStore(settingsPath).Save(settings);
     }
@@ -171,35 +178,54 @@ internal static partial class Program
             d.LeftUp();
             await d.FinishAsync();
         }),
-        new("win-window", "撮影前に Win を押しながらクリック", "ポインタの下のウィンドウを撮影", async (d, s) =>
+        new("win-window", "撮影前に Win を押しながらクリック", "ポインタの下のウィンドウを、手前のダイアログごと撮影", async (d, s) =>
         {
+            Rectangle entry = s.Entry.Bounds;
             await d.StartAsync(new Point(1000, 900));
             await d.WaitAsync(600);
             d.Press(DemoKey.Win);
             await d.WaitAsync(400);
-            await d.MoveAsync(s.Center(s.Entry) + new Size(0, 80), 700);
-            await d.WaitAsync(1000);
-            await d.MoveAsync(s.Center(s.Report), 800);
+            await d.MoveAsync(new Point(entry.Left + 160, entry.Bottom - 120), 800);
+            await d.WaitAsync(1200);
+            await d.MoveAsync(s.Center(s.Dialog.Bounds), 800);
+            await d.WaitAsync(1200);
+            await d.MoveAsync(new Point(entry.Left + 180, entry.Bottom - 100), 800);
             await d.WaitAsync(1000);
             await d.ClickAsync();
             await d.FinishAsync();
-        }),
+        }, DemoLayout.Dialog),
+        new("win-back-window", "撮影前に Win を押しながらクリック（重なった窓）", "後ろにあるウィンドウを前に出して、隠れた部分も含めて撮影", async (d, s) =>
+        {
+            Rectangle entry = s.Entry.Bounds, report = s.Report.Bounds;
+            await d.StartAsync(new Point(500, 920));
+            await d.WaitAsync(600);
+            d.Press(DemoKey.Win);
+            await d.WaitAsync(400);
+            await d.MoveAsync(s.Center(report), 900);
+            await d.WaitAsync(1200);
+            // 申請フォームの見えている左側を指すと、隠れていた右側も含めて手前に表示される。
+            await d.MoveAsync(new Point(entry.Left + 220, entry.Top + 260), 1000);
+            await d.WaitAsync(1600);
+            await d.ClickAsync();
+            await d.FinishAsync();
+        }, DemoLayout.Overlap),
         new("win-windows-drag", "撮影前に Win を押しながら左ドラッグ", "通ったウィンドウを位置と重なり順のまま1枚にまとめる", async (d, s) =>
         {
+            Rectangle entry = s.Entry.Bounds;
             await d.StartAsync(new Point(1000, 900));
             await d.WaitAsync(600);
             d.Press(DemoKey.Win);
             await d.WaitAsync(400);
-            await d.MoveAsync(s.Center(s.Entry) + new Size(-150, 120), 700);
+            await d.MoveAsync(new Point(entry.Left + 160, entry.Bottom - 120), 800);
             await d.WaitAsync(900);
             d.LeftDown();
-            await d.MoveAsync(s.Center(s.Entry) + new Size(200, 60), 700);
+            await d.MoveAsync(s.Center(s.Dialog.Bounds), 800);
             await d.MoveAsync(s.Center(s.Report) + new Size(-100, 40), 900);
             await d.MoveAsync(s.Center(s.Report) + new Size(80, 0), 500);
             await d.WaitAsync(900);
             d.LeftUp();
             await d.FinishAsync();
-        }),
+        }, DemoLayout.Dialog),
         new("drag-win-aspect", "ドラッグ中に Win", "押したときの縦横比を保ったまま広げる", async (d, s) =>
         {
             Rectangle chart = s.Chart;
@@ -305,66 +331,101 @@ internal static partial class Program
             d.LeftUp();
             await d.FinishAsync();
         }),
-        new("drag-alt-snap", "Alt を押しながらドラッグ", $"近くのウィンドウやモニターの端に吸着させる（この動画では{DemoSnapPixels}px以内）", async (d, s) =>
+        new("drag-alt-snap", "Alt を押しながらドラッグ", "ウィンドウの角に吸着させて、ウィンドウをぴったり囲う", async (d, s) =>
+        {
+            await SnapToWindowAsync(d, s.Report.Bounds);
+            await d.WaitAsync(800);
+            d.LeftUp();
+            await d.FinishAsync();
+        }),
+        new("snap-lock-height", "ウィンドウに吸着してから Alt＋Shift", "ウィンドウの高さのまま幅だけ縮め、左側の部分をきれいに撮影", async (d, s) =>
         {
             Rectangle report = s.Report.Bounds;
-            Point nearStart = report.Location + new Size(-55, -45);
-            Point nearEnd = new(report.Right + 55, report.Bottom + 45);
-            await d.StartAsync(nearStart + new Size(-80, -60));
-            await d.WaitAsync(600);
-            await d.MoveAsync(nearStart, 600);
-            d.Press(DemoKey.Alt);
-            await d.WaitAsync(900);
-            d.LeftDown();
-            await d.MoveAsync(new Point(report.Right - 220, report.Bottom - 170), 900);
-            await d.WaitAsync(400);
-            await d.MoveAsync(nearEnd, 1100);
+            await SnapToWindowAsync(d, report);
+            d.Press(DemoKey.Shift);
+            await d.WaitAsync(700);
+            // 高さは固定されるため、ポインタを上下に動かしても変わらない。
+            await d.MoveAsync(new Point(report.Left + 420, report.Bottom - 120), 1400);
+            await d.WaitAsync(500);
+            await d.MoveAsync(new Point(report.Left + 400, report.Bottom + 40), 800);
             await d.WaitAsync(1000);
-            // Altを離すと吸着が外れて終点がポインタの位置に戻り、押し直すと再び吸着する。
-            d.Release(DemoKey.Alt);
-            await d.WaitAsync(1200);
-            d.Press(DemoKey.Alt);
-            await d.WaitAsync(1200);
             d.LeftUp();
             await d.FinishAsync();
         }),
-        new("magnifier", "拡大鏡で画素単位に合わせる", "中クリックで拡大鏡を表示し、矢印キーで1pxずつ動かす", async (d, s) =>
+        new("snap-lock-width", "ウィンドウに吸着してから Alt＋Ctrl", "ウィンドウの幅のまま高さだけ縮め、上側の部分をきれいに撮影", async (d, s) =>
         {
-            Rectangle bar = s.Bar(3), next = s.Bar(4);
-            await d.StartAsync(bar.Location + new Size(-7, -6));
+            Rectangle report = s.Report.Bounds;
+            await SnapToWindowAsync(d, report);
+            d.Press(DemoKey.Ctrl);
+            await d.WaitAsync(700);
+            // 幅は固定されるため、ポインタを左右に動かしても変わらない。
+            await d.MoveAsync(new Point(report.Right - 160, report.Top + 330), 1400);
+            await d.WaitAsync(500);
+            await d.MoveAsync(new Point(report.Right + 50, report.Top + 350), 800);
+            await d.WaitAsync(1000);
+            d.LeftUp();
+            await d.FinishAsync();
+        }),
+        // グラフはアンチエイリアスで境界がぼやけるため、境界がはっきりしたボタンの角に合わせる。
+        new("magnifier", "拡大鏡と十字キーで画素単位に合わせる", $"中クリックで拡大鏡を表示し、十字キーで1pxずつ微調整（この動画では拡大倍率{DemoMagnifierZoom}倍）", async (d, s) =>
+        {
+            // ボタンの角は丸く薄いため、1pxの枠線がはっきりした複数行の入力欄の角に合わせる。
+            Rectangle notes = s.Notes.Parent!.RectangleToScreen(s.Notes.Bounds);
+            // 拡大鏡は10×10画素を映すため、最初から入力欄の角が拡大鏡に入る位置（角から4px以内）で始める。
+            await d.StartAsync(notes.Location + new Size(-4, -3));
             await d.WaitAsync(700);
             await d.MiddleClickAsync();
+            await d.WaitAsync(1000);
+            await d.TapKeyAsync(0x27, "→", 4, 450, extended: true, movesPointer: true);
+            await d.TapKeyAsync(0x28, "↓", 3, 450, extended: true, movesPointer: true);
             await d.WaitAsync(900);
-            await d.TapKeyAsync(0x27, "→", 7, 260, extended: true, movesPointer: true);
-            await d.TapKeyAsync(0x28, "↓", 6, 260, extended: true, movesPointer: true);
-            await d.WaitAsync(700);
             d.LeftDown();
-            Point end = new(next.Right, s.Chart.Bottom);
-            await d.MoveAsync(end + new Size(6, 5), 1200);
-            await d.WaitAsync(500);
-            await d.TapKeyAsync(0x25, "←", 6, 260, extended: true, movesPointer: true);
-            await d.TapKeyAsync(0x26, "↑", 5, 260, extended: true, movesPointer: true);
-            await d.WaitAsync(900);
+            Point end = new(notes.Right - 1, notes.Bottom - 1);
+            await d.MoveAsync(end + new Size(4, 3), 1300);
+            await d.WaitAsync(700);
+            await d.TapKeyAsync(0x25, "←", 4, 450, extended: true, movesPointer: true);
+            await d.TapKeyAsync(0x26, "↑", 3, 450, extended: true, movesPointer: true);
+            await d.WaitAsync(1000);
             d.LeftUp();
             await d.FinishAsync();
         }),
-        new("fixed-size", "固定サイズの枠を置いて撮影", "入力プリセット「固定サイズ 960×540」の枠を動かして撮影", async (d, s) =>
+        new("fixed-size", "固定サイズの枠を置いて撮影", "入力プリセット「固定サイズ 960×540」の枠を動かし、Spaceで基点を四隅に切り替える", async (d, s) =>
         {
             await d.StartAsync(new Point(150, 240), "--capture-preset", "--input-preset", "initial-input-fixed");
             await d.WaitAsync(800);
             // Shift＋矢印（10px移動）は、Shiftを押している間はモニター全体の選択表示になって枠が見えなくなるため、この動画では使わない。
-            await d.MoveAsync(new Point(330, 300), 1000);
+            // 枠の右下の基点が画面右下の操作ガイドに重ならないよう、左上寄りに置く。
+            await d.MoveAsync(new Point(320, 260), 1000);
             await d.WaitAsync(600);
-            await d.MoveAsync(new Point(380, 330), 800);
+            await d.MoveAsync(new Point(220, 160), 800);
             await d.WaitAsync(700);
-            // Spaceで基点を右上へ移す。もう一度押すと右下になり、画面右下の操作ガイドに重なってクリックが届かない。
-            await d.TapKeyAsync(0x20, "Space", 1, 1200, movesPointer: true);
+            // 既定ではSpaceで左上→右上→右下→左下→左上と移る。枠はそのままで、ポインタだけが次の基点へ移る。
+            await d.TapKeyAsync(0x20, "Space", 4, 1100, movesPointer: true);
             await d.WheelAsync(12, 90);
             await d.WaitAsync(1000);
             await d.ClickAsync();
             await d.FinishAsync();
         })
     ];
+
+    // Altを押しながら窓の左上の角のすぐ外で押し、右下の角のすぐ外までドラッグして、窓をぴったり囲う。
+    // 角から離れた位置で始めると、近くにある別の窓の辺やモニターの端に吸着してしまうため、
+    // 窓の見えている枠から既定のスナップ距離（20px）以内で押して離す。窓の左右と下には約7pxの見えない枠がある。
+    // 左ボタンとAltを押したまま戻る。
+    private static async Task SnapToWindowAsync(DemoDriver d, Rectangle window)
+    {
+        await d.StartAsync(window.Location + new Size(-90, -70));
+        await d.WaitAsync(600);
+        d.Press(DemoKey.Alt);
+        await d.WaitAsync(500);
+        await d.MoveAsync(window.Location + new Size(-6, -6), 1100);
+        await d.WaitAsync(900);
+        d.LeftDown();
+        await d.MoveAsync(new Point(window.Right - 260, window.Bottom - 200), 900);
+        await d.WaitAsync(300);
+        await d.MoveAsync(new Point(window.Right + 4, window.Bottom + 4), 1300);
+        await d.WaitAsync(1000);
+    }
 
     private enum DemoKey : byte { Shift = 0x10, Ctrl = 0x11, Alt = 0x12, Win = 0x5B }
 
@@ -373,7 +434,10 @@ internal static partial class Program
     // 全画面の架空のデスクトップ。録画中は前面に置き、利用者の窓を隠す。
     private sealed class DemoStage : IDisposable
     {
-        internal readonly Form Backdrop, Entry, Report;
+        internal readonly Form Backdrop, Entry, Report, Dialog;
+        private static readonly Rectangle EntryBounds = new(140, 220, 860, 600);
+        private static readonly Rectangle ReportBounds = new(1130, 250, 700, 540);
+        private static readonly Rectangle OverlapReportBounds = new(720, 300, 700, 540);
         internal readonly TextBox NameBox, Notes;
         internal readonly ComboBox Department;
         internal readonly CheckBox Notify, Attach;
@@ -398,7 +462,7 @@ internal static partial class Program
 
             Entry = new Form
             {
-                Text = "申請フォーム（サンプル） - 業務アプリ", StartPosition = FormStartPosition.Manual, Bounds = new Rectangle(140, 220, 860, 600),
+                Text = "申請フォーム（サンプル） - 業務アプリ", StartPosition = FormStartPosition.Manual, Bounds = EntryBounds,
                 FormBorderStyle = FormBorderStyle.FixedSingle, MaximizeBox = false, MinimizeBox = false, ShowInTaskbar = false, BackColor = Color.White
             };
             Label Caption(string text, int y) => new() { Text = text, AutoSize = true, Location = new Point(36, y + 4) };
@@ -415,12 +479,24 @@ internal static partial class Program
 
             Report = new Form
             {
-                Text = "週次レポート（サンプル） - 資料ビューアー", StartPosition = FormStartPosition.Manual, Bounds = new Rectangle(1130, 250, 700, 540),
+                Text = "週次レポート（サンプル） - 資料ビューアー", StartPosition = FormStartPosition.Manual, Bounds = ReportBounds,
                 FormBorderStyle = FormBorderStyle.FixedSingle, MaximizeBox = false, MinimizeBox = false, ShowInTaskbar = false, BackColor = Color.White
             };
             chartPanel = new DoubleBufferedPanel { Dock = DockStyle.Fill, BackColor = Color.White };
             chartPanel.Paint += (_, e) => PaintReport(e.Graphics, chartPanel.ClientSize);
             Report.Controls.Add(chartPanel);
+
+            // 申請フォームが所有する確認ダイアログ。ウィンドウ撮影で、所有ウィンドウごと撮れることを見せる。
+            Dialog = new Form
+            {
+                Text = "送信の確認", StartPosition = FormStartPosition.Manual,
+                Bounds = new Rectangle(EntryBounds.Left + 250, EntryBounds.Top + 170, 420, 210),
+                FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, ShowInTaskbar = false, BackColor = Color.White
+            };
+            Dialog.Controls.AddRange([
+                new Label { Text = "この内容で申請を送信しますか？", AutoSize = true, Location = new Point(30, 34) },
+                new Button { Text = "はい", Location = new Point(150, 104), Size = new Size(110, 40) },
+                new Button { Text = "いいえ", Location = new Point(272, 104), Size = new Size(110, 40) }]);
 
             Backdrop.Load += (_, _) =>
             {
@@ -429,19 +505,25 @@ internal static partial class Program
             };
         }
 
+        // 場面ごとの窓の配置にする。背景を前面にした後に呼ぶ。
+        internal void Arrange(DemoLayout layout)
+        {
+            Report.Bounds = layout == DemoLayout.Overlap ? OverlapReportBounds : ReportBounds;
+            if (layout == DemoLayout.Dialog)
+            {
+                if (!Dialog.Visible) Dialog.Show(Entry);
+            }
+            else Dialog.Hide();
+            if (layout == DemoLayout.Overlap) Report.BringToFront();
+            Backdrop.Update();
+        }
+
         // 資料の窓のグラフの範囲（画面座標）。
         internal Rectangle Chart => chartPanel.RectangleToScreen(ChartArea(chartPanel.ClientSize));
 
-        internal Point Center(Control control) => Center(control.RectangleToScreen(control.ClientRectangle));
+        internal Point Center(Control control) => Center(Bounds(control));
+        internal Rectangle Bounds(Control control) => control.RectangleToScreen(control.ClientRectangle);
         internal Point Center(Rectangle rectangle) => new(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Height / 2);
-
-        // グラフの棒の範囲（画面座標）。拡大鏡の場面で、棒の角を狙うために使う。
-        internal Rectangle Bar(int index)
-        {
-            Rectangle chart = ChartArea(chartPanel.ClientSize);
-            int slot = chart.Width / BarValues.Length;
-            return chartPanel.RectangleToScreen(new Rectangle(chart.Left + index * slot + slot / 4, chart.Bottom - BarValues[index], slot / 2, BarValues[index]));
-        }
 
         private static readonly int[] BarValues = [120, 180, 150, 230, 260, 210];
 
@@ -474,6 +556,7 @@ internal static partial class Program
 
         public void Dispose()
         {
+            Dialog.Dispose();
             Report.Dispose();
             Entry.Dispose();
             Backdrop.Dispose();
@@ -505,6 +588,12 @@ internal static partial class Program
         private long pointerMovedByApplicationUntil;
         // 移動の通知は送った直後とは限らず、少し前に送った位置で届くことがあるため、直近の位置を覚えておく。
         private readonly Queue<Point> sentPositions = new();
+
+        private void Remember(Point point)
+        {
+            sentPositions.Enqueue(point);
+            while (sentPositions.Count > 16) sentPositions.Dequeue();
+        }
 
         private bool SentRecently(Point point) =>
             sentPositions.Any(sent => Math.Abs(sent.X - point.X) <= 1 && Math.Abs(sent.Y - point.Y) <= 1);
@@ -546,6 +635,8 @@ internal static partial class Program
             labels.Clear();
             pointerMovedByApplicationUntil = 0;
             stage.Backdrop.Activate();
+            stage.Arrange(scene.Layout);
+            await Task.Delay(300);
             await StartRecorderAsync(Raw(scene));
             try { await scene.Run(this, stage); }
             catch
@@ -614,8 +705,7 @@ internal static partial class Program
                 double t = step / (double)steps;
                 double eased = t < 0.5 ? 2 * t * t : 1 - Math.Pow(-2 * t + 2, 2) / 2;
                 cursor = new Point(from.X + (int)Math.Round((target.X - from.X) * eased), from.Y + (int)Math.Round((target.Y - from.Y) * eased));
-                sentPositions.Enqueue(cursor);
-                while (sentPositions.Count > 16) sentPositions.Dequeue();
+                Remember(cursor);
                 if (!SetCursorPos(cursor.X, cursor.Y)) throw new InvalidOperationException("ポインタを移動できません。");
                 if (steps > 1) await Task.Delay(16);
                 Check();
@@ -669,12 +759,20 @@ internal static partial class Program
                 keybd_event(key, 0, extended ? 1u : 0u, 0);
                 await Task.Delay(40);
                 keybd_event(key, 0, 2u | (extended ? 1u : 0u), 0);
+                if (movesPointer)
+                {
+                    // SSCaptureが動かした先の位置も、遅れて届く通知と照合できるように覚える。
+                    await Task.Delay(60);
+                    GetCursorPos(out Point moved);
+                    Remember(moved);
+                }
                 await WaitAsync(interval);
             }
             if (movesPointer)
             {
                 await Task.Delay(150);
                 GetCursorPos(out cursor);
+                Remember(cursor);
             }
             await WaitAsync(250);
             Mark();
