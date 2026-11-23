@@ -57,7 +57,7 @@ Windows 11用の汎用スクリーンショットツールです。Windows標準
 
 新規設定では、入力4件（囲った範囲＋960×540・800×600・320×240pxの固定サイズ）と出力5件を用意します。静止画のクリップボードには画像・テキスト（OCR）・表（TSV）・ファイルパスのいずれかを指定できます。Win＋Shift＋Tでテキスト、Win＋Shift＋Lで表を撮影します。既定は矩形選択＋クリップボードのみで、画面固定ON・カーソルOFF・白余白なし・減色なし・グリッドOFF。暗転は基本設定で初期ONです。既存の編集済みプリセットやスナップ設定は保持します。
 
-現在の公開版はv0.1.11 (beta) です。KotorinToysのツール一覧からもインストール・更新できます。[公開版のダウンロード](https://github.com/KotorinChunChun/SSCapture/releases/tag/v0.1.11)・[リリースノート](docs/releases/v0.1.11.md)
+現在の公開版はv0.1.12 (beta) です。KotorinToysのツール一覧からもインストール・更新できます。[公開版のダウンロード](https://github.com/KotorinChunChun/SSCapture/releases/tag/v0.1.12)・[リリースノート](docs/releases/v0.1.12.md)
 
 ## Windows標準のSnipping Toolとの違い
 

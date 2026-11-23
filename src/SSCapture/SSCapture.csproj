@@ -13,7 +13,7 @@
     <InformationalVersion>0.1.12</InformationalVersion>
     <Version>0.1.12</Version>
     <ProductChannel>beta</ProductChannel>
-    <ProductUpdatedOn>2026-11-23</ProductUpdatedOn>
+    <ProductUpdatedOn>2026-11-24</ProductUpdatedOn>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AppHostDotNetSearch Condition="'$(SelfContained)' != 'true'">AppRelative;Global</AppHostDotNetSearch>
