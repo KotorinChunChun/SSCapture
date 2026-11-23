@@ -34,6 +34,23 @@ internal static partial class Program
                 && LaunchBehavior.ShowSettings([LaunchBehavior.AdministratorHandoff]), "昇格後の設定表示を失った");
         }));
 
+        Run("KotorinToysの管理起動と自動起動は単体の権限設定を適用せず、設定要求を出さない", () => WithServiceDirectory(directory =>
+        {
+            var store = new SettingsStore(Path.Combine(directory, "settings.json"));
+            foreach (bool administrator in new[] { false, true })
+            {
+                store.Save(new AppSettings { RunAsAdministrator = administrator });
+                var persisted = store.Load(out _);
+                foreach (string origin in new[] { "host_manual", "via_kotorintoys", "direct_task" })
+                {
+                    string[] arguments = ["--startup", "--launch-origin", origin];
+                    Check(!LaunchBehavior.ShowSettings(arguments), origin + " が起動画面を出した");
+                    Check(!LaunchBehavior.RequestsAdministrator(arguments, persisted.RunAsAdministrator), origin + " が昇格を要求した");
+                    Check(!LaunchBehavior.IsAdministratorHandoff(arguments), origin + " が昇格の引き継ぎとして扱われた");
+                }
+            }
+        }));
+
         Run("管理者起動の要求はWindowsに委ね、取消と失敗を通常起動へ返す", () =>
         {
             const string exe = @"C:\Development path\SSCapture.exe";
