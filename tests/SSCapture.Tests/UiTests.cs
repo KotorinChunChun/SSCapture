@@ -48,8 +48,8 @@ internal static partial class Program
             var magnifier = Box("ShowMagnifier");
             var dots = (ComboBox)form.Controls.Find("MagnifierDotCount", true).Single();
             var zoom = (NumericUpDown)form.Controls.Find("MagnifierZoom", true).Single();
-            Equal(10, (int)dots.SelectedItem!);
-            Equal(10m, zoom.Value);
+            Equal(20, (int)dots.SelectedItem!);
+            Equal(4m, zoom.Value);
             Check(dots.Items.Cast<int>().SequenceEqual(Enumerable.Range(1, 16).Select(value => value * 2)),
                 "拡大鏡のドット数に奇数が含まれる");
             Check(dots.Top >= magnifier.Bottom && zoom.Top >= dots.Bottom && zoom.Parent!.ClientRectangle.Contains(zoom.Bounds),
@@ -76,6 +76,8 @@ internal static partial class Program
             using var tooltip = new ToolTip();
             SettingsHelp.Apply(form, tooltip);
             string Tip(Control control) => tooltip.GetToolTip(control) ?? "";
+            Check(Tip(dots).Contains("20×20ドット", StringComparison.Ordinal) && Tip(zoom).Contains("既定は4倍", StringComparison.Ordinal),
+                "拡大鏡の初期値がツールチップにない");
             Check(Tip(Box("RunAsAdministrator")).Contains("管理者権限で動いているアプリを操作中にも撮影ショートカット", StringComparison.Ordinal),
                 "管理者実行の用途がツールチップにない");
             Check(Tip(Box("LimitToStartingMonitor")).Contains("既定はShift", StringComparison.Ordinal), "モニター移動の案内がない");

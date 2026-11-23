@@ -27,8 +27,8 @@ internal static partial class Program
             Equal(20m, Field<NumericUpDown>(form, "GridStepPixels").Value);
             Equal(0, Field<ComboBox>(form, "SelectionGuideDisplay").SelectedIndex);
             Check(!Field<CheckBox>(form, "ShowMagnifier").Checked, "拡大鏡が初期値に戻っていない");
-            Equal(10, (int)Field<ComboBox>(form, "MagnifierDotCount").SelectedItem!);
-            Equal(10m, Field<NumericUpDown>(form, "MagnifierZoom").Value);
+            Equal(20, (int)Field<ComboBox>(form, "MagnifierDotCount").SelectedItem!);
+            Equal(4m, Field<NumericUpDown>(form, "MagnifierZoom").Value);
             Check(!Field<CheckBox>(form, "KeepHistory").Checked, "履歴の設定が変わった");
             Equal(17m, Field<NumericUpDown>(form, "NotificationDurationSeconds").Value);
             var basic = Field<TabControl>(form, "SettingsTabs").TabPages[0];

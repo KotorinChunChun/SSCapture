@@ -116,15 +116,24 @@ internal static partial class Program
                     frame.SetPixel(inside.X - source.X, inside.Y - source.Y, Color.Lime);
                 }
         });
-        Run("旧設定の拡大鏡には10×10ドットと10倍を補い奇数・範囲外は拒否する", () => WithServiceDirectory(directory =>
+        Run("拡大鏡の初期値は20×20ドット・4倍で、保存済みの値を保持する", () => WithServiceDirectory(directory =>
         {
             string path = Path.Combine(directory, "settings.json");
-            File.WriteAllText(path, """{"ShowMagnifier":true}""");
             var store = new SettingsStore(path);
-            AppSettings old = store.Load(out string? warning);
+            var fresh = store.Load(out string? warning);
             Equal<string?>(null, warning);
-            Equal(10, old.MagnifierDotCount);
-            Equal(10, old.MagnifierZoom);
+            Equal(20, fresh.MagnifierDotCount);
+            Equal(4, fresh.MagnifierZoom);
+            File.WriteAllText(path, """{"ShowMagnifier":true}""");
+            AppSettings old = store.Load(out warning);
+            Equal<string?>(null, warning);
+            Equal(20, old.MagnifierDotCount);
+            Equal(4, old.MagnifierZoom);
+            store.Save(old with { MagnifierDotCount = 10, MagnifierZoom = 10 });
+            var previousDefaults = store.Load(out warning);
+            Equal<string?>(null, warning);
+            Equal(10, previousDefaults.MagnifierDotCount);
+            Equal(10, previousDefaults.MagnifierZoom);
             store.Save(old with { MagnifierDotCount = 18, MagnifierZoom = 7 });
             AppSettings current = store.Load(out warning);
             Equal<string?>(null, warning);

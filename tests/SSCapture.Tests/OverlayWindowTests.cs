@@ -84,15 +84,18 @@ internal static partial class Program
             Point pointer = new(frameBounds.Right - 1, frameBounds.Top);
             Rectangle lens = CaptureMagnifier.Place(viewport, new(pointer.X - frameBounds.X, pointer.Y - frameBounds.Y));
             Check(viewport.Contains(lens), "拡大鏡が画面からはみ出した");
+            Equal(new Size(80, 80), lens.Size);
             using var source = new Bitmap(frameBounds.Width, frameBounds.Height);
             using var destination = new Bitmap(viewport.Width, viewport.Height);
             source.SetPixel(319, 0, Color.Lime);
             source.SetPixel(318, 0, Color.Red);
             using (Graphics graphics = Graphics.FromImage(destination))
                 CaptureMagnifier.Draw(graphics, lens, source, frameBounds, pointer);
-            Equal(Color.Lime.ToArgb(), destination.GetPixel(lens.Left + 55, lens.Top + 55).ToArgb());
-            Equal(Color.Red.ToArgb(), destination.GetPixel(lens.Left + 45, lens.Top + 55).ToArgb());
-            Equal(Color.DimGray.ToArgb(), destination.GetPixel(lens.Left + 55, lens.Top + 45).ToArgb());
+            int x = lens.Left + lens.Width / 2, y = lens.Top + lens.Height / 2;
+            int halfPixel = CaptureMagnifier.DefaultZoom / 2;
+            Equal(Color.Lime.ToArgb(), destination.GetPixel(x + halfPixel, y + halfPixel).ToArgb());
+            Equal(Color.Red.ToArgb(), destination.GetPixel(x - halfPixel, y + halfPixel).ToArgb());
+            Equal(Color.DimGray.ToArgb(), destination.GetPixel(x + halfPixel, y - halfPixel).ToArgb());
         });
         Run("暗転OFFでは左押下中もドラッグ中も暗転しない", () =>
         {

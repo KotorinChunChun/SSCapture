@@ -4,10 +4,10 @@ namespace SSCapture.Capture;
 
 internal static class CaptureMagnifier
 {
-    internal const int DefaultDotCount = 10;
+    internal const int DefaultDotCount = 20;
     internal const int MinDotCount = 2;
     internal const int MaxDotCount = 32;
-    internal const int DefaultZoom = 10;
+    internal const int DefaultZoom = 4;
     internal const int MinZoom = 2;
     internal const int MaxZoom = 20;
     private const int Offset = 24;

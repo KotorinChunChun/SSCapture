@@ -121,7 +121,8 @@ internal static partial class Program
             // 既定の20pxではグリッドの変化が動画で見分けにくいため、100pxにする。動画の説明にもこの値を書く。
             // ウィンドウスナップ距離は既定の20pxのままにする。100pxにすると、窓の辺より先にモニターの端へ吸着してしまう。
             GridStepPixels = DemoSnapPixels,
-            // 拡大鏡は既定の10倍だと動画では小さいため、倍の20倍にする（表示の切り替えは中クリック）。
+            // 動画用の拡大鏡は10×10画素を20倍で表示する（表示の切り替えは中クリック）。
+            MagnifierDotCount = 10,
             MagnifierZoom = DemoMagnifierZoom,
             // スクロール撮影の場面で --input-preset に指定する入力プリセット。
             SavedRegions = [.. settings.SavedRegions, SavedRegion.FromSettings("スクロール撮影（録画用）", new AppSettings() with { DefaultMode = CaptureMode.Scroll })
