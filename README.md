@@ -4,7 +4,7 @@ Windows 11用の汎用スクリーンショットツールです。Windows標準
 
 インストールは [Releases](https://github.com/KotorinChunChun/SSCapture/releases) から行ってください。
 
-**[操作風景動画](docs/operation-videos.md)**：撮影中にCtrl・Shift・Alt・Winを押したときの動きを、12本の動画で確認できます。
+**[操作風景動画](docs/operation-videos.md)**：修飾キー・拡大鏡・固定サイズなど、撮影中の操作の動きを動画で確認できます。
 
 ![SSCaptureの機能紹介。撮影対象の切り替え、範囲の微調整、タイマーと外部アプリ連携](docs/images/readme/sscapture-infographic.png)
 
@@ -26,7 +26,7 @@ Windows 11用の汎用スクリーンショットツールです。Windows標準
 
 ![撮影前にCtrlを押しながら入力欄からボタンまでドラッグし、通過したコントロールを元の位置関係のまま1枚にまとめる動画](docs/images/operations/ctrl-controls-drag.gif)
 
-**[操作風景動画（全12本）を見る](docs/operation-videos.md)**
+**[操作風景動画をすべて見る](docs/operation-videos.md)**
 
 ### アウトプット
 

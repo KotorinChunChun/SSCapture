@@ -18,6 +18,7 @@ internal static partial class Program
     // タスクバーを映さないよう、主モニターの作業領域だけを録画する。幅と高さはH.264のため偶数にそろえる。
     private static Rectangle RecordArea => Screen.PrimaryScreen!.WorkingArea is var area ? area with { Width = area.Width & ~1, Height = area.Height & ~1 } : default;
     private const string DemoMarkerFile = "operation-demo.marker";
+    private const int DemoSnapPixels = 100;
 
     private sealed record DemoScene(string Id, string Title, string Detail, Func<DemoDriver, DemoStage, Task> Run);
 
@@ -108,7 +109,10 @@ internal static partial class Program
                 .Select(preset => preset with { IsDefault = preset.BuiltInKey == "initial-output-file", SaveDirectory = captures }).ToArray(),
             ShareCapturePresentation = true,
             PlayCaptureSound = false,
-            KeepHistory = false
+            KeepHistory = false,
+            // 既定の20pxでは吸着やグリッドの変化が動画で見分けにくいため、100pxにする。動画の説明にもこの値を書く。
+            GridStepPixels = DemoSnapPixels,
+            SnapDistancePixels = DemoSnapPixels
         }).ApplyDefaults();
         new SettingsStore(settingsPath).Save(settings);
     }
@@ -139,6 +143,19 @@ internal static partial class Program
             await d.ClickAsync();
             await d.FinishAsync();
         }),
+        new("ctrl-wheel-margin", "撮影前に Ctrl を押しながらホイール回転", "撮影対象の余白を広げる（1目盛りで四辺1pxずつ）", async (d, s) =>
+        {
+            await d.StartAsync(s.Center(s.Send) + new Size(-140, -70));
+            await d.WaitAsync(600);
+            d.Press(DemoKey.Ctrl);
+            await d.WaitAsync(400);
+            await d.MoveAsync(s.Center(s.Send), 600);
+            await d.WaitAsync(900);
+            await d.WheelAsync(24, 70);
+            await d.WaitAsync(1200);
+            await d.ClickAsync();
+            await d.FinishAsync();
+        }),
         new("ctrl-controls-drag", "撮影前に Ctrl を押しながら左ドラッグ", "通ったコントロールを元の位置関係のまま1枚にまとめる", async (d, s) =>
         {
             await d.StartAsync(s.Center(s.NameBox) + new Size(-120, -60));
@@ -165,6 +182,22 @@ internal static partial class Program
             await d.MoveAsync(s.Center(s.Report), 800);
             await d.WaitAsync(1000);
             await d.ClickAsync();
+            await d.FinishAsync();
+        }),
+        new("win-windows-drag", "撮影前に Win を押しながら左ドラッグ", "通ったウィンドウを位置と重なり順のまま1枚にまとめる", async (d, s) =>
+        {
+            await d.StartAsync(new Point(1000, 900));
+            await d.WaitAsync(600);
+            d.Press(DemoKey.Win);
+            await d.WaitAsync(400);
+            await d.MoveAsync(s.Center(s.Entry) + new Size(-150, 120), 700);
+            await d.WaitAsync(900);
+            d.LeftDown();
+            await d.MoveAsync(s.Center(s.Entry) + new Size(200, 60), 700);
+            await d.MoveAsync(s.Center(s.Report) + new Size(-100, 40), 900);
+            await d.MoveAsync(s.Center(s.Report) + new Size(80, 0), 500);
+            await d.WaitAsync(900);
+            d.LeftUp();
             await d.FinishAsync();
         }),
         new("drag-win-aspect", "ドラッグ中に Win", "押したときの縦横比を保ったまま広げる", async (d, s) =>
@@ -251,52 +284,84 @@ internal static partial class Program
             d.LeftUp();
             await d.FinishAsync();
         }),
-        new("drag-win-alt-grid", "ドラッグ中に Win＋Alt", "幅と高さを20px単位のグリッドにそろえる", async (d, s) =>
+        new("drag-win-alt-grid", "ドラッグ中に Win＋Alt", $"幅と高さをグリッド間隔（この動画では{DemoSnapPixels}px）にそろえる", async (d, s) =>
         {
             Rectangle chart = s.Chart;
             Point start = chart.Location + new Size(7, 5);
             await d.StartAsync(start);
             await d.WaitAsync(600);
             d.LeftDown();
-            await d.MoveAsync(start + new Size(213, 117), 600);
-            await d.WaitAsync(300);
+            await d.MoveAsync(start + new Size(173, 117), 700);
+            await d.WaitAsync(500);
             d.Press(DemoKey.Alt, DemoKey.Win);
-            await d.WaitAsync(500);
-            await d.MoveAsync(start + new Size(chart.Width - 30, chart.Height - 40), 1800);
-            await d.WaitAsync(400);
-            await d.MoveAsync(start + new Size(chart.Width / 2, chart.Height + 10), 1500);
             await d.WaitAsync(700);
-            d.LeftUp();
-            await d.FinishAsync();
-        }),
-        new("drag-alt-snap", "Alt を押しながらドラッグ", "ウィンドウやモニターの端に吸着させる", async (d, s) =>
-        {
-            Rectangle report = s.Report.Bounds;
-            await d.StartAsync(report.Location + new Size(-60, -50));
-            await d.WaitAsync(600);
-            d.Press(DemoKey.Alt);
-            await d.WaitAsync(400);
-            await d.MoveAsync(report.Location + new Size(-12, -9), 800);
+            // グリッドの段差が見えるよう、ゆっくり大きく動かす。
+            await d.MoveAsync(start + new Size(chart.Width - 20, chart.Height - 30), 2600);
             await d.WaitAsync(500);
-            d.LeftDown();
-            await d.MoveAsync(new Point(report.Right - 120, report.Bottom - 90), 900);
-            await d.MoveAsync(new Point(report.Right + 13, report.Bottom + 11), 900);
-            await d.WaitAsync(1000);
+            await d.MoveAsync(start + new Size(250, 160), 2200);
+            await d.WaitAsync(500);
+            await d.MoveAsync(start + new Size(390, 250), 1500);
+            await d.WaitAsync(800);
             d.LeftUp();
             await d.FinishAsync();
         }),
-        new("alt-tap-snap", "撮影前に Alt を短く押す", "今回の撮影だけウィンドウスナップを ON／OFF", async (d, s) =>
+        new("drag-alt-snap", "Alt を押しながらドラッグ", $"近くのウィンドウやモニターの端に吸着させる（この動画では{DemoSnapPixels}px以内）", async (d, s) =>
         {
             Rectangle report = s.Report.Bounds;
-            await d.StartAsync(report.Location + new Size(-12, -9));
-            await d.WaitAsync(800);
-            await d.TapAsync(DemoKey.Alt);
-            await d.WaitAsync(300);
+            Point nearStart = report.Location + new Size(-55, -45);
+            Point nearEnd = new(report.Right + 55, report.Bottom + 45);
+            await d.StartAsync(nearStart + new Size(-80, -60));
+            await d.WaitAsync(600);
+            await d.MoveAsync(nearStart, 600);
+            d.Press(DemoKey.Alt);
+            await d.WaitAsync(900);
             d.LeftDown();
-            await d.MoveAsync(new Point(report.Right - 120, report.Bottom - 90), 900);
-            await d.MoveAsync(new Point(report.Right + 13, report.Bottom + 11), 900);
+            await d.MoveAsync(new Point(report.Right - 220, report.Bottom - 170), 900);
+            await d.WaitAsync(400);
+            await d.MoveAsync(nearEnd, 1100);
             await d.WaitAsync(1000);
+            // Altを離すと吸着が外れて終点がポインタの位置に戻り、押し直すと再び吸着する。
+            d.Release(DemoKey.Alt);
+            await d.WaitAsync(1200);
+            d.Press(DemoKey.Alt);
+            await d.WaitAsync(1200);
             d.LeftUp();
+            await d.FinishAsync();
+        }),
+        new("magnifier", "拡大鏡で画素単位に合わせる", "中クリックで拡大鏡を表示し、矢印キーで1pxずつ動かす", async (d, s) =>
+        {
+            Rectangle bar = s.Bar(3), next = s.Bar(4);
+            await d.StartAsync(bar.Location + new Size(-7, -6));
+            await d.WaitAsync(700);
+            await d.MiddleClickAsync();
+            await d.WaitAsync(900);
+            await d.TapKeyAsync(0x27, "→", 7, 260, extended: true, movesPointer: true);
+            await d.TapKeyAsync(0x28, "↓", 6, 260, extended: true, movesPointer: true);
+            await d.WaitAsync(700);
+            d.LeftDown();
+            Point end = new(next.Right, s.Chart.Bottom);
+            await d.MoveAsync(end + new Size(6, 5), 1200);
+            await d.WaitAsync(500);
+            await d.TapKeyAsync(0x25, "←", 6, 260, extended: true, movesPointer: true);
+            await d.TapKeyAsync(0x26, "↑", 5, 260, extended: true, movesPointer: true);
+            await d.WaitAsync(900);
+            d.LeftUp();
+            await d.FinishAsync();
+        }),
+        new("fixed-size", "固定サイズの枠を置いて撮影", "入力プリセット「固定サイズ 960×540」の枠を動かして撮影", async (d, s) =>
+        {
+            await d.StartAsync(new Point(150, 240), "--capture-preset", "--input-preset", "initial-input-fixed");
+            await d.WaitAsync(800);
+            // Shift＋矢印（10px移動）は、Shiftを押している間はモニター全体の選択表示になって枠が見えなくなるため、この動画では使わない。
+            await d.MoveAsync(new Point(330, 300), 1000);
+            await d.WaitAsync(600);
+            await d.MoveAsync(new Point(380, 330), 800);
+            await d.WaitAsync(700);
+            // Spaceで基点を右上へ移す。もう一度押すと右下になり、画面右下の操作ガイドに重なってクリックが届かない。
+            await d.TapKeyAsync(0x20, "Space", 1, 1200, movesPointer: true);
+            await d.WheelAsync(12, 90);
+            await d.WaitAsync(1000);
+            await d.ClickAsync();
             await d.FinishAsync();
         })
     ];
@@ -370,6 +435,16 @@ internal static partial class Program
         internal Point Center(Control control) => Center(control.RectangleToScreen(control.ClientRectangle));
         internal Point Center(Rectangle rectangle) => new(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Height / 2);
 
+        // グラフの棒の範囲（画面座標）。拡大鏡の場面で、棒の角を狙うために使う。
+        internal Rectangle Bar(int index)
+        {
+            Rectangle chart = ChartArea(chartPanel.ClientSize);
+            int slot = chart.Width / BarValues.Length;
+            return chartPanel.RectangleToScreen(new Rectangle(chart.Left + index * slot + slot / 4, chart.Bottom - BarValues[index], slot / 2, BarValues[index]));
+        }
+
+        private static readonly int[] BarValues = [120, 180, 150, 230, 260, 210];
+
         private static Rectangle ChartArea(Size client) => new(60, 90, client.Width - 120, 300);
 
         private static void PaintReport(Graphics graphics, Size client)
@@ -385,7 +460,7 @@ internal static partial class Program
                 graphics.DrawLine(axis, chart.Left, chart.Bottom, chart.Right, chart.Bottom);
                 graphics.DrawLine(axis, chart.Left, chart.Top, chart.Left, chart.Bottom);
             }
-            int[] values = [120, 180, 150, 230, 260, 210];
+            int[] values = BarValues;
             string[] labels = ["月", "火", "水", "木", "金", "土"];
             int slot = chart.Width / values.Length;
             for (int i = 0; i < values.Length; i++)
@@ -427,6 +502,12 @@ internal static partial class Program
         private Process? recorder;
         private double sceneStart, sceneEnd;
         private Point cursor;
+        private long pointerMovedByApplicationUntil;
+        // 移動の通知は送った直後とは限らず、少し前に送った位置で届くことがあるため、直近の位置を覚えておく。
+        private readonly Queue<Point> sentPositions = new();
+
+        private bool SentRecently(Point point) =>
+            sentPositions.Any(sent => Math.Abs(sent.X - point.X) <= 1 && Math.Abs(sent.Y - point.Y) <= 1);
 
         internal DemoDriver(string app, string ffmpeg, string work)
         {
@@ -439,9 +520,11 @@ internal static partial class Program
             mouseHook = (code, message, data) =>
             {
                 // SetCursorPosによる移動は注入の印が付かないことがあるため、送った位置への移動は除く。
+                // 矢印キーやSpaceでSSCaptureがポインタを動かす間も、移動だけは除く。
                 if (code >= 0 && (Marshal.ReadInt32(data, 12) & 0x3) == 0
-                    && !(message == 0x0200 && Math.Abs(Marshal.ReadInt32(data, 0) - cursor.X) <= 1 && Math.Abs(Marshal.ReadInt32(data, 4) - cursor.Y) <= 1))
-                    physicalInput ??= $"マウスが操作されました（メッセージ 0x{message:x4}）。";
+                    && !(message == 0x0200 && Environment.TickCount64 < pointerMovedByApplicationUntil)
+                    && !(message == 0x0200 && SentRecently(new Point(Marshal.ReadInt32(data, 0), Marshal.ReadInt32(data, 4)))))
+                    physicalInput ??= $"マウスが操作されました（メッセージ 0x{message:x4}、位置 {Marshal.ReadInt32(data, 0)},{Marshal.ReadInt32(data, 4)}、送った位置 {cursor.X},{cursor.Y}）。";
                 return CallNextHookEx(0, code, message, data);
             };
             keyboardHook = (code, message, data) =>
@@ -461,6 +544,7 @@ internal static partial class Program
         {
             Console.WriteLine($"[{scene.Id}] {scene.Title}");
             labels.Clear();
+            pointerMovedByApplicationUntil = 0;
             stage.Backdrop.Activate();
             await StartRecorderAsync(Raw(scene));
             try { await scene.Run(this, stage); }
@@ -473,14 +557,15 @@ internal static partial class Program
             finally { await StopRecorderAsync(); }
         }
 
-        internal async Task StartAsync(Point pointer)
+        // 引数を省くと --capture-select（既定の入力プリセットの範囲選択）で起動する。
+        internal async Task StartAsync(Point pointer, params string[] arguments)
         {
             await MoveAsync(pointer, 0);
             await WaitAsync(500);
             sceneStart = clock.Elapsed.TotalSeconds;
             Mark();
             var start = new ProcessStartInfo(app) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-            start.ArgumentList.Add("--capture-select");
+            foreach (string argument in arguments.Length == 0 ? ["--capture-select"] : arguments) start.ArgumentList.Add(argument);
             capture = Process.Start(start) ?? throw new InvalidOperationException("SSCaptureを起動できません。");
             captureOutput = capture.StandardOutput.ReadToEndAsync();
             captureError = capture.StandardError.ReadToEndAsync();
@@ -529,6 +614,8 @@ internal static partial class Program
                 double t = step / (double)steps;
                 double eased = t < 0.5 ? 2 * t * t : 1 - Math.Pow(-2 * t + 2, 2) / 2;
                 cursor = new Point(from.X + (int)Math.Round((target.X - from.X) * eased), from.Y + (int)Math.Round((target.Y - from.Y) * eased));
+                sentPositions.Enqueue(cursor);
+                while (sentPositions.Count > 16) sentPositions.Dequeue();
                 if (!SetCursorPos(cursor.X, cursor.Y)) throw new InvalidOperationException("ポインタを移動できません。");
                 if (steps > 1) await Task.Delay(16);
                 Check();
@@ -557,15 +644,68 @@ internal static partial class Program
             Mark();
         }
 
-        // 短押しは一瞬で字幕が読めないため、離した後も「短押し」と1秒ほど表示する。
-        internal async Task TapAsync(DemoKey key)
+        // 撮影中に修飾キーを1つ離す。撮影画面が前面にあるため、単独で離してもメニューバー等は動かない。
+        internal void Release(params DemoKey[] released)
         {
             Check();
-            labels.Add((clock.Elapsed.TotalSeconds, $"{key}（短押し）"));
-            keybd_event((byte)key, 0, key == DemoKey.Win ? 1u : 0u, 0);
+            foreach (DemoKey key in released)
+            {
+                if (!keys.Remove(key)) continue;
+                keybd_event((byte)key, 0, 2u | (key == DemoKey.Win ? 1u : 0u), 0);
+                Thread.Sleep(30);
+            }
+            Mark();
+        }
+
+        // 矢印キーやSpaceを続けて押す。押している間は「Shift ＋ →」のように字幕に出す。
+        // SSCaptureが実際のポインタを動かすキーでは、その移動を利用者の操作と誤らないよう監視から外し、終わった位置を読み直す。
+        internal async Task TapKeyAsync(byte key, string name, int count, int interval, bool extended = false, bool movesPointer = false)
+        {
+            Check();
+            Mark(name);
+            for (int i = 0; i < count; i++)
+            {
+                if (movesPointer) pointerMovedByApplicationUntil = Environment.TickCount64 + interval + 400;
+                keybd_event(key, 0, extended ? 1u : 0u, 0);
+                await Task.Delay(40);
+                keybd_event(key, 0, 2u | (extended ? 1u : 0u), 0);
+                await WaitAsync(interval);
+            }
+            if (movesPointer)
+            {
+                await Task.Delay(150);
+                GetCursorPos(out cursor);
+            }
+            await WaitAsync(250);
+            Mark();
+        }
+
+        // ホイールを上へ1目盛りずつ回す。余白の調整ではSSCaptureがポインタを数px動かし、回し終えた後も動かすことがある。
+        // そのため場面の終わりまでポインタの移動は監視から外す（クリックとキーの監視は続ける）。
+        internal async Task WheelAsync(int notches, int interval)
+        {
+            Check();
+            Mark("ホイール↑");
+            pointerMovedByApplicationUntil = long.MaxValue;
+            for (int i = 0; i < notches; i++)
+            {
+                mouse_event(0x0800, 0, 0, 120, 0);
+                await WaitAsync(interval);
+            }
+            await Task.Delay(150);
+            GetCursorPos(out cursor);
+            await WaitAsync(400);
+            Mark();
+        }
+
+        internal async Task MiddleClickAsync()
+        {
+            Check();
+            Mark("中クリック");
+            mouse_event(0x0020, 0, 0, 0, 0);
             await Task.Delay(120);
-            keybd_event((byte)key, 0, 2u | (key == DemoKey.Win ? 1u : 0u), 0);
-            await WaitAsync(1000);
+            mouse_event(0x0040, 0, 0, 0, 0);
+            await WaitAsync(800);
             Mark();
         }
 
@@ -645,12 +785,13 @@ internal static partial class Program
             }
         }
 
-        private void Mark()
+        private void Mark(string? action = null)
         {
             var parts = new List<string>();
             foreach (DemoKey key in new[] { DemoKey.Ctrl, DemoKey.Shift, DemoKey.Alt, DemoKey.Win })
                 if (keys.Contains(key)) parts.Add(key.ToString());
             if (leftDown) parts.Add("左ボタン");
+            if (action is not null) parts.Add(action);
             labels.Add((clock.Elapsed.TotalSeconds, string.Join(" ＋ ", parts)));
         }
 
