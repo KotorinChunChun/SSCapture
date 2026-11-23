@@ -99,6 +99,7 @@ internal static class Program
                     warning = Services.LaunchBehavior.StartAsAdministrator(Path.Combine(AppContext.BaseDirectory, "SSCapture.exe"));
                     // The elevated child waits on the singleton until we release it.
                     if (warning is null) return;
+                    warning += " 通常権限で起動しました。";
                 }
                 using var context = new TrayApplicationContext(showSettings, store, settings, warning);
                 Application.ThreadException += (_, e) => context.HandleUnexpectedError(e.Exception);

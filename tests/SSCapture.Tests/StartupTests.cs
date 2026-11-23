@@ -50,9 +50,9 @@ internal static partial class Program
             }));
             Equal(1, calls);
             Check(LaunchBehavior.StartAsAdministrator(exe, _ => throw new System.ComponentModel.Win32Exception(1223))
-                ?.Contains("取り消された") == true, "UAC取消を報告しない");
+                ?.Contains("取り消されました") == true, "UAC取消を報告しない");
             Check(LaunchBehavior.StartAsAdministrator(exe, _ => throw new System.ComponentModel.Win32Exception(2))
-                ?.Contains("通常権限で起動") == true, "起動失敗を通常起動へ戻さない");
+                ?.Contains("起動できませんでした") == true, "起動失敗を報告しない");
             Check(LaunchBehavior.StartAsAdministrator(exe, _ => false) is not null, "起動結果がないのに成功した");
         });
 
@@ -78,6 +78,25 @@ internal static partial class Program
             Check(!check.Checked && apply.Enabled && saved.Count == 1, "初期化でOFFの下書きにならない");
             ApplySettingsPage(form, "基本");
             Check(saved.SequenceEqual([true, false]) && startup.Writes == 0, "OFFを保存できないか自動起動も変更された");
+        });
+
+        Run("適用済みの管理者実行だけを再起動でき、取消後も押し直せる", () =>
+        {
+            int restarts = 0;
+            using var form = new SettingsForm(new AppSettings(), _ => null, _ => { }, () => [],
+                startupRegistration: new FakeStartup(), restartAsAdministrator: () => { restarts++; return "模擬のUAC取消"; });
+            var toggle = (CheckBox)form.Controls.Find("RunAsAdministrator", true).Single();
+            var restart = form.Controls.Find("RestartAsAdministrator", true).Single();
+            Check(!restart.Enabled, "OFFのときに再起動できる");
+            toggle.Checked = true;
+            Check(!restart.Enabled, "適用していない設定で再起動できる");
+            ApplySettingsPage(form, "基本");
+            Check(restart.Enabled && form.Controls.Find("Status", true).Single().Text.Contains("再起動"), "再起動を案内しない");
+            RecordingClick(restart);
+            Equal(1, restarts);
+            Check(restart.Enabled && form.Controls.Find("Status", true).Single().Text.Contains("模擬のUAC取消"), "取消後に再試行できない");
+            toggle.Checked = false;
+            Check(!restart.Enabled, "OFFの下書きを無視して再起動できる");
         });
 
         Run("自動起動だけの変更は基本の適用で確定し、戻すと所有者の制限を守る", () =>

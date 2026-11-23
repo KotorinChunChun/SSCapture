@@ -9,6 +9,19 @@ namespace SSCapture;
 
 internal sealed partial class TrayApplicationContext
 {
+    private string? RestartAsAdministrator()
+    {
+        if (exiting || OperationPolicy.MustWaitToStop)
+            return "撮影・録画を完了またはキャンセルしてから再起動してください。";
+        if (!settings.RunAsAdministrator)
+            return "先に「管理者として実行」を適用してください。";
+
+        var error = LaunchBehavior.StartAsAdministrator(Path.Combine(AppContext.BaseDirectory, "SSCapture.exe"));
+        if (error is not null) return error;
+        ExitThread();
+        return null;
+    }
+
     protected override void ExitThreadCore()
     {
         if (OperationPolicy.MustWaitToStop)

@@ -30,15 +30,15 @@ internal static class LaunchBehavior
         request.ArgumentList.Add(AdministratorHandoff);
         try
         {
-            return (start ?? Launch)(request) ? null : "管理者として起動できなかったため、通常権限で起動しました。";
+            return (start ?? Launch)(request) ? null : "管理者として起動できませんでした。";
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
-            return "管理者としての起動が取り消されたため、通常権限で起動しました。";
+            return "管理者としての起動が取り消されました。";
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
-            return "管理者として起動できなかったため、通常権限で起動しました。 " + ex.Message;
+            return "管理者として起動できませんでした。 " + ex.Message;
         }
 
         static bool Launch(ProcessStartInfo request)

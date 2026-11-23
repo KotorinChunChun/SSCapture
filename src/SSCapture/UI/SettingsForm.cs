@@ -28,6 +28,7 @@ internal sealed partial class SettingsForm : Form
     private readonly Func<DateTimeOffset> now;
     private StatusMessage? statusMessage;
     private readonly Func<AppSettings, string?> save;
+    private readonly Func<string?>? restartAsAdministrator;
     private readonly CapturePresetEditor presetEditor;
     private readonly PresetCaptureShortcutEditor presetShortcutEditor;
     private readonly TabControl shortcutTabs;
@@ -50,7 +51,7 @@ internal sealed partial class SettingsForm : Form
         SavedRegion? lastRegion = null, Func<Size?, CaptureAnchor, Task<Rectangle?>>? selectInputRegion = null,
         Func<IReadOnlyList<DisplayLayout>>? regionDisplays = null, IStartupRegistration? startupRegistration = null,
         AppSettings? lastOutputSettings = null, Action<string>? exportSettings = null,
-        Func<AppSettings, string?>? importSettings = null)
+        Func<AppSettings, string?>? importSettings = null, Func<string?>? restartAsAdministrator = null)
     {
         settings = settings.UpdateDefaultProjections();
         settings = settings with
@@ -59,6 +60,7 @@ internal sealed partial class SettingsForm : Form
         };
         committed = settings;
         save = onSave;
+        this.restartAsAdministrator = restartAsAdministrator;
         this.now = now ?? (() => DateTimeOffset.Now);
         Text = WindowTitle.Create("設定");
         Name = "SettingsForm";

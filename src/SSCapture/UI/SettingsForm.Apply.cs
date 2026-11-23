@@ -24,6 +24,18 @@ internal sealed partial class SettingsForm
         var apply = MakeButton("適用", "ApplyPageSettings", ButtonRole.Primary);
         apply.Margin = new Padding(0, 4, 8, 4);
         actions.Controls.Add(apply);
+        Button? restart = null;
+        if (isBasic && restartAsAdministrator is { } restartApp)
+        {
+            restart = MakeButton("再起動", "RestartAsAdministrator");
+            restart.Margin = new Padding(0, 4, 8, 4);
+            restart.Click += (_, _) =>
+            {
+                if (restart.Enabled && restartApp() is { } error) SetStatus(error, true);
+            };
+            actions.Controls.Add(restart);
+            settingTips.SetToolTip(restart, "保存した設定を反映するため、Windowsの承認後にSSCaptureを管理者として再起動します。");
+        }
         var revert = AddRevertButton(actions, restoreDraft);
 
         bool applying = false;
@@ -31,6 +43,12 @@ internal sealed partial class SettingsForm
         {
             bool changed = !applying && (readDraft() != committed || isBasic && startupSettings.HasDraft);
             apply.Enabled = revert.Enabled = changed;
+            if (restart is not null)
+            {
+                bool canRestart = committed.RunAsAdministrator && readDraft().RunAsAdministrator;
+                restart.Visible = canRestart;
+                restart.Enabled = canRestart && !applying && !changed;
+            }
         }
         if (isBasic) startupSettings.DraftChanged += (_, _) => Refresh();
         apply.Click += async (_, _) =>
@@ -54,7 +72,11 @@ internal sealed partial class SettingsForm
                 string? startupError = startupChanged ? await startupSettings.ApplyDraftAsync() : null;
                 if (IsDisposed) return;
                 if (startupError is null)
-                    SetStatus(elevationChanged ? "設定を適用しました。起動権限は、トレイから終了した後の手動起動で反映されます。" : "設定を適用しました。");
+                    SetStatus(elevationChanged && restart is not null && next.RunAsAdministrator
+                        ? "設定を適用しました。「再起動」で管理者権限に切り替えられます。"
+                        : elevationChanged
+                            ? "設定を適用しました。起動権限は、トレイから終了した後の手動起動で反映されます。"
+                            : "設定を適用しました。");
                 else
                     SetStatus((settingsChanged ? "基本設定を保存しました。 " : "") + "自動起動を変更できませんでした。 " + startupError, true);
             }

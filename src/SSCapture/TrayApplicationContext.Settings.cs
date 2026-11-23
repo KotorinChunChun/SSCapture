@@ -22,7 +22,8 @@ internal sealed partial class TrayApplicationContext
             form = new SettingsForm(settings, SaveSettings, OpenFolder,
                 openHistory: ShowHistory, lastRegion: recipes.LastRegion, selectInputRegion: PickRegionAsync,
                 lastOutputSettings: recipes.Current?.Settings, exportSettings: path => SettingsTransfer.Export(path, settings),
-                importSettings: ImportSettings);
+                importSettings: ImportSettings,
+                restartAsAdministrator: LaunchBehavior.IsAdministrator() ? null : RestartAsAdministrator);
             form.FormClosed += (sender, _) => { if (ReferenceEquals(sender, form)) form = null; };
             form.SetStatus(lastStatus);
         }
