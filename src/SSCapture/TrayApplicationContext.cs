@@ -139,7 +139,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
             Post(ShowSettings);
         management = new(SettingsCommandLine.ManagementId, dispatcher, ShowSettings, ExitThread,
             () => OperationPolicy.MustWaitToStop ? "撮影・録画を完了またはキャンセルしてから終了してください。" : null,
-            importSettings: ImportFromManagement);
+            importSettings: ImportFromManagement, hotkeyBridgePid: () => hook?.HotkeyBridgePid);
     }
 
     private void Post(Action action)

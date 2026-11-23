@@ -22,7 +22,7 @@ internal sealed class HotkeyState
 
     // Preserve the original state-machine entry point and its Win+Shift+S behavior.
     internal HotkeyState(KeyboardModifiers initialModifiers = KeyboardModifiers.None, bool sInitiallyDown = false)
-        : this([new(HotkeyBinding.Parse("Win+Shift+S")!.Value, CaptureIntent.Screenshot)],
+        : this([new(new('S', HotkeyModifiers.Windows | HotkeyModifiers.Shift), CaptureIntent.Screenshot)],
             initialModifiers, sInitiallyDown ? [0x53] : []) { }
 
     internal HotkeyState(IReadOnlyList<HotkeyAssignment> assignments,
@@ -39,7 +39,7 @@ internal sealed class HotkeyState
     internal void SynchronizeModifiers(KeyboardModifiers current) => modifiers = current;
     internal bool IsTargetKey(int virtualKey) => bindings.ContainsKey(virtualKey);
 
-    internal HotkeyDecision Process(int virtualKey, bool isDown, bool enabled)
+    internal HotkeyDecision Process(int virtualKey, bool isDown, bool enabled, IReadOnlySet<HotkeyBinding>? bridgeBindings = null)
     {
         KeyboardModifiers modifier = virtualKey switch
         {
@@ -68,7 +68,7 @@ internal sealed class HotkeyState
             // release into a bare PrintScreen action when its modifiers were released.
             if (virtualKey == 0x2C && !wasDown && enabled)
             {
-                HotkeyAssignment? releaseIntent = Match(candidates);
+                HotkeyAssignment? releaseIntent = Match(candidates, bridgeBindings);
                 if (releaseIntent is HotkeyAssignment release) return new(true, true, release.Intent, release.DisplayNumber, release.RegionId, release.PresetKey);
             }
             return default;
@@ -76,16 +76,16 @@ internal sealed class HotkeyState
         if (down[virtualKey])
             return suppressedIntent[virtualKey] is HotkeyAssignment repeated ? new(true, false, repeated.Intent, repeated.DisplayNumber, repeated.RegionId, repeated.PresetKey) : default;
         down[virtualKey] = true;
-        HotkeyAssignment? matched = enabled ? Match(candidates) : null;
+        HotkeyAssignment? matched = enabled ? Match(candidates, bridgeBindings) : null;
         suppressedIntent[virtualKey] = matched;
         return matched is HotkeyAssignment capture ? new(true, true, capture.Intent, capture.DisplayNumber, capture.RegionId, capture.PresetKey) : default;
     }
 
-    private HotkeyAssignment? Match(HotkeyAssignment[] candidates)
+    private HotkeyAssignment? Match(HotkeyAssignment[] candidates, IReadOnlySet<HotkeyBinding>? bridgeBindings)
     {
         HotkeyModifiers current = HotkeyBinding.Normalize(modifiers);
         foreach (HotkeyAssignment candidate in candidates)
-            if (candidate.Binding.Modifiers == current) return candidate;
+            if (candidate.Binding.Modifiers == current && bridgeBindings?.Contains(candidate.Binding) != true) return candidate;
         return null;
     }
 }

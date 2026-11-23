@@ -1,9 +1,10 @@
+using System.Drawing;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 namespace SSCapture.Services;
 
-internal sealed class KeyboardHook : IDisposable
+internal sealed partial class KeyboardHook : IDisposable
 {
     private static readonly (int Key, KeyboardModifiers Modifier)[] ModifierKeys =
     [
@@ -23,22 +24,22 @@ internal sealed class KeyboardHook : IDisposable
     private nint hook;
     private int stopping;
     private int enabled = 1;
+    private IReadOnlySet<HotkeyBinding>? bridgeBindings;
 
-    public bool Enabled { get => Volatile.Read(ref enabled) != 0; set => Volatile.Write(ref enabled, value ? 1 : 0); }
-
-    public KeyboardHook(Action onCapture) : this(WrapLegacyCallback(onCapture), new AppSettings
+    public bool Enabled
     {
-        ScreenshotShortcut1 = "Win+Shift+S", ScreenshotShortcut2 = "",
-        RecordingShortcut1 = "", RecordingShortcut2 = "", InstantShortcuts = Enumerable.Repeat("", 10).ToArray()
-    }) { }
+        get => Volatile.Read(ref enabled) != 0;
+        set
+        {
+            Volatile.Write(ref enabled, value ? 1 : 0);
+            if (!value) CancelBridgeLease();
+        }
+    }
 
-    public KeyboardHook(Action<CaptureIntent> onCapture, AppSettings settings) : this(onCapture, settings, true) { }
-
-    public KeyboardHook(Action<CaptureIntent> onCapture, AppSettings settings, bool initiallyEnabled, Action<int>? onInstantCapture = null, Action<string>? onRegionCapture = null, Action<string>? onPresetCapture = null)
+    internal KeyboardHook(HotkeyAssignment[] assignments, Action<HotkeyDecision> onCapture, bool initiallyEnabled)
     {
         ArgumentNullException.ThrowIfNull(onCapture);
-        ArgumentNullException.ThrowIfNull(settings);
-        assignments = HotkeyBinding.ReadAssignments(settings);
+        this.assignments = assignments;
         Enabled = initiallyEnabled && assignments.Length > 0;
         callback = HandleKeyboard;
         dispatchCapture = intent =>
@@ -48,11 +49,7 @@ internal sealed class KeyboardHook : IDisposable
             // the process from a native callback or ThreadPool work item.
             try
             {
-                var decision = (HotkeyDecision)intent!;
-                if (decision.PresetKey is { } key) onPresetCapture?.Invoke(key);
-                else if (decision.RegionId is { } id) onRegionCapture?.Invoke(id);
-                else if (decision.DisplayNumber > 0) onInstantCapture?.Invoke(decision.DisplayNumber);
-                else onCapture(decision.Intent);
+                onCapture((HotkeyDecision)intent!);
             }
             catch (Exception) { }
         };
@@ -68,12 +65,6 @@ internal sealed class KeyboardHook : IDisposable
             Dispose();
             throw new InvalidOperationException("ショートカット監視を開始できませんでした。", startupError);
         }
-    }
-
-    private static Action<CaptureIntent> WrapLegacyCallback(Action onCapture)
-    {
-        ArgumentNullException.ThrowIfNull(onCapture);
-        return _ => onCapture();
     }
 
     private void MessageLoop()
@@ -117,7 +108,7 @@ internal sealed class KeyboardHook : IDisposable
                 // A lock/unlock or an earlier hook may hide modifier releases. The
                 // current event is a target key, so prior modifier state is valid.
                 if (state.IsTargetKey(virtualKey)) state.SynchronizeModifiers(ReadModifiers());
-                HotkeyDecision decision = state.Process(virtualKey, isDown, Enabled);
+                HotkeyDecision decision = state.Process(virtualKey, isDown, Enabled, Volatile.Read(ref bridgeBindings));
                 if (decision.Capture) ThreadPool.QueueUserWorkItem(dispatchCapture, decision);
                 if (decision.Suppress) return 1;
             }
@@ -136,10 +127,17 @@ internal sealed class KeyboardHook : IDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref stopping, 1) != 0) return;
+        DisposeBridge();
         if (threadId != 0) PostThreadMessage(threadId, 0x0012, 0, 0);
         if (Thread.CurrentThread != thread && thread.IsAlive) thread.Join(TimeSpan.FromSeconds(2));
         // Keep the startup event alive if a timed-out startup thread is still unwinding.
     }
+
+    internal void SetBridgeBindings(IReadOnlySet<HotkeyBinding>? bindings) => Volatile.Write(ref bridgeBindings, bindings);
+    internal void DispatchBridgeBinding(HotkeyAssignment assignment) => dispatchCapture(new HotkeyDecision(false, true, assignment.Intent,
+        assignment.DisplayNumber, assignment.RegionId, assignment.PresetKey));
+    partial void CancelBridgeLease();
+    partial void DisposeBridge();
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Message { public nint Window; public uint Id; public nuint WParam; public nint LParam; public uint Time; public Point Position; public uint Private; }

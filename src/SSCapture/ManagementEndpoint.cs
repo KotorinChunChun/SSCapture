@@ -25,7 +25,8 @@ internal sealed class ManagementEndpoint : IDisposable
     }
 
     public ManagementEndpoint(string id, Control dispatcher, Action show, Action stop,
-        Func<string?>? stopBlockReason = null, Func<object?>? shortcuts = null, Func<JsonElement, string?>? importSettings = null)
+        Func<string?>? stopBlockReason = null, Func<object?>? shortcuts = null, Func<JsonElement, string?>? importSettings = null,
+        Func<int?>? hotkeyBridgePid = null)
     {
         _ = dispatcher.Handle;
         _ = Task.Run(async () =>
@@ -63,6 +64,7 @@ internal sealed class ManagementEndpoint : IDisposable
                     var result = "completed";
                     var detail = "";
                     object? keyState = null;
+                    int? bridgePid = null;
                     bool stopAccepted = false;
                     var applied = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     dispatcher.BeginInvoke(new Action(() =>
@@ -93,7 +95,8 @@ internal sealed class ManagementEndpoint : IDisposable
                                 else if (importSettings(settings) is { } error)
                                 { result = "failed"; detail = error; }
                             }
-                            else if (command != "status") { result = "unsupported"; detail = "未対応の操作です。"; }
+                            else if (command == "status") bridgePid = hotkeyBridgePid?.Invoke();
+                            else { result = "unsupported"; detail = "未対応の操作です。"; }
                             applied.TrySetResult(true);
                         }
                         catch (Exception) { result = "failed"; detail = "UI操作を完了できませんでした。"; applied.TrySetResult(false); }
@@ -106,7 +109,7 @@ internal sealed class ManagementEndpoint : IDisposable
                     await writer.WriteLineAsync(JsonSerializer.Serialize(new {
                         protocolVersion = 2, requestId, pid = Environment.ProcessId, ready = uiReady,
                         version = version == null ? null : $"{version.Major}.{version.Minor}.{version.Build}",
-                        launchOrigin = LaunchOrigin, capabilities, result, detail, shortcuts = keyState
+                        launchOrigin = LaunchOrigin, capabilities, result, detail, shortcuts = keyState, hotkeyBridgePid = bridgePid
                     }));
                     // 終了要求の受理を返してから、既存の正常終了へ渡す。完了はクライアントがプロセスで確認する。
                     if (stopAccepted && !dispatcher.IsDisposed) dispatcher.BeginInvoke(stop);

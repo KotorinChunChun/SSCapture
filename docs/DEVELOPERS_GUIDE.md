@@ -146,6 +146,16 @@ pwsh -File scripts/package.ps1
 
 同梱ライセンスはNAudio、実際に使用した.NET Runtime Pack、Inno Setupから取得します。Inno Setup用の`.iss`は日本語を正しく扱うためUTF-8 BOM付きで保存します。
 
+### 管理者用撮影キー補助の検証ビルド
+
+Visual Studio Build ToolsのC++ツールチェーン、Windows SDK、MdVisualizerと共通の開発者署名を使います。署名済みのNative AOT単体EXEと照合用の目録を、版別ログの新しいフォルダに出力します。
+
+```powershell
+pwsh -File scripts/build-hotkey-bridge.ps1 -SigningModule ../MdVisualizer/scripts/MsixSigning.psm1
+```
+
+検証用ビルドに続く工程は、補助の署名者・SHA-256の照合、管理者だけが更新できる `%ProgramFiles%\KotorinToys\SSCaptureHotkeyBridge` への配置、KotorinToysによる専用予約です。予約は同じユーザーの対話セッション、引数 `--startup`、作業フォルダは保護された配置先に固定します。通常権限のSSCaptureの管理 `status` に出る `hotkeyBridgePid` が実行中の補助と一致すると、撮影キーの受付が準備できたと判断できます。
+
 
 ## READMEの撮影
 
