@@ -160,7 +160,7 @@ pwsh -File scripts/package.ps1
 [使い方の「修飾キーの操作の動画」](usage.md#修飾キーの操作の動画)のGIFは、実際のマウス・キー入力と画面録画で作ります。**実行中はPCを操作できない**ため、利用者が指示したときだけ実行します。主モニターが1920×1080（左上0,0）で、`ffmpeg.exe`がPATHにあることが条件です。常駐中のSSCaptureとその設定に触れないよう、録画専用のフォルダへ本体をビルドし、その隣の`data/settings.json`をこのコマンドが作ります（撮影操作の共有表示ON、効果音OFF、作業フォルダへのファイル保存）。目印のない既存の設定は上書きしません。
 
 ```powershell
-$run = 'dev/history/v0.1.12/logs/operation-demo'
+$run = 'dev/history/v0.1.11/logs/operation-demo'
 pwsh -c ". ./scripts/common.ps1; Invoke-Dotnet build src/SSCapture/SSCapture.csproj -c Release -p:OutputPath=$run/app/ --nologo"
 pwsh -c ". ./scripts/common.ps1; Invoke-Dotnet build tests/SSCapture.Tests/SSCapture.Tests.csproj -c Release -p:OutputPath=$run/tests/ --nologo"
 .tools/dotnet/dotnet.exe "$run/tests/SSCapture.Tests.dll" --operation-demo-recording "$run/work" "$run/app/SSCapture.exe" docs/images/operations
