@@ -38,7 +38,9 @@ function Assert-PayloadLinks([string]$Root) {
 
 function Get-ManagedDocumentImages {
     @(
-        'docs/images/sscapture-infographic.png'
+        'docs/images/readme/sscapture-infographic.png'
+        'docs/images/readme/flow-input.png'
+        'docs/images/readme/flow-output.png'
         'docs/images/readme/capture-complete.png'
         'docs/images/readme/capture-scene-drag.png'
         'docs/images/readme/capture-scene-two-clicks.png'

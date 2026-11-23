@@ -4,7 +4,7 @@ Windows 11用の汎用スクリーンショットツールです。Windows標準
 
 インストールは [Releases](https://github.com/KotorinChunChun/SSCapture/releases) から行ってください。
 
-![SSCaptureの機能紹介。撮影対象の切り替え、範囲の微調整、タイマーと外部アプリ連携](docs/images/sscapture-infographic.png)
+![SSCaptureの機能紹介。撮影対象の切り替え、範囲の微調整、タイマーと外部アプリ連携](docs/images/readme/sscapture-infographic.png)
 
 ![資料のグラフを矩形で囲んでいる途中の撮影画面。選択範囲の外が暗くなり、ポインタ横に座標と寸法、その近くに拡大鏡、画面右下に操作ガイドが表示されている](docs/images/readme/capture-scene-drag.png)
 
@@ -18,31 +18,13 @@ Windows 11用の汎用スクリーンショットツールです。Windows標準
 
 ドラッグすることで複数モニター、複数ウィンドウ、複数コントロールの撮影なども柔軟に選択できます。
 
-```mermaid
-flowchart TB
-    area["任意範囲撮影（Altで境界にスナップ）"] --> output["クリップボード／ファイル保存"]
-    monitor["Shiftでモニター撮影"] --> output
-    window["Winでウィンドウ撮影（子ウィンドウ対応）"] --> output
-    ctrl["Ctrlでコントロール撮影"] --> output
-    size["固定サイズ撮影"] --> output
-    position["固定位置とサイズで撮影"] --> output
-    repeat["直前と同じ範囲・対象物を再撮影"] --> output
-```
+![インプット。範囲、モニター、ウィンドウ、コントロールを選び、ドラッグで複数を指定できます。固定枠と再撮影も使えます。出力はクリップボード、ファイル保存、通知です。](docs/images/readme/flow-input.png)
 
 ### アウトプット
 
 画像編集に関わる機能は、それに特化したツールを使って欲しいという思いもあり、敢えて実装していません。代わりに、かなり柔軟に他のツールへ作業が引き継げるような工夫をいくつも行っています。
 
-```mermaid
-flowchart TB
-    clipboard["クリップボード"] -->|Ctrl＋V| document["資料へ貼り付け"]
-    clipboard -->|Ctrl＋V・連携ツール使用| folder["開いているフォルダへ画像を保存"]
-    file["ファイル保存"] --> save["指定フォルダに保存"]
-    file --> manual["画像付き手順書を作成"]
-    file --> openFolder["通知のボタンで保存先を開く"]
-    notice["撮影通知"] -->|サムネイルをダブルクリック| openEditor["画像編集アプリで開く"]
-    notice -->|サムネイルをドラッグ| drop["フォルダ・アプリへドロップ"]
-```
+![アウトプット。クリップボードの画像はCtrl＋Vで資料へ貼り付けます。指定フォルダにファイルを保存できます。撮影通知から外部アプリで開いたり、フォルダやアプリへ画像をドラッグしたりできます。](docs/images/readme/flow-output.png)
 
 出力方法と保存先は出力プリセットで指定します。[おすすめ連携ツール](#おすすめ連携ツール)・[用途別の操作例](docs/usage.md#用途別の操作例)
 
