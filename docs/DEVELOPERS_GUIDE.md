@@ -157,6 +157,21 @@ pwsh -File scripts/package.ps1
 .tools/dotnet/dotnet.exe tests/SSCapture.Tests/bin/Release/net10.0-windows10.0.19041.0/SSCapture.Tests.dll --capture-scene-gallery docs/images/readme
 ```
 
+[使い方の「修飾キーの操作の動画」](usage.md#修飾キーの操作の動画)のGIFは、実際のマウス・キー入力と画面録画で作ります。**実行中はPCを操作できない**ため、利用者が指示したときだけ実行します。主モニターが1920×1080（左上0,0）で、`ffmpeg.exe`がPATHにあることが条件です。常駐中のSSCaptureとその設定に触れないよう、録画専用のフォルダへ本体をビルドし、その隣の`data/settings.json`をこのコマンドが作ります（撮影操作の共有表示ON、効果音OFF、作業フォルダへのファイル保存）。目印のない既存の設定は上書きしません。
+
+```powershell
+$run = 'dev/history/v0.1.12/logs/operation-demo'
+pwsh -c ". ./scripts/common.ps1; Invoke-Dotnet build src/SSCapture/SSCapture.csproj -c Release -p:OutputPath=$run/app/ --nologo"
+pwsh -c ". ./scripts/common.ps1; Invoke-Dotnet build tests/SSCapture.Tests/SSCapture.Tests.csproj -c Release -p:OutputPath=$run/tests/ --nologo"
+.tools/dotnet/dotnet.exe "$run/tests/SSCapture.Tests.dll" --operation-demo-recording "$run/work" "$run/app/SSCapture.exe" docs/images/operations
+```
+
+- 架空のデスクトップ（壁紙、申請フォーム、資料の窓）を全画面に出し、`SSCapture.exe --capture-select`を場面ごとに起動して操作します。撮影画面は画面取得から除外されているため、共有表示を`gdigrab`で録画します。タスクバーは録画範囲（作業領域）から外します。
+- 場面IDを末尾に並べると、その場面だけを録り直します（例: `ctrl-control alt-tap-snap`）。全12場面で約5分かかります。
+- 録画中に実際のマウス・キー操作を検出するか、対象外の窓が前面に出ると、押したままのキーを離して中止します（終了コード3）。SSCaptureが撮影せずに終了した場合も失敗にします。
+- 字幕付きのMP4と元の録画は作業フォルダ（Git除外）に残ります。GIFは掲載前に内容を目視で確認します。
+- GIFはインストーラーに同梱しません。同梱する`docs/usage.md`では、`scripts/managed-payload.ps1`の`Copy-ManagedDocuments`が、同梱しない画像への参照を公開版のGitHubへのリンクに置き換えます。
+
 同梱するREADMEや利用ガイドの画像を追加・改名したときは、`scripts/managed-payload.ps1` の `Get-ManagedDocumentImages` も更新します。登録した画像はインストール先でも参照できます。
 
 先に`pwsh -File scripts/test.ps1 -Suite Preset`と同じ`-Suite Menu`を実行します。専用のビルド出力を使い、設定はSSCapture.exeの`--ui-preview`、範囲と撮影メニューはSSCapture.Tests.exeの`--capture-menu-preview <専用出力先>`で開きます。後者は合成画像を使い、実画面取得とクリップボード操作をしません。

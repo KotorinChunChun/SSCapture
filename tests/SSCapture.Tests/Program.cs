@@ -28,6 +28,7 @@ internal static partial class Program
         if (args.FirstOrDefault() == "--notification-drag-preview") return NotificationDragPreview(args[1]);
         if (args.FirstOrDefault() == "--store-editor-open") return OpenStoreEditorSmoke(args);
         if (args.FirstOrDefault() == "--recording-desktop-smoke") return RunRecordingDesktopSmoke(args);
+        if (args.FirstOrDefault() == "--operation-demo-recording") return OperationDemoRecording(args);
         if (args.SequenceEqual(["--notification-tests"]))
         {
             NotificationUpgradeTests(); NotificationActionTests(); NotificationPresentationTests(); NotificationDragTests(); FeedbackTests(); CaptureTargetTests();

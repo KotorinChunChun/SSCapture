@@ -233,6 +233,71 @@ KotorinToysと同じユーザー別の設定・所有タスクを使います。
 | トレイ左ダブルクリック | 設定を開く |
 | トレイ右クリック | 撮影モード、モニターを即時撮影、録画、前回の撮影結果を表示、設定など |
 
+### 修飾キーの操作の動画
+
+上の表のうち、Ctrl・Shift・Alt・Winを使う操作を、既定のキー割り当てで実機を操作して録画しました。背景は録画用の架空の画面です。左下のオレンジの帯は、押しているキーとマウスボタンを示します。複数のモニターが必要な操作（Shiftでモニターをまたぐ・移る操作）と、固定サイズでのShift＋矢印は含みません。
+
+<details><summary>撮影前に Shift＋左クリック：ポインタのあるモニター全体を撮影</summary>
+
+![Shiftを押すとポインタのあるモニターが明るくなり、左クリックでモニター全体を撮影する](images/operations/shift-monitor.gif)
+
+</details>
+<details><summary>撮影前に Ctrl を押しながらクリック：ボタンや入力欄を1つだけ撮影</summary>
+
+![Ctrlを押しながらポインタを入力欄・チェックボックス・ボタンへ動かし、ボタンをクリックして撮影する](images/operations/ctrl-control.gif)
+
+</details>
+<details><summary>撮影前に Ctrl を押しながら左ドラッグ：通ったコントロールを1枚にまとめる</summary>
+
+![Ctrlを押しながら入力欄からボタンまでドラッグし、通過したコントロールを元の位置関係のまま合成する](images/operations/ctrl-controls-drag.gif)
+
+</details>
+<details><summary>撮影前に Win を押しながらクリック：ポインタの下のウィンドウを撮影</summary>
+
+![Winを押している間はポインタの下のウィンドウが明るくなり、クリックでそのウィンドウを撮影する](images/operations/win-window.gif)
+
+</details>
+<details><summary>ドラッグ中に Win：押したときの縦横比を保つ</summary>
+
+![矩形をドラッグ中にWinを押すと、そのときの縦横比を保ったまま範囲が広がる](images/operations/drag-win-aspect.gif)
+
+</details>
+<details><summary>ドラッグ中に Ctrl：起点を中心に四方へ広げる</summary>
+
+![矩形をドラッグ中にCtrlを押すと、ドラッグの起点を中心に範囲が四方へ広がる](images/operations/drag-ctrl-center.gif)
+
+</details>
+<details><summary>ドラッグ中に Ctrl＋Shift：起点を中心に、縦横比を保って広げる</summary>
+
+![矩形をドラッグ中にCtrlとShiftを押すと、起点を中心に縦横比を保って範囲が広がる](images/operations/drag-ctrl-shift.gif)
+
+</details>
+<details><summary>ドラッグ中に Alt＋Shift：高さを固定して横だけ変える</summary>
+
+![矩形をドラッグ中にAltとShiftを押すと、ポインタを上下に動かしても高さは変わらず、幅だけが変わる](images/operations/drag-alt-shift.gif)
+
+</details>
+<details><summary>ドラッグ中に Alt＋Ctrl：幅を固定して縦だけ変える</summary>
+
+![矩形をドラッグ中にAltとCtrlを押すと、ポインタを左右に動かしても幅は変わらず、高さだけが変わる](images/operations/drag-alt-ctrl.gif)
+
+</details>
+<details><summary>ドラッグ中に Win＋Alt：幅と高さをグリッド間隔にそろえる</summary>
+
+![矩形をドラッグ中にWinとAltを押すと、幅と高さが20px単位で変わる](images/operations/drag-win-alt-grid.gif)
+
+</details>
+<details><summary>Alt を押しながらドラッグ：ウィンドウやモニターの端に吸着させる</summary>
+
+![Altを押しながら資料の窓の角の近くでドラッグを始めると、始点と終点が窓の角に吸着する](images/operations/drag-alt-snap.gif)
+
+</details>
+<details><summary>撮影前に Alt を短く押す：今回の撮影だけウィンドウスナップをON／OFF</summary>
+
+![ポインタを動かさずにAltを短く押すとウィンドウスナップがONになり、キーを離したままでも窓の角に吸着する](images/operations/alt-tap-snap.gif)
+
+</details>
+
 ### 画素単位で範囲やコントロールを選ぶ
 
 「入力プリセット」の矩形で「選択方法」を「2点クリック」にすると、左クリック1回目で始点を選びます。ポインタを動かして枠を確認し、2回目の左クリックを離すと撮影します。2点目の待機中にEscを押すと始点を取り消せます。矢印キーは拡大鏡の表示にかかわらず使えます。「基本」の「操作ガイド」で拡大鏡をONにできます。既定は10×10画素を10倍表示し、表示ドット数は2～32の偶数、拡大倍率は2～20倍から変更できます。起点は画素の間を通る赤い十字線で4方向を示します。終点では、実際の撮影境界を赤線で示し、撮影範囲の外側を薄く暗くします。操作ガイドや寸法欄を避けて配置し、同じ画面に収まる場所が空くまで一時的に隠れます。
