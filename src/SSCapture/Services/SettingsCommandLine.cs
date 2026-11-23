@@ -7,6 +7,7 @@ namespace SSCapture.Services;
 internal static class SettingsCommandLine
 {
     internal const string SingletonName = @"Local\SSCapture.Singleton";
+    internal const string ShowSettingsSignalName = @"Local\SSCapture.ShowSettings";
     internal const string ManagementId = "ss-capture";
 
     internal static bool Handles(string[] args) => args.FirstOrDefault() is

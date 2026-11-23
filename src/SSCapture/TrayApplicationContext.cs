@@ -45,14 +45,15 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
     private StatusMessage? lastStatus;
     private TrayOperationPolicy OperationPolicy => new(
         busy, recorder is not null, recordingTransition, namingForm is not null, pendingRecording is not null);
-    public TrayApplicationContext(bool showSettings)
+    internal TrayApplicationContext(bool showSettings, SettingsStore store, AppSettings initialSettings, string? warning)
     {
+        this.store = store;
+        settings = initialSettings;
         _ = dispatcher.Handle;
         try { NotificationImage.CleanupPreviousSession(workRoot); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { lastStatus = new StatusMessage("以前の通知用画像を整理できません: " + ex.Message, true, DateTimeOffset.Now); }
         feedback = new CaptureFeedback(message => Post(() => StoreStatus(message, true)), savedFileMoved: SavedFileMoved);
         pinnedImages = new PinnedImageManager((message, error) => Post(() => StoreStatus(message, error)));
-        store = new SettingsStore(Path.Combine(AppContext.BaseDirectory, "data", "settings.json"));
         output = new OutputRouter(workRoot, capturedWithBounds: (image, path, time, bounds) =>
         {
             if (settings?.KeepHistory == true)
@@ -68,7 +69,6 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
                 });
             },
             pinImage: pinnedImages.Show);
-        settings = store.Load(out var warning);
         icon = AppIcon.Create();
         menu = new ContextMenuStrip
         {
@@ -122,11 +122,11 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
             if (e.Button == MouseButtons.Left)
                 ShowSettings();
         };
-        settingsSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\SSCapture.ShowSettings");
+        settingsSignal = new EventWaitHandle(false, EventResetMode.AutoReset, SettingsCommandLine.ShowSettingsSignalName);
         signalWait = ThreadPool.RegisterWaitForSingleObject(settingsSignal, (_, _) => Post(ShowSettings), null, Timeout.Infinite, false);
         SystemEvents.SessionSwitch += OnSessionSwitch;
         if (!TryConfigureHook(settings.HasShortcuts, out string? hookError))
-            warning = hookError;
+            warning = warning is null ? hookError : warning + Environment.NewLine + hookError;
         RefreshMenu();
         // 自動起動の警告は記録だけにし、設定画面を勝手に開かない。
         if (warning is not null)

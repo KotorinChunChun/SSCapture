@@ -68,24 +68,55 @@ internal static class Program
             return;
         }
 
-        using var mutex = new Mutex(false, Services.SettingsCommandLine.SingletonName);
-        bool firstInstance;
-        try { firstInstance = mutex.WaitOne(0); }
-        catch (AbandonedMutexException) { firstInstance = true; }
-        if (!firstInstance)
+        RunResident(args);
+    }
+
+    private static void RunResident(string[] args)
+    {
+        bool handoff = Services.LaunchBehavior.IsAdministratorHandoff(args);
+        if (handoff && !Services.LaunchBehavior.IsAdministrator()) return;
+        bool showSettings = Services.LaunchBehavior.ShowSettings(args);
+        Mutex mutex;
+        try { mutex = new Mutex(false, Services.SettingsCommandLine.SingletonName); }
+        catch (UnauthorizedAccessException) { ShowExistingSettings(showSettings); return; }
+        using (mutex)
         {
-            if (!Services.LaunchBehavior.ShowSettings(args)) return;
-            try { using var signal = EventWaitHandle.OpenExisting(@"Local\SSCapture.ShowSettings"); signal.Set(); }
-            catch (WaitHandleCannotBeOpenedException) { }
-            return;
+            bool firstInstance;
+            try { firstInstance = mutex.WaitOne(handoff ? TimeSpan.FromSeconds(10) : TimeSpan.Zero); }
+            catch (AbandonedMutexException) { firstInstance = true; }
+            if (!firstInstance)
+            {
+                ShowExistingSettings(showSettings);
+                return;
+            }
+            try
+            {
+                var store = new Services.SettingsStore(Path.Combine(AppContext.BaseDirectory, "data", "settings.json"));
+                var settings = store.Load(out string? warning);
+                if (Services.LaunchBehavior.RequestsAdministrator(args, settings.RunAsAdministrator)
+                    && !Services.LaunchBehavior.IsAdministrator())
+                {
+                    warning = Services.LaunchBehavior.StartAsAdministrator(Path.Combine(AppContext.BaseDirectory, "SSCapture.exe"));
+                    // The elevated child waits on the singleton until we release it.
+                    if (warning is null) return;
+                }
+                using var context = new TrayApplicationContext(showSettings, store, settings, warning);
+                Application.ThreadException += (_, e) => context.HandleUnexpectedError(e.Exception);
+                Application.Run(context);
+            }
+            finally { mutex.ReleaseMutex(); }
         }
+    }
+
+    private static void ShowExistingSettings(bool showSettings)
+    {
+        if (!showSettings) return;
         try
         {
-            using var context = new TrayApplicationContext(Services.LaunchBehavior.ShowSettings(args));
-            Application.ThreadException += (_, e) => context.HandleUnexpectedError(e.Exception);
-            Application.Run(context);
+            using var signal = EventWaitHandle.OpenExisting(Services.SettingsCommandLine.ShowSettingsSignalName);
+            signal.Set();
         }
-        finally { mutex.ReleaseMutex(); }
+        catch (Exception ex) when (ex is WaitHandleCannotBeOpenedException or UnauthorizedAccessException) { }
     }
 
     private static void ConfigureUi()

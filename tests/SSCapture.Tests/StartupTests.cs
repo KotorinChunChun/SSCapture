@@ -14,6 +14,72 @@ internal static partial class Program
             foreach (string[] args in new string[][] { ["--startup"], ["--hidden"], ["--settings", "--startup"], ["--settings", "--hidden"], ["--startup", "--launch-origin", "direct_task"] })
                 Check(!LaunchBehavior.ShowSettings(args), "無表示指定より画面表示が優先された");
         });
+        Run("管理者実行はOFFが既定で、ONの手動起動だけが昇格を要求する", () => WithServiceDirectory(directory =>
+        {
+            string file = Path.Combine(directory, "settings.json");
+            var store = new SettingsStore(file);
+            Check(!store.Load(out _).RunAsAdministrator, "新規設定がON");
+            File.WriteAllText(file, """{"SchemaVersion":3}""");
+            Check(!store.Load(out _).RunAsAdministrator, "旧設定がON");
+            store.Save(store.Load(out _) with { RunAsAdministrator = true });
+            Check(store.Load(out _).RunAsAdministrator, "保存値を読み込めない");
+
+            Check(!LaunchBehavior.RequestsAdministrator([], false), "OFFで昇格を要求した");
+            Check(LaunchBehavior.RequestsAdministrator([], true)
+                && LaunchBehavior.RequestsAdministrator(["--settings"], true), "手動起動で昇格を要求しない");
+            foreach (string[] args in new string[][] { ["--startup"], ["--hidden"], ["--settings", "--startup"],
+                ["--startup", "--launch-origin", "direct_task"], ["--capture-select"], [LaunchBehavior.AdministratorHandoff] })
+                Check(!LaunchBehavior.RequestsAdministrator(args, true), "自動起動または昇格引き継ぎでUACを再要求した");
+            Check(LaunchBehavior.IsAdministratorHandoff([LaunchBehavior.AdministratorHandoff])
+                && LaunchBehavior.ShowSettings([LaunchBehavior.AdministratorHandoff]), "昇格後の設定表示を失った");
+        }));
+
+        Run("管理者起動の要求はWindowsに委ね、取消と失敗を通常起動へ返す", () =>
+        {
+            const string exe = @"C:\Development path\SSCapture.exe";
+            int calls = 0;
+            Equal<string?>(null, LaunchBehavior.StartAsAdministrator(exe, request =>
+            {
+                calls++;
+                Check(request.UseShellExecute, "ShellExecuteを使っていない");
+                Equal("runas", request.Verb);
+                Equal(exe, request.FileName);
+                Equal(Path.GetDirectoryName(exe), request.WorkingDirectory);
+                Equal(LaunchBehavior.AdministratorHandoff, request.ArgumentList.Single());
+                return true;
+            }));
+            Equal(1, calls);
+            Check(LaunchBehavior.StartAsAdministrator(exe, _ => throw new System.ComponentModel.Win32Exception(1223))
+                ?.Contains("取り消された") == true, "UAC取消を報告しない");
+            Check(LaunchBehavior.StartAsAdministrator(exe, _ => throw new System.ComponentModel.Win32Exception(2))
+                ?.Contains("通常権限で起動") == true, "起動失敗を通常起動へ戻さない");
+            Check(LaunchBehavior.StartAsAdministrator(exe, _ => false) is not null, "起動結果がないのに成功した");
+        });
+
+        Run("基本で管理者実行を適用・戻す・初期化でき、自動起動の予約は変更しない", () =>
+        {
+            var startup = new FakeStartup();
+            var saved = new List<bool>();
+            using var form = new SettingsForm(new AppSettings(), value => { saved.Add(value.RunAsAdministrator); return null; },
+                _ => { }, () => [], startupRegistration: startup);
+            var check = (CheckBox)form.Controls.Find("RunAsAdministrator", true).Single();
+            var apply = SettingsApplyButton(form, "基本");
+            var revert = form.Controls.Find("RevertPageSettings", true).First(control => control.Parent == apply.Parent);
+            Check(!check.Checked && !apply.Enabled, "初期状態でONまたは未確定");
+            check.Checked = true;
+            Check(apply.Enabled && revert.Enabled, "下書きを認識しない");
+            RecordingClick(revert);
+            Check(!check.Checked && !apply.Enabled && saved.Count == 0, "戻すで未確定値を保持または保存");
+            check.Checked = true;
+            ApplySettingsPage(form, "基本");
+            Check(saved.SequenceEqual([true]) && !apply.Enabled && startup.Writes == 0, "適用値または予約の状態が不正");
+            Check(form.Controls.Find("Status", true).Single().Text.Contains("手動起動"), "適用時に反映時期が分からない");
+            form.ResetSelectedPage();
+            Check(!check.Checked && apply.Enabled && saved.Count == 1, "初期化でOFFの下書きにならない");
+            ApplySettingsPage(form, "基本");
+            Check(saved.SequenceEqual([true, false]) && startup.Writes == 0, "OFFを保存できないか自動起動も変更された");
+        });
+
         Run("自動起動だけの変更は基本の適用で確定し、戻すと所有者の制限を守る", () =>
         {
             var fake = new FakeStartup();
@@ -71,6 +137,9 @@ internal static partial class Program
             Check(editor.Parent!.ClientRectangle.Contains(editor.Bounds), "自動起動欄が親領域外");
             Check(check.Parent!.ClientRectangle.Contains(check.Bounds) && apply.Parent!.ClientRectangle.Contains(apply.Bounds), "自動起動欄または適用ボタンが親領域外");
             Equal(RegionBoundsOnForm(screenGuide).Left, RegionBoundsOnForm(check).Left);
+            var runAs = form.Controls.Find("RunAsAdministrator", true).Single();
+            Check(runAs.Parent!.ClientRectangle.Contains(runAs.Bounds), "起動権限のチェック欄が収まらない");
+            Equal(RegionBoundsOnForm(check).Left, RegionBoundsOnForm(runAs).Left);
             Check(form.Controls.Find("ApplyStartup", true).Length == 0 && apply.TabStop, "基本の適用に統合されていない");
             ((CheckBox)check).Checked = true;
             Check(apply.Enabled, "自動起動だけの変更で基本の適用が有効にならない");

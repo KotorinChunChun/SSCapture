@@ -163,6 +163,7 @@ internal sealed partial class SettingsForm
         magnifierEnabled.Checked = defaults.ShowMagnifier;
         magnifierDotCount.SelectedItem = defaults.MagnifierDotCount;
         magnifierZoom.Value = defaults.MagnifierZoom;
+        runAsAdministrator.Checked = defaults.RunAsAdministrator;
     }
 
     private void ResetShortcutDraft(AppSettings defaults)

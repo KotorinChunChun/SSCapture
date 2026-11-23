@@ -39,6 +39,7 @@ internal sealed partial class SettingsForm
             var next = readDraft();
             bool settingsChanged = next != committed;
             bool startupChanged = isBasic && startupSettings.HasDraft;
+            bool elevationChanged = isBasic && next.RunAsAdministrator != committed.RunAsAdministrator;
             if (!settingsChanged && !startupChanged) return;
 
             applying = true;
@@ -53,7 +54,7 @@ internal sealed partial class SettingsForm
                 string? startupError = startupChanged ? await startupSettings.ApplyDraftAsync() : null;
                 if (IsDisposed) return;
                 if (startupError is null)
-                    SetStatus("設定を適用しました。");
+                    SetStatus(elevationChanged ? "設定を適用しました。起動権限は、トレイから終了した後の手動起動で反映されます。" : "設定を適用しました。");
                 else
                     SetStatus((settingsChanged ? "基本設定を保存しました。 " : "") + "自動起動を変更できませんでした。 " + startupError, true);
             }

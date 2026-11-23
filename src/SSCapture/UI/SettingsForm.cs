@@ -41,6 +41,7 @@ internal sealed partial class SettingsForm : Form
     private readonly ComboBox guideDisplay, magnifierDotCount;
     private readonly NumericUpDown magnifierZoom;
     private readonly StartupSettingsControl startupSettings;
+    private readonly CheckBox runAsAdministrator;
     private readonly CaptureCommandControl captureCommand;
 
     public SettingsForm(AppSettings settings, Func<AppSettings, string?> onSave, Action<string> openFolder,
@@ -288,14 +289,14 @@ internal sealed partial class SettingsForm : Form
         }
         // 旧単独ページを廃止し、プリセットの編集欄だけを公開する。
         basic.Controls.Clear();
-        basic.RowStyles.Clear(); basic.RowCount = 5;
-        foreach (int height in new[] { 108, 120, 188, 84, 46 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        basic.RowStyles.Clear(); basic.RowCount = 6;
+        foreach (int height in new[] { 100, 110, 174, 36, 78, 46 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
         basic.Dock = DockStyle.Top;
         basic.AutoSize = true;
         basic.AutoSizeMode = AutoSizeMode.GrowAndShrink;
         ((TabPage)basic.Parent!).AutoScroll = true;
 
-        var selectionOptions = BasicFields(34, 34, 34);
+        var selectionOptions = BasicFields(31, 31, 31);
         limitToStartingMonitor = BasicCheckBox("LimitToStartingMonitor", "開始したモニター内で選択する", settings.LimitToStartingMonitor);
         dimCaptureBackground = BasicCheckBox("DimCaptureBackground", "選択中モニターの背景を暗くする", settings.DimCaptureBackground);
         AddFullRow(selectionOptions, limitToStartingMonitor, 0);
@@ -304,14 +305,14 @@ internal sealed partial class SettingsForm : Form
         AddFullRow(selectionOptions, shareCapturePresentation, 2);
         Add(basic, "選択範囲", selectionOptions, 0);
 
-        var precisionOptions = BasicFields(33, 40, 40);
+        var precisionOptions = BasicFields(31, 36, 36);
         gridEnabled = BasicCheckBox("GridEnabled", "グリッドスナップを既定でON", settings.Grid20);
         AddFullRow(precisionOptions, gridEnabled, 0);
         gridStep = PixelField(precisionOptions, "グリッド間隔（px）", "GridStepPixels", settings.GridStepPixels, 1);
         snapDistance = PixelField(precisionOptions, "ウィンドウスナップ距離（px）", "SnapDistancePixels", settings.SnapDistancePixels, 2);
         Add(basic, "位置・寸法の補正", precisionOptions, 1);
 
-        var guideOptions = BasicFields(34, 34, 34, 40, 40);
+        var guideOptions = BasicFields(32, 31, 31, 36, 37);
         guideEnabled = BasicCheckBox("ShowSelectionGuide", "画面右下に操作ガイドを表示する", settings.ShowSelectionGuide);
         pointerGuideEnabled = BasicCheckBox("ShowPointerGuide", "ポインタ横に操作ガイドを表示する", settings.ShowPointerGuide);
         magnifierEnabled = BasicCheckBox("ShowMagnifier", "拡大鏡を表示する", settings.ShowMagnifier);
@@ -334,8 +335,12 @@ internal sealed partial class SettingsForm : Form
         Add(guideOptions, "拡大鏡の拡大倍率（倍）", magnifierZoom, 4);
         Add(basic, "操作ガイド", guideOptions, 2);
 
+        var launchOptions = BasicFields(29);
+        runAsAdministrator = BasicCheckBox("RunAsAdministrator", "管理者として実行", settings.RunAsAdministrator);
+        AddFullRow(launchOptions, runAsAdministrator, 0);
+        Add(basic, "起動権限", launchOptions, 3);
         startupSettings = new StartupSettingsControl(startupRegistration ?? new StartupRegistration());
-        Add(basic, "自動起動", startupSettings, 3);
+        Add(basic, "自動起動", startupSettings, 4);
         var transfer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = new Padding(0, 3, 0, 3) };
         var exportButton = MakeButton("設定をエクスポート", "ExportSettings");
         var importButton = MakeButton("設定をインポート", "ImportSettings");
@@ -356,7 +361,7 @@ internal sealed partial class SettingsForm : Form
             if (importSettings!(candidate) is { } error) SetStatus(error, true);
         };
         transfer.Controls.AddRange([exportButton, importButton]);
-        basic.Controls.Add(transfer, 1, 4);
+        basic.Controls.Add(transfer, 1, 5);
         foreach (Label label in basic.Controls.OfType<Label>())
         {
             label.Anchor = AnchorStyles.Top | AnchorStyles.Left;
@@ -547,7 +552,8 @@ internal sealed partial class SettingsForm : Form
         SelectionGuideDisplay = (SelectionGuideDisplay)guideDisplay.SelectedIndex,
         ShowMagnifier = magnifierEnabled.Checked, ShareCapturePresentation = shareCapturePresentation.Checked,
         MagnifierDotCount = (int)magnifierDotCount.SelectedItem!, MagnifierZoom = SettingNumber(magnifierZoom),
-        SnapDistancePixels = SettingNumber(snapDistance), GridStepPixels = SettingNumber(gridStep)
+        SnapDistancePixels = SettingNumber(snapDistance), GridStepPixels = SettingNumber(gridStep),
+        RunAsAdministrator = runAsAdministrator.Checked
     };
     private string NotificationAppId() => (notificationApplication?.SelectedItem as NotificationAppItem)?.Id ?? committed.NotificationApplicationId;
     private sealed record NotificationAppItem(string Id, string Label) { public override string ToString() => Label; }
@@ -564,7 +570,7 @@ internal sealed partial class SettingsForm : Form
     }
 
     private static CheckBox BasicCheckBox(string name, string label, bool isChecked) =>
-        new() { Name = name, Text = label, Checked = isChecked, AutoSize = true };
+        new() { Name = name, Text = label, Checked = isChecked, AutoSize = true, Margin = new Padding(3, 1, 3, 1) };
 
     private static void AddFullRow(TableLayoutPanel table, Control control, int row)
     {

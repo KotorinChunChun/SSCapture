@@ -82,6 +82,7 @@ internal static class SettingsTransfer
             .AppendLine($"出力プリセット {current.CapturePresets.Length} → {candidate.CapturePresets.Length}件")
             .AppendLine($"撮影・録画ショートカット {HotkeyBinding.ReadAssignments(current).Length} → {candidateKeys.Length}件")
             .AppendLine($"外部アプリ {current.ImageEditors.Length + current.VideoEditors.Length} → {candidate.ImageEditors.Length + candidate.VideoEditors.Length}件")
+            .AppendLine($"手動起動時の管理者実行 {(current.RunAsAdministrator ? "ON" : "OFF")} → {(candidate.RunAsAdministrator ? "ON" : "OFF")}")
             .AppendLine($"撮影履歴の保持 {(current.KeepHistory ? "ON" : "OFF")} → {(candidate.KeepHistory ? "ON" : "OFF")}");
         if (current.KeepHistory && !candidate.KeepHistory)
             preview.AppendLine("適用すると、この実行中に保持した撮影履歴が消去されます。");

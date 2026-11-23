@@ -26,7 +26,7 @@ internal static partial class Program
                 .OrderBy(basic.GetRow)
                 .Select(control => control.Text)
                 .ToArray();
-            Check(groups.SequenceEqual(["選択範囲", "位置・寸法の補正", "操作ガイド", "自動起動"]), "基本のグループ順が異なる");
+            Check(groups.SequenceEqual(["選択範囲", "位置・寸法の補正", "操作ガイド", "起動権限", "自動起動"]), "基本のグループ順が異なる");
             Check(basic.Controls.Find("DefaultInputSummary", true).Length == 0 &&
                 basic.Controls.Find("DefaultOutputSummary", true).Length == 0, "基本に既定プリセットの概要が残っている");
 
@@ -64,6 +64,7 @@ internal static partial class Program
             Equal(OnForm(step).X, OnForm(display).X);
             Equal(OnForm(grid).X, OnForm(screenGuide).X);
             Equal(OnForm(grid).X, OnForm(Box("StartWithWindows")).X);
+            Equal(OnForm(grid).X, OnForm(Box("RunAsAdministrator")).X);
             Check(form.Controls.Find("ApplyStartup", true).Length == 0, "自動起動の専用ボタンが残っている");
             display.SelectedIndex = 1;
             Equal(screenGuide.Left, pointerGuide.Left);
@@ -75,6 +76,8 @@ internal static partial class Program
             using var tooltip = new ToolTip();
             SettingsHelp.Apply(form, tooltip);
             string Tip(Control control) => tooltip.GetToolTip(control) ?? "";
+            Check(Tip(Box("RunAsAdministrator")).Contains("管理者権限で動いているアプリを操作中にも撮影ショートカット", StringComparison.Ordinal),
+                "管理者実行の用途がツールチップにない");
             Check(Tip(Box("LimitToStartingMonitor")).Contains("既定はShift", StringComparison.Ordinal), "モニター移動の案内がない");
             Check(Tip(Box("DimCaptureBackground")).Contains("ウィンドウ選択中も", StringComparison.Ordinal), "暗転OFFの案内がない");
             Check(Tip(step).Contains("10px単位", StringComparison.Ordinal) && Tip(distance).Contains("端・角", StringComparison.Ordinal),
