@@ -64,6 +64,8 @@ internal sealed partial class SettingsForm
                     break;
                 case "履歴":
                     keepHistory.Checked = defaults.KeepHistory;
+                    historyRetentionDays.Value = defaults.HistoryRetentionDays;
+                    persistHistory.Checked = defaults.PersistHistory;
                     break;
                 case "外部アプリ":
                     var restored = StandardRegistrationReset.RestoreExternalApplications(committed with { ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications });
@@ -119,6 +121,8 @@ internal sealed partial class SettingsForm
                 break;
             case "履歴":
                 keepHistory.Checked = committed.KeepHistory;
+                historyRetentionDays.Value = committed.HistoryRetentionDays;
+                persistHistory.Checked = committed.PersistHistory;
                 break;
             case "外部アプリ":
                 imageApps.LoadRestoredApplications(committed.ImageEditors, committed.SelectedImageEditorId);

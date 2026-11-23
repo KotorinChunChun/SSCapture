@@ -32,6 +32,8 @@ internal sealed record AppSettings
     public bool IncludeCursor { get; init; }
     public Capture.CaptureSelectionMethod SelectionMethod { get; init; }
     public bool KeepHistory { get; init; } = true;
+    public int HistoryRetentionDays { get; init; }
+    public bool PersistHistory { get; init; }
     public bool RunAsAdministrator { get; init; }
     public NotificationDisplay NotificationDisplay { get; init; } = Services.NotificationDisplay.Main;
     public int NotificationDurationSeconds { get; init; } = 1;
@@ -112,6 +114,8 @@ internal sealed record AppSettings
     internal void Validate()
     {
         if (!Enum.IsDefined(SelectionMethod))
+        if (HistoryRetentionDays is < 0 or > CaptureHistory.MaximumRetentionDays)
+            throw new ArgumentException("撮影履歴の保持日数が正しくありません。");
             throw new ArgumentException("矩形の選択方法が無効です。");
         if (!Enum.IsDefined(SelectionGuideDisplay))
             throw new ArgumentException("操作ガイドの表示先が正しくありません。");

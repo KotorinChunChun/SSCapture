@@ -21,7 +21,8 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
     private readonly PinnedImageManager pinnedImages;
     private readonly ToolStripMenuItem pinnedVisibility;
     private CaptureDelivery? deferredFeedback;
-    private readonly CaptureHistory history = new();
+    private readonly CaptureHistory history;
+    private readonly System.Windows.Forms.Timer historyExpiration = new() { Interval = 30000 };
     private readonly CaptureRecipeBook recipes = new();
     private readonly ToolStripMenuItem sameSettingsItem;
     private readonly ToolStripMenuItem savedRegionMenu;
@@ -50,14 +51,17 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         this.store = store;
         settings = initialSettings;
         _ = dispatcher.Handle;
+        history = new(storage: new(Path.Combine(AppContext.BaseDirectory, "data", "history")),
+            onStorageError: message => Post(() => StoreStatus(message, true)));
+        ConfigureHistory(restore: warning is null || settings.PersistHistory);
+        historyExpiration.Tick += (_, _) => { if (history.Prune()) historyForm?.RefreshEntries(); };
         try { NotificationImage.CleanupPreviousSession(workRoot); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { lastStatus = new StatusMessage("以前の通知用画像を整理できません: " + ex.Message, true, DateTimeOffset.Now); }
         feedback = new CaptureFeedback(message => Post(() => StoreStatus(message, true)), savedFileMoved: SavedFileMoved);
         pinnedImages = new PinnedImageManager((message, error) => Post(() => StoreStatus(message, error)));
         output = new OutputRouter(workRoot, capturedWithBounds: (image, path, time, bounds) =>
         {
-            if (settings?.KeepHistory == true)
-                history.Add(image, path, time, bounds);
+            history.Add(image, path, time, bounds);
         }, delivered: DispatchDelivery, retryChanged: () => Post(RefreshMenu),
             captureSucceeded: (sequence, recipe) =>
             {

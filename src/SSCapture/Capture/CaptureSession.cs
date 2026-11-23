@@ -1565,7 +1565,11 @@ internal sealed partial class SessionController
                 if (controlGroup is { Isolated: true })
                 {
                     var capture = await IsolatedWindowCapture.TakeControlsAsync(controlGroup.Targets,
-                        OutputSettings with { DefaultDestination = Destination }, Snapshot.Context?.FocusedElement);
+                        OutputSettings with { DefaultDestination = Destination }, Snapshot.Context?.FocusedElement,
+                        takeBackground: OutputSettings.FreezeFrame || options.Intent == CaptureIntent.Recording
+                            ? bounds => CaptureGeometry.Crop(Snapshot.Image, Snapshot.Bounds, bounds, minimumSize: 1)
+                                ?? throw new InvalidOperationException("選択したコントロールが開始時の画面範囲にありません。")
+                            : null);
                     result = capture.Image;
                     metadata = capture.Metadata;
                 }
@@ -1607,11 +1611,12 @@ internal sealed partial class SessionController
                     throw new InvalidOperationException("選択中にディスプレイ領域が変わりました。もう一度撮影してください。");
                 if (controlGroup is null && Mode == CaptureMode.FixedRegion && !entireMonitor && !CaptureGeometry.IsFullyCovered(selection.Bounds, frame.Monitors))
                     throw new InvalidOperationException("選択中にディスプレイ配置が変わりました。もう一度撮影してください。");
-                result ??= selection.Composite?.Regions is { } regions
+                result ??= controlGroup is null && selection.Composite?.Regions is { } regions
                     ? CaptureGeometry.ComposeRegions(frame.Image, frame.Bounds, selection.Bounds, regions)
                     : selection.Polygon is { } polygon
                     ? CaptureGeometry.Freeform(frame.Image, frame.Bounds, polygon)
-                    : CaptureGeometry.Crop(frame.Image, frame.Bounds, selection.Bounds, clientOnly || control is not null || Mode == CaptureMode.FixedRegion ? 1 : CaptureGeometry.MinimumSize);
+                    : CaptureGeometry.Crop(frame.Image, frame.Bounds, selection.Bounds,
+                        clientOnly || control is not null || controlGroup is not null || Mode == CaptureMode.FixedRegion ? 1 : CaptureGeometry.MinimumSize);
                 if (result is null) { completion.TrySetResult(new CaptureOutcome(null, null)); return; }
             }
             completion.TrySetResult(new CaptureOutcome(result, selection, outputSettings: OutputSettings with { DefaultDestination = Destination },

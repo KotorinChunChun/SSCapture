@@ -82,7 +82,7 @@ internal static partial class Program
 
             static ControlLayoutEntry Entry(Rectangle r) => new(new(PixelBounds.From(r), null), PixelBounds.From(r), true, 0);
         });
-        Run("WGCのコントロール合成は同じ親を一度撮影し、選択外は透過して重なりは前面を優先する", () =>
+        Run("WGCのコントロール合成は外接矩形を同じ親の背景で埋め、重なりは前面を優先する", () =>
         {
             var back = new CaptureWindow(new(-40, -20, 80, 70), "背面", 11, 10, 10, ZOrder: 3);
             var front = new CaptureWindow(new(0, -20, 80, 70), "前面", 12, 10, 10, ZOrder: 2);
@@ -98,15 +98,31 @@ internal static partial class Program
                 return Task.FromResult(new WindowCaptureFrame(frame, window.Bounds, default));
             }
 
-            var capture = IsolatedWindowCapture.TakeControlsAsync(targets, new AppSettings(), takeFrame: Read).GetAwaiter().GetResult();
+            var capture = IsolatedWindowCapture.TakeControlsAsync(targets, new AppSettings(), takeFrame: Read,
+                takeBackground: bounds => new Bitmap(bounds.Width, bounds.Height)).GetAwaiter().GetResult();
             using var image = capture.Image;
             Check(fetched.SequenceEqual([back.Handle, front.Handle]), "ウィンドウの描画順か取得回数が合わない");
             Equal(new Size(51, 21), image.Size);
             Equal(Color.Blue.ToArgb(), image.GetPixel(1, 1).ToArgb());
-            Equal(0, image.GetPixel(13, 3).A);
+            Equal(Color.Blue.ToArgb(), image.GetPixel(13, 3).ToArgb());
             Equal(Color.Blue.ToArgb(), image.GetPixel(19, 10).ToArgb());
             Equal(Color.Red.ToArgb(), image.GetPixel(25, 10).ToArgb());
-            Equal(0, image.GetPixel(49, 2).A);
+            Equal(Color.Red.ToArgb(), image.GetPixel(49, 2).ToArgb());
+
+            var distant = front with { Bounds = new(80, -20, 80, 70) };
+            var mixed = IsolatedWindowCapture.TakeControlsAsync([targets[0], new(distant, new(82, 8, 10, 12), id)],
+                new AppSettings(), takeFrame: Read, takeBackground: bounds =>
+                {
+                    Equal(new Rectangle(-20, 0, 112, 20), bounds);
+                    var backdrop = new Bitmap(bounds.Width, bounds.Height);
+                    using var graphics = Graphics.FromImage(backdrop);
+                    graphics.Clear(Color.Green);
+                    return backdrop;
+                }).GetAwaiter().GetResult();
+            using var withGap = mixed.Image;
+            Equal(Color.Blue.ToArgb(), withGap.GetPixel(1, 1).ToArgb());
+            Equal(Color.Green.ToArgb(), withGap.GetPixel(75, 1).ToArgb());
+            Equal(Color.Red.ToArgb(), withGap.GetPixel(104, 1).ToArgb());
 
             var union = targets.Select(target => target.Bounds).Aggregate(Rectangle.Union);
             var recipe = LastCaptureRecipe.Create(1, union, null, new AppSettings(), [],

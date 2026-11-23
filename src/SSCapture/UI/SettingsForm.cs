@@ -16,6 +16,8 @@ internal sealed partial class SettingsForm : Form
     private readonly ComboBox metadataMode;
     private readonly CheckBox dimCaptureBackground;
     private readonly CheckBox includeCursor, keepHistory, playCaptureSound, limitToStartingMonitor;
+    private readonly CheckBox persistHistory;
+    private readonly NumericUpDown historyRetentionDays;
     private readonly ComboBox notificationCorner, notificationDisplay, fixedCaptureAnchor;
     private readonly ComboBox notificationApplication;
     private readonly CheckBox holdNotification;
@@ -147,11 +149,17 @@ internal sealed partial class SettingsForm : Form
         fixedCaptureAnchor.SelectedIndex = (int)settings.FixedCaptureAnchor;
         includeCursor = Toggle(regions, "マウスカーソル", "IncludeCursor", "画像・動画に含める", settings.IncludeCursor, 4);
         var historyPage = Page(tabs, "履歴");
-        keepHistory = Toggle(historyPage, "撮影履歴", "KeepHistory", "メモリーに保持する", settings.KeepHistory, 0);
+        keepHistory = Toggle(historyPage, "撮影履歴", "KeepHistory", "撮影した画像を履歴に残す", settings.KeepHistory, 0);
+        historyRetentionDays = new NumericUpDown { Name = "HistoryRetentionDays", Minimum = 0,
+            Maximum = CaptureHistory.MaximumRetentionDays, Value = settings.HistoryRetentionDays };
+        Add(historyPage, "保持日数", historyRetentionDays, 1);
+        persistHistory = Toggle(historyPage, "再起動後の履歴", "PersistHistory", "ディスクに保存して復元する", settings.PersistHistory, 2);
+        keepHistory.CheckedChanged += (_, _) => UpdateHistoryFields();
+        UpdateHistoryFields();
         var historyButton = MakeButton("撮影履歴", "OpenHistory", ButtonRole.Secondary);
         historyButton.Width = 144; historyButton.Enabled = openHistory is not null;
         historyButton.Click += (_, _) => openHistory?.Invoke();
-        Add(historyPage, "管理", historyButton, 1);
+        Add(historyPage, "管理", historyButton, 3);
         var instant = Page(shortcutTabs, "即時撮影キー");
         var instantPage = (TabPage)instant.Parent!;
         shortcutTabs.TabPages.Remove(instantPage);
@@ -559,6 +567,12 @@ internal sealed partial class SettingsForm : Form
     };
     private string NotificationAppId() => (notificationApplication?.SelectedItem as NotificationAppItem)?.Id ?? committed.NotificationApplicationId;
     private sealed record NotificationAppItem(string Id, string Label) { public override string ToString() => Label; }
+    private void UpdateHistoryFields()
+    {
+        historyRetentionDays.Enabled = keepHistory.Checked;
+        persistHistory.Enabled = keepHistory.Checked;
+    }
+
     private static NumericUpDown PixelField(TableLayoutPanel table, string label, string name, int value, int row)
     { var control = new NumericUpDown { Name = name, Minimum = 1, Maximum = 32768, Value = value }; Add(table, label, control, row); return control; }
 

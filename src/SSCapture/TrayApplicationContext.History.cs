@@ -8,6 +8,12 @@ namespace SSCapture;
 
 internal sealed partial class TrayApplicationContext
 {
+    private void ConfigureHistory(bool restore = false)
+    {
+        history.Configure(settings.KeepHistory, settings.HistoryRetentionDays, settings.PersistHistory, restore);
+        historyExpiration.Enabled = settings.KeepHistory && settings.HistoryRetentionDays > 0;
+    }
+
     private void ShowHistory()
     {
         if (exiting || busy)

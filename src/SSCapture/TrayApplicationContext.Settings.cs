@@ -97,11 +97,8 @@ internal sealed partial class TrayApplicationContext
         {
             // 旧通知が削除/変更前のアプリへ送信しないよう、設定確定時に破棄する。
             feedback.HideForCapture();
-            if (!settings.KeepHistory)
-            {
-                history.Clear();
-                historyForm?.RefreshEntries();
-            }
+            ConfigureHistory();
+            historyForm?.RefreshEntries();
             RefreshMenu();
         }
         catch (Exception ex) { StoreStatus("設定を保存しましたが画面を更新できません: " + ex.Message, true); }

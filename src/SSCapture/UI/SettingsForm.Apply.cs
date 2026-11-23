@@ -11,7 +11,8 @@ internal sealed partial class SettingsForm
     {
         "基本" => CurrentSelectionSettings,
         "通知" => ReadNotificationSettings,
-        "履歴" => () => committed with { KeepHistory = keepHistory.Checked },
+        "履歴" => () => committed with { KeepHistory = keepHistory.Checked,
+            HistoryRetentionDays = SettingNumber(historyRetentionDays), PersistHistory = persistHistory.Checked },
         "外部アプリ" => ReadExternalApplicationSettings,
         "即時撮影キー" => ReadInstantShortcuts,
         FirstPointTab => ReadBeforeShortcuts,

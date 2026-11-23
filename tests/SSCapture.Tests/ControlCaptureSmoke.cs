@@ -174,7 +174,7 @@ internal static partial class Program
                     using var result = await session.Completion.WaitAsync(TimeSpan.FromSeconds(8));
                     Equal(Rectangle.Union(a, c), result.Selection!.Bounds);
                     Check(result.Selection.Composite!.Regions!.ToHashSet().SetEquals([a, b, c]), "撮影結果に経路外のコントロールが入りました。");
-                    Equal(0, result.Image!.GetPixel(a.Width + 4, 10).A);
+                    Check(result.Image!.GetPixel(a.Width + 4, 10).A > 0, "外接矩形内の背景が透過しています。");
                     Check(result.Image.GetPixel(b.X - a.X + 4, 10).A > 0, "途中のコントロールが透過しています。");
                     Check(result.Selection.ReplaySource is CaptureReplaySource.ControlGroup { Isolated: true }, "WGC合成の対象が保持されていません。");
                     var group = (CaptureReplaySource.ControlGroup)result.Selection.ReplaySource!;
@@ -189,11 +189,11 @@ internal static partial class Program
                     var after = Rectangle.Union(first.RectangleToScreen(first.ClientRectangle),
                         last.RectangleToScreen(last.ClientRectangle));
                     Equal(after, replay.Bounds);
-                    Equal(0, replayImage.GetPixel(a.Width + 4, 10).A);
+                    Check(replayImage.GetPixel(a.Width + 4, 10).A > 0, "移動後に撮り直した背景が透過しています。");
                     Equal(0, clicked);
                 }
                 finally { session.Cancel(); }
-                Console.WriteLine("CONTROL PASS ドラッグ軌跡・UIAの3対象・WGC合成・透過・取消・移動後の再撮影");
+                Console.WriteLine("CONTROL PASS ドラッグ軌跡・UIAの3対象・WGC合成・外接矩形の背景・取消・移動後の再撮影");
             }
             catch (Exception ex) { error = ex; }
             finally { host.Close(); }

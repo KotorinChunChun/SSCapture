@@ -83,7 +83,7 @@ internal sealed class HistoryForm : Form
         close.Click += (_, _) => Close();
         clearButton = Button("履歴を消去", "ClearHistory", 138, ButtonRole.Danger);
         clearButton.Click += (_, _) => ClearHistory();
-        tips.SetToolTip(clearButton, "履歴はアプリの終了時と、設定で保持をオフにしたときにも消去されます。保存済みファイルは残ります。");
+        tips.SetToolTip(clearButton, "一覧と履歴用の画像を消去します。撮影時に保存したファイルは残ります。");
         removeButton = Button("選択項目を削除", "RemoveHistorySelection", 144, ButtonRole.Danger);
         removeButton.Click += (_, _) => RemoveSelected();
         editButton = Button("画像編集アプリを選ぶ ▾", "EditHistoryImage", 212, ButtonRole.Secondary);

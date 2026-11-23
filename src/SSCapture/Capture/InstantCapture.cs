@@ -202,8 +202,7 @@ internal static class InstantCapture
             return new(capture.Image, canvas, capture.Metadata, title, source);
         }
         var desktop = await TakeWithContextAsync(canvas, settings);
-        using var raw = desktop.Image;
-        return new(CaptureGeometry.ComposeRegions(raw, canvas, canvas, regions), canvas, desktop.Metadata, title, source);
+        return new(desktop.Image, canvas, desktop.Metadata, title, source);
     }
 
     internal static Rectangle ResolveDesktopMargin(Rectangle original, int margin, IReadOnlyList<Rectangle> monitors, int minimumSize) =>

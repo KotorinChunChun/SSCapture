@@ -8,6 +8,72 @@ internal static partial class Program
 {
     static partial void HistoryUiTests()
     {
+        Run("履歴の期限は撮影時刻から計算し、期限後は取得できない", () =>
+        {
+            var clock = new HistoryClock();
+            using var history = new CaptureHistory(clock: clock);
+            using var image = new Bitmap(4, 4);
+            history.Configure(true, 1, false);
+            history.Add(image, null);
+            var id = history.Entries.Single().Id;
+            using var clone = history.CloneImage(id)!;
+            clock.Now += TimeSpan.FromDays(1) - TimeSpan.FromTicks(1);
+            Equal(id, history.Find(id)!.Id);
+            clock.Now += TimeSpan.FromTicks(1);
+            Equal(true, history.Prune());
+            Equal(0, history.Entries.Count);
+            Check(history.CloneImage(id) is null, "期限切れの履歴を取得できる");
+            Equal(image.Size, clone.Size);
+        });
+
+        Run("履歴は明示設定で再起動後に復元し、期限・移動・容量・消去を保持する", () =>
+        {
+            string root = Path.Combine(Path.GetTempPath(), "SSCapture-History-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                string original = Path.Combine(root, "保存した画像.png");
+                using var image = new Bitmap(4, 4);
+                image.SetPixel(0, 0, Color.Blue);
+                image.Save(original, System.Drawing.Imaging.ImageFormat.Png);
+                var storage = new CaptureHistoryStorage(Path.Combine(root, "history"));
+                var clock = new HistoryClock();
+                Guid id;
+                using (var before = new CaptureHistory(capacity: 3, storage: storage, clock: clock))
+                {
+                    before.Add(image, original);
+                    Check(!Directory.Exists(Path.Combine(root, "history")), "メモリーのみの履歴をディスクへ保存した");
+                    before.Configure(true, 2, true);
+                    var bounds = new Rectangle(-20, 30, 4, 4);
+                    before.Add(image, original, clock.Now.AddDays(-1), bounds);
+                    id = before.Entries.Last().Id;
+                    before.UpdateSavedPath(original, original + ".moved");
+                    before.Add(image, null, clock.Now.AddDays(-1.5));
+                }
+                using (var after = new CaptureHistory(capacity: 2, storage: storage, clock: clock))
+                {
+                    after.Configure(true, 2, true, restore: true);
+                    Equal(2, after.Entries.Count);
+                    Equal(new Rectangle(-20, 30, 4, 4), after.Find(id)!.CaptureBounds!.Value);
+                    Equal(original + ".moved", after.Find(id)!.SavedPath);
+                    using var copy = after.CloneImage(id);
+                    Equal(Color.Blue.ToArgb(), copy!.GetPixel(0, 0).ToArgb());
+                    Equal(2, storage.ReadEntries().Count);
+                    clock.Now += TimeSpan.FromDays(1);
+                    Equal(true, after.Prune());
+                    Equal(1, storage.ReadEntries().Count);
+                    after.Configure(true, 2, false);
+                    Equal(0, storage.ReadEntries().Count);
+                    Equal(1, after.Entries.Count);
+                    after.Configure(true, 2, true);
+                    after.Clear();
+                    Equal(0, storage.ReadEntries().Count);
+                    Check(File.Exists(original), "履歴の消去で利用者の保存済み画像を削除した");
+                }
+            }
+            finally { Directory.Delete(root, true); }
+        });
+
         Run("履歴から選んだアプリと撮影画像だけを編集処理に渡す", () =>
         {
             using var history = new CaptureHistory();
@@ -245,6 +311,12 @@ internal static partial class Program
 
         static HistoryForm Form(CaptureHistory history) => new(history, _ => Task.FromResult("コピー完了"), () => [],
             (_, _) => Task.FromResult("編集完了"), copyOcr: (_, _, _) => Task.FromResult("OCRコピー完了"));
+    }
+
+    private sealed class HistoryClock : TimeProvider
+    {
+        internal DateTimeOffset Now { get; set; } = new(2026, 11, 23, 12, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => Now;
     }
 
     private static Task SendHistory(HistoryForm form, Func<Guid, Task<string>> action) => (Task)typeof(HistoryForm)

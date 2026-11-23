@@ -148,6 +148,8 @@ $settingsFile = Join-Path (Get-Location) 'sscapture-settings.json'
 
 自動起動の登録・解除は、正式に導入した実行ファイルに対して行います。KotorinToys経由の起動を設定している場合は、本体で変更します。設定ファイルの読込・書き出しでWindowsの予約は変わりません。
 
+履歴の設定は `KeepHistory`（保持のON/OFF）、`HistoryRetentionDays`（0～365日、0は期限なし）、`PersistHistory`（再起動後に復元、初期OFF）です。設定の書き出しには履歴画像は含まれません。保持をOFFにする取込は履歴を消去するため、先に `--check` で確認できます。
+
 ## 撮影サンプル集
 
 サンプル1～7は、[まず実行する](#まず実行する)と同じ `$sscapture` を使います。座標は撮りたい場所の物理ピクセル値へ置き換えてください。IDが必要な例では「コマンド生成」で対象のプリセットを個別に選び、生成結果の `--input-preset` または `--output-preset` の直後にあるIDを使います。

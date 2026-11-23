@@ -1,4 +1,3 @@
-using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using SSCapture.Services;
 
@@ -67,7 +66,8 @@ internal static class IsolatedWindowCapture
 
     internal static async Task<(Bitmap Image, CaptureMetadata? Metadata)> TakeControlsAsync(
         IReadOnlyList<CaptureControlTarget> targets, AppSettings settings, ElementMetadata? focusAtSelectionStart = null,
-        Func<CaptureWindow, bool, CancellationToken, Task<WindowCaptureFrame>>? takeFrame = null)
+        Func<CaptureWindow, bool, CancellationToken, Task<WindowCaptureFrame>>? takeFrame = null,
+        Func<Rectangle, Bitmap>? takeBackground = null)
     {
         bool observe = settings.DefaultDestination.HasFlag(OutputDestination.File) && settings.MetadataMode != CaptureMetadataMode.None;
         using var cursor = observe ? CursorSnapshot.Capture() : null;
@@ -75,6 +75,7 @@ internal static class IsolatedWindowCapture
         DateTimeOffset observedAt = DateTimeOffset.Now;
         takeFrame ??= TakeFrameAsync;
         Rectangle bounds = targets.Select(target => target.Bounds).Aggregate(Rectangle.Union);
+        var groups = targets.GroupBy(target => target.Window.Handle).OrderByDescending(group => group.First().Window.ZOrder).ToArray();
         var result = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
         DateTimeOffset capturedAt = observedAt;
         try
@@ -82,21 +83,19 @@ internal static class IsolatedWindowCapture
             using (Graphics graphics = Graphics.FromImage(result))
             {
                 graphics.Clear(Color.Transparent);
-                foreach (var group in targets.GroupBy(target => target.Window).OrderByDescending(group => group.Key.ZOrder))
+                if (groups.Length > 1)
                 {
-                    WindowCaptureFrame frame = await takeFrame(group.Key, settings.IncludeCursor, CancellationToken.None);
+                    using var background = takeBackground is null ? InstantCapture.Take(bounds, includeCursor: false) : takeBackground(bounds);
+                    graphics.DrawImageUnscaled(background, Point.Empty);
+                }
+                foreach (var group in groups)
+                {
+                    CaptureWindow window = group.First().Window;
+                    WindowCaptureFrame frame = await takeFrame(window, settings.IncludeCursor, CancellationToken.None);
                     using var raw = frame.Image;
                     capturedAt = frame.CapturedAt;
-                    if (frame.Bounds.Location != group.Key.Bounds.Location || group.Any(target => !frame.Bounds.Contains(target.Bounds)))
+                    if (frame.Bounds.Location != window.Bounds.Location || group.Any(target => !frame.Bounds.Contains(target.Bounds)))
                         throw new InvalidOperationException("対象の位置が変わりました。もう一度選び直してください。");
-                    using var mask = new Region(Rectangle.Empty);
-                    foreach (var target in group)
-                    {
-                        Rectangle local = target.Bounds;
-                        local.Offset(-bounds.X, -bounds.Y);
-                        mask.Union(local);
-                    }
-                    graphics.SetClip(mask, CombineMode.Replace);
                     graphics.DrawImageUnscaled(raw, frame.Bounds.X - bounds.X, frame.Bounds.Y - bounds.Y);
                 }
             }

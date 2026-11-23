@@ -64,6 +64,7 @@ internal sealed partial class TrayApplicationContext
             recordingForm?.Dispose();
             dispatcher.Dispose();
             historyForm?.Dispose();
+            historyExpiration.Dispose();
             history.Dispose();
             output.Dispose();
             pinnedImages.Dispose();
