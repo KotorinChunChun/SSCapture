@@ -3,11 +3,10 @@ namespace SSCapture.Capture;
 internal sealed partial class SessionController
 {
     private sealed record MarginTarget(nint Window, Rectangle Original, Rectangle Source, int MinimumSize,
-        bool Isolated, bool Control, Services.ControlIdentity? Identity = null);
+        bool Isolated, bool Control, Services.ControlIdentity? Identity = null, bool LiveScreenWindow = false);
 
     private MarginTarget? marginTarget;
-    private int targetMargin, wheelRemainder;
-    private bool targetWheelUsed;
+    private int targetMargin, requestedTargetMargin, wheelRemainder;
 
     private void WatchGuideBounds(UI.SelectionGuideForm form)
     {
@@ -24,8 +23,11 @@ internal sealed partial class SessionController
         }
     }
 
+    private bool PressedRectangleWindow => Mode == CaptureMode.Rectangle && !TwoPointSelection
+        && pressedButton == MouseButtons.Left && gesture.IsPressed && !gesture.HasDragged;
+
     internal bool MagnifierMarksOrigin => IsRectangleMode && !gesture.HasDragged
-        && !SelectingControl && !SelectingDesktop && !targetWheelUsed;
+        && !SelectingControl && !SelectingDesktop && !(PressedRectangleWindow && MarginSelection is { IsEmpty: false });
 
     internal Point MagnifierSample => MagnifierMarksOrigin || (!SelectingControl && !SelectingDesktop
         && (IsRectangleMode || Mode == CaptureMode.FixedRegion && gesture.FixedPosition is null)
@@ -36,25 +38,50 @@ internal sealed partial class SessionController
     internal IReadOnlyList<Point>? MagnifierPolygon => !SelectingControl && Mode == CaptureMode.Freeform
         && gesture.HasDragged ? Points : null;
 
-    private Rectangle? MarginSelection => marginTarget is { } target
-        && (target.Control || HighlightWindow || HasPointerPress || targetWheelUsed)
+    private MarginTarget? VisibleMarginTarget => marginTarget is { } target
+        && (target.Control || HighlightWindow || HasPointerPress) ? target : null;
+
+    private Rectangle? MarginSelection => VisibleMarginTarget is { } target
         ? Rectangle.Inflate(target.Original, targetMargin, targetMargin) : null;
+
+    internal Rectangle SelectionBasis => VisibleMarginTarget?.Original
+        ?? (SelectingControl || PreviewFrame is not null ? Rectangle.Empty : gesture.SelectionBasis);
 
     private int? AppliedTargetMargin => targetMargin == 0 ? null : targetMargin;
 
     private void ResetTargetMargin()
     {
         marginTarget = null;
-        wheelRemainder = targetMargin = 0;
-        targetWheelUsed = false;
+        wheelRemainder = requestedTargetMargin = targetMargin = 0;
     }
 
-    private void UpdateTargetMargin()
+    private bool UpdateTargetMargin()
     {
         MarginTarget? next = ReadMarginTarget();
-        if (next == marginTarget) return;
-        ResetTargetMargin();
+        if (next == marginTarget) return false;
+        // Keep the adjustment while the live window moves. Re-clamp it to the
+        // new physical bounds without treating the move as a different target.
+        if (next is not { LiveScreenWindow: true } || marginTarget is not { LiveScreenWindow: true } previous
+            || previous.Window != next.Window)
+            ResetTargetMargin();
         marginTarget = next;
+        ReapplyTargetMargin();
+        return true;
+    }
+
+    private void RefreshLiveWindowMargin()
+    {
+        if (marginTarget is not { LiveScreenWindow: true } || !UpdateTargetMargin()) return;
+        UpdateGuidePointer();
+        overlayUpdatePending = true;
+    }
+
+    private void ReapplyTargetMargin()
+    {
+        targetMargin = marginTarget is { Original.IsEmpty: false } target
+            ? CaptureTargetMargin.Apply(target.Original, requestedTargetMargin, target.Source,
+                target.MinimumSize, target.Isolated ? null : SelectionMonitors).Margin
+            : 0;
     }
 
     private MarginTarget? ReadMarginTarget()
@@ -69,7 +96,7 @@ internal sealed partial class SessionController
                 1, isolated, true, control.Identity);
         }
 
-        if (SelectingDesktop || HasWindowDrag || TwoPointSelection
+        if (SelectingDesktop || HasWindowDrag || TwoPointSelection || UsesClientWindowArea
             || Mode is not (CaptureMode.Window or CaptureMode.Rectangle or CaptureMode.Freeform)
             || gesture.IsPressed && gesture.HasDragged) return null;
         Point point = gesture.WindowTargetPoint;
@@ -84,6 +111,15 @@ internal sealed partial class SessionController
         }
 
         Rectangle source = selectionBounds ?? Snapshot.Bounds;
+        if (window is not null && !OutputSettings.FreezeFrame && (PressedRectangleWindow || HighlightWindow))
+        {
+            Rectangle liveBounds;
+            try { liveBounds = captureWindowsKey ? CaptureNative.RequireCaptureWindow(window) : window.Bounds; }
+            catch (InvalidOperationException) { liveBounds = Rectangle.Empty; }
+            original = CaptureGeometry.Clip(liveBounds, source);
+            if (!CaptureGeometry.IsUsable(original)) original = Rectangle.Empty;
+            return new(window.Handle, original, source, CaptureGeometry.MinimumSize, false, false, LiveScreenWindow: true);
+        }
         return new(window?.Handle ?? 0, original, source, CaptureGeometry.MinimumSize, false, false);
     }
 
@@ -101,22 +137,26 @@ internal sealed partial class SessionController
             RefreshOverlays();
             return;
         }
-        if (!SelectingControl && Mode != CaptureMode.Window) return;
+        if (!SelectingControl && !HighlightWindow
+            && (!PressedRectangleWindow || !OutputSettings.CaptureKeys.WheelAdjustRectangle)) return;
         UpdateTargetMargin();
-        if (marginTarget is not { } target) return;
+        if (marginTarget is not { Original.IsEmpty: false }) return;
         (int steps, wheelRemainder) = CaptureTargetMargin.WheelSteps(wheelRemainder, delta);
         hasSelectionInput = true;
-        targetWheelUsed = true;
-        var adjusted = CaptureTargetMargin.Apply(target.Original, targetMargin + steps, target.Source,
-            target.MinimumSize, target.Isolated ? null : SelectionMonitors);
-        targetMargin = adjusted.Margin;
+        if (steps != 0)
+        {
+            requestedTargetMargin = targetMargin + steps;
+            ReapplyTargetMargin();
+        }
         RefreshOverlays();
     }
 
-    private CaptureSelection ApplyWindowMargin(CaptureSelection selection)
+    private CaptureSelection? ApplyWindowMargin(CaptureSelection selection)
     {
-        if (selection.WindowHitPoint is null || marginTarget is not { Control: false } target || AppliedTargetMargin is not int margin)
+        if (selection.WindowHitPoint is null || marginTarget is not { Control: false } target
+            || !target.LiveScreenWindow && AppliedTargetMargin is null)
             return selection;
-        return selection with { Bounds = Rectangle.Inflate(target.Original, margin, margin), TargetMargin = margin };
+        if (target.Original.IsEmpty) return null;
+        return selection with { Bounds = Rectangle.Inflate(target.Original, targetMargin, targetMargin), TargetMargin = AppliedTargetMargin };
     }
 }

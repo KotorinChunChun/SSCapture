@@ -15,7 +15,7 @@ internal sealed class CaptureOverlay : Form
     internal CaptureContextMenu SelectionMenu => session.SelectionMenu;
 
     private sealed record VisualState(DesktopSnapshot Snapshot, CaptureMode Mode, bool Dim, bool Highlight,
-        Rectangle Selection, Rectangle Target, WindowCaptureFrame? Preview, bool Valid, int Points, Rectangle Dimensions, string? DimensionsText,
+        Rectangle Selection, Rectangle Basis, Rectangle Target, WindowCaptureFrame? Preview, bool Valid, int Points, Rectangle Dimensions, string? DimensionsText,
         Rectangle Hint, string? HintText, string? Error, int TrailPoints, Rectangle TrailBounds, IReadOnlyList<Rectangle> DragHighlights,
         Rectangle Magnifier, Point MagnifierSample, Rectangle MagnifierSelection, bool MagnifierMarksOrigin,
         int MagnifierDotCount, int MagnifierZoom, bool Shared);
@@ -207,7 +207,7 @@ internal sealed class CaptureOverlay : Form
         if (!shared)
             foreach (Rectangle window in session.TargetDragHighlights)
                 DrawSnapshot(graphics, Rectangle.Intersect(Local(window), dirty));
-        DrawSelection(graphics, selection, dirty, shared);
+        DrawSelection(graphics, selection, Local(visual.Basis), dirty, shared);
         DrawTargetTrail(graphics, dirty);
         if (visual.DimensionsText is string dimensions)
             DrawPointerLabel(graphics, dimensions, visual.Dimensions, shared);
@@ -246,9 +246,9 @@ internal sealed class CaptureOverlay : Form
             dirty.Union(Inflate(old.Selection));
             dirty.Union(Inflate(next.Selection));
         }
-        else if (old.Selection != next.Selection || old.Valid != next.Valid)
+        if (old.Selection != next.Selection || old.Basis != next.Basis || old.Valid != next.Valid)
         {
-            if (!next.Highlight)
+            if (!next.Highlight && old.Selection != next.Selection)
             {
                 using var change = new Region(Local(old.Selection));
                 change.Xor(Local(next.Selection));
@@ -256,6 +256,8 @@ internal sealed class CaptureOverlay : Form
             }
             AddBorder(old.Selection);
             AddBorder(next.Selection);
+            AddBorder(old.Basis);
+            AddBorder(next.Basis);
         }
         if (old.Target != next.Target)
         {
@@ -320,7 +322,8 @@ internal sealed class CaptureOverlay : Form
     private VisualState ReadVisualState()
     {
         Rectangle selection = session.DisplaySelection;
-        var (dimensions, dimensionsPointer, hint) = ReadPointerLabels(selection);
+        Rectangle basis = selection.IsEmpty ? Rectangle.Empty : session.SelectionBasis;
+        var (dimensions, dimensionsPointer, hint) = ReadPointerLabels(selection, basis);
         Rectangle dimensionsBounds = dimensions is null ? Rectangle.Empty : PointerLabelBounds(dimensions, dimensionsPointer, 24, hint);
         Rectangle hintBounds = hint is null ? Rectangle.Empty : PointerLabelBounds(hint, session.Pointer, HintOffset(dimensions, dimensionsPointer));
         int dotCount = session.OutputSettings.MagnifierDotCount, zoom = session.OutputSettings.MagnifierZoom;
@@ -329,7 +332,7 @@ internal sealed class CaptureOverlay : Form
                 [dimensionsBounds, hintBounds, Local(session.VisibleGuideBounds)], magnifierQuadrant, dotCount * zoom)
             : new(Rectangle.Empty);
         magnifierQuadrant = lens.Quadrant;
-        return new(session.Snapshot, session.Mode, session.DimCaptureBackground, session.HighlightWindow, selection,
+        return new(session.Snapshot, session.Mode, session.DimCaptureBackground, session.HighlightWindow, selection, basis,
             session.HighlightForOverlay(MonitorBounds), session.PreviewFrame, session.FixedSelectionValid, session.Points.Count,
             dimensionsBounds, dimensions, hintBounds, hint, session.SelectionError, session.TargetDragPath.Count, session.TargetDragBounds,
             session.TargetDragHighlights, lens.Bounds, lens.Bounds.IsEmpty ? Point.Empty : session.MagnifierSample,
@@ -361,18 +364,27 @@ internal sealed class CaptureOverlay : Form
         return screen;
     }
 
-    private void DrawSelection(Graphics graphics, Rectangle selection, Rectangle dirty, bool shared)
+    private void DrawSelection(Graphics graphics, Rectangle selection, Rectangle basis, Rectangle dirty, bool shared)
     {
-        using Pen border = new(session.FixedSelectionValid ? Color.FromArgb(55, 195, 255) : Color.OrangeRed, 2);
+        bool adjusted = HasAdjustedFrame(selection, basis);
+        using Pen border = new(session.FixedSelectionValid ? Color.FromArgb(55, 195, 255) : Color.OrangeRed, adjusted ? 1 : 2);
         if (!session.SelectingControl && session.Mode == CaptureMode.Freeform && session.Dragging
             && session.Points.Count >= 2 && (selection.IsEmpty || session.MagnifierPolygon is not null))
             DrawFreeformSelection(graphics, border, dirty, shared);
         else if (selection.Width > 0 && selection.Height > 0)
         {
             if (!session.HighlightWindow && !session.SelectingControl && !shared) DrawSnapshot(graphics, Rectangle.Intersect(selection, dirty));
+            if (adjusted)
+            {
+                graphics.DrawRectangle(border, basis);
+                border.DashStyle = DashStyle.Dash;
+            }
             graphics.DrawRectangle(border, selection);
         }
     }
+
+    private static bool HasAdjustedFrame(Rectangle selection, Rectangle basis) =>
+        basis.Width > 0 && basis.Height > 0 && selection != basis;
 
     private GraphicsPath FreeformPath()
     {
@@ -400,19 +412,28 @@ internal sealed class CaptureOverlay : Form
         else graphics.DrawLines(border, points);
     }
 
-    private (string? Dimensions, Point DimensionsPointer, string? Hint) ReadPointerLabels(Rectangle selection)
+    private (string? Dimensions, Point DimensionsPointer, string? Hint) ReadPointerLabels(Rectangle selection, Rectangle basis)
     {
         Point pointer = session.SelectingControl ? session.Pointer : session.Current;
+        bool showBasis = session.OutputSettings.ShowPointerGuide && HasAdjustedFrame(selection, basis);
+        if (showBasis) pointer = session.Pointer;
         string? dimensions = null;
-        if (!session.PointerLabelsSuppressed && selection.Width > 0 && selection.Height > 0 && MonitorBounds.Contains(pointer)
-            && selection != session.PointerHintCoordinates)
-            dimensions = $"{selection.Width} × {selection.Height}" + (session.FixedSelectionValid ? "" : " 画面外");
+        if (!session.PointerLabelsSuppressed && selection.Width > 0 && selection.Height > 0 && MonitorBounds.Contains(pointer))
+        {
+            if (selection != session.PointerHintCoordinates)
+                dimensions = $"{selection.Width} × {selection.Height}" + (session.FixedSelectionValid ? "" : " 画面外");
+            if (showBasis)
+            {
+                string original = $"基準 {basis.Width} × {basis.Height}";
+                dimensions = dimensions is null ? original : $"{original}\n撮影 {dimensions}";
+            }
+        }
         return (dimensions, pointer, PointerHintText());
     }
 
     private int HintOffset(string? dimensions, Point dimensionsPointer) =>
         dimensions is not null && Math.Abs(dimensionsPointer.Y - session.Pointer.Y) < 52
-        ? 24 + Math.Max(28, PointerLabelLineHeight + 8) : 24;
+        ? 24 + Math.Max(28, (1 + dimensions.Count(c => c == '\n')) * PointerLabelLineHeight + 8) : 24;
 
     private int PointerLabelLineHeight => TextRenderer.MeasureText("国", dimensionsFont).Height;
 

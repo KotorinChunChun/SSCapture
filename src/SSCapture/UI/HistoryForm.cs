@@ -9,14 +9,24 @@ internal sealed class HistoryForm : Form
     private readonly ListBox list;
     private readonly PictureBox picture;
     private readonly Label details, status;
-    private readonly Button copyButton, editButton, clearButton;
+    private readonly Button copyButton, editButton, removeButton, clearButton;
     private readonly ContextMenuStrip editMenu = new() { Name = "HistoryEditMenu" };
-    private bool operating, refreshPending, disposedResources;
+    private readonly ContextMenuStrip ocrMenu = new() { Name = "HistoryOcrMenu" };
+    private readonly CancellationTokenSource formLifetime = new();
+    private readonly Button? ocrButton;
+    private readonly ToolTip tips = new();
+    private readonly Func<Guid, Control, CancellationToken, Task<string>>? drag;
+    private bool operating, refreshing, refreshPending, disposedResources;
+    private Point? dragOrigin;
+    private CancellationTokenSource? dragGesture;
 
     public HistoryForm(CaptureHistory history, Func<Guid, Task<string>> copy,
-        Func<IReadOnlyList<ExternalApplication>> applications, Func<Guid, string, Task<string>> editWithApplication)
+        Func<IReadOnlyList<ExternalApplication>> applications, Func<Guid, string, Task<string>> editWithApplication,
+        Func<Guid, Control, CancellationToken, Task<string>>? drag = null,
+        Func<Guid, bool, CancellationToken, Task<string>>? copyOcr = null)
     {
         this.history = history;
+        this.drag = drag;
         Name = "HistoryForm";
         Text = WindowTitle.Create("撮影履歴");
         MinimizeBox = MaximizeBox = false;
@@ -42,6 +52,7 @@ internal sealed class HistoryForm : Form
         body.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.Controls.Add(body, 0, 0);
         list = new ListBox { Name = "HistoryEntries", Dock = DockStyle.Fill, IntegralHeight = false,
+            SelectionMode = SelectionMode.MultiExtended,
             DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 80, Margin = new Padding(0, 0, 10, 0) };
         body.Controls.Add(list, 0, 0);
         var preview = new TableLayoutPanel { Name = "HistoryPreviewPanel", Dock = DockStyle.Fill,
@@ -52,6 +63,13 @@ internal sealed class HistoryForm : Form
         body.Controls.Add(preview, 1, 0);
         picture = new PictureBox { Name = "HistoryPreview", Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom,
             BackColor = Color.FromArgb(224, 229, 234), BorderStyle = BorderStyle.FixedSingle, Margin = Padding.Empty };
+        if (drag is not null)
+        {
+            picture.MouseDown += BeginDrag;
+            picture.MouseMove += DragPreviewAsync;
+            picture.MouseUp += (_, _) => CancelDrag();
+            picture.MouseCaptureChanged += (_, _) => { if (!picture.Capture) CancelDrag(); };
+        }
         preview.Controls.Add(picture, 0, 0);
         details = new Label { Name = "HistoryDetails", Dock = DockStyle.Fill, AutoEllipsis = true,
             Padding = new Padding(0, 5, 0, 0) };
@@ -65,13 +83,16 @@ internal sealed class HistoryForm : Form
         close.Click += (_, _) => Close();
         clearButton = Button("履歴を消去", "ClearHistory", 138, ButtonRole.Danger);
         clearButton.Click += (_, _) => ClearHistory();
+        tips.SetToolTip(clearButton, "履歴はアプリの終了時と、設定で保持をオフにしたときにも消去されます。保存済みファイルは残ります。");
+        removeButton = Button("選択項目を削除", "RemoveHistorySelection", 144, ButtonRole.Danger);
+        removeButton.Click += (_, _) => RemoveSelected();
         editButton = Button("画像編集アプリを選ぶ ▾", "EditHistoryImage", 212, ButtonRole.Secondary);
         editButton.ContextMenuStrip = editMenu;
         editButton.Click += (_, _) => editMenu.Show(editButton, new Point(0, editButton.Height));
         editMenu.Opening += (_, e) =>
         {
             while (editMenu.Items.Count > 0) editMenu.Items[0].Dispose();
-            if (operating || list.SelectedItem is not Item target || picture.Image is null) { e.Cancel = true; return; }
+            if (operating || SelectedImage is not Item target || picture.Image is null) { e.Cancel = true; return; }
             var apps = applications();
             if (apps.Count == 0)
             {
@@ -85,7 +106,7 @@ internal sealed class HistoryForm : Form
                 var choice = new ToolStripMenuItem { Text = app.Name.Replace("&", "&&"), Name = appId };
                 choice.Click += async (_, _) =>
                 {
-                    if ((list.SelectedItem as Item)?.Entry.Id == target.Entry.Id)
+                    if (SelectedImage?.Entry.Id == target.Entry.Id)
                         await SendAsync(id => editWithApplication(id, appId));
                 };
                 editMenu.Items.Add(choice);
@@ -94,11 +115,29 @@ internal sealed class HistoryForm : Form
         };
         copyButton = Button("再コピー", "CopyHistoryImage", 124, ButtonRole.Primary);
         copyButton.Click += async (_, _) => await SendAsync(copy);
-        buttons.Controls.AddRange([close, clearButton, editButton, copyButton]);
+        buttons.Controls.AddRange([close, clearButton, removeButton, editButton]);
+        if (copyOcr is not null)
+        {
+            ocrButton = Button("OCRコピー ▾", "CopyHistoryOcr", 120, ButtonRole.Secondary);
+            AddOcrItem("文字をコピー", "HistoryCopyText", false);
+            AddOcrItem("表をコピー", "HistoryCopyTable", true);
+            ocrMenu.Opening += (_, e) => e.Cancel = operating || SelectedImage is null || picture.Image is null;
+            ocrButton.Click += (_, _) => ocrMenu.Show(ocrButton, new Point(0, ocrButton.Height));
+            picture.ContextMenuStrip = ocrMenu;
+            buttons.Controls.Add(ocrButton);
+
+            void AddOcrItem(string label, string name, bool asTable)
+            {
+                var item = new ToolStripMenuItem(label) { Name = name };
+                item.Click += async (_, _) => await SendAsync(id => copyOcr(id, asTable, formLifetime.Token));
+                ocrMenu.Items.Add(item);
+            }
+        }
+        buttons.Controls.Add(copyButton);
         root.Controls.Add(buttons, 0, 2);
         CancelButton = close;
         list.DrawItem += DrawEntry;
-        list.SelectedIndexChanged += (_, _) => LoadPreview();
+        list.SelectedIndexChanged += (_, _) => { if (!refreshing && !disposedResources) LoadPreview(); };
         HandleCreated += (_, _) => UpdateRowHeight();
         DpiChanged += (_, _) => UpdateRowHeight();
         RefreshEntries();
@@ -108,7 +147,8 @@ internal sealed class HistoryForm : Form
     {
         if (IsDisposed || disposedResources) return;
         if (operating) { refreshPending = true; return; }
-        Guid? selected = (list.SelectedItem as Item)?.Entry.Id;
+        var selected = list.SelectedItems.Cast<Item>().Select(item => item.Entry.Id).ToHashSet();
+        refreshing = true;
         list.BeginUpdate();
         try
         {
@@ -119,20 +159,23 @@ internal sealed class HistoryForm : Form
                 if (image is null) continue;
                 list.Items.Add(new Item(entry, Thumbnail(image)));
             }
-            int next = Enumerable.Range(0, list.Items.Count).FirstOrDefault(
-                index => ((Item)list.Items[index]).Entry.Id == selected, -1);
-            list.SelectedIndex = next >= 0 ? next : list.Items.Count > 0 ? 0 : -1;
-            if (list.Items.Count == 0) { LoadPreview(); SetStatus("撮影履歴はありません。"); }
-            else SetStatus($"{list.Items.Count}枚の履歴");
+            for (int index = 0; index < list.Items.Count; index++)
+                if (selected.Contains(((Item)list.Items[index]).Entry.Id)) list.SetSelected(index, true);
+            if (list.SelectedItems.Count == 0 && list.Items.Count > 0) list.SetSelected(0, true);
         }
-        finally { list.EndUpdate(); UpdateButtons(); }
+        finally { list.EndUpdate(); refreshing = false; }
+        SetStatus(list.Items.Count == 0 ? "撮影履歴はありません。" : $"起動中の履歴 {list.Items.Count}枚");
+        LoadPreview();
     }
+
+    private Item? SelectedImage => list.SelectedItems.Count == 1 ? list.SelectedItem as Item : null;
 
     private void LoadPreview()
     {
+        CancelDrag();
         Image? previous = picture.Image;
         picture.Image = null; previous?.Dispose();
-        if (list.SelectedItem is not Item selected) { details.Text = ""; UpdateButtons(); return; }
+        if (SelectedImage is not Item selected) { details.Text = ""; UpdateButtons(); return; }
         Bitmap? image = history.CloneImage(selected.Entry.Id);
         picture.Image = image;
         if (image is null)
@@ -149,10 +192,36 @@ internal sealed class HistoryForm : Form
         UpdateButtons();
     }
 
-    private async Task SendAsync(Func<Guid, Task<string>> action)
+    private void BeginDrag(object? sender, MouseEventArgs e)
     {
-        if (operating || list.SelectedItem is not Item selected) return;
-        if (!history.Entries.Any(entry => entry.Id == selected.Entry.Id))
+        if (e.Button != MouseButtons.Left || operating || SelectedImage is null || picture.Image is null) return;
+        CancelDrag();
+        dragGesture = new();
+        dragOrigin = e.Location;
+    }
+
+    private async void DragPreviewAsync(object? sender, MouseEventArgs e)
+    {
+        if (drag is null || dragOrigin is not Point origin || dragGesture is null || e.Button != MouseButtons.Left
+            || !NotificationFileDrag.DragThresholdReached(origin, e.Location, SystemInformation.DragSize)) return;
+        dragOrigin = null;
+        CancellationToken gesture = dragGesture.Token;
+        try { await SendAsync(id => drag(id, picture, gesture)); }
+        finally { CancelDrag(); }
+    }
+
+    private void CancelDrag()
+    {
+        dragOrigin = null;
+        dragGesture?.Cancel();
+        dragGesture?.Dispose();
+        dragGesture = null;
+    }
+
+    internal async Task SendAsync(Func<Guid, Task<string>> action)
+    {
+        if (operating || SelectedImage is not Item selected) return;
+        if (history.Find(selected.Entry.Id) is null)
         { RefreshEntries(); SetStatus("この画像は履歴から解放されています。", true); return; }
         operating = true; list.Enabled = false; UpdateButtons(); SetStatus("処理中…");
         string? result = null;
@@ -179,11 +248,24 @@ internal sealed class HistoryForm : Form
         SetStatus("メモリー内の履歴を消去しました。保存済みファイルは残っています。");
     }
 
+    private void RemoveSelected()
+    {
+        if (operating || list.SelectedItems.Count == 0) return;
+        int removed = history.Remove(list.SelectedItems.Cast<Item>().Select(item => item.Entry.Id));
+        RefreshEntries();
+        SetStatus($"選択した履歴を{removed}枚削除しました。保存済みファイルは残っています。");
+    }
+
     private void UpdateButtons()
     {
-        bool selected = list.SelectedItem is Item && picture.Image is not null;
+        bool selected = SelectedImage is not null && picture.Image is not null;
         copyButton.Enabled = editButton.Enabled = !operating && selected;
+        if (ocrButton is not null) ocrButton.Enabled = !operating && selected;
+        removeButton.Enabled = !operating && list.SelectedItems.Count > 0;
         clearButton.Enabled = !operating && list.Items.Count > 0;
+        bool canDrag = !operating && selected && drag is not null;
+        picture.Cursor = canDrag ? Cursors.Hand : Cursors.Default;
+        tips.SetToolTip(picture, canDrag ? "フォルダへドラッグして移動。Ctrlを押すとコピー。対応アプリへドロップして開きます。" : null);
     }
 
     private void DrawEntry(object? sender, DrawItemEventArgs e)
@@ -238,7 +320,12 @@ internal sealed class HistoryForm : Form
         if (disposing && !disposedResources)
         {
             disposedResources = true;
+            CancelDrag();
+            formLifetime.Cancel();
+            formLifetime.Dispose();
+            ocrMenu.Dispose();
             editMenu.Dispose();
+            tips.Dispose();
             ReleaseItems();
             Image? image = picture.Image; picture.Image = null; image?.Dispose();
         }

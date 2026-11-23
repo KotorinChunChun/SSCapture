@@ -22,6 +22,7 @@ internal sealed class LastCaptureRecipe
     internal IReadOnlyList<(int WindowIndex, ControlIdentity? Identity)>? ControlGroup { get; }
     internal bool IncludeOwnedWindows { get; }
     internal bool IsSingleWindowSelection { get; }
+    internal bool ClientAreaOnly { get; }
     internal int? TargetMargin { get; }
     internal IReadOnlyList<Point>? Polygon { get; }
     internal AppSettings Settings => CaptureSettingsSnapshot.Copy(settings);
@@ -49,6 +50,7 @@ internal sealed class LastCaptureRecipe
             UseIsolatedWindow = selected.Isolated;
             IncludeOwnedWindows = selected.IncludeOwned;
             IsSingleWindowSelection = selected.IsSingleWindowSelection;
+            ClientAreaOnly = selected.ClientAreaOnly;
             TargetMargin = selected.TargetMargin;
         }
         if (source is CaptureReplaySource.Monitors selectedMonitors)

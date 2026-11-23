@@ -37,6 +37,45 @@ internal static partial class Program
 
     static partial void OcrTests()
     {
+        OcrCopyTests();
+        Run("OCRコピーは成功した文字またはTSVだけをクリップボードへ確定する", () =>
+        {
+            using var image = new Bitmap(80, 40);
+            const string original = "元のクリップボード";
+            string clipboard = original;
+            using var operation = new CancellationTokenSource();
+            Task Write(string text, CancellationToken token)
+            {
+                token.ThrowIfCancellationRequested();
+                clipboard = text;
+                return Task.CompletedTask;
+            }
+            Task Copy(OcrCopyResult response, bool table, CancellationToken token = default) =>
+                CaptureOcrCopy.CopyAsync(image, "", table, token, (_, _, _, _) => Task.FromResult(response), Write);
+            void Refuse(OcrCopyResult response, bool table, string message)
+            {
+                try { Copy(response, table).GetAwaiter().GetResult(); throw new Exception("コピーが失敗しなかった"); }
+                catch (InvalidOperationException ex) { Check(ex.Message.Contains(message), ex.Message); }
+                Equal(original, clipboard);
+            }
+            Refuse(new("", "認識失敗", null, new(OcrTableStatus.RecognitionFailed)), false, "認識失敗");
+            Refuse(new("  ", null, null, new(OcrTableStatus.Empty)), false, "文字を認識できません");
+            Refuse(new("東京", null, null, new(OcrTableStatus.LowConfidence)), true, "文字をコピー");
+            try
+            {
+                CaptureOcrCopy.CopyAsync(image, "", false, operation.Token, (_, _, _, _) =>
+                {
+                    operation.Cancel();
+                    return Task.FromResult(new OcrCopyResult("認識済み", null, null, new(OcrTableStatus.NotRequested)));
+                }, Write).GetAwaiter().GetResult();
+                throw new Exception("コピーが取り消されなかった");
+            }
+            catch (OperationCanceledException) { Equal(original, clipboard); }
+            Copy(new("東京\r\n大阪", null, null, new(OcrTableStatus.NotRequested)), false).GetAwaiter().GetResult();
+            Equal("東京\r\n大阪", clipboard);
+            Copy(new("A B C", null, null, new(OcrTableStatus.Ready, "A\t\tC\r\n1\t2\t3")), true).GetAwaiter().GetResult();
+            Equal("A\t\tC\r\n1\t2\t3", clipboard);
+        });
         Run("OCR未選択をボタンとCtrlEnterで確定してPNGとMP4を保存", () => WithServiceDirectory(directory =>
         {
             using var image = OcrFixture();

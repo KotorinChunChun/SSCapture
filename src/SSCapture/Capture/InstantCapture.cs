@@ -84,6 +84,8 @@ internal static class InstantCapture
         var windows = CaptureNative.CaptureWindows(monitors.Aggregate(Rectangle.Union));
         CaptureWindow[] roots = recipe.ResolveWindows(windows, requireOriginalWindow: requireOriginalWindow);
         CaptureWindow target = roots[0];
+        if (recipe.ClientAreaOnly)
+            return await TakeWindowAsync(target, settings, recipe.UseIsolatedWindow, clientAreaOnly: true);
         if (recipe.ControlGroup is { } controlGroup)
             return await TakeReplayControlsAsync(controlGroup, roots, monitors, recipe.UseIsolatedWindow, settings);
         if (recipe.TracksControl)
@@ -139,6 +141,31 @@ internal static class InstantCapture
         if (regions.Length == 1) return new(capture.Image, bounds, capture.Metadata, title, source);
         using var raw = capture.Image;
         return new(CaptureGeometry.ComposeRegions(raw, bounds, bounds, regions), bounds, capture.Metadata, title, source);
+    }
+
+    internal static async Task<WindowReplayFrame> TakeWindowAsync(CaptureWindow target, AppSettings settings,
+        bool isolated, bool clientAreaOnly)
+    {
+        var source = new CaptureReplaySource.Windows([target], isolated, IncludeOwned: false, IsSingleWindowSelection: true)
+            { ClientAreaOnly = clientAreaOnly };
+        if (isolated)
+        {
+            var frame = await IsolatedWindowCapture.TakeAsync(target, settings, clientAreaOnly: clientAreaOnly);
+            return new(frame.Image, frame.Bounds, frame.Metadata, target.Title, source);
+        }
+
+        Rectangle bounds = clientAreaOnly ? CaptureNative.RequireClientBounds(target) : CaptureNative.RequireCaptureWindow(target);
+        if (!CaptureGeometry.IsFullyCovered(bounds, CaptureNative.MonitorBounds()))
+            throw new InvalidOperationException("ウィンドウの撮影範囲全体が撮影可能なモニター内にありません。");
+        var capture = await TakeWithContextAsync(bounds, settings);
+        try
+        {
+            Rectangle current = clientAreaOnly ? CaptureNative.RequireClientBounds(target) : CaptureNative.RequireCaptureWindow(target);
+            if (current != bounds)
+                throw new InvalidOperationException("撮影中にウィンドウの撮影範囲が変わりました。もう一度撮影してください。");
+            return new(capture.Image, bounds, capture.Metadata, target.Title, source);
+        }
+        catch { capture.Image.Dispose(); throw; }
     }
 
     private static async Task<WindowReplayFrame> TakeReplayControlsAsync(

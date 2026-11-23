@@ -5,6 +5,19 @@ namespace SSCapture.Services;
 
 internal static class ClipboardWriter
 {
+    internal static async Task CopyTextAsync(string text, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("コピーする文字がありません。", nameof(text));
+        if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA || SynchronizationContext.Current is not WindowsFormsSynchronizationContext)
+            throw new InvalidOperationException("クリップボードにはUIスレッドからアクセスしてください。");
+        for (int attempt = 0; ; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try { Clipboard.SetText(text, TextDataFormat.UnicodeText); return; }
+            catch (ExternalException) when (attempt < 7) { await Task.Delay(50 * (attempt + 1), cancellationToken); }
+        }
+    }
+
     public static async Task CopyFileAsync(string path)
     {
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA || SynchronizationContext.Current is not WindowsFormsSynchronizationContext)

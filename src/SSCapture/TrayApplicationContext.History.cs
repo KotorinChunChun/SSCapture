@@ -14,7 +14,8 @@ internal sealed partial class TrayApplicationContext
             return;
         if (historyForm is null || historyForm.IsDisposed)
         {
-            historyForm = new HistoryForm(history, CopyHistoryAsync, () => settings.ImageEditors, EditHistoryAsync);
+            historyForm = new HistoryForm(history, CopyHistoryAsync, () => settings.ImageEditors, EditHistoryAsync,
+                drag: DragHistoryAsync, copyOcr: CopyHistoryOcrAsync);
             historyForm.FormClosed += (_, _) => historyForm = null;
         }
 
@@ -22,9 +23,30 @@ internal sealed partial class TrayApplicationContext
         WindowVisibility.Show(historyForm);
     }
 
+    private async Task<string> DragHistoryAsync(Guid id, Control source, CancellationToken gesture)
+    {
+        bool dropped = await NotificationFileDrag.RunHistoryAsync(source, history, id, workRoot,
+            () => !exiting && source.Visible && !gesture.IsCancellationRequested && (Control.MouseButtons & MouseButtons.Left) != 0,
+            SavedFileMoved);
+        return dropped ? "画像を渡しました。" : "ドラッグを取り消しました。";
+    }
+
+    private void SavedFileMoved(string previous, string? current)
+    {
+        history.UpdateSavedPath(previous, current);
+        feedback.UpdateSavedPath(previous, current);
+        historyForm?.RefreshEntries();
+    }
+
+    private async Task<string> CopyHistoryOcrAsync(Guid id, bool asTable, CancellationToken token)
+    {
+        using var image = history.CloneImage(id) ?? throw new InvalidOperationException("この画像は履歴から削除されています。");
+        return await CaptureOcrCopy.CopyAsync(image, settings.OneOcrDirectory, asTable, token);
+    }
+
     private async Task<string> CopyHistoryAsync(Guid id)
     {
-        var entry = history.Entries.FirstOrDefault(e => e.Id == id) ?? throw new InvalidOperationException("この画像は履歴から削除されています。");
+        var entry = history.Find(id) ?? throw new InvalidOperationException("この画像は履歴から削除されています。");
         using var image = history.CloneImage(id) ?? throw new InvalidOperationException("この画像は履歴から削除されています。");
         try
         {
@@ -45,7 +67,7 @@ internal sealed partial class TrayApplicationContext
         var application = settings.ImageEditors.FirstOrDefault(app => app.Id == applicationId)
             ?? throw new InvalidOperationException("選んだ画像編集アプリは登録されていません。選び直してください。");
         var editorSettings = (settings with { SelectedImageEditorId = applicationId }).ResolveEditors();
-        var entry = history.Entries.FirstOrDefault(e => e.Id == id) ?? throw new InvalidOperationException("この画像は履歴から削除されています。");
+        var entry = history.Find(id) ?? throw new InvalidOperationException("この画像は履歴から削除されています。");
         if (entry.SavedPath is string saved && File.Exists(saved))
         {
             try

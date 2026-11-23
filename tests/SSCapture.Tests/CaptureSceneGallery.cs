@@ -85,6 +85,15 @@ internal static partial class Program
         // ウィンドウ撮影で、資料の窓を指している状態。拡大鏡に棒グラフの角が映る位置を指す。
         await CaptureSceneAsync(Path.Combine(output, "capture-scene-window.png"), settingsImage, settings, CaptureMode.Window, null,
             new Point(1534, 424), session => new Point(1534, 424));
+        // 矩形モードでウィンドウ上の左ボタンを押したまま、ホイールで外周を広げた状態。
+        await CaptureSceneAsync(Path.Combine(output, "capture-scene-window-margin.png"), settingsImage, settings, CaptureMode.Rectangle, null,
+            new Point(1534, 424), session =>
+            {
+                var pointer = new Point(1534, 424);
+                session.MouseDown(SceneOverlay(session), MouseButtons.Left, pointer);
+                session.MouseWheel(pointer, 120 * 12);
+                return pointer;
+            });
         // 固定サイズ960×540pxの枠を置く位置を選んでいる状態。
         await CaptureSceneAsync(Path.Combine(output, "capture-scene-fixed.png"), settingsImage, settings, CaptureMode.FixedRegion, new Size(960, 540),
             new Point(150, 120), session => new Point(150, 120));

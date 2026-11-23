@@ -8,7 +8,8 @@ internal static class IsolatedWindowCapture
 {
     internal static async Task<(Bitmap Image, Rectangle Bounds, CaptureMetadata? Metadata)> TakeAsync(
         CaptureWindow target, AppSettings settings, ElementMetadata? focusAtSelectionStart = null, WindowCapturePreview? preview = null,
-        IReadOnlyList<CaptureWindow>? foregroundFirst = null, IReadOnlyList<CaptureWindow>? requiredWindows = null)
+        IReadOnlyList<CaptureWindow>? foregroundFirst = null, IReadOnlyList<CaptureWindow>? requiredWindows = null,
+        bool clientAreaOnly = false)
     {
         _ = CaptureNative.RequireCaptureWindow(target);
         bool observe = settings.DefaultDestination.HasFlag(OutputDestination.File) && settings.MetadataMode != CaptureMetadataMode.None;
@@ -32,6 +33,7 @@ internal static class IsolatedWindowCapture
 
         async Task<WindowCaptureFrame> CaptureOrReuseAsync()
         {
+            if (clientAreaOnly) return await TakeClientFrameAsync(target, settings.IncludeCursor);
             if (preview is not null)
             {
                 try { return await preview.TakeAsync(); }
@@ -110,10 +112,29 @@ internal static class IsolatedWindowCapture
 
     private static bool IsCaptureFailure(Exception ex) => ex is InvalidOperationException or TimeoutException or NotSupportedException or UnauthorizedAccessException;
 
+    internal static async Task<WindowCaptureFrame> TakeClientFrameAsync(CaptureWindow target, bool includeCursor,
+        CancellationToken cancellationToken = default)
+    {
+        Rectangle frameBounds = CaptureNative.RequireCaptureWindow(target);
+        Rectangle clientBounds = CaptureNative.RequireClientBounds(target);
+        using var image = await WindowStillCapture.CaptureAsync(target, includeCursor, cancellationToken);
+        if (CaptureNative.RequireCaptureWindow(target) != frameBounds || CaptureNative.RequireClientBounds(target) != clientBounds)
+            throw new InvalidOperationException("撮影中にウィンドウの描画領域が変わりました。もう一度撮影してください。");
+        return new(CropClientFrame(image, frameBounds, clientBounds), clientBounds, DateTimeOffset.Now);
+    }
+
+    internal static Bitmap CropClientFrame(Bitmap image, Rectangle frameBounds, Rectangle clientBounds)
+    {
+        if (frameBounds.Size != image.Size || !frameBounds.Contains(clientBounds)
+            || CaptureGeometry.Crop(image, frameBounds, clientBounds, minimumSize: 1) is not { } client)
+            throw new InvalidOperationException("描画領域とウィンドウ画像の位置や寸法が一致しません。もう一度撮影してください。");
+        return client;
+    }
+
     internal static async Task<WindowCaptureFrame> TakeFrameAsync(CaptureWindow target, bool includeCursor, CancellationToken cancellationToken = default)
     {
         _ = CaptureNative.RequireCaptureWindow(target);
-        Bitmap image = await WindowStillCapture.CaptureAsync(target.Handle, includeCursor, cancellationToken);
+        Bitmap image = await WindowStillCapture.CaptureAsync(target, includeCursor, cancellationToken);
         try
         {
             return new(image, new(CaptureNative.RequireCaptureWindow(target).Location, image.Size), DateTimeOffset.Now);
@@ -125,7 +146,8 @@ internal static class IsolatedWindowCapture
 internal sealed record WindowCaptureFrame(Bitmap Image, Rectangle Bounds, DateTimeOffset CapturedAt);
 
 // Each hover owns one frame until the pointer leaves the target or the user confirms it.
-internal sealed class WindowCapturePreview(CaptureWindow target, bool includeCursor, IReadOnlyList<CaptureWindow> foregroundFirst) : IDisposable
+internal sealed class WindowCapturePreview(CaptureWindow target, bool includeCursor, IReadOnlyList<CaptureWindow> foregroundFirst,
+    bool clientAreaOnly = false) : IDisposable
 {
     private readonly CancellationTokenSource cancellation = new();
     private Task<WindowCaptureFrame>? frame;
@@ -133,12 +155,14 @@ internal sealed class WindowCapturePreview(CaptureWindow target, bool includeCur
     internal CaptureWindow Target { get; } = target;
     internal IReadOnlyList<CaptureWindow> Windows { get; } = foregroundFirst;
     internal bool IncludeCursor { get; } = includeCursor;
+    internal bool ClientAreaOnly { get; } = clientAreaOnly;
     internal Task<WindowCaptureFrame> Frame => frame ??= LoadAsync(cancellation.Token);
 
     private async Task<WindowCaptureFrame> LoadAsync(CancellationToken token)
     {
         // Skip GPU setup for windows the pointer only passes over.
         await Task.Delay(80, token).ConfigureAwait(false);
+        if (ClientAreaOnly) return await IsolatedWindowCapture.TakeClientFrameAsync(Target, IncludeCursor, token).ConfigureAwait(false);
         return await IsolatedWindowCapture.TakeGroupAsync(Windows, IncludeCursor, token,
             new HashSet<nint> { Target.Handle }).ConfigureAwait(false);
     }

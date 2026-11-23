@@ -162,14 +162,17 @@ internal sealed class TemporaryHandoff : IDisposable
 
     private sealed record Lease(string FileName, string StagingFileName, FileIdentity Identity);
 
-    private readonly record struct FileIdentity(uint Volume, ulong Index, ulong Created)
+    internal readonly record struct FileIdentity(uint Volume, ulong Index, ulong Created)
     {
         private const uint ReadAttributes = 0x80, Delete = 0x10000;
         private const uint OpenExisting = 3, OpenReparsePoint = 0x00200000;
 
+        internal static SafeFileHandle OpenForTracking(string path) =>
+            CreateFileW(NativePath(path), ReadAttributes, FileShare.ReadWrite | FileShare.Delete, 0, OpenExisting, OpenReparsePoint, 0);
+
         internal static FileIdentity? Read(string path)
         {
-            using var file = CreateFileW(NativePath(path), ReadAttributes, FileShare.ReadWrite | FileShare.Delete, 0, OpenExisting, OpenReparsePoint, 0);
+            using var file = OpenForTracking(path);
             return Identify(file);
         }
 
@@ -186,7 +189,7 @@ internal sealed class TemporaryHandoff : IDisposable
         private static string NativePath(string path) => path.StartsWith(@"\\?\", StringComparison.Ordinal) ? path
             : path.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + path[2..] : @"\\?\" + path;
 
-        private static FileIdentity? Identify(SafeFileHandle file)
+        internal static FileIdentity? Identify(SafeFileHandle file)
         {
             if (file.IsInvalid || !GetFileInformationByHandle(file, out var info)
                 || (info.Attributes & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0) return null;

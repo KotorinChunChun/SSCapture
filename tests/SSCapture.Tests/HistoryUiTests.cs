@@ -29,6 +29,7 @@ internal static partial class Program
             menu.Items["second"]!.PerformClick();
             Equal((history.Entries[0].Id, "second"), sent.Single());
             var list = (ListBox)form.Controls.Find("HistoryEntries", true).Single();
+            list.ClearSelected();
             list.SelectedIndex = 1;
             menu.Items["first"]!.PerformClick();
             Equal(1, sent.Count);
@@ -43,6 +44,33 @@ internal static partial class Program
                 typeof(ContextMenuStrip).GetMethod("OnOpening", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(menu, [args]);
                 return args.Cancel;
             }
+        });
+
+        Run("履歴のOCRは選択した画像だけを処理し、終了で取り消す", () =>
+        {
+            using var history = new CaptureHistory();
+            using var image = new Bitmap(4, 4);
+            history.Add(image, null);
+            history.Add(image, null);
+            var pending = new TaskCompletionSource<string>();
+            Guid? id = null;
+            bool asTable = false;
+            CancellationToken token = default;
+            using var form = new HistoryForm(history, _ => Task.FromResult("コピー完了"), () => [], (_, _) => Task.FromResult("編集完了"),
+                copyOcr: (entry, table, cancellation) =>
+                {
+                    id = entry; asTable = table; token = cancellation;
+                    return pending.Task;
+                });
+            var list = (ListBox)form.Controls.Find("HistoryEntries", true).Single();
+            list.ClearSelected(); list.SetSelected(1, true);
+            var menu = form.Controls.Find("HistoryPreview", true).Single().ContextMenuStrip!;
+            menu.Items["HistoryCopyTable"]!.PerformClick();
+            Equal<Guid?>(history.Entries[1].Id, id);
+            Check(asTable && !token.IsCancellationRequested, "表の処理に有効なトークンが渡らなかった");
+            form.Dispose();
+            Check(token.IsCancellationRequested, "履歴を閉じてもOCRが取り消されなかった");
+            pending.SetCanceled(token);
         });
 
         Run("履歴画面の一覧・画像・ボタンが最小サイズで収まる", () =>
@@ -60,7 +88,7 @@ internal static partial class Program
             var preview = form.Controls.Find("HistoryPreview", true).Single();
             Check(list.Width >= 300 && list.Height >= 400, $"一覧の寸法不足 {list.Size}");
             Check(preview.Width >= 500 && preview.Height >= 330, $"画像領域の寸法不足 {preview.Size}");
-            foreach (string name in new[] { "CopyHistoryImage", "EditHistoryImage", "ClearHistory", "CloseHistory", "HistoryDetails" })
+            foreach (string name in new[] { "CopyHistoryImage", "CopyHistoryOcr", "EditHistoryImage", "RemoveHistorySelection", "ClearHistory", "CloseHistory", "HistoryDetails" })
             {
                 var control = form.Controls.Find(name, true).Single();
                 Check(control.Parent!.ClientRectangle.Contains(control.Bounds), name + " が親領域外");
@@ -74,7 +102,7 @@ internal static partial class Program
         {
             using var history = new CaptureHistory();
             using var form = Form(history);
-            foreach (string name in new[] { "CopyHistoryImage", "EditHistoryImage", "ClearHistory" })
+            foreach (string name in new[] { "CopyHistoryImage", "EditHistoryImage", "RemoveHistorySelection", "ClearHistory" })
                 Check(!form.Controls.Find(name, true).Single().Enabled, name + " が空履歴で有効");
             using var image = new Bitmap(4, 4);
             image.SetPixel(0, 0, Color.Red);
@@ -111,6 +139,70 @@ internal static partial class Program
                 Check(((PictureBox)form.Controls.Find("HistoryPreview", true).Single()).Image is null, "プレビューが残っている");
             }
             finally { File.Delete(saved); Directory.Delete(root); }
+        });
+
+        Run("複数選択を更新後も維持し選択した履歴だけを削除する", () => WithServiceDirectory(directory =>
+        {
+            using var history = new CaptureHistory();
+            using var image = new Bitmap(4, 4);
+            string saved = Path.Combine(directory, "saved.png");
+            File.WriteAllText(saved, "keep");
+            history.Add(image, saved);
+            history.Add(image, null);
+            history.Add(image, null);
+            var entries = history.Entries;
+            using var form = Form(history);
+            var list = (ListBox)form.Controls.Find("HistoryEntries", true).Single();
+            Equal(SelectionMode.MultiExtended, list.SelectionMode);
+            list.SetSelected(2, true);
+            form.RefreshEntries();
+            Equal(2, list.SelectedItems.Count);
+            Check(!form.Controls.Find("CopyHistoryImage", true).Single().Enabled && !form.Controls.Find("EditHistoryImage", true).Single().Enabled,
+                "複数選択で単一画像の操作が有効");
+            int calls = 0;
+            WaitHistory(form.SendAsync(_ => { calls++; return Task.FromResult("処理完了"); }));
+            Equal(0, calls);
+            typeof(HistoryForm).GetMethod("RemoveSelected", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            Equal(entries[1].Id, history.Entries.Single().Id);
+            Check(history.CloneImage(entries[0].Id) is null && history.CloneImage(entries[2].Id) is null, "画像が解放されない");
+            Equal("keep", File.ReadAllText(saved));
+            Equal(1, list.Items.Count);
+            Guid? selected = null;
+            WaitHistory(form.SendAsync(id => { selected = id; return Task.FromResult("処理完了"); }));
+            Equal<Guid?>(entries[1].Id, selected);
+        }));
+
+        Run("履歴プレビューのクリックではドラッグせずボタン解放で準備を取り消す", () =>
+        {
+            using var history = new CaptureHistory();
+            using var image = new Bitmap(4, 4);
+            history.Add(image, null);
+            int drags = 0;
+            CancellationToken gesture = default;
+            var completion = new TaskCompletionSource<string>();
+            using var form = new HistoryForm(history, _ => Task.FromResult("コピー完了"), () => [], (_, _) => Task.FromResult("編集完了"),
+                drag: (id, source, token) =>
+                {
+                    Equal(history.Entries.Single().Id, id);
+                    Equal("HistoryPreview", source.Name);
+                    drags++;
+                    gesture = token;
+                    return completion.Task;
+                });
+            var preview = form.Controls.Find("HistoryPreview", true).Single();
+            Mouse("OnMouseDown", 10); Mouse("OnMouseUp", 10); Equal(0, drags);
+            Mouse("OnMouseDown", 10); Mouse("OnMouseMove", 10); Equal(0, drags);
+            Mouse("OnMouseMove", 10 + SystemInformation.DragSize.Width);
+            Mouse("OnMouseMove", 20 + SystemInformation.DragSize.Width);
+            Equal(1, drags);
+            Check(!gesture.IsCancellationRequested, "ドラッグ開始時点で取り消された");
+            Check(!form.Controls.Find("RemoveHistorySelection", true).Single().Enabled, "ドラッグ中に履歴を削除できる");
+            Mouse("OnMouseUp", 10);
+            Check(gesture.IsCancellationRequested, "マウスを離しても準備が取り消されない");
+            completion.SetResult("ドラッグを取り消しました。");
+
+            void Mouse(string method, int x) => typeof(Control).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(preview, [new MouseEventArgs(MouseButtons.Left, 1, x, 10, 0)]);
         });
 
         Run("履歴からの送信中は二重実行と消去を拒否し完了結果を表示", () =>
@@ -151,7 +243,8 @@ internal static partial class Program
             Check(form.Controls.Find("CopyHistoryImage", true).Single().Enabled, "エラー後も操作不可");
         });
 
-        static HistoryForm Form(CaptureHistory history) => new(history, _ => Task.FromResult("コピー完了"), () => [], (_, _) => Task.FromResult("編集完了"));
+        static HistoryForm Form(CaptureHistory history) => new(history, _ => Task.FromResult("コピー完了"), () => [],
+            (_, _) => Task.FromResult("編集完了"), copyOcr: (_, _, _) => Task.FromResult("OCRコピー完了"));
     }
 
     private static Task SendHistory(HistoryForm form, Func<Guid, Task<string>> action) => (Task)typeof(HistoryForm)

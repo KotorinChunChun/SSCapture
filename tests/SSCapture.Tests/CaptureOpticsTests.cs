@@ -8,6 +8,50 @@ internal static partial class Program
 {
     private static void CaptureOpticsTests()
     {
+        SelectionFrameTests();
+        Run("通常の矩形モードでは左単押し中のホイールを確定画像の四辺に反映する", () =>
+        {
+            Rectangle desktop = new(-100, -80, 1000, 760), original = new(-20, 0, 800, 600);
+            Rectangle expected = Rectangle.Inflate(original, 2, 2);
+            var target = new CaptureWindow(original, "対象", 1, 0, 0);
+            var snapshot = new DesktopSnapshot(new Bitmap(desktop.Width, desktop.Height), desktop, [desktop]);
+            using (Graphics graphics = Graphics.FromImage(snapshot.Image)) graphics.Clear(Color.White);
+            (Point Pixel, Color Color)[] edges =
+            [
+                (new(expected.Left, original.Top + 10), Color.Lime),
+                (new(expected.Right - 1, original.Top + 10), Color.Blue),
+                (new(original.Left + 10, expected.Top), Color.Red),
+                (new(original.Left + 10, expected.Bottom - 1), Color.Magenta)
+            ];
+            foreach (var (pixel, color) in edges)
+                snapshot.Image.SetPixel(pixel.X - desktop.Left, pixel.Y - desktop.Top, color);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
+                OutputSettings: new() { ScreenshotPaddingPixels = 7 }), snapshot, [original], findWindow: p => original.Contains(p) ? target : null);
+            try
+            {
+                Point point = original.Location + new Size(10, 10);
+                session.MouseWheel(point, 240);
+                Equal(Rectangle.Empty, session.DisplaySelection);
+                BeginOpticsPress(session, point);
+                session.MouseWheel(point, 240);
+                Equal(expected, session.DisplaySelection);
+                Equal(original, session.SelectionBasis);
+                Equal(expected, session.MagnifierSelection);
+                session.MouseWheel(point, -240);
+                Equal(original, session.DisplaySelection);
+                Equal(original, session.SelectionBasis);
+                session.MouseWheel(point, 240);
+                session.MouseUp(MouseButtons.Left, point, Keys.None);
+                Check(session.Completion.IsCompletedSuccessfully, "単押しを確定できない");
+                using var outcome = session.Completion.Result;
+                Equal(expected, outcome.Selection!.Bounds);
+                Equal(expected.Size, outcome.Image!.Size);
+                Equal<int?>(2, ((CaptureReplaySource.Windows)outcome.Selection.ReplaySource!).TargetMargin);
+                foreach (var (pixel, color) in edges)
+                    Equal(color.ToArgb(), outcome.Image.GetPixel(pixel.X - expected.Left, pixel.Y - expected.Top).ToArgb());
+            }
+            finally { session.Cancel(); }
+        });
         Run("拡大鏡の起点は偶数ドットを赤い十字で四等分し各画素の色を保つ", () =>
         {
             const int dots = 6, zoom = 7, size = dots * zoom, center = size / 2;
@@ -173,6 +217,7 @@ internal static partial class Program
                 Equal(first.Bounds, session.DisplaySelection);
                 session.MouseWheel(point, 300);
                 Equal(Rectangle.Inflate(first.Bounds, 2, 2), session.DisplaySelection);
+                Equal(first.Bounds, session.SelectionBasis);
                 Check(session.PointerHint!.Contains("座標（0, 8　24 × 14）　余白+2px"), "適用済みの余白と表示が合わない");
                 session.MouseWheel(point, 120);
                 Equal(Rectangle.Inflate(first.Bounds, 2, 2), session.MagnifierSelection);
@@ -325,5 +370,264 @@ internal static partial class Program
                 Equal(Color.Blue.ToArgb(), cropped.GetPixel(cropped.Width - 1, cropped.Height - 1).ToArgb());
             }
         });
+    }
+
+    private static void SelectionFrameTests()
+    {
+        Run("基準の実線と撮影の破線、暗転と拡大鏡は配信用描画でも実際の枠と一致する", () =>
+        {
+            Rectangle desktop = new(-200, -110, 400, 300), basis = new(-120, -60, 140, 100);
+            Point point = basis.Location + new Size(38, 8);
+            Color border = Color.FromArgb(55, 195, 255);
+            foreach (bool dim in new[] { false, true })
+            {
+                var snapshot = new DesktopSnapshot(new Bitmap(desktop.Width, desktop.Height), desktop, [desktop]);
+                using (Graphics graphics = Graphics.FromImage(snapshot.Image)) graphics.Clear(Color.White);
+                var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
+                    ShowSelectionGuide: false, DimCaptureBackground: dim,
+                    OutputSettings: new() { ShowPointerGuide = dim }), snapshot, [basis]);
+                using var overlay = new CaptureOverlay(session, desktop);
+                try
+                {
+                    BeginOpticsPress(session, point);
+                    session.MouseWheel(point, -720);
+                    Rectangle adjusted = Rectangle.Inflate(basis, -6, -6);
+                    Equal(adjusted, session.MagnifierSelection);
+                    Check(!session.MagnifierMarksOrigin, "単押し調整中に拡大鏡が始点の十字を表示する");
+                    object visual = ReadOpticsVisual(overlay);
+                    Equal(dim ? "基準 140 × 100" : "128 × 88", VisualProperty<string>(visual, "DimensionsText"));
+                    string? hint = VisualProperty<string>(visual, "HintText");
+                    Check(dim ? hint?.Contains("128 × 88", StringComparison.Ordinal) == true : hint is null, "ポインタガイドの寸法表示が一致しない");
+                    foreach (bool shared in new[] { false, true })
+                    {
+                        using Bitmap image = DrawOpticsOverlay(overlay, visual, shared);
+                        int solid = Enumerable.Range(92, 80).Count(x => image.GetPixel(x, 50).ToArgb() == border.ToArgb());
+                        Equal(80, solid);
+                        int dashed = Enumerable.Range(92, 80).Count(x => image.GetPixel(x, 56).ToArgb() == border.ToArgb());
+                        Check(dashed is > 0 and < 80, "撮影枠が破線でない");
+                        Equal(Color.White.ToArgb(), image.GetPixel(90, 80).ToArgb());
+                        Equal(dim ? 140 : 255, (int)image.GetPixel(82, 80).R);
+                    }
+                    session.MouseWheel(point, 720);
+                    using Bitmap reset = DrawOpticsOverlay(overlay, ReadOpticsVisual(overlay), shared: false);
+                    Check(Enumerable.Range(92, 80).All(x => reset.GetPixel(x, 50).ToArgb() == border.ToArgb()), "一致した枠が実線に戻らない");
+                    Equal(Color.White.ToArgb(), reset.GetPixel(92, 56).ToArgb());
+                    session.MouseWheel(point, -720);
+                    session.ChangeMagnifierVisibility(true);
+                    visual = ReadOpticsVisual(overlay);
+                    Rectangle lens = VisualProperty<Rectangle>(visual, "Magnifier");
+                    Check(!lens.IsEmpty, "拡大鏡の表示領域を確保できない");
+                    int redY = lens.Top + (adjusted.Top - point.Y + CaptureMagnifier.DefaultDotCount / 2) * CaptureMagnifier.DefaultZoom;
+                    using Bitmap magnified = DrawOpticsOverlay(overlay, visual, shared: true);
+                    Equal(Color.Red.ToArgb(), magnified.GetPixel(lens.Left + lens.Width / 2, redY).ToArgb());
+                }
+                finally { session.Cancel(); }
+            }
+        });
+        Run("単押しは押下時の対象を使い、ホイールOFFとEsc・次回の端数リセットを尊重する", () =>
+        {
+            Rectangle desktop = new(0, 0, 200, 150), first = new(30, 20, 40, 40), second = new(70, 20, 50, 40);
+            foreach (bool enabled in new[] { false, true })
+            {
+                var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot,
+                    OutputDestination.Clipboard, OutputSettings: new() { CaptureKeys = new(WheelAdjustRectangle: enabled) }),
+                    new DesktopSnapshot(new Bitmap(desktop.Width, desktop.Height), desktop, [desktop]), [first, second]);
+                try
+                {
+                    Point down = new(first.Right - 1, 30), across = new(second.Left, 30);
+                    BeginOpticsPress(session, down);
+                    session.MouseWheel(across, 180);
+                    Equal(first, session.SelectionBasis);
+                    Equal(enabled ? Rectangle.Inflate(first, 1, 1) : first, session.DisplaySelection);
+                    Check(session.HandleCommandKey(Keys.Escape, false), "Escを処理しない");
+                    session.MouseUp(MouseButtons.Left, across, Keys.None);
+                    Equal(Rectangle.Empty, session.DisplaySelection);
+                    BeginOpticsPress(session, across);
+                    session.MouseWheel(across, 60);
+                    Equal(second, session.DisplaySelection);
+                }
+                finally { session.Cancel(); }
+            }
+        });
+        Run("矩形ドラッグと2点クリックは基準枠を保ち、調整後の四隅を取得する", () =>
+        {
+            Rectangle desktop = new(0, 0, 200, 150), basis = new(30, 20, 70, 60);
+            Point end = new(basis.Right, basis.Bottom);
+            foreach (var method in Enum.GetValues<CaptureSelectionMethod>())
+            {
+                var snapshot = new DesktopSnapshot(new Bitmap(desktop.Width, desktop.Height), desktop, [desktop]);
+                var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
+                    OutputSettings: new() { SelectionMethod = method, CaptureKeys = new(SpaceEnabled: true) }), snapshot, [basis]);
+                try
+                {
+                    if (method == CaptureSelectionMethod.Drag)
+                    {
+                        BeginOpticsPress(session, basis.Location);
+                        session.MouseWheel(basis.Location, 420);
+                    }
+                    else
+                    {
+                        SetOpticsField(session, "pressedButton", MouseButtons.Left);
+                        session.MouseUp(MouseButtons.Left, basis.Location, Keys.None);
+                    }
+                    session.MoveTo(end);
+                    Equal(basis, session.DisplaySelection);
+                    session.MouseWheel(end, -240);
+                    Rectangle adjusted = Rectangle.Inflate(basis, -2, -2);
+                    Equal(basis, session.SelectionBasis);
+                    Equal(adjusted, session.DisplaySelection);
+                    Check(session.HandleCommandKey(Keys.Space, false), "Spaceで基点が変わらない");
+                    Equal(basis, session.SelectionBasis);
+                    Equal(adjusted, session.MagnifierSelection);
+                    (Point Pixel, Color Color)[] corners =
+                    [
+                        (adjusted.Location, Color.Red), (new(adjusted.Right - 1, adjusted.Top), Color.Blue),
+                        (new(adjusted.Left, adjusted.Bottom - 1), Color.Lime), (new(adjusted.Right - 1, adjusted.Bottom - 1), Color.Magenta)
+                    ];
+                    foreach (var (pixel, color) in corners) snapshot.Image.SetPixel(pixel.X, pixel.Y, color);
+                    SetOpticsField(session, "pressedButton", MouseButtons.Left);
+                    session.MouseUp(MouseButtons.Left, session.Pointer, Keys.None);
+                    Check(session.Completion.IsCompletedSuccessfully, "矩形選択を確定できない");
+                    using var outcome = session.Completion.Result;
+                    Equal<Point?>(null, outcome.Selection!.WindowHitPoint);
+                    Equal(adjusted, outcome.Selection.Bounds);
+                    foreach (var (pixel, color) in corners)
+                        Equal(color.ToArgb(), outcome.Image!.GetPixel(pixel.X - adjusted.Left, pixel.Y - adjusted.Top).ToArgb());
+                }
+                finally { session.Cancel(); }
+            }
+        });
+        Run("ライブ取得では対象移動後も調整し、前後のモニターを再描画して新しい画素を取得する", () =>
+        {
+            Rectangle[] monitors = [new(-160, 0, 160, 140), new(0, 0, 160, 140)];
+            Rectangle desktop = Rectangle.Union(monitors[0], monitors[1]), basis = new(-80, 30, 50, 40);
+            Point point = basis.Location + new Size(10, 12);
+            var target = new CaptureWindow(basis, "対象", 1, 0, 0);
+            DesktopSnapshot NewSnapshot() => new(new Bitmap(desktop.Width, desktop.Height), desktop, monitors);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
+                FreezeFrame: false, LimitToStartingMonitor: false, ShowSelectionGuide: false,
+                OutputSettings: new() { ShareCapturePresentation = true }),
+                NewSnapshot(), [basis], findWindow: p => basis.Contains(p) ? target : null, currentFrameFactory: () =>
+                {
+                    var current = NewSnapshot();
+                    Rectangle adjusted = Rectangle.Inflate(target.Bounds, 3, 3);
+                    current.Image.SetPixel(adjusted.Left - desktop.Left, adjusted.Top, Color.Magenta);
+                    return current;
+                });
+            using var oldScreen = new CaptureOverlay(session, monitors[0]);
+            using var newScreen = new CaptureOverlay(session, monitors[1]);
+            try
+            {
+                BeginOpticsPress(session, point);
+                session.MouseWheel(point, 360);
+                Equal(Rectangle.Inflate(basis, 3, 3), session.DisplaySelection);
+                oldScreen.InvalidateChanges();
+                newScreen.InvalidateChanges();
+                target = target with { Bounds = new(110, 35, 50, 40) };
+                OpticsMethod(typeof(SessionController), "RefreshLiveWindowMargin").Invoke(session, null);
+                Equal(target.Bounds, session.DisplaySelection);
+                Check(oldScreen.InvalidateChanges() && newScreen.InvalidateChanges(), "移動前後のモニターを更新しない");
+                target = target with { Bounds = new(20, 35, 50, 40) };
+                OpticsMethod(typeof(SessionController), "RefreshLiveWindowMargin").Invoke(session, null);
+                Rectangle expected = Rectangle.Inflate(target.Bounds, 3, 3);
+                Equal(target.Bounds, session.SelectionBasis);
+                Equal(expected, session.MagnifierSelection);
+                session.MouseUp(MouseButtons.Left, point, Keys.None);
+                Check(session.Completion.IsCompletedSuccessfully, "移動後のウィンドウを確定できない");
+                using var outcome = session.Completion.Result;
+                Equal(expected, outcome.Selection!.Bounds);
+                Equal(Color.Magenta.ToArgb(), outcome.Image!.GetPixel(0, 0).ToArgb());
+            }
+            finally { session.Cancel(); }
+        });
+        Run("固定枠と固定位置、単一コントロール、WGCにも共通の基準枠を使う", () =>
+        {
+            Rectangle desktop = new(0, 0, 240, 200), basis = new(30, 20, 70, 60);
+            Point point = basis.Location + new Size(6, 6);
+            DesktopSnapshot NewSnapshot() => new(new Bitmap(desktop.Width, desktop.Height), desktop, [desktop]);
+            foreach (bool registered in new[] { false, true })
+            {
+                var fixedSession = new SessionController(new(CaptureMode.FixedRegion, CaptureIntent.Screenshot,
+                    OutputDestination.Clipboard, FixedSize: basis.Size), NewSnapshot(), []);
+                try
+                {
+                    if (registered) OpticsGesture(fixedSession).FixedPosition = basis;
+                    fixedSession.MouseWheel(basis.Location, 120);
+                    Equal(basis, fixedSession.SelectionBasis);
+                    Equal(Rectangle.Inflate(basis, 1, 1), fixedSession.DisplaySelection);
+                }
+                finally { fixedSession.Cancel(); }
+            }
+            var target = new CaptureWindow(basis, "対象", 1, 0, 0);
+            var control = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot,
+                OutputDestination.Clipboard), NewSnapshot(), [basis], findWindow: _ => target);
+            try
+            {
+                Rectangle part = Rectangle.Inflate(basis, -3, -3);
+                SetOpticsField(control, "controlToggled", true);
+                SetOpticsField(control, "selectingControl", true);
+                SetOpticsField(control, "controlRequest", (point, target));
+                SetOpticsField(control, "controlCandidate", (target, part, (ControlIdentity?)null));
+                control.MouseWheel(point, 120);
+                Equal(part, control.SelectionBasis);
+                Equal(Rectangle.Inflate(part, 1, 1), control.MagnifierSelection);
+            }
+            finally { control.Cancel(); }
+            var window = new SessionController(new CaptureOptions(CaptureMode.Window, CaptureIntent.Screenshot,
+                OutputDestination.Clipboard) { SelectionOnly = true, RestartState = new(false, true, CaptureAspectRatio.Free, null) },
+                NewSnapshot(), [basis], findWindow: _ => target);
+            var preview = new WindowCapturePreview(target, false, [target]);
+            var frame = new Bitmap(basis.Width, basis.Height);
+            frame.SetPixel(1, 1, Color.Lime);
+            typeof(WindowCapturePreview).GetField("frame", OpticsPrivate)!.SetValue(preview,
+                Task.FromResult(new WindowCaptureFrame(frame, basis, DateTimeOffset.Now)));
+            SetOpticsField(window, "windowPreview", preview);
+            try
+            {
+                window.MouseWheel(point, 960);
+                Equal(basis, window.SelectionBasis);
+                Equal(basis, window.DisplaySelection);
+                window.MouseWheel(point, -120);
+                Rectangle expected = Rectangle.Inflate(basis, -1, -1);
+                Equal(basis, window.SelectionBasis);
+                Equal(expected, window.MagnifierSelection);
+                using Bitmap cropped = CaptureTargetMargin.CropFrame(frame, basis, expected, CaptureGeometry.MinimumSize);
+                Equal(Color.Lime.ToArgb(), cropped.GetPixel(0, 0).ToArgb());
+            }
+            finally { window.Cancel(); }
+        });
+    }
+
+    private const BindingFlags OpticsPrivate = BindingFlags.Instance | BindingFlags.NonPublic;
+
+    private static MethodInfo OpticsMethod(Type type, string name) => type.GetMethod(name, OpticsPrivate)!;
+
+    private static object ReadOpticsVisual(CaptureOverlay overlay) =>
+        OpticsMethod(typeof(CaptureOverlay), "ReadVisualState").Invoke(overlay, null)!;
+
+    private static T? VisualProperty<T>(object state, string name) =>
+        (T?)state.GetType().GetProperty(name)!.GetValue(state);
+
+    private static Bitmap DrawOpticsOverlay(CaptureOverlay overlay, object state, bool shared)
+    {
+        var image = new Bitmap(overlay.MonitorBounds.Width, overlay.MonitorBounds.Height);
+        using Graphics graphics = Graphics.FromImage(image);
+        graphics.Clear(Color.White);
+        OpticsMethod(typeof(CaptureOverlay), "DrawForeground").Invoke(overlay,
+            [graphics, new Rectangle(Point.Empty, image.Size), shared, state]);
+        return image;
+    }
+
+    private static void SetOpticsField(SessionController session, string name, object value) =>
+        typeof(SessionController).GetField(name, OpticsPrivate)!.SetValue(session, value);
+
+    private static SelectionGesture OpticsGesture(SessionController session) =>
+        (SelectionGesture)typeof(SessionController).GetField("gesture", OpticsPrivate)!.GetValue(session)!;
+
+    private static void BeginOpticsPress(SessionController session, Point point)
+    {
+        SetOpticsField(session, "pressedButton", MouseButtons.Left);
+        OpticsGesture(session).Begin(point, new(8, 8));
+        session.MoveTo(point);
     }
 }

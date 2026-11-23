@@ -1,5 +1,4 @@
 using SSCapture.Services;
-using SSCapture.UI;
 
 namespace SSCapture.Tests;
 internal static partial class Program
@@ -46,8 +45,8 @@ internal static partial class Program
             using var image = new Bitmap(400, 200); using var pending = new NotificationImage(image, directory);
             using var thumbnail = pending.CreateThumbnail(); Equal(new Size(88, 44), thumbnail.Size);
             Check(!Directory.EnumerateFiles(directory).Any(), "プレビューで画像を書いた");
-            Check(!ToastActionForm.DragThresholdReached(new(10, 10), new(11, 11), new(8, 8)), "クリックでドラッグ開始");
-            Check(ToastActionForm.DragThresholdReached(new(10, 10), new(16, 10), new(8, 8)), "ドラッグが始まらない");
+            Check(!NotificationFileDrag.DragThresholdReached(new(10, 10), new(11, 11), new(8, 8)), "クリックでドラッグ開始");
+            Check(NotificationFileDrag.DragThresholdReached(new(10, 10), new(16, 10), new(8, 8)), "ドラッグが始まらない");
         }));
         Run("保存済み通知の編集はプレビューを持っても原本を一時整理へ渡さない", () => WithServiceDirectory(directory =>
         {
@@ -131,5 +130,79 @@ internal static partial class Program
             await toast.Actions!.Drag!(source, gesture.Token); Equal(1, drags);
             Check(toast.Visible, "終了済みジェスチャーで通知を消した");
         })));
+        Run("履歴の保存画像は移動先で再ドラッグできコピーと取消では参照を維持する", () => WithServiceDirectory(directory => RunNotificationTask(async () =>
+        {
+            using var history = new CaptureHistory();
+            using var image = new Bitmap(8, 4);
+            using var source = new Control();
+            string saved = CaptureStorage.SavePng(image, directory, DateTimeOffset.Now, "saved.png");
+            string destinationFolder = Directory.CreateDirectory(Path.Combine(directory, "moved")).FullName;
+            string moved = Path.Combine(destinationFolder, Path.GetFileName(saved)), copied = Path.Combine(directory, "copied.png");
+            history.Add(image, saved);
+            Guid id = history.Entries.Single().Id;
+
+            Check(await Drag(saved, path => { File.Move(path, moved); return DragDropEffects.None; }), "最適化移動を失敗扱い");
+            Check(string.Equals(moved, history.Find(id)!.SavedPath, StringComparison.OrdinalIgnoreCase), "履歴が移動先を参照していない");
+            Check(await Drag(moved, path => { File.Copy(path, copied); return DragDropEffects.Copy; }), "コピーを失敗扱い");
+            Check(!await Drag(moved, _ => DragDropEffects.None), "取消を成功扱い");
+            Check(string.Equals(moved, history.Find(id)!.SavedPath, StringComparison.OrdinalIgnoreCase), "コピーや取消で履歴の参照が変わった");
+            Check(File.Exists(moved) && File.Exists(copied), "コピーや取消でファイルを削除した");
+
+            Task<bool> Drag(string expected, Func<string, DragDropEffects> operation) =>
+                NotificationFileDrag.RunHistoryAsync(source, history, id, directory, () => true, history.UpdateSavedPath, data =>
+                {
+                    Equal(DragDropEffects.Move, NotificationFileDrag.ReadEffect(data, NotificationFileDrag.PreferredEffect));
+                    string path = DraggedPath(data);
+                    Check(string.Equals(expected, path, StringComparison.OrdinalIgnoreCase), "異なるファイルのパスを渡した");
+                    return operation(path);
+                });
+        })));
+        Run("移動先が通知されない履歴はメモリー画像を再ドラッグし一時PNGは参照に残さない", () => WithServiceDirectory(directory => RunNotificationTask(async () =>
+        {
+            using var history = new CaptureHistory();
+            using var image = new Bitmap(8, 4);
+            image.SetPixel(1, 1, Color.Orange);
+            using var source = new Control();
+            string saved = CaptureStorage.SavePng(image, directory, DateTimeOffset.Now, "saved.png");
+            string copy = Path.Combine(directory, "untracked.png");
+            history.Add(image, saved);
+            Guid id = history.Entries.Single().Id;
+            using var performed = new MemoryStream(BitConverter.GetBytes((int)DragDropEffects.Move));
+            Check(await Drag(() => true, data =>
+            {
+                File.Copy(DraggedPath(data), copy);
+                data.SetData(NotificationFileDrag.PerformedEffect, false, performed);
+                return DragDropEffects.Move;
+            }), "非最適化移動を失敗扱い");
+            Check(!File.Exists(saved) && File.Exists(copy), "移動の完了処理が不正");
+            Equal<string?>(null, history.Find(id)!.SavedPath);
+            Check(!Directory.Exists(TemporaryHandoff.DirectoryFor(directory)), "事前に一時PNGを作った");
+            int readinessChecks = 0;
+            Check(!await Drag(() => readinessChecks++ == 0, _ => throw new Exception("作成中の取消後にドラッグした")), "取消を成功扱い");
+            var paths = new List<string>();
+            foreach (DragDropEffects result in new[] { DragDropEffects.None, DragDropEffects.Copy })
+            {
+                Equal(result != DragDropEffects.None, await Drag(() => true, data =>
+                {
+                    string path = DraggedPath(data);
+                    paths.Add(path);
+                    using var file = new Bitmap(path);
+                    Equal(image.GetPixel(1, 1), file.GetPixel(1, 1));
+                    return result;
+                }));
+            }
+            Equal(2, paths.Distinct().Count());
+            Equal<string?>(null, history.Find(id)!.SavedPath);
+            Check(File.Exists(copy), "再ドラッグでユーザーの移動先ファイルを消した");
+
+            Task<bool> Drag(Func<bool> canStart, Func<DataObject, DragDropEffects> perform) =>
+                NotificationFileDrag.RunHistoryAsync(source, history, id, directory, canStart, history.UpdateSavedPath, perform);
+        })));
+    }
+
+    private static string DraggedPath(DataObject data)
+    {
+        Check(data.TryGetData<string[]>(DataFormats.FileDrop, out var files), "FileDropがない");
+        return files!.Single();
     }
 }

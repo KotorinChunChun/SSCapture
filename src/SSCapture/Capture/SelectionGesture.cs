@@ -48,6 +48,8 @@ internal sealed class SelectionGesture
         : mode == CaptureMode.Rectangle && Selection != rectangleBase && centerMove is null ? AnchorPoint(Selection, PointerCorner(rectangleBase, Current)) : Current;
     internal Point WindowTargetPoint => IsPressed && !HasDragged ? rawStart : RawCurrent;
     internal Rectangle Selection { get; private set; }
+    internal Rectangle SelectionBasis => mode == CaptureMode.FixedRegion ? FixedBase
+        : mode == CaptureMode.Rectangle && HasDragged ? rectangleBase : Rectangle.Empty;
     internal Rectangle PressedWindow => IsPressed && !HasDragged && mode is (CaptureMode.Rectangle or CaptureMode.Freeform)
         ? WindowAt(rawStart) : Rectangle.Empty;
     internal List<Point> Points { get; } = [];

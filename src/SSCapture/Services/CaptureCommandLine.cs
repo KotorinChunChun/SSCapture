@@ -8,6 +8,7 @@ internal sealed record CaptureCommandRequest(Rectangle? Region = null, string? I
 {
     internal CaptureSchedule? Schedule { get; init; }
     internal bool UsePresetMode { get; init; }
+    internal WindowCaptureCommand? Window { get; init; }
 }
 
 internal sealed record ResolvedCaptureCommand(CaptureCommandRequest Request, AppSettings Settings, SavedRegion InputPreset, CapturePreset? OutputPreset = null)
@@ -37,12 +38,16 @@ internal static class CaptureCommandLine
 {
     internal static bool Handles(IReadOnlyList<string> args) => args.Any(arg =>
         arg.StartsWith("--capture-", StringComparison.Ordinal) && arg != "--capture-context-worker"
-        || arg is "--input-preset" or "--output-preset" || CaptureTimerArguments.Handles(arg));
+        || arg is "--input-preset" or "--output-preset" or "--hwnd" or "--process" or "--title" or "--client-area"
+        || CaptureTimerArguments.Handles(arg));
 
     internal static CaptureCommandRequest Parse(IReadOnlyList<string> args)
     {
         bool mode = false;
         bool usePresetMode = false;
+        bool windowMode = false, clientAreaOnly = false;
+        nint? handle = null;
+        string? process = null, title = null;
         Rectangle? region = null;
         string? input = null, output = null;
         Dictionary<string, string> scheduleOptions = new(StringComparer.Ordinal);
@@ -53,9 +58,11 @@ internal static class CaptureCommandLine
             {
                 case "--capture-preset":
                 case "--capture-select":
+                case "--capture-window":
                     if (mode) throw new ArgumentException("撮影方式は1つだけ指定してください。");
                     mode = true;
                     usePresetMode = option == "--capture-preset";
+                    windowMode = option == "--capture-window";
                     break;
                 case "--capture-region":
                     if (mode) throw new ArgumentException("撮影方式は1つだけ指定してください。");
@@ -68,6 +75,22 @@ internal static class CaptureCommandLine
                     }
                     region = new Rectangle(Number(), Number(), Number(), Number());
                     ValidateRegion(region.Value);
+                    break;
+                case "--hwnd":
+                    if (handle.HasValue) throw new ArgumentException("--hwnd が重複しています。");
+                    handle = WindowCaptureCommand.ParseHandle(ReadWindowValue(option, args, ref index));
+                    break;
+                case "--process":
+                    if (process is not null) throw new ArgumentException("--process が重複しています。");
+                    process = ReadWindowValue(option, args, ref index);
+                    break;
+                case "--title":
+                    if (title is not null) throw new ArgumentException("--title が重複しています。");
+                    title = ReadWindowValue(option, args, ref index);
+                    break;
+                case "--client-area":
+                    if (clientAreaOnly) throw new ArgumentException("--client-area が重複しています。");
+                    clientAreaOnly = true;
                     break;
                 case "--input-preset":
                 case "--output-preset":
@@ -91,8 +114,20 @@ internal static class CaptureCommandLine
                 default: throw new ArgumentException("不明な撮影引数です: " + option);
             }
         }
-        if (!mode) throw new ArgumentException("--capture-select、--capture-region、--capture-presetのいずれかを指定してください。");
-        return new(region, input, output) { UsePresetMode = usePresetMode, Schedule = CaptureTimerArguments.Build(scheduleOptions) };
+        if (!mode) throw new ArgumentException("--capture-select、--capture-region、--capture-preset、--capture-window のいずれかを指定してください。");
+        if (!windowMode && (handle.HasValue || process is not null || title is not null || clientAreaOnly))
+            throw new ArgumentException("ウィンドウ指定の引数は --capture-window と一緒に使用してください。");
+        WindowCaptureCommand? window = windowMode ? new(handle, process, title, clientAreaOnly) : null;
+        window?.Validate();
+        return new(region, input, output) { UsePresetMode = usePresetMode, Schedule = CaptureTimerArguments.Build(scheduleOptions), Window = window };
+    }
+
+    private static string ReadWindowValue(string option, IReadOnlyList<string> args, ref int index)
+    {
+        if (++index >= args.Count || string.IsNullOrWhiteSpace(args[index]) || args[index].StartsWith("--", StringComparison.Ordinal)
+            || args[index].Any(char.IsControl))
+            throw new ArgumentException(option + " の値を指定してください。");
+        return args[index];
     }
 
     internal static void ValidateRegion(Rectangle region)
@@ -105,6 +140,7 @@ internal static class CaptureCommandLine
 
     internal static ResolvedCaptureCommand Resolve(CaptureCommandRequest request, AppSettings settings)
     {
+        ValidateWindowMode(request);
         if (request.Region is Rectangle bounds)
         {
             if (request.UsePresetMode) throw new ArgumentException("撮影方式は1つだけ指定してください。");
@@ -131,12 +167,21 @@ internal static class CaptureCommandLine
             || executable.IndexOfAny(Path.GetInvalidPathChars()) >= 0 || executable.Any(char.IsControl))
             throw new ArgumentException("実行ファイルにはexeの完全パスを指定してください。");
         List<string> args = [];
+        ValidateWindowMode(request);
         if (request.Region is Rectangle bounds)
         {
             if (request.UsePresetMode) throw new ArgumentException("撮影方式は1つだけ指定してください。");
             ValidateRegion(bounds);
             args.AddRange(["--capture-region", bounds.X.ToString(CultureInfo.InvariantCulture), bounds.Y.ToString(CultureInfo.InvariantCulture),
                 bounds.Width.ToString(CultureInfo.InvariantCulture), bounds.Height.ToString(CultureInfo.InvariantCulture)]);
+        }
+        else if (request.Window is { } window)
+        {
+            args.Add("--capture-window");
+            if (window.Handle is nint handle) args.AddRange(["--hwnd", "0x" + unchecked((nuint)handle).ToString("X", CultureInfo.InvariantCulture)]);
+            if (window.ProcessName is not null) args.AddRange(["--process", window.ProcessName]);
+            if (window.Title is not null) args.AddRange(["--title", window.Title]);
+            if (window.ClientAreaOnly) args.Add("--client-area");
         }
         else args.Add(request.UsePresetMode ? "--capture-preset" : "--capture-select");
         if (request.InputPresetId is not null) args.AddRange(["--input-preset", request.InputPresetId]);
@@ -146,6 +191,13 @@ internal static class CaptureCommandLine
         static string Quote(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
         return "& " + Quote(executable) + " " + string.Join(" ", args.Select(Quote));
     }
+
+    private static void ValidateWindowMode(CaptureCommandRequest request)
+    {
+        if (request.Window is not { } window) return;
+        if (request.Region.HasValue || request.UsePresetMode) throw new ArgumentException("撮影方式は1つだけ指定してください。");
+        window.Validate();
+    }
 }
 
 internal static partial class CaptureCommandRunner
@@ -153,16 +205,27 @@ internal static partial class CaptureCommandRunner
     internal static async Task<int> ExecuteAsync(ResolvedCaptureCommand command, OutputRouter output,
         Func<Rectangle, AppSettings, Task<(Bitmap Image, CaptureMetadata? Metadata)>>? take = null,
         Func<CaptureOptions, Task<CaptureOutcome>>? select = null, Action<string, bool>? report = null,
-        Func<IReadOnlyList<DisplayLayout>>? readPresetDisplays = null, Func<TimeSpan, Task>? wait = null)
+        Func<IReadOnlyList<DisplayLayout>>? readPresetDisplays = null, Func<TimeSpan, Task>? wait = null,
+        Func<WindowCaptureCommand, CaptureWindow>? resolveWindow = null,
+        Func<CaptureWindow, AppSettings, bool, bool, Task<WindowReplayFrame>>? takeWindow = null)
     {
         try
         {
             if (command.Request.Schedule is not null)
-                return await ExecuteTimerAsync(command, output, take, select, report);
+                return await ExecuteTimerAsync(command, output, take, select, report, resolveWindow, takeWindow);
             AppSettings settings = command.Settings;
             if (settings.DefaultDestination == OutputDestination.None) throw new ArgumentException("出力先がすべてOFFです。");
             DateTimeOffset capturedAt = DateTimeOffset.Now;
             bool delivered = false;
+            if (command.Request.Window is not null)
+            {
+                // 遅延前に対象を確定し、閉じた後に別のウィンドウを探索し直さない。
+                var shot = CaptureTimerShot.Window(command, resolveWindow, takeWindow);
+                await CaptureDelay.WaitAsync(command.InputPreset.StartDelay, wait);
+                string result = await shot.DeliverAsync(output, DateTimeOffset.Now);
+                report?.Invoke(result, false);
+                return 0;
+            }
             if (command.Request.Region.HasValue || command.Request.UsePresetMode && command.InputPreset.UseFixedCoordinates)
             {
                 if (command.InputPreset.StartDelay != CaptureStartDelay.None)

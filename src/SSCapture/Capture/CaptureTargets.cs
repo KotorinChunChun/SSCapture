@@ -7,6 +7,7 @@ internal abstract record CaptureReplaySource
     internal sealed record Windows(IReadOnlyList<CaptureWindow> Targets, bool Isolated, bool IncludeOwned, bool IsSingleWindowSelection = false) : CaptureReplaySource
     {
         internal int? TargetMargin { get; init; }
+        internal bool ClientAreaOnly { get; init; }
     }
     internal sealed record Control(CaptureWindow Window, Services.ControlIdentity? Identity, bool Isolated) : CaptureReplaySource
     {

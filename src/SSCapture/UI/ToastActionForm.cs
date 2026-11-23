@@ -10,7 +10,7 @@ internal sealed class ToastActionForm : Form
     internal const int ActionExtendedStyle = 0x08000000 | 0x80 | 0x80000 | 0x8;
     private readonly Func<nint, CaptureProtection> protect;
     private readonly bool nativeShow;
-    private readonly ActionButton folder, edit, retry;
+    private readonly ActionButton folder, edit, copyPath, retry;
     private readonly PictureBox preview;
     private readonly ToolTip tips = new() { ShowAlways = true };
     private readonly ContextMenuStrip editorMenu = new() { Name = "NotificationEditorMenu" };
@@ -31,11 +31,12 @@ internal sealed class ToastActionForm : Form
         BackColor = ToastCardStyle.Surface;
         folder = Make("フォルダを開く", "NotificationOpenFolder");
         edit = Make("外部アプリで編集", "NotificationEdit");
+        copyPath = Make("ファイルのパスをコピー", "NotificationCopyPath");
         retry = Make("失敗した出力を再実行", "NotificationRetry");
         preview = new PictureBox { Name = "NotificationDragImage", SizeMode = PictureBoxSizeMode.Zoom,
             BackColor = Color.FromArgb(235, 241, 244), TabStop = false, AccessibleName = "撮影画像をドラッグ" };
         tips.SetToolTip(preview, "フォルダへドラッグして移動。Ctrlを押すとコピー。対応アプリへドロップして開きます。");
-        Controls.AddRange([folder, edit, retry, preview]);
+        Controls.AddRange([folder, edit, copyPath, retry, preview]);
         editorMenu.Opening += (_, e) => e.Cancel = !protect(editorMenu.Handle).Success;
         preview.MouseUp += (_, e) =>
         {
@@ -63,16 +64,15 @@ internal sealed class ToastActionForm : Form
         preview.MouseMove += async (_, e) =>
         {
             if (dragOrigin is not Point origin || dragGesture is null || e.Button != MouseButtons.Left || !ready || actions?.Drag is not { } drag) return;
-            if (!DragThresholdReached(origin, e.Location, SystemInformation.DragSize)) return;
+            if (!NotificationFileDrag.DragThresholdReached(origin, e.Location, SystemInformation.DragSize)) return;
             dragOrigin = null;
             await drag(preview, dragGesture.Token);
         };
         folder.Click += (_, _) => InvokeAction(actions?.OpenFolder);
         edit.Click += (_, _) => InvokeAction(actions?.Edit);
+        copyPath.Click += (_, _) => InvokeAction(actions?.CopyPath);
         retry.Click += (_, _) => InvokeAction(actions?.Retry);
     }
-    internal static bool DragThresholdReached(Point origin, Point current, Size threshold) =>
-        !new Rectangle(origin.X - threshold.Width / 2, origin.Y - threshold.Height / 2, threshold.Width, threshold.Height).Contains(current);
     private void CancelGesture()
     {
         dragOrigin = null; dragGesture?.Cancel(); dragGesture?.Dispose(); dragGesture = null;
@@ -114,11 +114,11 @@ internal sealed class ToastActionForm : Form
         int top = Math.Max(0, ClientSize.Height - height - Math.Min(inset, ClientSize.Height / 4));
         preview.Bounds = ToastCardStyle.PreviewBounds(dpi);
         preview.Image = value.Thumbnail; preview.Visible = value.Thumbnail is not null;
-        SetEditorMenu(value.Editors ?? []);
+        SetEditorMenu(value.Editors ?? [], value.CopyText, value.CopyTable);
         tips.SetToolTip(preview, value.Edit is null ? "フォルダや対応アプリへドラッグできます。Ctrlを押すとコピー。"
             : "ダブルクリックで編集アプリを開きます。フォルダや対応アプリへドラッグできます。Ctrlを押すとコピー。");
         if (editorMenu.Items.Count != 0)
-            tips.SetToolTip(preview, tips.GetToolTip(preview) + " 右クリックで編集アプリを選べます。");
+            tips.SetToolTip(preview, tips.GetToolTip(preview) + " 右クリックで画像の操作を選べます。");
         preview.Cursor = value.Drag is null ? Cursors.Default : Cursors.Hand;
         if (actionFont is null || actionFont.Size != 14 * scale)
         {
@@ -127,16 +127,18 @@ internal sealed class ToastActionForm : Form
         }
         folder.Visible = value.OpenFolder is not null;
         edit.Visible = value.Edit is not null;
+        copyPath.Visible = value.CopyPath is not null;
         retry.Visible = value.Retry is not null;
-        var buttons = new List<ActionButton>(3);
+        var buttons = new List<ActionButton>(4);
         if (value.OpenFolder is not null) buttons.Add(folder);
         if (value.Edit is not null) buttons.Add(edit);
+        if (value.CopyPath is not null) buttons.Add(copyPath);
         if (value.Retry is not null) buttons.Add(retry);
         var region = new Region(); region.MakeEmpty();
-        if (buttons.Count == 3)
+        if (buttons.Count > 2)
         {
-            PlaceRow([retry], top);
-            buttons.RemoveAt(2);
+            PlaceRow(buttons.GetRange(2, buttons.Count - 2), top);
+            buttons.RemoveRange(2, buttons.Count - 2);
             top = Math.Max(0, top - height - gap);
         }
         if (buttons.Count != 0) PlaceRow(buttons, top);
@@ -166,21 +168,34 @@ internal sealed class ToastActionForm : Form
             }
         }
     }
-    private void SetEditorMenu(IReadOnlyList<NotificationEditorChoice> choices)
+    private void SetEditorMenu(IReadOnlyList<NotificationEditorChoice> choices, Action? copyText = null, Action? copyTable = null)
     {
         editorMenu.Close();
         foreach (ToolStripItem item in editorMenu.Items.Cast<ToolStripItem>().ToArray()) item.Dispose();
-        if (choices.Count == 0) return;
-        var editWith = new ToolStripMenuItem("アプリを選んで編集") { Name = "NotificationEditWith" };
-        if (editWith.DropDown is ToolStripDropDown submenu)
-            submenu.Opening += (_, e) => e.Cancel = !protect(submenu.Handle).Success;
-        foreach (var choice in choices)
+        if (choices.Count != 0)
         {
-            var item = new ToolStripMenuItem(choice.Name);
-            item.Click += (_, _) => InvokeAction(choice.Open);
-            editWith.DropDownItems.Add(item);
+            var editWith = new ToolStripMenuItem("アプリを選んで編集") { Name = "NotificationEditWith" };
+            if (editWith.DropDown is ToolStripDropDown submenu)
+                submenu.Opening += (_, e) => e.Cancel = !protect(submenu.Handle).Success;
+            foreach (var choice in choices)
+            {
+                var item = new ToolStripMenuItem(choice.Name.Replace("&", "&&"));
+                item.Click += (_, _) => InvokeAction(choice.Open);
+                editWith.DropDownItems.Add(item);
+            }
+            editorMenu.Items.Add(editWith);
+            if (copyText is not null || copyTable is not null) editorMenu.Items.Add(new ToolStripSeparator());
         }
-        editorMenu.Items.Add(editWith);
+        AddCopyItem("文字をコピー", "NotificationCopyText", copyText);
+        AddCopyItem("表をコピー", "NotificationCopyTable", copyTable);
+
+        void AddCopyItem(string label, string name, Action? action)
+        {
+            if (action is null) return;
+            var item = new ToolStripMenuItem(label) { Name = name };
+            item.Click += (_, _) => { if (ready) action(); };
+            editorMenu.Items.Add(item);
+        }
     }
 
     internal void ShowProtected() { if (ready && protectedHandle == Handle && nativeShow) CaptureToastForm.ShowNative(this); }

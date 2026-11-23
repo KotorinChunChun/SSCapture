@@ -44,6 +44,8 @@ internal sealed class NotificationImage : IDisposable
         }
     }
 
+    internal Bitmap CloneImage() => (Bitmap)(image ?? throw new ObjectDisposedException(nameof(NotificationImage))).Clone();
+
     internal Bitmap CreateThumbnail() => Thumbnail(image ?? throw new ObjectDisposedException(nameof(NotificationImage)));
     internal static Bitmap Thumbnail(Image image)
     {

@@ -35,6 +35,29 @@ internal static partial class Program
                 Equal("通知_01.png", Path.GetFileName(handoff));
                 Check(File.ReadAllBytes(moved).SequenceEqual(File.ReadAllBytes(handoff)), "移動済み原本とPNGが一致しない");
             })));
+        Run("OCRメニューは成功した静止画にだけ表示し未保存・編集アプリなしでも使える", () =>
+            WithServiceDirectory(directory =>
+            {
+                using var image = new Bitmap(12, 6);
+                var toast = new FakeCaptureToast();
+                var settings = new AppSettings { ImageEditors = [] };
+                using var feedback = new CaptureFeedback(createToast: () => toast, sound: new FakeCompletionSound(),
+                    timer: new FakeFeedbackTimer());
+                feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None,
+                    NotificationImage: new NotificationImage(image, directory)), settings);
+                var actions = toast.Actions!;
+                Check(actions.CopyText is not null && actions.CopyTable is not null, "未保存画像のOCRが使えない");
+                using var form = new CaptureToastForm(_ => new(true, null), _ => { }, () => (new Rectangle(0, 0, 1000, 800), 96));
+                form.SetActions(actions);
+                Check(form.TryShow("コピーしました", false, NotificationCorner.BottomRight, out var warning), warning ?? "表示失敗");
+                var host = (ToastActionForm)typeof(CaptureToastForm).GetField("actionHost", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+                var menu = (ContextMenuStrip)typeof(ToastActionForm).GetField("editorMenu", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(host)!;
+                Check(menu.Items["NotificationCopyText"] is not null && menu.Items["NotificationCopyTable"] is not null, "OCR項目がない");
+                feedback.ShowPreviousScreenshot(settings);
+                Check(toast.Actions!.CopyText is null && toast.Actions.CopyTable is null, "参考表示にOCRが出た");
+                feedback.Notify(new(CaptureIntent.Recording, OutputDestination.File, OutputDestination.None), settings);
+                Check(toast.Actions!.CopyText is null && toast.Actions.CopyTable is null, "動画にOCRが出た");
+            }));
         Run("通知のサムネイルを左ダブルクリックしたときだけ割り当て済みの編集を実行する", () =>
         {
             using var thumbnail = new Bitmap(44, 24);
@@ -75,7 +98,7 @@ internal static partial class Program
             var actionFlags = (CreateParams)typeof(ToastActionForm).GetProperty("CreateParams", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(host)!;
             Check((actionFlags.ExStyle & 0x20) == 0 && (actionFlags.ExStyle & 0x08000000) != 0, "ボタンが透過またはアクティブ化");
             Check(host.Region is not null && !host.Region.IsVisible(1, 1), "ボタン外が入力を遮断");
-            foreach (Control button in host.Controls.OfType<Button>().Where(b => b.Name != "NotificationRetry"))
+            foreach (Control button in host.Controls.OfType<Button>().Where(b => b.Name is "NotificationOpenFolder" or "NotificationEdit"))
             {
                 Check(host.ClientRectangle.Contains(button.Bounds), "ボタンがつぶれる/はみ出す");
                 Check(host.Region!.IsVisible(button.Left + button.Width / 2, button.Top + button.Height / 2), "ボタンが入力領域にない");
@@ -104,9 +127,12 @@ internal static partial class Program
                 Check(feedback.LastWarning is null, feedback.LastWarning ?? "通知を準備できない");
                 var host = (ToastActionForm)typeof(CaptureToastForm).GetField("actionHost", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
                 var folder = host.Controls.Find("NotificationOpenFolder", true).Single();
+                var copyPath = host.Controls.Find("NotificationCopyPath", true).Single();
                 var preview = (PictureBox)host.Controls.Find("NotificationDragImage", true).Single();
                 var styles = (CreateParams)folder.GetType().GetProperty("CreateParams", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(folder)!;
                 Equal(showFolder, (styles.Style & 0x10000000) != 0);
+                var copyStyles = (CreateParams)copyPath.GetType().GetProperty("CreateParams", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(copyPath)!;
+                Equal(showFolder, (copyStyles.Style & 0x10000000) != 0);
                 Equal(showFolder, host.Region!.IsVisible(folder.Left + folder.Width / 2, folder.Top + folder.Height / 2));
                 Check(preview.Image is not null && preview.Cursor == Cursors.Hand && host.Region.IsVisible(preview.Left + 2, preview.Top + 2),
                     "サムネイルからドラッグできない");
@@ -119,7 +145,8 @@ internal static partial class Program
             foreach (int dpi in new[] { 96, 144, 192 })
             {
                 using var form = new CaptureToastForm(_ => new(true, null), _ => { }, () => (new Rectangle(-1920, -200, 1920, 1440), dpi));
-                form.SetActions(new(() => { }, () => { }, "直前の設定で再撮影するキー: Ctrl+Shift+F11", thumbnail, Retry: () => { }));
+                form.SetActions(new(() => { }, () => { }, "直前の設定で再撮影するキー: Ctrl+Shift+F11", thumbnail,
+                    Retry: () => { }, CopyPath: () => { }));
                 Check(form.TryShow("コピーしました。\n保存しました。\n外部アプリを開きました。\nDISPLAY2 / 1920×1080px", false, NotificationCorner.BottomRight, out var warning), warning ?? "表示失敗");
                 foreach (Control child in Descendants(form)) _ = child.Handle;
                 LayoutTree(form);
@@ -180,6 +207,37 @@ internal static partial class Program
             Check(toast.Actions!.OpenFolder is not null && toast.Actions.Edit is null, "画像アプリを動画の既定として流用");
             Equal("", toast.Actions.RepeatHint);
             Equal<ExternalApplication?>(null, NotificationPresentation.ResolveApplication(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, CaptureSettings: settings), settings with { ImageEditors = [] }));
+        }));
+        Run("保存済みの通知だけから実在するファイルの絶対パスをコピーする", () => WithServiceDirectory(directory =>
+        {
+            string saved = Path.Combine(directory, "撮影 1.png"), moved = Path.Combine(directory, "撮影 2.png");
+            using var image = new Bitmap(4, 4);
+            image.Save(saved, System.Drawing.Imaging.ImageFormat.Png);
+            var toast = new FakeCaptureToast();
+            var copied = new List<string>();
+            using var feedback = new CaptureFeedback(createToast: () => toast, sound: new FakeCompletionSound(),
+                timer: new FakeFeedbackTimer(), copyPathText: copied.Add);
+            var settings = new AppSettings();
+            var result = new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.File, OutputDestination.None,
+                SavedPath: Path.Combine(directory, ".", Path.GetFileName(saved)));
+            feedback.Notify(result with { Completed = OutputDestination.Clipboard, Failed = OutputDestination.File }, settings);
+            Equal<Action?>(null, toast.Actions!.CopyPath);
+            feedback.Notify(result, settings);
+            toast.Actions!.CopyPath!();
+            Equal(saved, copied.Single());
+            feedback.Notify(result with { SavedPath = saved }, settings);
+            File.Move(saved, moved);
+            feedback.UpdateSavedPath(saved, moved);
+            toast.Actions!.CopyPath!();
+            Equal(moved, copied.Last());
+            feedback.Notify(result with { SavedPath = moved }, settings);
+            var copy = toast.Actions!.CopyPath!;
+            File.Delete(moved);
+            copy();
+            Equal(2, copied.Count);
+            Check(feedback.LastWarning?.Contains("保存ファイルが見つかりません") == true, "消失を報告しない");
+            feedback.Notify(result, settings);
+            Equal<Action?>(null, toast.Actions!.CopyPath);
         }));
         Run("通知の設定画面は9候補と編集アプリだけを表示し旧クリック選択を除去", () =>
         {

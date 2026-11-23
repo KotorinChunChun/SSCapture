@@ -56,8 +56,15 @@ internal static class CaptureNative
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(nint window, out NativeRect bounds);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetClientRect(nint window, out NativeRect bounds);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int MapWindowPoints(nint from, nint to, ref NativeRect bounds, uint pointCount);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(nint window, StringBuilder text, int count);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowTextLength(nint window);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetClassName(nint window, StringBuilder text, int count);
     [DllImport("dwmapi.dll")]
@@ -173,7 +180,12 @@ internal static class CaptureNative
         return monitors;
     }
 
-    internal static IReadOnlyList<CaptureWindow> CaptureWindows(Rectangle desktop)
+    internal static IReadOnlyList<CaptureWindow> CaptureWindows(Rectangle desktop, bool includeClientBounds = false)
+        => EnumerateCaptureWindows(desktop, includeClientBounds);
+
+    internal static IReadOnlyList<CaptureWindow> EnumerateCaptureWindows() => EnumerateCaptureWindows(null, false);
+
+    private static IReadOnlyList<CaptureWindow> EnumerateCaptureWindows(Rectangle? desktop, bool includeClientBounds)
     {
         List<CaptureWindow> windows = [];
         nint shell = GetShellWindow();
@@ -182,6 +194,8 @@ internal static class CaptureNative
         EnumWindows((window, data) =>
         {
             if (window == shell || !IsWindowVisible(window) || IsIconic(window)) return true;
+            uint thread = GetWindowThreadProcessId(window, out uint process);
+            if (thread == 0 || process == 0) return true;
             long style = GetWindowLongPtr(window, -20 /* GWL_EXSTYLE */).ToInt64();
             // 入力透過の補助画面や完全透明な画面の矩形で、背後の撮影対象を遮らない。
             if ((style & 0x20 /* WS_EX_TRANSPARENT */) != 0) return true;
@@ -190,16 +204,21 @@ internal static class CaptureNative
             if (DwmGetWindowAttributeInt(window, 14, out int cloaked, sizeof(int)) == 0 && cloaked != 0) return true;
             if (DwmGetWindowAttribute(window, 9, out NativeRect bounds, Marshal.SizeOf<NativeRect>()) != 0
                 && !GetWindowRect(window, out bounds)) return true;
-            Rectangle clipped = CaptureGeometry.Clip(bounds.ToRectangle(), desktop);
-            if (CaptureGeometry.IsUsable(clipped))
+            Rectangle clipped = desktop is Rectangle area ? CaptureGeometry.Clip(bounds.ToRectangle(), area) : bounds.ToRectangle();
+            if (desktop.HasValue ? CaptureGeometry.IsUsable(clipped) : clipped.Width > 0 && clipped.Height > 0)
             {
                 title.Clear();
                 className.Clear();
+                if (!desktop.HasValue) title.EnsureCapacity(GetWindowTextLength(window) + 2);
                 GetWindowText(window, title, title.Capacity);
                 GetClassName(window, className, className.Capacity);
-                uint thread = GetWindowThreadProcessId(window, out uint process);
-                windows.Add(new(clipped, title.ToString().Replace('\r', ' ').Replace('\n', ' ').Trim(), window, process, thread,
-                    GetWindow(window, 4 /* GW_OWNER */), windows.Count, className.ToString()));
+                string caption = title.ToString();
+                if (desktop.HasValue) caption = caption.Replace('\r', ' ').Replace('\n', ' ').Trim();
+                var target = new CaptureWindow(clipped, caption, window, process, thread,
+                    GetWindow(window, 4 /* GW_OWNER */), windows.Count, className.ToString())
+                    { ClientBoundsAtSelection = includeClientBounds ? ReadClientBounds(window) : null };
+                if (GetWindowThreadProcessId(window, out uint currentProcess) == thread && currentProcess == process)
+                    windows.Add(target);
             }
             return true;
         }, 0);
@@ -211,16 +230,44 @@ internal static class CaptureNative
 
     internal static Rectangle RequireCaptureWindow(CaptureWindow target)
     {
-        uint thread = GetWindowThreadProcessId(target.Handle, out uint process);
-        if (thread == 0 || thread != target.ThreadId || process != target.ProcessId
-            || !IsWindowVisible(target.Handle) || IsIconic(target.Handle))
-            throw new InvalidOperationException("選択したウィンドウを取得できません。選び直してください。");
+        RequireWindowIdentity(target);
         if (DwmGetWindowAttribute(target.Handle, 9, out NativeRect bounds, Marshal.SizeOf<NativeRect>()) != 0
             && !GetWindowRect(target.Handle, out bounds))
             throw new InvalidOperationException("選択したウィンドウの範囲を取得できません。");
         return bounds.ToRectangle();
     }
+
+    internal static void RequireWindowIdentity(CaptureWindow target)
+    {
+        uint thread = GetWindowThreadProcessId(target.Handle, out uint process);
+        if (thread == 0 || thread != target.ThreadId || process != target.ProcessId)
+            throw new InvalidOperationException("選択したウィンドウは利用できなくなりました。選び直してください。");
+        if (!IsWindowVisible(target.Handle) || IsIconic(target.Handle))
+            throw new InvalidOperationException("選択したウィンドウが非表示か最小化されています。表示してから撮影してください。");
+    }
+
+    internal static Rectangle RequireClientBounds(CaptureWindow target)
+    {
+        RequireWindowIdentity(target);
+        Rectangle? bounds = ReadClientBounds(target.Handle);
+        RequireWindowIdentity(target);
+        return bounds ?? throw new InvalidOperationException("選択したウィンドウの描画領域を取得できません。");
+    }
+
+    private static Rectangle? ReadClientBounds(nint window)
+    {
+        // The capture thread is PerMonitorV2. Passing both corners also handles mirrored windows.
+        if (!GetClientRect(window, out NativeRect bounds) || bounds.Right <= 0 || bounds.Bottom <= 0)
+            return null;
+        if (MapWindowPoints(window, 0, ref bounds, 2) == 0 && Marshal.GetLastPInvokeError() != 0)
+            return null;
+        Rectangle mapped = bounds.ToRectangle();
+        return mapped.Width > 0 && mapped.Height > 0 ? mapped : null;
+    }
 }
 
 internal sealed record CaptureWindow(Rectangle Bounds, string Title, nint Handle, uint ProcessId, uint ThreadId,
-    nint Owner = 0, int ZOrder = 0, string ClassName = "");
+    nint Owner = 0, int ZOrder = 0, string ClassName = "")
+{
+    internal Rectangle? ClientBoundsAtSelection { get; init; }
+}

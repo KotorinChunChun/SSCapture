@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Xml.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -10,10 +11,17 @@ using Microsoft.Win32;
 
 namespace SSCapture.Services;
 
-internal sealed record OcrResult(string[] Lines, string? Error = null);
+internal sealed record OcrResult(string[] Lines, string? Error = null)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public OcrLineLayout?[]? Layout { get; init; }
+}
 
 internal static class OneOcr
 {
+    private const string LayoutMode = "--layout";
+    private const string TextMode = "--text";
+
     internal static string FindEngine(string configured)
     {
         if (!string.IsNullOrWhiteSpace(configured)) return ValidateEngine(configured);
@@ -78,34 +86,28 @@ internal static class OneOcr
         return cache;
     }
 
-    internal static async Task<OcrResult> RecognizeAsync(Bitmap image, string configured, CancellationToken cancellationToken)
+    internal static Task<OcrResult> RecognizeAsync(Bitmap image, string configured, CancellationToken cancellationToken) =>
+        RecognizeCoreAsync(image, configured, null, cancellationToken);
+
+    internal static Task<OcrResult> RecognizeForCopyAsync(Bitmap image, string configured, bool asTable, CancellationToken cancellationToken) =>
+        RecognizeCoreAsync(image, configured, asTable ? LayoutMode : TextMode, cancellationToken);
+
+    private static async Task<OcrResult> RecognizeCoreAsync(Bitmap image, string configured, string? mode, CancellationToken cancellationToken)
     {
         string folder = Path.Combine(Path.GetTempPath(), "SSCapture-OCR-" + Guid.NewGuid().ToString("N"));
         string input = Path.Combine(folder, "input.png"), output = Path.Combine(folder, "result.json");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(45));
-        using var process = new Process();
         try
         {
+            timeout.Token.ThrowIfCancellationRequested();
             string engine = PrepareEngine(FindEngine(configured));
             Directory.CreateDirectory(folder);
             image.Save(input, ImageFormat.Png);
-            string dotnet = Path.GetFullPath(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), "..", "..", "..", "dotnet.exe"));
-            var start = new ProcessStartInfo(dotnet) { UseShellExecute = false, CreateNoWindow = true,
-                RedirectStandardOutput = true, RedirectStandardError = true, WorkingDirectory = folder };
-            foreach (string argument in new[] { typeof(OneOcr).Assembly.Location, "--ocr-worker", input, output, engine }) start.ArgumentList.Add(argument);
-            process.StartInfo = start;
-            if (!process.Start()) throw new IOException("OneOCRを開始できません。");
-            // Native DLL diagnostics must never block the worker's pipes.
-            Task stdout = process.StandardOutput.BaseStream.CopyToAsync(Stream.Null);
-            Task stderr = process.StandardError.BaseStream.CopyToAsync(Stream.Null);
-            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-            await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
-            if (!File.Exists(output)) throw new IOException($"OneOCRが結果を返さず終了しました（{process.ExitCode}）。");
-            OcrResult result = JsonSerializer.Deserialize<OcrResult>(await File.ReadAllTextAsync(output, timeout.Token).ConfigureAwait(false))
-                ?? throw new IOException("OneOCRの結果が空です。");
-            if (process.ExitCode != 0 && result.Error is null) throw new IOException("OneOCRの実行に失敗しました。");
-            return result;
+            OcrResult? result = await ReadWorkerAsync(folder, input, output, engine, mode, timeout.Token).ConfigureAwait(false);
+            // A changed native layout ABI can terminate the worker. Retry with the same budget and text-only exports.
+            return result ?? await ReadWorkerAsync(folder, input, output, engine, TextMode, timeout.Token).ConfigureAwait(false)
+                ?? throw new IOException("OneOCRが結果を返さず終了しました。");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         { return new OcrResult([], "OneOCRが45秒以内に応答しませんでした。手入力できます。"); }
@@ -113,8 +115,6 @@ internal static class OneOcr
         { return new OcrResult([], ex.Message); }
         finally
         {
-            try { if (process.Id != 0 && !process.HasExited) { process.Kill(true); await process.WaitForExitAsync().ConfigureAwait(false); } }
-            catch (Exception ex) when (ex is InvalidOperationException or Win32Exception) { }
             foreach (string path in new[] { input, output })
                 try { File.Delete(path); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
             try { if (Directory.Exists(folder)) Directory.Delete(folder, false); }
@@ -122,14 +122,55 @@ internal static class OneOcr
         }
     }
 
+    private static async Task<OcrResult?> ReadWorkerAsync(string folder, string input, string output, string engine,
+        string? mode, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        string assembly = typeof(OneOcr).Assembly.Location;
+        string dotnet = Path.GetFullPath(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), "..", "..", "..", "dotnet.exe"));
+        bool useAppHost = File.Exists(Path.Combine(AppContext.BaseDirectory, "hostpolicy.dll")) || !File.Exists(dotnet);
+        var start = new ProcessStartInfo(useAppHost ? Path.ChangeExtension(assembly, ".exe") : dotnet)
+        {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true,
+            RedirectStandardError = true, WorkingDirectory = folder
+        };
+        if (!useAppHost) start.ArgumentList.Add(assembly);
+        foreach (string argument in new[] { "--ocr-worker", input, output, engine }) start.ArgumentList.Add(argument);
+        if (mode is not null) start.ArgumentList.Add(mode);
+        using var process = new Process { StartInfo = start };
+        if (!process.Start()) throw new IOException("OneOCRを開始できません。");
+        try
+        {
+            // Native DLL diagnostics must never block the worker's pipes.
+            Task stdout = process.StandardOutput.BaseStream.CopyToAsync(Stream.Null, token);
+            Task stderr = process.StandardError.BaseStream.CopyToAsync(Stream.Null, token);
+            await process.WaitForExitAsync(token).ConfigureAwait(false);
+            await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
+            if (!File.Exists(output))
+            {
+                if (mode == LayoutMode) return null;
+                throw new IOException($"OneOCRが結果を返さず終了しました（{process.ExitCode}）。");
+            }
+            var result = JsonSerializer.Deserialize<OcrResult>(await File.ReadAllTextAsync(output, token).ConfigureAwait(false))
+                ?? throw new IOException("OneOCRの結果が空です。");
+            if (process.ExitCode != 0 && result.Error is null) throw new IOException("OneOCRの実行に失敗しました。");
+            return result;
+        }
+        finally
+        {
+            try { if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync().ConfigureAwait(false); } }
+            catch (Exception ex) when (ex is InvalidOperationException or Win32Exception) { }
+        }
+    }
+
     internal static int RunWorker(string[] args)
     {
-        if (args.Length != 4) return 2;
+        if (args.Length != 4 && (args.Length != 5 || args[4] is not (LayoutMode or TextMode))) return 2;
         OcrResult result;
         try
         {
             using var image = new Bitmap(args[1]);
-            result = new OcrResult(OneOcrNative.Read(image, ValidateEngine(args[3])));
+            result = OneOcrNative.Read(image, ValidateEngine(args[3]), args.Length == 5, args.Length == 5 && args[4] == LayoutMode);
         }
         catch (Exception ex) { result = new OcrResult([], ex.Message); }
         File.WriteAllText(args[2], JsonSerializer.Serialize(result));
@@ -148,11 +189,13 @@ internal static class OneOcrNative
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate long Count(long result, out long count);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate long Line(long result, long index, out long line);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate long Content(long line, out nint text);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int MaxLineCount(long options, int count);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int BoundingBox(long handle, out nint box);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Release(long handle);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern nint LoadLibraryEx(string path, nint file, uint flags);
 
-    internal static string[] Read(Bitmap source, string directory)
+    internal static OcrResult Read(Bitmap source, string directory, bool forCopy, bool includeLayout)
     {
         if (RuntimeInformation.ProcessArchitecture != Architecture.X64) throw new PlatformNotSupportedException("OneOCRはx64プロセスで実行してください。");
         nint library = LoadLibraryEx(Path.Combine(directory, "oneocr.dll"), 0, 0x1100);
@@ -163,6 +206,8 @@ internal static class OneOcrNative
         }
         long init = 0, pipeline = 0, options = 0, result = 0;
         T Bind<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
+        T? BindOptional<T>(string name) where T : Delegate => NativeLibrary.TryGetExport(library, name, out nint address)
+            ? Marshal.GetDelegateForFunctionPointer<T>(address) : null;
         void Check(long status) { if (status != 0) throw new IOException($"OneOCRエラー: {status}"); }
         try
         {
@@ -170,8 +215,10 @@ internal static class OneOcrNative
             Check(Bind<Delay>("OcrInitOptionsSetUseModelDelayLoad")(init, 0));
             Check(Bind<Pipeline>("CreateOcrPipeline")(Path.Combine(directory, "oneocr.onemodel"), "kj)TGtrK>f]b[Piow.gU+nC@s\"\"\"\"\"\"4", init, out pipeline));
             Check(Bind<Create>("CreateOcrProcessOptions")(out options));
+            if (forCopy) BindOptional<MaxLineCount>("OcrProcessOptionsSetMaxRecognitionLineCount")?.Invoke(options, 1000);
             double scale = Math.Min(1d, 10000d / Math.Max(source.Width, source.Height));
             int width = Math.Max(1, (int)(source.Width * scale)), height = Math.Max(1, (int)(source.Height * scale));
+            var scaled = new Size(width, height);
             using var pixels = new Bitmap(Math.Max(50, width), Math.Max(50, height), PixelFormat.Format32bppArgb);
             using (var graphics = Graphics.FromImage(pixels)) { graphics.Clear(Color.White); graphics.DrawImage(source, new Rectangle(0, 0, width, height)); }
             BitmapData data = pixels.LockBits(new Rectangle(Point.Empty, pixels.Size), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
@@ -181,15 +228,31 @@ internal static class OneOcrNative
                 Check(Bind<Run>("RunOcrPipeline")(pipeline, ref image, options, out result));
                 Check(Bind<Count>("GetOcrLineCount")(result, out long count));
                 if (count is < 0 or > 10000) throw new IOException("OneOCRの認識行数が不正です。");
-                var lines = new List<string>();
+                var lines = new List<string>((int)count);
+                var lineBox = includeLayout ? BindOptional<BoundingBox>("GetOcrLineBoundingBox") : null;
+                var wordCount = includeLayout ? BindOptional<Count>("GetOcrLineWordCount") : null;
+                var getWord = includeLayout ? BindOptional<Line>("GetOcrWord") : null;
+                var wordContent = includeLayout ? BindOptional<Content>("GetOcrWordContent") : null;
+                var wordBox = includeLayout ? BindOptional<BoundingBox>("GetOcrWordBoundingBox") : null;
+                List<OcrLineLayout?>? layout = lineBox is null ? null : new((int)count);
+                int remainingWords = 100_000;
+                var getLine = Bind<Line>("GetOcrLine");
+                var lineContent = Bind<Content>("GetOcrLineContent");
                 for (long index = 0; index < count; index++)
                 {
-                    Check(Bind<Line>("GetOcrLine")(result, index, out long line));
-                    Check(Bind<Content>("GetOcrLineContent")(line, out nint text));
+                    Check(getLine(result, index, out long line));
+                    Check(lineContent(line, out nint text));
                     string value = Marshal.PtrToStringUTF8(text) ?? "";
-                    if (!string.IsNullOrWhiteSpace(value)) lines.Add(value);
+                    if (!forCopy && string.IsNullOrWhiteSpace(value)) continue;
+                    lines.Add(value);
+                    if (layout is null) continue;
+                    var bounds = ReadBounds(line, lineBox!, pixels.Size, scaled, source.Size);
+                    var words = bounds is null || wordCount is null || getWord is null || wordContent is null || wordBox is null
+                        ? null : ReadWords(line, wordCount, getWord, wordContent, wordBox, pixels.Size,
+                            scaled, source.Size, ref remainingWords);
+                    layout.Add(bounds is { } box ? new OcrLineLayout(box, words) : null);
                 }
-                return lines.ToArray();
+                return new OcrResult(lines.ToArray()) { Layout = layout?.ToArray() };
             }
             finally { pixels.UnlockBits(data); }
         }
@@ -202,5 +265,45 @@ internal static class OneOcrNative
             }
             finally { NativeLibrary.Free(library); }
         }
+    }
+
+    private static OcrWord[]? ReadWords(long line, Count count, Line get, Content content, BoundingBox box,
+        Size pixels, Size scaled, Size source, ref int remaining)
+    {
+        if (count(line, out long length) != 0 || length < 1 || length > remaining) return null;
+        remaining -= (int)length;
+        var words = new OcrWord[(int)length];
+        for (int index = 0; index < words.Length; index++)
+        {
+            if (get(line, index, out long word) != 0 || word == 0 || content(word, out nint text) != 0) return null;
+            string? value = Marshal.PtrToStringUTF8(text);
+            var bounds = ReadBounds(word, box, pixels, scaled, source);
+            if (string.IsNullOrWhiteSpace(value) || bounds is null) return null;
+            words[index] = new(value, bounds.Value);
+        }
+        return words;
+    }
+
+    private static OcrBounds? ReadBounds(long handle, BoundingBox read, Size pixels, Size scaled, Size source)
+    {
+        // The x64 export returns a result-owned pointer to four (x, y) float pairs. Copy before releasing the result.
+        if (handle == 0 || read(handle, out nint data) != 0 || data == 0) return null;
+        Span<float> corners = stackalloc float[8];
+        for (int i = 0; i < corners.Length; i++)
+        {
+            float value = BitConverter.Int32BitsToSingle(Marshal.ReadInt32(data, i * sizeof(float)));
+            int limit = i % 2 == 0 ? pixels.Width : pixels.Height;
+            if (!float.IsFinite(value) || value < -16 || value > limit + 16) return null;
+            corners[i] = value;
+        }
+
+        float left = MathF.Min(MathF.Min(corners[0], corners[2]), MathF.Min(corners[4], corners[6]));
+        float top = MathF.Min(MathF.Min(corners[1], corners[3]), MathF.Min(corners[5], corners[7]));
+        float right = MathF.Max(MathF.Max(corners[0], corners[2]), MathF.Max(corners[4], corners[6]));
+        float bottom = MathF.Max(MathF.Max(corners[1], corners[3]), MathF.Max(corners[5], corners[7]));
+        float xScale = (float)source.Width / scaled.Width, yScale = (float)source.Height / scaled.Height;
+        var bounds = new OcrBounds(Math.Clamp(left, 0, scaled.Width) * xScale, Math.Clamp(top, 0, scaled.Height) * yScale,
+            Math.Clamp(right, 0, scaled.Width) * xScale, Math.Clamp(bottom, 0, scaled.Height) * yScale);
+        return bounds.IsValid ? bounds : null;
     }
 }

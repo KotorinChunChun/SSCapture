@@ -9,6 +9,7 @@ internal static partial class Program
 {
     private static void CaptureCommandTests()
     {
+        WindowCaptureCommandTests();
         Run("撮影CLIは通常起動と内部workerを変更しない", () =>
         {
             foreach (string[] args in new[] { Array.Empty<string>(), new[] { "--startup" }, new[] { "--hidden" }, new[] { "--capture-context-worker" }, new[] { "--ocr-worker" } })

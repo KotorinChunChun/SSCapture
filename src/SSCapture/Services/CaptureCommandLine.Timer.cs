@@ -6,10 +6,14 @@ internal static partial class CaptureCommandRunner
 {
     private static async Task<int> ExecuteTimerAsync(ResolvedCaptureCommand command, OutputRouter output,
         Func<Rectangle, AppSettings, Task<(Bitmap Image, CaptureMetadata? Metadata)>>? take,
-        Func<CaptureOptions, Task<CaptureOutcome>>? select, Action<string, bool>? report)
+        Func<CaptureOptions, Task<CaptureOutcome>>? select, Action<string, bool>? report,
+        Func<WindowCaptureCommand, CaptureWindow>? resolveWindow,
+        Func<CaptureWindow, AppSettings, bool, bool, Task<WindowReplayFrame>>? takeWindow)
     {
         CaptureTimerShot? shot;
-        if (command.Request.Region is Rectangle bounds)
+        if (command.Request.Window is not null)
+            shot = CaptureTimerShot.Window(command, resolveWindow, takeWindow);
+        else if (command.Request.Region is Rectangle bounds)
             shot = CaptureTimerShot.Fixed(bounds, command, take);
         else if (command.Request.UsePresetMode && command.InputPreset.UseFixedCoordinates)
             shot = CaptureTimerShot.Registered(command.InputPreset, command.Settings);

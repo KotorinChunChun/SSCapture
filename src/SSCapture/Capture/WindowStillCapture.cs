@@ -11,20 +11,20 @@ internal static class WindowStillCapture
     private const int CaptureTimeoutMilliseconds = 3000;
 
     /// <summary>戻り値の画像は呼び出し元で破棄する。</summary>
-    internal static async Task<Bitmap> CaptureAsync(nint hwnd, bool includeCursor, CancellationToken cancellationToken = default)
+    internal static async Task<Bitmap> CaptureAsync(CaptureWindow target, bool includeCursor, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var identity = GetWindowIdentity(hwnd);
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
             throw new NotSupportedException("このWindowsではウィンドウ単独取得を利用できません。");
 
         try
         {
-            return await Task.Run(() => Capture(hwnd, identity, includeCursor, cancellationToken), cancellationToken)
+            return await Task.Run(() => Capture(target.Handle, (target.ProcessId, target.ThreadId), includeCursor, cancellationToken), cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception error) when (error is COMException or UnauthorizedAccessException)
         {
+            CaptureNative.RequireWindowIdentity(target);
             throw new InvalidOperationException("選択したウィンドウをWindows Graphics Captureで取得できませんでした。", error);
         }
     }

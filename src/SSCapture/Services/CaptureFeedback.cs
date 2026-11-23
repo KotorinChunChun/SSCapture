@@ -7,14 +7,11 @@ internal enum NotificationClickAction { None, OpenFolder, ExternalApplication }
 internal sealed record NotificationEditorChoice(string Name, Action Open);
 internal sealed record NotificationActions(Action? OpenFolder, Action? Edit, string RepeatHint,
     Bitmap? Thumbnail = null, Func<Control, CancellationToken, Task>? Drag = null,
-    Action? Retry = null, string? Heading = null, IReadOnlyList<NotificationEditorChoice>? Editors = null)
+    Action? Retry = null, string? Heading = null, IReadOnlyList<NotificationEditorChoice>? Editors = null,
+    Action? CopyPath = null, Action? CopyText = null, Action? CopyTable = null)
 {
-    internal int ButtonRows => (OpenFolder, Edit, Retry) switch
-    {
-        (null, null, null) => 0,
-        (not null, not null, not null) => 2,
-        _ => 1
-    };
+    internal int ButtonRows => ((OpenFolder is null ? 0 : 1) + (Edit is null ? 0 : 1)
+        + (Retry is null ? 0 : 1) + (CopyPath is null ? 0 : 1) + 1) / 2;
     internal bool HasInteractiveSurface => ButtonRows != 0 || Thumbnail is not null;
 }
 
@@ -60,17 +57,23 @@ internal sealed class CaptureFeedback : IDisposable
     private NotificationLifetime? lifetime;
     private NotificationImage? pendingImage;
     private Bitmap? thumbnail;
+    private CancellationTokenSource? ocrCopy;
+    private NotificationActions? shownActions;
     private CaptureDelivery? previousScreenshot;
     private int draggingSerial;
+    private string? shownSavedPath;
     private readonly Func<Control, string, bool>? dragFile;
     private readonly Func<bool> dragButtonDown;
     private readonly Action<string>? retainDragFile;
+    private readonly Action<string, string?>? savedFileMoved;
+    private readonly Action<string> copyPathText;
 
     internal CaptureFeedback(Action<string>? warning = null, Func<ICaptureToast>? createToast = null,
         ICompletionSound? sound = null, IFeedbackTimer? timer = null, Action<string>? openSavedFile = null,
         Func<long>? now = null, Func<Point>? pointer = null, Action<System.Diagnostics.ProcessStartInfo>? launch = null,
         Func<Control, string, bool>? dragFile = null, Func<bool>? dragButtonDown = null, Action<string>? retainDragFile = null,
-        ExternalEditor? externalEditor = null)
+        ExternalEditor? externalEditor = null, Action<string, string?>? savedFileMoved = null,
+        Action<string>? copyPathText = null)
     {
         this.warning = warning;
         this.createToast = createToast ?? (() => new CaptureToastForm());
@@ -83,6 +86,8 @@ internal sealed class CaptureFeedback : IDisposable
         this.dragFile = dragFile;
         this.dragButtonDown = dragButtonDown ?? (() => (Control.MouseButtons & MouseButtons.Left) != 0);
         this.retainDragFile = retainDragFile;
+        this.savedFileMoved = savedFileMoved;
+        this.copyPathText = copyPathText ?? (path => Clipboard.SetText(path, TextDataFormat.UnicodeText));
         this.timer.Elapsed += PollLifetime;
     }
 
@@ -118,7 +123,9 @@ internal sealed class CaptureFeedback : IDisposable
         {
             int serial = ++notificationSerial;
             var presentation = NotificationPresentation.Create(result, settings, pendingImage is not null);
-            Action? folder = presentation.SavedFile is string path ? () => OpenSavedFile(serial, path) : null;
+            shownSavedPath = result.SavedPath;
+            Action? folder = presentation.SavedFile is not null ? () => OpenSavedFile(serial) : null;
+            Action? copyPath = File.Exists(presentation.SavedFile) ? () => CopySavedPath(serial) : null;
             Action? edit = presentation.Editor is { } app
                 ? () => OpenApplication(serial, result, app) : null;
             toast ??= createToast();
@@ -144,14 +151,17 @@ internal sealed class CaptureFeedback : IDisposable
             NotificationEditorChoice[]? editorChoices = thumbnail is null ? null :
                 NotificationPresentation.ScreenshotEditors(settings, editor)
                     .Select(candidate => new NotificationEditorChoice(candidate.Name, () => OpenApplication(serial, result, candidate))).ToArray();
-            toast.SetActions(new(folder, edit, presentation.RepeatHint, thumbnail,
+            shownActions = new(folder, edit, presentation.RepeatHint, thumbnail,
                 canDrag && thumbnail is not null ? (source, gesture) => DragAsync(serial, result, settings, source, gesture) : null,
                 retryOutput is not null && result.HasFailure ? () =>
                 {
                     if (disposed || serial != notificationSerial) return;
                     HideForCapture();
                     retryOutput();
-                } : null, heading, editorChoices));
+                } : null, heading, editorChoices, CopyPath: copyPath,
+                CopyText: thumbnail is null ? null : () => _ = CopyOcrAsync(serial, result, settings, false),
+                CopyTable: thumbnail is null ? null : () => _ = CopyOcrAsync(serial, result, settings, true));
+            toast.SetActions(shownActions);
             bool shared = result.CaptureSettings?.ShareCapturePresentation ?? settings.ShareCapturePresentation;
             var display = shared ? NotificationDisplay.Captured : settings.NotificationDisplay;
             if (!toast.TryShow(presentation.Message, presentation.HasFailure, settings.NotificationCorner, out string? error,
@@ -176,7 +186,11 @@ internal sealed class CaptureFeedback : IDisposable
     {
         if (disposed) return;
         notificationSerial++;
+        ocrCopy?.Cancel();
+        ocrCopy = null;
+        shownActions = null;
         lifetime = null;
+        shownSavedPath = null;
         timer.Stop();
         toast?.Hide();
         thumbnail?.Dispose(); thumbnail = null;
@@ -186,7 +200,7 @@ internal sealed class CaptureFeedback : IDisposable
     private void PollLifetime()
     {
         if (disposed || lifetime is null || toast is null) return;
-        if (draggingSerial == notificationSerial) return;
+        if (draggingSerial == notificationSerial || ocrCopy is not null) return;
         if (toast.IsEditorMenuOpen) { timer.Restart(50); return; }
         try
         {
@@ -196,12 +210,85 @@ internal sealed class CaptureFeedback : IDisposable
         catch (Exception ex) { HideForCapture(); Warn("通知の近接状態を確認できません: " + ex.Message); }
     }
 
-    private void OpenSavedFile(int serial, string path)
+    internal void UpdateSavedPath(string previous, string? current)
+    {
+        if (string.Equals(shownSavedPath, previous, StringComparison.OrdinalIgnoreCase)) shownSavedPath = current;
+    }
+
+    private void OpenSavedFile(int serial)
     {
         if (disposed || serial != notificationSerial) return;
+        string? path = shownSavedPath;
         HideForCapture();
-        try { openSavedFile(path); }
+        try { openSavedFile(path ?? throw new FileNotFoundException("保存ファイルが見つかりません。")); }
         catch (Exception ex) { Warn("保存ファイルをExplorerで表示できません: " + ex.Message); }
+    }
+
+    private async Task CopyOcrAsync(int serial, CaptureDelivery result, AppSettings settings, bool asTable)
+    {
+        if (disposed || serial != notificationSerial || ocrCopy is not null || shownActions is null) return;
+        timer.Stop();
+        string? path = shownSavedPath ?? result.NotificationPath;
+        using var operation = new CancellationTokenSource();
+        ocrCopy = operation;
+        string message;
+        bool failed = false;
+        try
+        {
+            using var bitmap = pendingImage?.CloneImage() ?? new Bitmap(RequireSavedFile(path));
+            string directory = result.CaptureSettings?.OneOcrDirectory ?? settings.OneOcrDirectory;
+            message = await CaptureOcrCopy.CopyAsync(bitmap, directory, asTable, operation.Token);
+        }
+        catch (OperationCanceledException) when (operation.IsCancellationRequested) { return; }
+        catch (Exception ex)
+        {
+            failed = true;
+            message = (asTable ? "表をコピーできませんでした。 " : "文字をコピーできませんでした。 ") + ex.Message;
+        }
+        finally
+        {
+            if (ReferenceEquals(ocrCopy, operation)) ocrCopy = null;
+        }
+        if (disposed || operation.IsCancellationRequested || serial != notificationSerial || shownActions is null || toast is null) return;
+        try
+        {
+            toast.SetActions(shownActions with { Heading = failed ? "OCRエラー" : "OCR" });
+            bool shared = result.CaptureSettings?.ShareCapturePresentation ?? settings.ShareCapturePresentation;
+            var display = shared ? NotificationDisplay.Captured : settings.NotificationDisplay;
+            if (toast.TryShow(message, failed, settings.NotificationCorner, out string? error,
+                display: display, captureBounds: result.CaptureBounds))
+            {
+                int duration = checked(settings.NotificationDurationSeconds * 1000);
+                lifetime = new NotificationLifetime(now(), duration, settings.HoldNotificationWhileApproaching);
+                timer.Restart(toast.DisplayBounds.IsEmpty ? duration : 50);
+            }
+            else
+            {
+                HideForCapture();
+                if (error is not null) Warn(error);
+            }
+        }
+        catch (Exception ex) { HideForCapture(); Warn(ex.Message); }
+        if (failed) Warn(message);
+    }
+
+    private void CopySavedPath(int serial)
+    {
+        if (disposed || serial != notificationSerial) return;
+        string? path = shownSavedPath;
+        HideForCapture();
+        try { copyPathText(RequireSavedFile(path)); }
+        catch (Exception ex) { Warn("ファイルのパスをコピーできません: " + ex.Message); }
+    }
+
+    private static string RequireSavedFile(string? path)
+    {
+        if (path is not null)
+        {
+            string absolute = Path.GetFullPath(path);
+            if (File.Exists(absolute)) return absolute;
+        }
+        throw new FileNotFoundException("保存ファイルが見つかりません。");
     }
 
     private async Task DragAsync(int serial, CaptureDelivery result, AppSettings settings, Control source, CancellationToken gesture)
@@ -213,12 +300,15 @@ internal sealed class CaptureFeedback : IDisposable
         try
         {
             string path;
-            if (result.SavedPath is { } saved && File.Exists(saved)) path = saved;
+            string? savedPath = shownSavedPath;
+            bool hasSavedFile = File.Exists(savedPath);
+            if (hasSavedFile) path = savedPath!;
             else if (pendingImage is not null) path = (temporary = await pendingImage.PrepareForHandoffAsync()).Path;
-            else path = result.SavedPath ?? result.NotificationPath ?? throw new IOException("ドラッグする画像がありません。");
+            else path = result.NotificationPath ?? throw new IOException("ドラッグする画像がありません。");
             if (disposed || serial != notificationSerial || source.IsDisposed || gesture.IsCancellationRequested || !dragButtonDown()) return;
             Action? completeMove = temporary is null ? null : temporary.CompleteMove;
-            bool dropped = dragFile?.Invoke(source, path) ?? NotificationFileDrag.Run(source, path, completeMove: completeMove);
+            bool dropped = dragFile?.Invoke(source, path) ?? NotificationFileDrag.Run(source, path, completeMove: completeMove,
+                savedFileMoved: hasSavedFile ? savedFileMoved : null);
             if (dropped && !disposed && serial == notificationSerial) HideForCapture();
         }
         catch (Exception ex) { Warn("通知から画像を渡せません: " + ex.Message); }
@@ -238,6 +328,7 @@ internal sealed class CaptureFeedback : IDisposable
     private async void OpenApplication(int serial, CaptureDelivery result, ExternalApplication app)
     {
         if (disposed || serial != notificationSerial) return;
+        string? savedPath = shownSavedPath;
         var image = pendingImage; pendingImage = null;
         HideForCapture();
         TemporaryHandoff? temporary = null;
@@ -245,10 +336,10 @@ internal sealed class CaptureFeedback : IDisposable
         {
             var open = editor.Resolve(app);
             string path;
-            if (result.SavedPath is { } saved && File.Exists(saved)) path = saved;
+            if (savedPath is { } saved && File.Exists(saved)) path = saved;
             else if (image is not null) path = (temporary = await image.PrepareForHandoffAsync()).Path;
             else if (result.PrepareNotificationFile is { } prepare) path = (temporary = await prepare()).Path;
-            else path = result.SavedPath ?? result.NotificationPath ?? throw new IOException("通知から開く画像・動画を準備できませんでした。");
+            else path = result.NotificationPath ?? throw new IOException("通知から開く画像・動画を準備できませんでした。");
             if (!disposed) open(path);
         }
         catch (Exception ex) { Warn("通知から外部アプリを開けません: " + ex.Message); }

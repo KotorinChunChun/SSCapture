@@ -12,7 +12,10 @@ internal static class CaptureDelay
 }
 
 internal sealed record CaptureRestartState(bool UseFixedCoordinates, bool ExclusiveWindow,
-    CaptureAspectRatio AspectRatio, int? TemporaryPadding);
+    CaptureAspectRatio AspectRatio, int? TemporaryPadding)
+{
+    internal bool ClientAreaOnly { get; init; }
+}
 internal sealed record DelayedCaptureRestart(CaptureStartDelay Delay, CaptureOptions Options);
 
 internal sealed record CaptureOptions(

@@ -45,6 +45,18 @@ internal sealed class CaptureTimerShot
     internal static CaptureTimerShot Registered(SavedRegion region, AppSettings settings) =>
         new(settings, region.Name, current => TakeRegionAsync(RegionCoordinates.Resolve(region, RegionCoordinates.ReadDisplays()), current));
 
+    internal static CaptureTimerShot Window(ResolvedCaptureCommand command, Func<WindowCaptureCommand, CaptureWindow>? resolveWindow,
+        Func<CaptureWindow, AppSettings, bool, bool, Task<WindowReplayFrame>>? takeWindow)
+    {
+        var request = command.Request.Window!;
+        var target = (resolveWindow ?? (window => window.Resolve()))(request);
+        return new(command.Settings, command.InputPreset.Name, async settings =>
+        {
+            var frame = await (takeWindow ?? InstantCapture.TakeWindowAsync)(target, settings, true, request.ClientAreaOnly);
+            return new(frame.Image, frame.Bounds, frame.Metadata, WindowTitle: frame.Title, Source: frame.Source);
+        });
+    }
+
     internal static CaptureTimerShot Monitor(DisplayLayout display, AppSettings settings, IReadOnlyList<DisplayLayout> displays) =>
         FromSelection(new(display.Bounds, null, settings.DefaultDestination, ReplaySource: new CaptureReplaySource.Monitors([display.Bounds])),
             settings, display.Name, displays);

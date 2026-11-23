@@ -293,6 +293,21 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         visibleWindow!.Checked = !isolated;
         isolatedWindow!.Checked = isolated;
     }
+    internal void AddWindowAreaOptions(Action<bool> changeArea)
+    {
+        var area = Menu("ウィンドウの撮影範囲", "WindowCaptureArea", Command("CaptureRangeGroup").DropDownItems);
+        Item("ウィンドウ全体", "WholeWindowArea", () => changeArea(false), area.DropDownItems);
+        Item("描画領域のみ", "ClientWindowArea", () => changeArea(true), area.DropDownItems);
+    }
+
+    internal void SetWindowArea(CaptureMode mode, bool clientOnly)
+    {
+        var area = AllCommands.FirstOrDefault(item => item.Name == "WindowCaptureArea");
+        if (area is null) return;
+        area.Available = mode == CaptureMode.Window;
+        Command("WholeWindowArea").Checked = !clientOnly;
+        Command("ClientWindowArea").Checked = clientOnly;
+    }
     internal void SetApplication(string id)
     { var menu = AllCommands.FirstOrDefault(i => i.Name == "ExternalApplicationMenu"); if (menu is not null) foreach (var item in menu.DropDownItems.OfType<ToolStripMenuItem>()) item.Checked = item.Name == id; }
     internal void SetGrid(bool enabled) { var item = AllCommands.FirstOrDefault(i => i.Name == "Grid20"); if (item is not null) item.Checked = enabled; }

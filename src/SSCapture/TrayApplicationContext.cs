@@ -50,7 +50,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         _ = dispatcher.Handle;
         try { NotificationImage.CleanupPreviousSession(workRoot); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { lastStatus = new StatusMessage("以前の通知用画像を整理できません: " + ex.Message, true, DateTimeOffset.Now); }
-        feedback = new CaptureFeedback(message => Post(() => StoreStatus(message, true)));
+        feedback = new CaptureFeedback(message => Post(() => StoreStatus(message, true)), savedFileMoved: SavedFileMoved);
         pinnedImages = new PinnedImageManager((message, error) => Post(() => StoreStatus(message, error)));
         store = new SettingsStore(Path.Combine(AppContext.BaseDirectory, "data", "settings.json"));
         output = new OutputRouter(workRoot, capturedWithBounds: (image, path, time, bounds) =>
