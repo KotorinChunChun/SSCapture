@@ -157,7 +157,7 @@ pwsh -File scripts/package.ps1
 .tools/dotnet/dotnet.exe tests/SSCapture.Tests/bin/Release/net10.0-windows10.0.19041.0/SSCapture.Tests.dll --capture-scene-gallery docs/images/readme
 ```
 
-[操作風景動画](operation-videos.md)のGIFは、実際のマウス・キー入力と画面録画で作ります。**実行中はPCを操作できない**ため、利用者が指示したときだけ実行します。主モニターが1920×1080（左上0,0）で、`ffmpeg.exe`がPATHにあることが条件です。常駐中のSSCaptureとその設定に触れないよう、録画専用のフォルダへ本体をビルドし、その隣の`data/settings.json`をこのコマンドが作ります（撮影操作の共有表示ON、効果音OFF、作業フォルダへのファイル保存、グリッド間隔100px、拡大鏡の拡大倍率20倍）。目印のない既存の設定は上書きしません。
+[操作風景動画](operation-videos.md)のGIFは、実際のマウス・キー入力と画面録画で作ります。**実行中はPCを操作できない**ため、利用者が指示したときだけ実行します。主モニターが1920×1080（左上0,0）で、`ffmpeg.exe`がPATHにあることが条件です。常駐中のSSCaptureとその設定に触れないよう、録画専用のフォルダへ本体をビルドし、その隣の`data/settings.json`をこのコマンドが作ります（撮影操作の共有表示ON、効果音OFF、作業フォルダへのファイル保存、グリッド間隔100px、拡大鏡の拡大倍率20倍、スクロール撮影の入力プリセット）。目印のない既存の設定は上書きしません。
 
 ```powershell
 $run = 'dev/history/v0.1.11/logs/operation-demo'
@@ -167,7 +167,7 @@ pwsh -c ". ./scripts/common.ps1; Invoke-Dotnet build tests/SSCapture.Tests/SSCap
 ```
 
 - 架空のデスクトップ（壁紙、申請フォーム、資料の窓）を全画面に出し、`SSCapture.exe --capture-select`を場面ごとに起動して操作します。撮影画面は画面取得から除外されているため、共有表示を`gdigrab`で録画します。タスクバーは録画範囲（作業領域）から外します。
-- 場面IDを末尾に並べると、その場面だけを録り直します（例: `ctrl-control fixed-size`）。全18場面で約9分かかります。
+- 場面IDを末尾に並べると、その場面だけを録り直します（例: `ctrl-control fixed-size`）。全21場面で約11分かかります。
 - 録画中に実際のマウス・キー操作を検出するか、対象外の窓が前面に出ると、押したままのキーを離して中止します（終了コード3）。SSCaptureが撮影せずに終了した場合も失敗にします。
 - 字幕付きのMP4と元の録画は作業フォルダ（Git除外）に残ります。GIFは掲載前に内容を目視で確認します。
 - GIFはインストーラーに同梱しません。同梱する`docs/usage.md`では、`scripts/managed-payload.ps1`の`Copy-ManagedDocuments`が、同梱しない画像への参照を公開版のGitHubへのリンクに置き換えます。
