@@ -90,9 +90,9 @@ internal static partial class Program
                 captureBounds: new(1, 1, image.Width, image.Height), requestFileName: () => Task.FromResult<ScreenshotFileName?>(null));
             Equal(1, copies); Equal(0, remembers);
         })));
-        Run("直前設定キーの初期値は未割当で押し続けや同じキーの二重登録を防ぐ", () =>
+        Run("直前設定キーは新規でWin＋Ctrl＋Alt＋Sを割り当て、押し続けと二重登録を防ぐ", () =>
         {
-            Equal("", new AppSettings().LastRecipeShortcut);
+            Equal("Win+Ctrl+Alt+S", new AppSettings().LastRecipeShortcut);
             var settings = new AppSettings { LastRecipeShortcut = "Ctrl+F11" };
             var state = new HotkeyState(HotkeyBinding.ReadAssignments(settings), KeyboardModifiers.LeftControl);
             Equal(new HotkeyDecision(true, true, CaptureIntent.Screenshot, RegionId: AppSettings.LastRecipeKeyId), state.Process((int)Keys.F11, true, true));
@@ -102,6 +102,24 @@ internal static partial class Program
             try { (settings with { LastRecipeShortcut = settings.ScreenshotShortcut1 }).Validate(); } catch (ArgumentException) { rejected = true; }
             Check(rejected, "重複が通過");
         });
+        Run("再撮影キーの既存設定は省略・明示なし・独自割り当てを保持する", () => WithServiceDirectory(directory =>
+        {
+            string file = Path.Combine(directory, "settings.json");
+            var store = new SettingsStore(file);
+            Equal(AppSettings.DefaultLastRecipeShortcut, store.Load(out _).LastRecipeShortcut);
+            foreach (var (json, expected) in new (string, string)[]
+            {
+                ("""{"SchemaVersion":3,"ScreenshotShortcut1":"Win+Ctrl+Alt+S"}""", ""),
+                ("""{"SchemaVersion":3,"LastRecipeShortcut":""}""", ""),
+                ("""{"SchemaVersion":3,"LastRecipeShortcut":"Ctrl+F11"}""", "Ctrl+F11"),
+                ("""{"SchemaVersion":3,"LastRecipeShortcut":"Win+Ctrl+Alt+S"}""", AppSettings.DefaultLastRecipeShortcut)
+            })
+            {
+                File.WriteAllText(file, json);
+                Equal(expected, store.Load(out string? warning).LastRecipeShortcut);
+                Equal<string?>(null, warning);
+            }
+        }));
         Run("直前設定は配列と自由形状を独立保持し負座標・構成変更を検証", () =>
         {
             var bounds = new Rectangle(-30, 20, 10, 10);

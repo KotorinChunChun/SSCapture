@@ -42,6 +42,9 @@ internal sealed class SettingsStore(string path)
         AppSettings settings = root.Deserialize<AppSettings>(strict ? StrictReadOptions : Options) ?? throw new JsonException("設定が空です。");
         if (root.TryGetProperty(nameof(AppSettings.PresetCaptureShortcuts), out _) && settings.PresetCaptureShortcuts is null)
             throw new JsonException("プリセット撮影の一覧を指定してください。");
+        // 旧設定で省略されていた再撮影キーは、当時の未割り当てを維持する。
+        if (!root.TryGetProperty(nameof(AppSettings.LastRecipeShortcut), out _))
+            settings = settings with { LastRecipeShortcut = "" };
         // 旧設定で省略されていた暗転は、当時の初期値OFFを維持する。
         if (!root.TryGetProperty(nameof(AppSettings.DimCaptureBackground), out _))
             settings = settings with { DimCaptureBackground = false };

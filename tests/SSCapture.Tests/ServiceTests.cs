@@ -219,8 +219,8 @@ internal static partial class Program
             Equal<HotkeyBinding?>(null, HotkeyBinding.Parse("  "));
             Equal<HotkeyBinding?>(null, HotkeyBinding.Parse(null));
             HotkeyAssignment[] defaults = HotkeyBinding.ReadAssignments(new AppSettings());
-            Equal(13, defaults.Length);
-            Equal(12, defaults.Count(item => item.Intent == CaptureIntent.Screenshot));
+            Equal(14, defaults.Length);
+            Equal(13, defaults.Count(item => item.Intent == CaptureIntent.Screenshot));
             Equal(1, defaults.Count(item => item.Intent == CaptureIntent.Recording));
         });
         Run("不正キー・Escape・修飾単独・重複修飾を拒否", () =>
@@ -333,7 +333,7 @@ internal static partial class Program
         });
         Run("空欄4枠は無効・旧hook constructorのAPIを保持", () =>
         {
-            var settings = new AppSettings { ScreenshotShortcut1 = "", ScreenshotShortcut2 = "", RecordingShortcut1 = "", RecordingShortcut2 = "" };
+            var settings = new AppSettings { ScreenshotShortcut1 = "", ScreenshotShortcut2 = "", RecordingShortcut1 = "", RecordingShortcut2 = "", LastRecipeShortcut = "" };
             var state = new HotkeyState(HotkeyBinding.ReadAssignments(settings), KeyboardModifiers.LeftWindows | KeyboardModifiers.LeftShift);
             foreach (int key in new[] { 0x53, 0x52, 0x2C })
             {

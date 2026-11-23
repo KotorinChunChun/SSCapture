@@ -108,14 +108,14 @@ internal static partial class Program
             Equal("Ctrl+F12", Field<HotkeyEditor>(form, "LastRecipeShortcut").Value);
             tabs.SelectedIndex = 1;
             CaptureCommandClick(tabs.TabPages[1], "ResetSettingsPage");
-            Equal("", Field<HotkeyEditor>(form, "LastRecipeShortcut").Value);
+            Equal(AppSettings.DefaultLastRecipeShortcut, Field<HotkeyEditor>(form, "LastRecipeShortcut").Value);
             Equal(0, writes);
             ApplySettingsPage(form, "ショートカット", "即時撮影キー");
             tabs.SelectedIndex = 0;
             form.ResetSelectedPage();
             Equal(4, ((DataGridView)editor).Rows.Count);
             Equal(1, writes);
-            Equal("", Field<HotkeyEditor>(form, "LastRecipeShortcut").Value);
+            Equal(AppSettings.DefaultLastRecipeShortcut, Field<HotkeyEditor>(form, "LastRecipeShortcut").Value);
         });
 
         static T Field<T>(SettingsForm form, string name) where T : Control => (T)form.Controls.Find(name, true).Single();

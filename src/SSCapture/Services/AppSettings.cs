@@ -20,7 +20,8 @@ internal sealed record AppSettings
     public string[] InstantShortcuts { get; init; } = Enumerable.Range(1, 10).Select(n => $"Win+Shift+{n % 10}").ToArray();
     internal const string LastRegionKeyId = "$last";
     internal const string LastRecipeKeyId = "$last-recipe";
-    public string LastRecipeShortcut { get; init; } = "";
+    internal const string DefaultLastRecipeShortcut = "Win+Ctrl+Alt+S";
+    public string LastRecipeShortcut { get; init; } = DefaultLastRecipeShortcut;
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public PresetCaptureShortcut[]? PresetCaptureShortcuts { get; init; }
     public SavedRegion[] SavedRegions { get; init; } = [];
