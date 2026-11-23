@@ -157,7 +157,7 @@ pwsh -File scripts/package.ps1
 .tools/dotnet/dotnet.exe tests/SSCapture.Tests/bin/Release/net10.0-windows10.0.19041.0/SSCapture.Tests.dll --capture-scene-gallery docs/images/readme
 ```
 
-[使い方の「修飾キーの操作の動画」](usage.md#修飾キーの操作の動画)のGIFは、実際のマウス・キー入力と画面録画で作ります。**実行中はPCを操作できない**ため、利用者が指示したときだけ実行します。主モニターが1920×1080（左上0,0）で、`ffmpeg.exe`がPATHにあることが条件です。常駐中のSSCaptureとその設定に触れないよう、録画専用のフォルダへ本体をビルドし、その隣の`data/settings.json`をこのコマンドが作ります（撮影操作の共有表示ON、効果音OFF、作業フォルダへのファイル保存）。目印のない既存の設定は上書きしません。
+[操作風景動画](operation-videos.md)のGIFは、実際のマウス・キー入力と画面録画で作ります。**実行中はPCを操作できない**ため、利用者が指示したときだけ実行します。主モニターが1920×1080（左上0,0）で、`ffmpeg.exe`がPATHにあることが条件です。常駐中のSSCaptureとその設定に触れないよう、録画専用のフォルダへ本体をビルドし、その隣の`data/settings.json`をこのコマンドが作ります（撮影操作の共有表示ON、効果音OFF、作業フォルダへのファイル保存）。目印のない既存の設定は上書きしません。
 
 ```powershell
 $run = 'dev/history/v0.1.11/logs/operation-demo'
