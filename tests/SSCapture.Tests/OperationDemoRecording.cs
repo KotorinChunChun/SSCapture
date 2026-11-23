@@ -16,8 +16,12 @@ namespace SSCapture.Tests;
 internal static partial class Program
 {
     private static readonly Rectangle DemoMonitor = new(0, 0, 1920, 1080);
-    // タスクバーを映さないよう、主モニターの作業領域だけを録画する。幅と高さはH.264のため偶数にそろえる。
-    private static Rectangle RecordArea => Screen.PrimaryScreen!.WorkingArea is var area ? area with { Width = area.Width & ~1, Height = area.Height & ~1 } : default;
+    // 動画はHD（1280×720）で、主モニターの左上を等倍で録画する。架空のデスクトップの窓もこの範囲に収める。
+    private static readonly Rectangle MainRecordArea = new(0, 0, 1280, 720);
+    // スクロール撮影の操作窓は作業領域の右下に出るため、その場面だけは作業領域の右下の1280×720を録画する。
+    private static Rectangle ScrollRecordArea => Screen.PrimaryScreen!.WorkingArea is var area
+        ? new Rectangle(area.Right - MainRecordArea.Width, area.Bottom - MainRecordArea.Height, MainRecordArea.Width, MainRecordArea.Height) : default;
+    private static Rectangle RecordArea = MainRecordArea;
     private const string DemoMarkerFile = "operation-demo.marker";
     private const int DemoSnapPixels = 100;
     private const int DemoMagnifierZoom = 20;
@@ -130,17 +134,122 @@ internal static partial class Program
         new SettingsStore(settingsPath).Save(settings);
     }
 
+    // 掲載ページ（docs/operation-videos.md）と同じ順に並べる。
     private static DemoScene[] DemoScenes() =>
     [
+        // 基本の撮影：範囲・ウィンドウ・モニター
+        new("plain-drag", "左ドラッグで囲う（Snipping Tool と同じ操作）", "ボタンを押した位置から離した位置までの範囲を撮影", async (d, s) =>
+        {
+            Rectangle chart = s.Chart;
+            await d.StartAsync(chart.Location + new Size(-70, -50));
+            await d.WaitAsync(600);
+            await d.MoveAsync(chart.Location + new Size(-12, -14), 600);
+            await d.WaitAsync(400);
+            d.LeftDown();
+            await d.MoveAsync(new Point(chart.Right + 12, chart.Bottom + 34), 1300);
+            await d.WaitAsync(800);
+            d.LeftUp();
+            await d.FinishAsync();
+        }),
+        new("drag-cancel", "ドラッグ中に右クリック／Esc", "押している途中の範囲だけを取り消し、選び直す", async (d, s) =>
+        {
+            Rectangle chart = s.Chart;
+            await d.StartAsync(chart.Location + new Size(160, 90));
+            await d.WaitAsync(600);
+            d.LeftDown();
+            await d.MoveAsync(chart.Location + new Size(380, 250), 800);
+            await d.WaitAsync(500);
+            await d.RightClickAsync();
+            d.LeftUp();
+            await d.WaitAsync(600);
+            await d.MoveAsync(chart.Location + new Size(50, 30), 700);
+            d.LeftDown();
+            await d.MoveAsync(chart.Location + new Size(230, 270), 800);
+            await d.WaitAsync(500);
+            await d.TapKeyAsync(0x1B, "Esc", 1, 900);
+            d.LeftUp();
+            await d.WaitAsync(600);
+            await d.MoveAsync(chart.Location, 700);
+            d.LeftDown();
+            await d.MoveAsync(chart.Location + new Size(chart.Width, chart.Height), 1000);
+            await d.WaitAsync(700);
+            d.LeftUp();
+            await d.FinishAsync();
+        }),
+        new("plain-window", "撮影前にクリック", "ポインタの下のウィンドウを、見えているままに撮影（手前に重なった窓も写る）", async (d, s) =>
+        {
+            Rectangle entry = s.Entry.Bounds;
+            await d.StartAsync(new Point(640, 670));
+            await d.WaitAsync(600);
+            await d.MoveAsync(new Point(entry.Left + 220, entry.Top + 260), 1000);
+            await d.WaitAsync(1000);
+            // 押している間は対象のウィンドウが強調され、離すとその枠内に見えている画面を切り抜く。
+            d.LeftDown();
+            await d.WaitAsync(1200);
+            d.LeftUp();
+            d.ShowResultAfterFinish();
+            await d.FinishAsync();
+        }, DemoLayout.Overlap),
+        new("win-back-window", "撮影前に Win を押しながらクリック（重なった窓）", "後ろにあるウィンドウを前に出して、隠れた部分も含めて撮影", async (d, s) =>
+        {
+            Rectangle entry = s.Entry.Bounds, report = s.Report.Bounds;
+            await d.StartAsync(new Point(640, 670));
+            await d.WaitAsync(600);
+            d.Press(DemoKey.Win);
+            await d.WaitAsync(400);
+            await d.MoveAsync(s.Center(report), 900);
+            await d.WaitAsync(1200);
+            // 申請フォームの見えている左側を指すと、隠れていた右側も含めて手前に表示される。
+            await d.MoveAsync(new Point(entry.Left + 220, entry.Top + 260), 1000);
+            await d.WaitAsync(1600);
+            d.ShowResultAfterFinish();
+            await d.ClickAsync();
+            await d.FinishAsync();
+        }, DemoLayout.Overlap),
+        new("win-window", "撮影前に Win を押しながらクリック", "ポインタの下のウィンドウを、手前のダイアログごと撮影", async (d, s) =>
+        {
+            Rectangle entry = s.Entry.Bounds;
+            await d.StartAsync(new Point(900, 660));
+            await d.WaitAsync(600);
+            d.Press(DemoKey.Win);
+            await d.WaitAsync(400);
+            await d.MoveAsync(new Point(entry.Left + 110, entry.Bottom - 110), 800);
+            await d.WaitAsync(1200);
+            await d.MoveAsync(s.Center(s.Dialog.Bounds), 800);
+            await d.WaitAsync(1200);
+            await d.MoveAsync(new Point(entry.Left + 130, entry.Bottom - 90), 800);
+            await d.WaitAsync(1000);
+            await d.ClickAsync();
+            await d.FinishAsync();
+        }, DemoLayout.Dialog),
+        new("win-windows-drag", "撮影前に Win を押しながら左ドラッグ", "通ったウィンドウを位置と重なり順のまま1枚にまとめる", async (d, s) =>
+        {
+            Rectangle entry = s.Entry.Bounds;
+            await d.StartAsync(new Point(900, 660));
+            await d.WaitAsync(600);
+            d.Press(DemoKey.Win);
+            await d.WaitAsync(400);
+            await d.MoveAsync(new Point(entry.Left + 110, entry.Bottom - 110), 800);
+            await d.WaitAsync(900);
+            d.LeftDown();
+            await d.MoveAsync(s.Center(s.Dialog.Bounds), 800);
+            await d.MoveAsync(s.Center(s.Report) + new Size(-100, 40), 900);
+            await d.MoveAsync(s.Center(s.Report) + new Size(80, 0), 500);
+            await d.WaitAsync(900);
+            d.LeftUp();
+            await d.FinishAsync();
+        }, DemoLayout.Dialog),
         new("shift-monitor", "撮影前に Shift＋左クリック", "ポインタのあるモニター全体を撮影", async (d, s) =>
         {
-            await d.StartAsync(new Point(980, 900));
+            await d.StartAsync(new Point(900, 660));
             await d.WaitAsync(700);
             d.Press(DemoKey.Shift);
             await d.WaitAsync(1200);
             await d.ClickAsync();
             await d.FinishAsync();
         }),
+
+        // コントロールの撮影：Ctrl
         new("ctrl-control", "撮影前に Ctrl を押しながらクリック", "ポインタの下のボタンや入力欄を1つだけ撮影", async (d, s) =>
         {
             await d.StartAsync(s.Center(s.NameBox) + new Size(-120, -60));
@@ -153,19 +262,6 @@ internal static partial class Program
             await d.WaitAsync(800);
             await d.MoveAsync(s.Center(s.Send), 600);
             await d.WaitAsync(1000);
-            await d.ClickAsync();
-            await d.FinishAsync();
-        }),
-        new("ctrl-wheel-margin", "撮影前に Ctrl を押しながらホイール回転", "撮影対象の余白を広げる（1目盛りで四辺1pxずつ）", async (d, s) =>
-        {
-            await d.StartAsync(s.Center(s.Send) + new Size(-140, -70));
-            await d.WaitAsync(600);
-            d.Press(DemoKey.Ctrl);
-            await d.WaitAsync(400);
-            await d.MoveAsync(s.Center(s.Send), 600);
-            await d.WaitAsync(900);
-            await d.WheelAsync(24, 70);
-            await d.WaitAsync(1200);
             await d.ClickAsync();
             await d.FinishAsync();
         }),
@@ -184,54 +280,40 @@ internal static partial class Program
             d.LeftUp();
             await d.FinishAsync();
         }),
-        new("win-window", "撮影前に Win を押しながらクリック", "ポインタの下のウィンドウを、手前のダイアログごと撮影", async (d, s) =>
+        new("ctrl-wheel-margin", "撮影前に Ctrl を押しながらホイール回転", "撮影対象の余白を広げる（1目盛りで四辺1pxずつ）", async (d, s) =>
         {
-            Rectangle entry = s.Entry.Bounds;
-            await d.StartAsync(new Point(1000, 900));
+            await d.StartAsync(s.Center(s.Send) + new Size(-140, -70));
             await d.WaitAsync(600);
-            d.Press(DemoKey.Win);
+            d.Press(DemoKey.Ctrl);
             await d.WaitAsync(400);
-            await d.MoveAsync(new Point(entry.Left + 160, entry.Bottom - 120), 800);
-            await d.WaitAsync(1200);
-            await d.MoveAsync(s.Center(s.Dialog.Bounds), 800);
-            await d.WaitAsync(1200);
-            await d.MoveAsync(new Point(entry.Left + 180, entry.Bottom - 100), 800);
-            await d.WaitAsync(1000);
-            await d.ClickAsync();
-            await d.FinishAsync();
-        }, DemoLayout.Dialog),
-        new("win-back-window", "撮影前に Win を押しながらクリック（重なった窓）", "後ろにあるウィンドウを前に出して、隠れた部分も含めて撮影", async (d, s) =>
-        {
-            Rectangle entry = s.Entry.Bounds, report = s.Report.Bounds;
-            await d.StartAsync(new Point(500, 920));
-            await d.WaitAsync(600);
-            d.Press(DemoKey.Win);
-            await d.WaitAsync(400);
-            await d.MoveAsync(s.Center(report), 900);
-            await d.WaitAsync(1200);
-            // 申請フォームの見えている左側を指すと、隠れていた右側も含めて手前に表示される。
-            await d.MoveAsync(new Point(entry.Left + 220, entry.Top + 260), 1000);
-            await d.WaitAsync(1600);
-            await d.ClickAsync();
-            await d.FinishAsync();
-        }, DemoLayout.Overlap),
-        new("win-windows-drag", "撮影前に Win を押しながら左ドラッグ", "通ったウィンドウを位置と重なり順のまま1枚にまとめる", async (d, s) =>
-        {
-            Rectangle entry = s.Entry.Bounds;
-            await d.StartAsync(new Point(1000, 900));
-            await d.WaitAsync(600);
-            d.Press(DemoKey.Win);
-            await d.WaitAsync(400);
-            await d.MoveAsync(new Point(entry.Left + 160, entry.Bottom - 120), 800);
+            await d.MoveAsync(s.Center(s.Send), 600);
             await d.WaitAsync(900);
+            await d.WheelAsync(24, 70);
+            await d.WaitAsync(1200);
+            await d.ClickAsync();
+            await d.FinishAsync();
+        }),
+
+        // ドラッグ中のキー
+        new("drag-space-corners", "ドラッグ中に Space", "範囲を保ったまま、ポインタを次の角へ移して反対側から調整する", async (d, s) =>
+        {
+            Rectangle chart = s.Chart;
+            Point start = chart.Location + new Size(40, 30);
+            await d.StartAsync(start);
+            await d.WaitAsync(600);
             d.LeftDown();
-            await d.MoveAsync(s.Center(s.Dialog.Bounds), 800);
-            await d.MoveAsync(s.Center(s.Report) + new Size(-100, 40), 900);
-            await d.MoveAsync(s.Center(s.Report) + new Size(80, 0), 500);
+            await d.MoveAsync(start + new Size(280, 170), 1000);
+            await d.WaitAsync(700);
+            // Spaceを押すたびに、ポインタが範囲の角を時計回りに移る。移った角から範囲を広げ直せる。
+            await d.TapKeyAsync(0x20, "Space", 1, 900, movesPointer: true);
+            await d.MoveAsync(d.Pointer + new Size(-30, 40), 800);
+            await d.WaitAsync(600);
+            await d.TapKeyAsync(0x20, "Space", 1, 900, movesPointer: true);
+            await d.MoveAsync(d.Pointer + new Size(-25, -20), 800);
             await d.WaitAsync(900);
             d.LeftUp();
             await d.FinishAsync();
-        }, DemoLayout.Dialog),
+        }),
         new("drag-win-aspect", "ドラッグ中に Win", "押したときの縦横比を保ったまま広げる", async (d, s) =>
         {
             Rectangle chart = s.Chart;
@@ -259,8 +341,8 @@ internal static partial class Program
             await d.WaitAsync(300);
             d.Press(DemoKey.Ctrl);
             await d.WaitAsync(500);
-            await d.MoveAsync(center + new Size(250, 120), 900);
-            await d.MoveAsync(center + new Size(180, 170), 600);
+            await d.MoveAsync(center + new Size(230, 110), 900);
+            await d.MoveAsync(center + new Size(160, 160), 600);
             await d.WaitAsync(700);
             d.LeftUp();
             await d.FinishAsync();
@@ -275,9 +357,9 @@ internal static partial class Program
             await d.WaitAsync(300);
             d.Press(DemoKey.Ctrl, DemoKey.Shift);
             await d.WaitAsync(500);
-            await d.MoveAsync(center + new Size(260, 90), 800);
-            await d.MoveAsync(center + new Size(150, 180), 700);
-            await d.MoveAsync(center + new Size(260, 160), 600);
+            await d.MoveAsync(center + new Size(230, 80), 800);
+            await d.MoveAsync(center + new Size(140, 160), 700);
+            await d.MoveAsync(center + new Size(230, 150), 600);
             await d.WaitAsync(700);
             d.LeftUp();
             await d.FinishAsync();
@@ -293,8 +375,8 @@ internal static partial class Program
             d.Press(DemoKey.Shift, DemoKey.Alt);
             await d.WaitAsync(500);
             await d.MoveAsync(chart.Location + new Size(chart.Width, chart.Height / 2), 700);
-            await d.MoveAsync(chart.Location + new Size(chart.Width / 3, chart.Height + 60), 900);
-            await d.MoveAsync(chart.Location + new Size(chart.Width, chart.Height + 30), 800);
+            await d.MoveAsync(chart.Location + new Size(chart.Width / 3, chart.Height + 50), 900);
+            await d.MoveAsync(chart.Location + new Size(chart.Width, chart.Height + 25), 800);
             await d.WaitAsync(700);
             d.LeftUp();
             await d.FinishAsync();
@@ -310,7 +392,7 @@ internal static partial class Program
             d.Press(DemoKey.Ctrl, DemoKey.Alt);
             await d.WaitAsync(500);
             await d.MoveAsync(chart.Location + new Size(chart.Width / 2, chart.Height), 700);
-            await d.MoveAsync(chart.Location + new Size(chart.Width + 80, chart.Height / 3), 900);
+            await d.MoveAsync(chart.Location + new Size(chart.Width + 30, chart.Height / 3), 900);
             await d.MoveAsync(chart.Location + new Size(chart.Width / 2, chart.Height + 20), 800);
             await d.WaitAsync(700);
             d.LeftUp();
@@ -323,64 +405,22 @@ internal static partial class Program
             await d.StartAsync(start);
             await d.WaitAsync(600);
             d.LeftDown();
-            await d.MoveAsync(start + new Size(173, 117), 700);
+            await d.MoveAsync(start + new Size(143, 87), 700);
             await d.WaitAsync(500);
             d.Press(DemoKey.Alt, DemoKey.Win);
             await d.WaitAsync(700);
             // グリッドの段差が見えるよう、ゆっくり大きく動かす。
             await d.MoveAsync(start + new Size(chart.Width - 20, chart.Height - 30), 2600);
             await d.WaitAsync(500);
-            await d.MoveAsync(start + new Size(250, 160), 2200);
+            await d.MoveAsync(start + new Size(150, 110), 2200);
             await d.WaitAsync(500);
-            await d.MoveAsync(start + new Size(390, 250), 1500);
+            await d.MoveAsync(start + new Size(330, 230), 1500);
             await d.WaitAsync(800);
             d.LeftUp();
             await d.FinishAsync();
         }),
-        new("drag-space-corners", "ドラッグ中に Space", "範囲を保ったまま、ポインタを次の角へ移して反対側から調整する", async (d, s) =>
-        {
-            Rectangle chart = s.Chart;
-            Point start = chart.Location + new Size(40, 30);
-            await d.StartAsync(start);
-            await d.WaitAsync(600);
-            d.LeftDown();
-            await d.MoveAsync(start + new Size(300, 190), 1000);
-            await d.WaitAsync(700);
-            // Spaceを押すたびに、ポインタが範囲の角を時計回りに移る。移った角から範囲を広げ直せる。
-            await d.TapKeyAsync(0x20, "Space", 1, 900, movesPointer: true);
-            await d.MoveAsync(d.Pointer + new Size(-30, 45), 800);
-            await d.WaitAsync(600);
-            await d.TapKeyAsync(0x20, "Space", 1, 900, movesPointer: true);
-            await d.MoveAsync(d.Pointer + new Size(-25, -20), 800);
-            await d.WaitAsync(900);
-            d.LeftUp();
-            await d.FinishAsync();
-        }),
-        new("drag-cancel", "ドラッグ中に右クリック／Esc", "押している途中の範囲だけを取り消し、選び直す", async (d, s) =>
-        {
-            Rectangle chart = s.Chart;
-            await d.StartAsync(chart.Location + new Size(200, 120));
-            await d.WaitAsync(600);
-            d.LeftDown();
-            await d.MoveAsync(chart.Location + new Size(420, 280), 800);
-            await d.WaitAsync(500);
-            await d.RightClickAsync();
-            d.LeftUp();
-            await d.WaitAsync(600);
-            await d.MoveAsync(chart.Location + new Size(60, 40), 700);
-            d.LeftDown();
-            await d.MoveAsync(chart.Location + new Size(260, 300), 800);
-            await d.WaitAsync(500);
-            await d.TapKeyAsync(0x1B, "Esc", 1, 900);
-            d.LeftUp();
-            await d.WaitAsync(600);
-            await d.MoveAsync(chart.Location, 700);
-            d.LeftDown();
-            await d.MoveAsync(chart.Location + new Size(chart.Width, chart.Height), 1000);
-            await d.WaitAsync(700);
-            d.LeftUp();
-            await d.FinishAsync();
-        }),
+
+        // ウィンドウへの吸着：Alt
         new("drag-alt-snap", "Alt を押しながらドラッグ", "ウィンドウの角に吸着させて、ウィンドウをぴったり囲う", async (d, s) =>
         {
             await SnapToWindowAsync(d, s.Report.Bounds);
@@ -395,9 +435,9 @@ internal static partial class Program
             d.Press(DemoKey.Shift);
             await d.WaitAsync(700);
             // 高さは固定されるため、ポインタを上下に動かしても変わらない。
-            await d.MoveAsync(new Point(report.Left + 420, report.Bottom - 120), 1400);
+            await d.MoveAsync(new Point(report.Left + 300, report.Bottom - 100), 1400);
             await d.WaitAsync(500);
-            await d.MoveAsync(new Point(report.Left + 400, report.Bottom + 40), 800);
+            await d.MoveAsync(new Point(report.Left + 280, report.Bottom + 40), 800);
             await d.WaitAsync(1000);
             d.LeftUp();
             await d.FinishAsync();
@@ -409,17 +449,18 @@ internal static partial class Program
             d.Press(DemoKey.Ctrl);
             await d.WaitAsync(700);
             // 幅は固定されるため、ポインタを左右に動かしても変わらない。
-            await d.MoveAsync(new Point(report.Right - 160, report.Top + 330), 1400);
+            await d.MoveAsync(new Point(report.Right - 130, report.Top + 240), 1400);
             await d.WaitAsync(500);
-            await d.MoveAsync(new Point(report.Right + 50, report.Top + 350), 800);
+            await d.MoveAsync(new Point(report.Right + 25, report.Top + 260), 800);
             await d.WaitAsync(1000);
             d.LeftUp();
             await d.FinishAsync();
         }),
-        // グラフはアンチエイリアスで境界がぼやけるため、境界がはっきりしたボタンの角に合わせる。
+
+        // 拡大鏡・固定サイズ・スクロール撮影
         new("magnifier", "拡大鏡と十字キーで画素単位に合わせる", $"中クリックで拡大鏡を表示し、十字キーで1pxずつ微調整（この動画では拡大倍率{DemoMagnifierZoom}倍）", async (d, s) =>
         {
-            // ボタンの角は丸く薄いため、1pxの枠線がはっきりした複数行の入力欄の角に合わせる。
+            // グラフやボタンの角は境界がぼやけるため、1pxの枠線がはっきりした複数行の入力欄の角に合わせる。
             Rectangle notes = s.Notes.Parent!.RectangleToScreen(s.Notes.Bounds);
             // 拡大鏡は10×10画素を映すため、最初から入力欄の角が拡大鏡に入る位置（角から4px以内）で始める。
             await d.StartAsync(notes.Location + new Size(-4, -3));
@@ -441,13 +482,13 @@ internal static partial class Program
         }),
         new("fixed-size", "固定サイズの枠を置いて撮影", "入力プリセット「固定サイズ 960×540」の枠を動かし、Spaceで基点を四隅に切り替える", async (d, s) =>
         {
-            await d.StartAsync(new Point(150, 240), "--capture-preset", "--input-preset", "initial-input-fixed");
+            await d.StartAsync(new Point(150, 200), "--capture-preset", "--input-preset", "initial-input-fixed");
             await d.WaitAsync(800);
             // Shift＋矢印（10px移動）は、Shiftを押している間はモニター全体の選択表示になって枠が見えなくなるため、この動画では使わない。
-            // 枠の右下の基点が画面右下の操作ガイドに重ならないよう、左上寄りに置く。
-            await d.MoveAsync(new Point(320, 260), 1000);
+            // 録画範囲（1280×720）に枠が収まり、左下の基点が字幕に隠れにくい位置に置く。
+            await d.MoveAsync(new Point(380, 240), 1000);
             await d.WaitAsync(600);
-            await d.MoveAsync(new Point(220, 160), 800);
+            await d.MoveAsync(new Point(240, 120), 800);
             await d.WaitAsync(700);
             // 既定ではSpaceで左上→右上→右下→左下→左上と移る。枠はそのままで、ポインタだけが次の基点へ移る。
             await d.TapKeyAsync(0x20, "Space", 4, 1100, movesPointer: true);
@@ -460,7 +501,7 @@ internal static partial class Program
         {
             Rectangle view = s.ManualView.RectangleToScreen(s.ManualView.ClientRectangle);
             Point topLeft = view.Location + new Size(12, 12);
-            Point bottomRight = new(view.Right - 12, view.Top + 430);
+            Point bottomRight = new(view.Right - 12, view.Top + 400);
             await d.StartAsync(topLeft + new Size(-60, -40), "--capture-select", "--input-preset", DemoScrollPreset);
             await d.WaitAsync(700);
             await d.MoveAsync(topLeft, 600);
@@ -511,9 +552,10 @@ internal static partial class Program
     {
         internal readonly Form Backdrop, Entry, Report, Dialog, Manual;
         internal readonly Panel ManualView;
-        private static readonly Rectangle EntryBounds = new(140, 220, 860, 600);
-        private static readonly Rectangle ReportBounds = new(1130, 250, 700, 540);
-        private static readonly Rectangle OverlapReportBounds = new(720, 300, 700, 540);
+        // 左上の字幕（y≒110まで）と左下のキー表示（y≒644から）をなるべく避けて、1280×720に収める。
+        private static readonly Rectangle EntryBounds = new(40, 128, 620, 500);
+        private static readonly Rectangle ReportBounds = new(700, 150, 540, 440);
+        private static readonly Rectangle OverlapReportBounds = new(420, 200, 540, 440);
         internal readonly TextBox NameBox, Notes;
         internal readonly ComboBox Department;
         internal readonly CheckBox Notify, Attach;
@@ -542,16 +584,16 @@ internal static partial class Program
                 FormBorderStyle = FormBorderStyle.FixedSingle, MaximizeBox = false, MinimizeBox = false, ShowInTaskbar = false, BackColor = Color.White
             };
             Label Caption(string text, int y) => new() { Text = text, AutoSize = true, Location = new Point(36, y + 4) };
-            NameBox = new TextBox { Location = new Point(170, 36), Width = 380, Text = "山田 花子" };
-            Department = new ComboBox { Location = new Point(170, 92), Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
+            NameBox = new TextBox { Location = new Point(150, 30), Width = 300, Text = "山田 花子" };
+            Department = new ComboBox { Location = new Point(150, 80), Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
             Department.Items.AddRange(["営業部", "開発部", "総務部"]);
             Department.SelectedIndex = 1;
-            Notes = new TextBox { Location = new Point(170, 148), Size = new Size(620, 180), Multiline = true, Text = "新機能の公開に合わせて、問い合わせ窓口の体制を見直します。" };
-            Notify = new CheckBox { Text = "上長に通知する", AutoSize = true, Location = new Point(170, 350), Checked = true };
-            Attach = new CheckBox { Text = "添付ファイルあり", AutoSize = true, Location = new Point(170, 392) };
-            Send = new Button { Text = "送信", Location = new Point(540, 470), Size = new Size(120, 44) };
-            Cancel = new Button { Text = "キャンセル", Location = new Point(672, 470), Size = new Size(120, 44) };
-            Entry.Controls.AddRange([Caption("氏名", 36), NameBox, Caption("部署", 92), Department, Caption("内容", 148), Notes, Notify, Attach, Send, Cancel]);
+            Notes = new TextBox { Location = new Point(150, 130), Size = new Size(420, 130), Multiline = true, Text = "新機能の公開に合わせて、問い合わせ窓口の体制を見直します。" };
+            Notify = new CheckBox { Text = "上長に通知する", AutoSize = true, Location = new Point(150, 276), Checked = true };
+            Attach = new CheckBox { Text = "添付ファイルあり", AutoSize = true, Location = new Point(150, 314) };
+            Send = new Button { Text = "送信", Location = new Point(318, 380), Size = new Size(120, 44) };
+            Cancel = new Button { Text = "キャンセル", Location = new Point(450, 380), Size = new Size(120, 44) };
+            Entry.Controls.AddRange([Caption("氏名", 30), NameBox, Caption("部署", 80), Department, Caption("内容", 130), Notes, Notify, Attach, Send, Cancel]);
 
             Report = new Form
             {
@@ -566,22 +608,23 @@ internal static partial class Program
             Dialog = new Form
             {
                 Text = "送信の確認", StartPosition = FormStartPosition.Manual,
-                Bounds = new Rectangle(EntryBounds.Left + 250, EntryBounds.Top + 170, 420, 210),
+                Bounds = new Rectangle(EntryBounds.Left + 150, EntryBounds.Top + 150, 380, 190),
                 FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, ShowInTaskbar = false, BackColor = Color.White
             };
             Dialog.Controls.AddRange([
                 new Label { Text = "この内容で申請を送信しますか？", AutoSize = true, Location = new Point(30, 34) },
-                new Button { Text = "はい", Location = new Point(150, 104), Size = new Size(110, 40) },
-                new Button { Text = "いいえ", Location = new Point(272, 104), Size = new Size(110, 40) }]);
+                new Button { Text = "はい", Location = new Point(130, 92), Size = new Size(110, 40) },
+                new Button { Text = "いいえ", Location = new Point(250, 92), Size = new Size(110, 40) }]);
 
             // スクロール撮影の場面で使う、縦に長い操作手順書。前後の画面を照合できるよう、節ごとに内容と色を変える。
             Manual = new Form
             {
-                Text = "操作手順書（サンプル） - ドキュメントビューアー", StartPosition = FormStartPosition.Manual, Bounds = new Rectangle(1130, 180, 700, 720),
+                Text = "操作手順書（サンプル） - ドキュメントビューアー", StartPosition = FormStartPosition.Manual,
+                Bounds = new Rectangle(ScrollRecordArea.Left + 40, ScrollRecordArea.Top + 130, 540, 520),
                 FormBorderStyle = FormBorderStyle.FixedSingle, MaximizeBox = false, MinimizeBox = false, ShowInTaskbar = false, BackColor = Color.White
             };
             ManualView = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Color.White };
-            var manualPage = new DoubleBufferedPanel { Location = Point.Empty, Size = new Size(640, 2600), BackColor = Color.White };
+            var manualPage = new DoubleBufferedPanel { Location = Point.Empty, Size = new Size(500, 2600), BackColor = Color.White };
             manualPage.Paint += (_, e) => PaintManual(e.Graphics);
             ManualView.Controls.Add(manualPage);
             Manual.Controls.Add(ManualView);
@@ -610,7 +653,7 @@ internal static partial class Program
                 graphics.DrawString($"手順{i + 1}　{titles[i]}", headingFont, Brushes.Black, 30, y);
                 graphics.DrawString($"{titles[i]}では、記録票の項目{i + 2}つを確認してから次へ進みます。", bodyFont, Brushes.DimGray, 30, y + 34);
                 using var brush = new SolidBrush(colors[i % colors.Length]);
-                int width = 180 + (i * 53) % 360;
+                int width = 140 + (i * 53) % 300;
                 graphics.FillRectangle(brush, 30, y + 66, width, 34 + (i % 3) * 12);
                 graphics.DrawString($"図{i + 1}", bodyFont, Brushes.White, 38, y + 72);
                 y += 200;
@@ -638,6 +681,8 @@ internal static partial class Program
                 if (!Dialog.Visible) Dialog.Show(Entry);
             }
             else Dialog.Hide();
+            // スクロール撮影は録画範囲が右下にずれるため、端だけ映り込む申請フォームも隠す。
+            Entry.Visible = layout != DemoLayout.Scroll;
             Report.Visible = layout != DemoLayout.Scroll;
             ArrangeManual(layout == DemoLayout.Scroll);
             if (layout == DemoLayout.Overlap) Report.BringToFront();
@@ -653,7 +698,7 @@ internal static partial class Program
 
         private static readonly int[] BarValues = [120, 180, 150, 230, 260, 210];
 
-        private static Rectangle ChartArea(Size client) => new(60, 90, client.Width - 120, 300);
+        private static Rectangle ChartArea(Size client) => new(50, 80, client.Width - 100, client.Height - 170);
 
         private static void PaintReport(Graphics graphics, Size client)
         {
@@ -674,7 +719,8 @@ internal static partial class Program
             for (int i = 0; i < values.Length; i++)
             {
                 using var bar = new SolidBrush(i is 3 or 4 ? Color.FromArgb(230, 126, 60) : Color.FromArgb(76, 140, 200));
-                graphics.FillRectangle(bar, chart.Left + i * slot + slot / 4, chart.Bottom - values[i], slot / 2, values[i]);
+                int height = values[i] * chart.Height / 280;
+                graphics.FillRectangle(bar, chart.Left + i * slot + slot / 4, chart.Bottom - height, slot / 2, height);
                 graphics.DrawString(labels[i], bodyFont, Brushes.DimGray, chart.Left + i * slot + slot / 2 - 9, chart.Bottom + 8);
             }
             graphics.DrawString("木・金は新機能の公開に伴い増加。", bodyFont, Brushes.DimGray, 36, client.Height - 56);
@@ -766,6 +812,7 @@ internal static partial class Program
         {
             Console.WriteLine($"[{scene.Id}] {scene.Title}");
             labels.Clear();
+            RecordArea = scene.Layout == DemoLayout.Scroll ? ScrollRecordArea : MainRecordArea;
             pointerMovedByApplicationUntil = 0;
             hiddenPanel = null;
             appendResult = false;
@@ -1157,10 +1204,10 @@ internal static partial class Program
             File.WriteAllText(Path.Combine(directory, "detail.txt"), scene.Detail, utf8);
             var filter = new StringBuilder("[0:v]");
             string Text(string file, int size, string color, string position, string? enable = null) =>
-                $"drawtext=fontfile=font.ttc:textfile={scene.Id}/{file}:fontsize={size}:fontcolor=white:box=1:boxcolor={color}:boxborderw=18:{position}" +
+                $"drawtext=fontfile=font.ttc:textfile={scene.Id}/{file}:fontsize={size}:fontcolor=white:box=1:boxcolor={color}:boxborderw=12:{position}" +
                 (enable is null ? "" : $":enable='{enable}'") + ",";
-            filter.Append(Text("title.txt", 46, "0x1f2937@0.88", "x=40:y=28"));
-            filter.Append(Text("detail.txt", 34, "0x1f2937@0.88", "x=40:y=114"));
+            filter.Append(Text("title.txt", 32, "0x1f2937@0.88", "x=24:y=18"));
+            filter.Append(Text("detail.txt", 24, "0x1f2937@0.88", "x=24:y=76"));
             var segments = labels.Select((label, index) => (label.Label, Start: label.At, End: index + 1 < labels.Count ? labels[index + 1].At : to))
                 .Where(segment => segment.Label.Length > 0 && segment.End > from).ToArray();
             for (int i = 0; i < segments.Length; i++)
@@ -1168,7 +1215,7 @@ internal static partial class Program
                 File.WriteAllText(Path.Combine(directory, $"key{i}.txt"), segments[i].Label, utf8);
                 double a = Math.Max(0, segments[i].Start - from), b = segments[i].End - from;
                 // 右下には撮影画面の操作ガイドが出るため、左下に置く。
-                filter.Append(Text($"key{i}.txt", 48, "0xc2410c@0.94", "x=40:y=h-110",
+                filter.Append(Text($"key{i}.txt", 32, "0xc2410c@0.94", "x=24:y=h-64",
                     $"between(t,{a.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)},{b.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)})"));
             }
             if (hiddenPanel is { } panel)
@@ -1177,7 +1224,7 @@ internal static partial class Program
                 File.WriteAllText(Path.Combine(directory, "panel.txt"), "操作窓（録画には映りません）", utf8);
                 string shown = $"gte(t,{(hiddenPanelAt - from).ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)})";
                 filter.Append($"drawbox=x={panel.X - RecordArea.X}:y={panel.Y - RecordArea.Y}:w={panel.Width}:h={panel.Height}:color=0xf59e0b:t=4:enable='{shown}',");
-                filter.Append(Text("panel.txt", 28, "0x1f2937@0.88", $"x={panel.X - RecordArea.X}:y={panel.Y - RecordArea.Y - 64}", shown));
+                filter.Append(Text("panel.txt", 20, "0x1f2937@0.88", $"x={panel.X - RecordArea.X}:y={panel.Y - RecordArea.Y - 44}", shown));
             }
             filter.Length--;
             string? result = appendResult
@@ -1192,16 +1239,16 @@ internal static partial class Program
                 // 撮影結果を約3.5秒、録画の後ろにつなげる。
                 using (var image = Image.FromFile(result))
                     File.WriteAllText(Path.Combine(directory, "result.txt"), $"合成された1枚の画像（{image.Width}×{image.Height}px）", utf8);
-                string resultTitle = Text("result.txt", 40, "0x1f2937@0.88", "x=40:y=28").TrimEnd(',');
+                string resultTitle = Text("result.txt", 28, "0x1f2937@0.88", "x=24:y=18").TrimEnd(',');
                 captioned = filter + "[m];" +
-                    $"[1:v]scale=w={RecordArea.Width - 40}:h={RecordArea.Height - 140}:force_original_aspect_ratio=decrease," +
-                    $"pad={RecordArea.Width}:{RecordArea.Height}:(ow-iw)/2:(oh-ih)/2+40:color=0x34404f,setsar=1,fps=30,format=yuv420p,{resultTitle}[r];" +
+                    $"[1:v]scale=w={RecordArea.Width - 40}:h={RecordArea.Height - 100}:force_original_aspect_ratio=decrease," +
+                    $"pad={RecordArea.Width}:{RecordArea.Height}:(ow-iw)/2:(oh-ih)/2+30:color=0x34404f,setsar=1,fps=30,format=yuv420p,{resultTitle}[r];" +
                     "[m]setsar=1,fps=30,format=yuv420p[mm];[mm][r]concat=n=2:v=1:a=0[c]";
             }
             string mp4Script = Path.Combine(directory, "mp4.filter");
             File.WriteAllText(mp4Script, captioned, utf8);
             string gifScript = Path.Combine(directory, "gif.filter");
-            File.WriteAllText(gifScript, captioned + ";[c]fps=12,scale=960:-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle[g]", utf8);
+            File.WriteAllText(gifScript, captioned + ";[c]fps=12,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle[g]", utf8);
             string seek = from.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture);
             string length = (to - from).ToString("0.000", System.Globalization.CultureInfo.InvariantCulture);
             string[] inputs = result is null
