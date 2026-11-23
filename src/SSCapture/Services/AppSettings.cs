@@ -67,6 +67,7 @@ internal sealed record AppSettings
     public int MagnifierDotCount { get; init; } = Capture.CaptureMagnifier.DefaultDotCount;
     public int MagnifierZoom { get; init; } = Capture.CaptureMagnifier.DefaultZoom;
     public bool ShareCapturePresentation { get; init; }
+    public StillClipboardContent ClipboardContent { get; init; }
     public OutputDestination DefaultDestination { get; init; } = OutputDestination.Clipboard;
     public bool RecordSystemAudio { get; init; }
     public bool RecordMicrophone { get; init; }
@@ -113,9 +114,10 @@ internal sealed record AppSettings
 
     internal void Validate()
     {
-        if (!Enum.IsDefined(SelectionMethod))
         if (HistoryRetentionDays is < 0 or > CaptureHistory.MaximumRetentionDays)
             throw new ArgumentException("撮影履歴の保持日数が正しくありません。");
+        if (!Enum.IsDefined(ClipboardContent)) throw new ArgumentException("静止画のコピー内容が無効です。");
+        if (!Enum.IsDefined(SelectionMethod))
             throw new ArgumentException("矩形の選択方法が無効です。");
         if (!Enum.IsDefined(SelectionGuideDisplay))
             throw new ArgumentException("操作ガイドの表示先が正しくありません。");

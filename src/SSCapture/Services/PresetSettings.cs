@@ -59,8 +59,40 @@ internal static class PresetSettings
     private static AppSettings CompletePresets(AppSettings settings, bool newAssignments)
     {
         settings = PresetCaptureShortcut.Migrate(UpgradeFixedSizes(UpgradePresets(settings)));
-        if (!newAssignments || PresetCaptureShortcut.FindDefaultFixedAssignment(settings) is not { } assignment) return settings;
-        return settings with { PresetCaptureShortcuts = [.. settings.PresetCaptureShortcuts!, assignment] };
+        if (newAssignments && PresetCaptureShortcut.FindDefaultFixedAssignment(settings) is { } assignment)
+            settings = settings with { PresetCaptureShortcuts = [..settings.PresetCaptureShortcuts!, assignment] };
+        if (settings.PresetSchemaVersion >= 5) return settings;
+        var outputs = settings.CapturePresets.ToList();
+        foreach (var (id, name, content, _) in OcrTemplates)
+        {
+            if (outputs.Count >= 100) break;
+            if (outputs.Any(p => p.BuiltInKey == id)) continue;
+            var preset = CapturePreset.FromSettings(UniqueName(name, outputs.Select(p => p.Name)), new AppSettings());
+            outputs.Add(preset with { Id = UniqueId(id, outputs.Select(p => p.Id)), BuiltInKey = id, ClipboardContent = content });
+        }
+        settings = settings with { CapturePresets = outputs.ToArray(), PresetSchemaVersion = 5 };
+        return settings.PresetCaptureShortcuts is { Length: > 0 } rows
+            ? settings with { PresetCaptureShortcuts = WithOcrShortcuts(settings, rows) } : settings;
+    }
+
+    private static readonly (string Id, string Name, StillClipboardContent Content, string Shortcut)[] OcrTemplates =
+    [
+        ("initial-output-text", "テキスト（OCR）", StillClipboardContent.Text, "Win+Shift+T"),
+        ("initial-output-tsv", "表（TSV）", StillClipboardContent.Tsv, "Win+Shift+L")
+    ];
+
+    internal static PresetCaptureShortcut[] WithOcrShortcuts(AppSettings settings, PresetCaptureShortcut[] existing)
+    {
+        var rows = existing.ToList();
+        var assigned = existing.Select(row => row.Key).Concat(settings.InstantShortcuts).Append(settings.LastRecipeShortcut)
+            .Select(HotkeyBinding.Parse).ToHashSet();
+        foreach (var (id, _, _, key) in OcrTemplates)
+        {
+            if (!assigned.Add(HotkeyBinding.Parse(key))) continue;
+            if (settings.CapturePresets.FirstOrDefault(p => p.BuiltInKey == id) is { } preset)
+                rows.Add(new(key, OutputPresetId: preset.Id) { SelectRangeWithDefaultInput = true });
+        }
+        return rows.ToArray();
     }
 
     private static AppSettings UpgradePresets(AppSettings settings)

@@ -113,7 +113,7 @@ internal static partial class Program
             ApplySettingsPage(form, "ショートカット", "即時撮影キー");
             tabs.SelectedIndex = 0;
             form.ResetSelectedPage();
-            Equal(4, ((DataGridView)editor).Rows.Count);
+            Equal(6, ((DataGridView)editor).Rows.Count);
             Equal(1, writes);
             Equal(AppSettings.DefaultLastRecipeShortcut, Field<HotkeyEditor>(form, "LastRecipeShortcut").Value);
         });

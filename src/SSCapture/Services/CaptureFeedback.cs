@@ -105,6 +105,24 @@ internal sealed class CaptureFeedback : IDisposable
         Show(result, settings, retryOutput, reference: false);
     }
 
+    private bool showingOcr;
+
+    internal void ShowOcrProgress(AppSettings settings, Rectangle? bounds)
+    {
+        if (disposed || !settings.ShowCaptureNotification || settings.NotificationDurationSeconds == 0) return;
+        HideForCapture();
+        try
+        {
+            toast ??= createToast();
+            toast.SetActions(new(null, null, "", Heading: "文字認識"));
+            showingOcr = toast.TryShow("OCR中....", false, settings.NotificationCorner, out var warning,
+                display: settings.ShareCapturePresentation ? NotificationDisplay.Captured : settings.NotificationDisplay,
+                captureBounds: bounds);
+            if (!showingOcr && warning is not null) Warn(warning);
+        }
+        catch (Exception ex) { Warn("OCRの進行表示を出せません: " + ex.Message); }
+    }
+
     internal void ShowPreviousScreenshot(AppSettings settings)
     {
         if (CanShowPreviousScreenshot(settings) && previousScreenshot is { } result) Show(result, settings, null, reference: true);
@@ -112,7 +130,9 @@ internal sealed class CaptureFeedback : IDisposable
 
     private void Show(CaptureDelivery result, AppSettings settings, Action? retryOutput, bool reference)
     {
-        HideForCapture(); pendingImage = result.NotificationImage;
+        if (!showingOcr) HideForCapture();
+        showingOcr = false;
+        pendingImage = result.NotificationImage;
         if (!reference && settings.PlayCaptureSound && result.HasSuccess)
         {
             try { sound.Request(); }
@@ -185,6 +205,7 @@ internal sealed class CaptureFeedback : IDisposable
     internal void HideForCapture()
     {
         if (disposed) return;
+        showingOcr = false;
         notificationSerial++;
         ocrCopy?.Cancel();
         ocrCopy = null;
@@ -235,6 +256,8 @@ internal sealed class CaptureFeedback : IDisposable
         bool failed = false;
         try
         {
+            toast?.TryShow("OCR中....", false, settings.NotificationCorner, out _, display:
+                settings.ShareCapturePresentation ? NotificationDisplay.Captured : settings.NotificationDisplay, captureBounds: result.CaptureBounds);
             using var bitmap = pendingImage?.CloneImage() ?? new Bitmap(RequireSavedFile(path));
             string directory = result.CaptureSettings?.OneOcrDirectory ?? settings.OneOcrDirectory;
             message = await CaptureOcrCopy.CopyAsync(bitmap, directory, asTable, operation.Token);

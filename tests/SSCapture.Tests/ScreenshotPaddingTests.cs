@@ -103,7 +103,7 @@ internal static partial class Program
             LayoutTree(form);
             Check(input.Height >= 24 && input.Parent!.ClientRectangle.Contains(input.Bounds), "余白欄が見切れる");
             var basic = (TableLayoutPanel)input.Parent!;
-            Equal(6, basic.GetRow(input));
+            Equal(7, basic.GetRow(input));
             form.Height += 500;
             LayoutTree(form);
             var label = basic.GetControlFromPosition(0, basic.GetRow(input))!;

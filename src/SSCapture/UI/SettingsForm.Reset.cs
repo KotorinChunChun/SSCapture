@@ -181,6 +181,7 @@ internal sealed partial class SettingsForm
                     PresetCaptureShortcuts = rows, InstantShortcuts = [], LastRecipeShortcut = ""
                 });
                 if (fixedShortcut is not null) rows = [.. rows, fixedShortcut];
+                rows = PresetSettings.WithOcrShortcuts(committed, rows);
                 HotkeyBinding.ValidateSettings(committed with { PresetCaptureShortcuts = rows });
                 presetShortcutEditor.LoadRows(rows);
                 break;

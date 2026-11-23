@@ -72,7 +72,11 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
                     RefreshMenu();
                 });
             },
-            pinImage: pinnedImages.Show);
+            pinImage: pinnedImages.Show, ocrStarted: (captureSettings, bounds) =>
+            {
+                if (dispatcher.InvokeRequired) Post(() => feedback.ShowOcrProgress(captureSettings, bounds));
+                else if (!exiting) feedback.ShowOcrProgress(captureSettings, bounds);
+            });
         icon = AppIcon.Create();
         menu = new ContextMenuStrip
         {

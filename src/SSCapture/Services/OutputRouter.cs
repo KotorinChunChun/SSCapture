@@ -13,7 +13,10 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
     long retryByteLimit = 256L * 1024 * 1024, Func<string, Task>? beforeMetadataSave = null,
     Action<long, LastCaptureRecipe?>? captureSucceeded = null, Func<IReadOnlyList<DisplayLayout>>? readCaptureLayout = null,
     Action<Bitmap, Rectangle, AppSettings>? pinImage = null, ExternalEditor? externalEditor = null,
-    Func<Bitmap, string, CancellationToken, Task<OcrResult>>? recognizeForHandoff = null) : IDisposable
+    Func<Bitmap, string, CancellationToken, Task<OcrResult>>? recognizeForHandoff = null,
+    Action<AppSettings, Rectangle?>? ocrStarted = null,
+    Func<Bitmap, string, CancellationToken, bool, Task<OcrCopyResult>>? recognizeClipboard = null,
+    Func<string, CancellationToken, Task>? copyText = null) : IDisposable
 {
     private long captureSequence;
     private readonly Func<Bitmap, Task> copyImage = copyImage ?? ClipboardWriter.CopyAsync;
@@ -85,7 +88,19 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         };
         retry.Pending = destination;
         retry.PrepareFile = prepareFile;
-        retry.Execute = () => DeliverAsync(CaptureIntent.Screenshot, retry.Pending, () => copyImage(owned),
+        async Task CopyStill()
+        {
+            if (settings.ClipboardContent == StillClipboardContent.Image)
+            {
+                await copyImage(owned);
+                return;
+            }
+            ocrStarted?.Invoke(settings, captureBounds);
+            await CaptureOcrCopy.CopyAsync(owned, settings.OneOcrDirectory, settings.ClipboardContent == StillClipboardContent.Tsv,
+                CancellationToken.None, recognizeClipboard, copyText);
+        }
+
+        retry.Execute = () => DeliverAsync(CaptureIntent.Screenshot, retry.Pending, CopyStill,
             async () =>
             {
                 FileNamePlan? plan = await naming.ResolveAsync(retry.NamingImage ?? owned);
@@ -173,9 +188,11 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
         if (retry?.IsRetry == true)
             openFolderAfterSave = retry.FolderPending || destination.HasFlag(OutputDestination.File) && openFolderAfterSave;
         OutputDestination succeeded = OutputDestination.None, failed = OutputDestination.None;
-        bool folderOpenFailed = false, skipExternal = false;
+        bool folderOpenFailed = false, skipExternal = false, saveCancelled = false;
         bool metadataFailed = false;
-        if (destination.HasFlag(OutputDestination.Clipboard))
+        bool pathCopy = intent == CaptureIntent.Screenshot && captureSettings?.ClipboardContent == StillClipboardContent.FilePath;
+        bool wantsClipboard = destination.HasFlag(OutputDestination.Clipboard);
+        if (wantsClipboard && !pathCopy)
         {
             try { await copy(); succeeded |= OutputDestination.Clipboard; messages.Add("コピーしました。"); }
             catch (Exception ex) { failed |= OutputDestination.Clipboard; errors.Add(ex); messages.Add("コピー失敗: " + ex.Message); }
@@ -198,6 +215,7 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                     if (requestedFolderOpen is null)
                     {
                         shouldSave = false;
+                        saveCancelled = true;
                         skipExternal = true;
                         messages.Add("ファイル保存をキャンセルしました。");
                     }
@@ -217,6 +235,19 @@ internal sealed partial class OutputRouter(string workRoot, Func<Bitmap, Task>? 
                 try { saved = await save(); succeeded |= OutputDestination.File; messages.Add("保存しました: " + saved); }
                 catch (Exception ex) { failed |= OutputDestination.File; errors.Add(ex); messages.Add("保存失敗: " + ex.Message); }
             }
+        }
+        if (wantsClipboard && pathCopy && !saveCancelled)
+        {
+            try
+            {
+                using var temporary = captureSettings!.DefaultDestination.HasFlag(OutputDestination.File) ? null : await prepareExternal();
+                string path = temporary?.Path ?? saved ?? throw new IOException("保存先のパスを取得できません。");
+                if (!File.Exists(path)) throw new FileNotFoundException("コピーするファイルが見つかりません。");
+                await (copyText ?? ClipboardWriter.CopyTextAsync)(path, CancellationToken.None);
+                succeeded |= OutputDestination.Clipboard;
+                messages.Add("ファイルパスをコピーしました。");
+            }
+            catch (Exception ex) { failed |= OutputDestination.Clipboard; errors.Add(ex); messages.Add("パスのコピー失敗: " + ex.Message); }
         }
         if (saveMetadata is not null && saved is not null && (succeeded.HasFlag(OutputDestination.File) || retry?.MetadataPending == true))
         {

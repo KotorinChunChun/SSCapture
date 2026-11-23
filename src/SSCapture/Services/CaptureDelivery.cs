@@ -15,10 +15,18 @@ internal sealed record CaptureDelivery(CaptureIntent Intent, OutputDestination C
         {
             List<string> lines = [];
             string? prefix = CreateSubjectPrefix();
-            bool copiedAndSaved = Completed.HasFlag(OutputDestination.Clipboard | OutputDestination.File);
+            string? content = Intent == CaptureIntent.Screenshot ? CaptureSettings?.ClipboardContent switch
+            {
+                StillClipboardContent.Text => "テキスト",
+                StillClipboardContent.Tsv => "表（TSV）",
+                StillClipboardContent.FilePath => "ファイルパス",
+                _ => null
+            } : null;
+            if (content is not null && CaptureDescription is { Length: > 0 } subject) prefix = subject + "：";
+            bool copiedAndSaved = content is null && Completed.HasFlag(OutputDestination.Clipboard | OutputDestination.File);
             if (copiedAndSaved) Append("コピー・保存しました");
-            Add(OutputDestination.Clipboard, prefix is null ? "コピーが完了しました" : "コピーしました",
-                "コピーできませんでした", copiedAndSaved);
+            Add(OutputDestination.Clipboard, content is null ? (prefix is null ? "コピーが完了しました" : "コピーしました") : $"{content}をコピーしました",
+                content is null ? "コピーできませんでした" : $"{content}をコピーできませんでした", copiedAndSaved);
             string defaultSaved = Intent == CaptureIntent.Recording ? "動画を保存しました" : "スクリーンショットを保存しました";
             Add(OutputDestination.File, string.IsNullOrEmpty(CaptureDescription) ? defaultSaved : "保存しました",
                 "保存できませんでした", copiedAndSaved);

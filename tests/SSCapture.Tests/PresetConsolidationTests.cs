@@ -99,10 +99,10 @@ internal static partial class Program
             Check(group is GroupBox && group.Contains(form.Controls.Find("PresetCaptureShortcut", true).Single()) &&
                 !group.Contains(form.Controls.Find("PresetCaptureShortcuts", true).Single()), "ショートカットの一覧と編集欄の区別がない");
         });
-        Run("新規は入力4件・出力3件と矩形コピー既定・暗転ON", () =>
+        Run("新規は入力4件・出力5件と矩形コピー既定・暗転ON", () =>
         {
             var settings = new AppSettings().ApplyDefaults(); settings.Validate();
-            Equal(4, settings.PresetSchemaVersion); Equal(4, settings.SavedRegions.Length); Equal(3, settings.CapturePresets.Length);
+            Equal(5, settings.PresetSchemaVersion); Equal(4, settings.SavedRegions.Length); Equal(5, settings.CapturePresets.Length);
             Equal(CaptureMode.Rectangle, settings.DefaultMode); Equal(OutputDestination.Clipboard, settings.DefaultDestination);
             Check(settings.DimCaptureBackground && settings.FreezeFrame && !settings.IncludeCursor && !settings.Grid20, "標準入力の初期条件が異なる");
             Equal(0, settings.ScreenshotPaddingPixels); Equal(ScreenshotColorDepth.Original, settings.ScreenshotColorDepth);
@@ -110,6 +110,12 @@ internal static partial class Program
             Equal("Rectangle,FixedRegion,FixedRegion,FixedRegion", string.Join(',', settings.SavedRegions.Select(p => p.Mode)));
             Check(settings.SavedRegions.All(p => !p.UseFixedCoordinates && p.FreezeFrame && p.PaddingPixels == 0 && !p.IncludeCursor && p.Shortcut == ""), "初期入力に座標・キー・加工が混入");
             Equal("960x540,800x600,320x240", string.Join(',', settings.SavedRegions.Where(p => p.Mode == CaptureMode.FixedRegion).Select(p => $"{p.Bounds.Width}x{p.Bounds.Height}")));
+            foreach (var (key, content) in new[] { ("Win+Shift+T", StillClipboardContent.Text), ("Win+Shift+L", StillClipboardContent.Tsv) })
+            {
+                var row = settings.PresetCaptureShortcuts!.Single(row => row.Key == key);
+                Check(row.UsesNormalSelection, "範囲選択で開始しない");
+                Equal(content, ResolvedPresetCapture.Resolve(settings, row.InputPresetId, row.OutputPresetId).Settings.ClipboardContent);
+            }
             var quick = settings.PresetCaptureShortcuts!.Single(row => row.Key == "Win+Shift+Q");
             var fixedPreset = ResolvedPresetCapture.Resolve(settings, quick.InputPresetId, quick.OutputPresetId);
             Check(!quick.UsesDirectCapture(fixedPreset.Input), "固定サイズキーが選択画面を開かない");
@@ -146,7 +152,7 @@ internal static partial class Program
                 migrated.SavedRegions.Single(p => p.Id == edited.Id));
             Equal(new Size(320, 240), migrated.SavedRegions.Single(p => p.Id == oldThird.Id).Bounds.Size);
             Equal(old4K.Bounds, migrated.SavedRegions.Single(p => p.Id == old4K.Id).Bounds);
-            Check(migrated.PresetCaptureShortcuts!.SequenceEqual(keys), "ショートカットの参照を書き換えた");
+            Check(migrated.PresetCaptureShortcuts!.Take(keys.Length).SequenceEqual(keys), "ショートカットの参照を書き換えた");
             Equal(custom.Bounds, ResolvedPresetCapture.Resolve(migrated, custom.Id, null).Input.Bounds);
             VerifyStandardFixedFrames(migrated);
             store.Save(migrated);
@@ -181,6 +187,25 @@ internal static partial class Program
             Equal(960m, ((NumericUpDown)form.Controls.Find("FixedWidth", true).Single()).Value);
             Equal(540m, ((NumericUpDown)form.Controls.Find("FixedHeight", true).Single()).Value);
         });
+        Run("旧版のT割り当てを保持しLだけを追加し、赤字の競合案内で割り当てを妨げない", () =>
+        {
+            var defaults = new AppSettings().ApplyDefaults();
+            var old = defaults with { PresetSchemaVersion = 4,
+                CapturePresets = defaults.CapturePresets.Where(p => p.ClipboardContent == StillClipboardContent.Image).ToArray(),
+                PresetCaptureShortcuts = [new("Win+Shift+T")] };
+            var migrated = old.EnsurePresets();
+            migrated.Validate();
+            Equal<string?>(null, migrated.PresetCaptureShortcuts!.Single(p => p.Key == "Win+Shift+T").OutputPresetId);
+            Equal("initial-output-tsv", migrated.PresetCaptureShortcuts!.Single(p => p.Key == "Win+Shift+L").OutputPresetId);
+            using var editor = new PresetCaptureShortcutEditor(migrated.PresetCaptureShortcuts!, () => { });
+            var warning = (Label)editor.Controls.Find("ShortcutConflict", true).Single();
+            Equal(Color.DarkRed, warning.ForeColor); Check(warning.Text.Contains("PowerToys"), "Tの競合表示がない");
+            var key = (HotkeyEditor)editor.Controls.Find("PresetCaptureShortcut", true).Single();
+            editor.LoadRows([new("Win+Shift+S")]);
+            Check(warning.Text.Contains("スクリーンショット"), "Sの競合表示がない");
+            editor.LoadRows([new("Win+Shift+L")]);
+            Equal("", warning.Text); Equal("Win+Shift+L", key.Value);
+        });
         Run("初期候補追加はv1の既定・ID・値と重複名を保持", () =>
         {
             var baseline = new AppSettings { DefaultMode = CaptureMode.Freeform, ScreenshotPaddingPixels = 17, IncludeCursor = true, DimCaptureBackground = false };
@@ -188,11 +213,11 @@ internal static partial class Program
             var output = CapturePreset.FromSettings("ファイル保存", baseline) with { Id = "initial-output-file", IsDefault = true };
             var legacy = baseline with { PresetSchemaVersion = 1, SavedRegions = [input], CapturePresets = [output] };
             var next = legacy.ApplyDefaults(); next.Validate();
-            Equal(5, next.SavedRegions.Length); Equal(3, next.CapturePresets.Length);
+            Equal(5, next.SavedRegions.Length); Equal(5, next.CapturePresets.Length);
             Equal(input, next.SavedRegions.Single(p => p.IsDefault)); Equal(output, next.CapturePresets.Single(p => p.IsDefault));
             Equal(17, next.ScreenshotPaddingPixels); Equal(CaptureMode.Freeform, next.DefaultMode); Check(next.IncludeCursor && !next.DimCaptureBackground, "既存条件が上書きされた");
             Equal(5, next.SavedRegions.Select(p => p.Id).Distinct().Count()); Equal(5, next.SavedRegions.Select(p => p.Name).Distinct().Count());
-            Equal(3, next.CapturePresets.Select(p => p.Id).Distinct().Count()); Equal(3, next.CapturePresets.Select(p => p.Name).Distinct().Count());
+            Equal(5, next.CapturePresets.Select(p => p.Id).Distinct().Count()); Equal(5, next.CapturePresets.Select(p => p.Name).Distinct().Count());
         });
         Run("初期候補は3件以上の既存登録へ追加せず削除後も復活しない", () =>
         {
@@ -200,9 +225,9 @@ internal static partial class Program
             var many = settings with { PresetSchemaVersion = 1,
                 SavedRegions = [..settings.SavedRegions, settings.SavedRegions[0] with { Id = "custom-input", Name = "追加", IsDefault = false }],
                 CapturePresets = [..settings.CapturePresets, settings.CapturePresets[0] with { Id = "custom-output", Name = "追加", IsDefault = false }] };
-            var next = many.EnsurePresets(); Equal(5, next.SavedRegions.Length); Equal(4, next.CapturePresets.Length);
+            var next = many.EnsurePresets(); Equal(5, next.SavedRegions.Length); Equal(6, next.CapturePresets.Length);
             var removed = settings with { SavedRegions = [settings.SavedRegions.Single(p => p.IsDefault)], CapturePresets = [settings.CapturePresets.Single(p => p.IsDefault)],
-                PresetCaptureShortcuts = settings.PresetCaptureShortcuts!.Where(row => row.InputPresetId is null).ToArray() };
+                PresetCaptureShortcuts = settings.PresetCaptureShortcuts!.Where(row => row.InputPresetId is null && row.OutputPresetId is null).ToArray() };
             Check(ReferenceEquals(removed, removed.EnsurePresets()), "削除済み候補を再追加した"); removed.Validate();
         });
         Run("コピー用の無効保存先は新規ファイル候補へ流用しない", () =>
@@ -216,23 +241,23 @@ internal static partial class Program
         {
             string path = Path.Combine(directory, "settings.json");
             var current = new AppSettings().EnsurePresets(); var legacy = current with { PresetSchemaVersion = 1, SavedRegions = [current.SavedRegions[0]], CapturePresets = [current.CapturePresets[0]], DimCaptureBackground = false,
-                PresetCaptureShortcuts = current.PresetCaptureShortcuts!.Where(row => row.InputPresetId is null).ToArray() };
+                PresetCaptureShortcuts = current.PresetCaptureShortcuts!.Where(row => row.InputPresetId is null && row.OutputPresetId is null).ToArray() };
             string json = System.Text.Json.JsonSerializer.Serialize(legacy); File.WriteAllText(path, json);
             var store = new SettingsStore(path); var loaded = store.Load(out var warning); Equal<string?>(null, warning); Equal(4, loaded.SavedRegions.Length); Equal(json, File.ReadAllText(path));
             store.Save(loaded); Equal(json, File.ReadAllText(path + ".presets-v1.bak"));
             var restored = store.Load(out warning); Equal<string?>(null, warning); SettingsEqual(loaded, restored); Check(!restored.DimCaptureBackground, "明示OFFを変更");
             store.Save(restored); Equal(json, File.ReadAllText(path + ".presets-v1.bak"));
         }));
-        Run("初期3候補は設定一覧と撮影中メニューの双方から選択可能", () =>
+        Run("初期候補は設定一覧と撮影中メニューの双方から選択可能", () =>
         {
             var settings = new AppSettings().ApplyDefaults();
             using var form = new SettingsForm(settings, _ => null, _ => { }, () => []);
             Equal(4, ((ListBox)form.Controls.Find("SavedRegions", true).Single()).Items.Count);
-            Equal(3, ((ListBox)form.Controls.Find("CapturePresetList", true).Single()).Items.Count);
+            Equal(5, ((ListBox)form.Controls.Find("CapturePresetList", true).Single()).Items.Count);
             Check(((CheckBox)form.Controls.Find("DimCaptureBackground", true).Single()).Checked, "新規設定UIが暗転OFF");
             using var menu = new CaptureContextMenu(settings.DefaultDestination, _ => { }, () => { }, () => { },
                 inputPresets: settings.SavedRegions, applyInputPreset: _ => { }, presets: settings.CapturePresets, applyPreset: _ => { });
-            Equal(4, menu.Command("InputPresetMenu").DropDownItems.Count); Equal(3, menu.Command("CapturePresetMenu").DropDownItems.Count);
+            Equal(4, menu.Command("InputPresetMenu").DropDownItems.Count); Equal(5, menu.Command("CapturePresetMenu").DropDownItems.Count);
         });
         Run("統合画面は9分類と内部区分で旧入力・命名ページを重複表示しない", () =>
         {
@@ -268,7 +293,7 @@ internal static partial class Program
             ConsolidationClick(form, "DuplicateCapturePreset"); form.Controls.Find("CapturePresetName", true).Single().Text = "16色";
             ((ComboBox)form.Controls.Find("ScreenshotColorDepth", true).Single()).SelectedIndex = (int)ScreenshotColorDepth.Indexed4;
             form.Controls.Find("FileNamePattern", true).Single().Text = "sample.{ext}";
-            ConsolidationClick(form, "DefaultCapturePreset"); ConsolidationClick(form, "DeleteCapturePreset"); Equal(4, editor.Presets.Length);
+            ConsolidationClick(form, "DefaultCapturePreset"); ConsolidationClick(form, "DeleteCapturePreset"); Equal(6, editor.Presets.Length);
             Check(saved is not null, "出力の既定が保存されない");
             Equal(ScreenshotColorDepth.Indexed4, saved!.ScreenshotColorDepth); Equal("sample.{ext}", saved.FileNamePattern); Equal(12, saved.ScreenshotPaddingPixels);
             Equal("16色", saved.CapturePresets.Single(p => p.IsDefault).Name);

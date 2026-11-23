@@ -10,6 +10,54 @@ internal static partial class Program
     {
         WindowCropTests();
         HandoffTests();
+        Run("静止画のOCR出力は認識中に通知し、画像を書かず指定形式を一度コピーする", () => WithOutputDirectory(directory => RunOutputTask(async () =>
+        {
+            using var image = OutputImage();
+            foreach (var format in new[] { StillClipboardContent.Text, StillClipboardContent.Tsv })
+            {
+                var events = new List<string>();
+                using var router = new OutputRouter(directory, _ => throw new InvalidOperationException("画像をコピーした"),
+                    ocrStarted: (_, _) => events.Add("認識中"),
+                    recognizeClipboard: (_, _, _, table) => Task.FromResult(new OcrCopyResult("本文", null, null,
+                        new OcrTableResult(OcrTableStatus.Ready, table ? "A\tB" : null))),
+                    copyText: (text, _) => { events.Add(text); return Task.CompletedTask; });
+                await router.ScreenshotAsync(image, OutputDestination.Clipboard, OutputSettings(directory) with { ClipboardContent = format });
+                Check(events.SequenceEqual(["認識中", format == StillClipboardContent.Text ? "本文" : "A\tB"]), "進行と出力内容が異なる");
+            }
+        })));
+        Run("表を判定できない場合にも保存は成功しクリップボードを書き換えない", () => WithOutputDirectory(directory => RunOutputTask(async () =>
+        {
+            using var image = OutputImage();
+            int writes = 0;
+            CaptureDelivery? delivery = null;
+            using var router = new OutputRouter(directory, delivered: result => { delivery = result; result.NotificationImage?.Dispose(); },
+                recognizeClipboard: (_, _, _, _) => Task.FromResult(new OcrCopyResult("本文", null, null, new(OcrTableStatus.LowConfidence))),
+                copyText: (_, _) => { writes++; return Task.CompletedTask; });
+            try { await router.ScreenshotAsync(image, OutputDestination.Clipboard | OutputDestination.File,
+                OutputSettings(directory) with { ClipboardContent = StillClipboardContent.Tsv }, "partial.png"); }
+            catch (IOException) { }
+            Equal(0, writes); Equal(OutputDestination.File, delivery!.Completed); Equal(OutputDestination.Clipboard, delivery.Failed);
+            Check(File.Exists(delivery.SavedPath), "表コピー失敗で画像保存まで失われた");
+        })));
+        Run("パス出力は存在するPNGをコピーし保存取消時には書き込まない", () => WithOutputDirectory(directory => RunOutputTask(async () =>
+        {
+            using var image = OutputImage();
+            var paths = new List<string>();
+            using var router = new OutputRouter(directory, copyText: (path, _) =>
+            {
+                Check(File.Exists(path), "書き込み前のパスを渡した");
+                paths.Add(path);
+                return Task.CompletedTask;
+            });
+            var settings = OutputSettings(directory) with { ClipboardContent = StillClipboardContent.FilePath };
+            await router.ScreenshotAsync(image, OutputDestination.Clipboard, settings);
+            Check(paths.Single().StartsWith(TemporaryHandoff.DirectoryFor(directory) + Path.DirectorySeparatorChar), "一時PNGではない");
+            await router.ScreenshotAsync(image, OutputDestination.Clipboard | OutputDestination.File, settings, "saved.png");
+            Equal(Path.Combine(settings.SaveDirectory, "saved.png"), paths[1]);
+            await router.ScreenshotAsync(image, OutputDestination.Clipboard | OutputDestination.File, settings,
+                requestFileName: () => Task.FromResult<ScreenshotFileName?>(null));
+            Equal(2, paths.Count);
+        })));
         Run("履歴は取得時刻を保持し命名時刻や完了順に左右されない", () => WithOutputDirectory(directory => RunOutputTask(async () =>
         {
             using var history = new CaptureHistory(); using var image = OutputImage();

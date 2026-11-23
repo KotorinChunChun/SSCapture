@@ -2,6 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace SSCapture.Services;
 
+internal enum StillClipboardContent { Image, Text, Tsv, FilePath }
+
 internal sealed record CapturePreset
 {
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
@@ -9,6 +11,7 @@ internal sealed record CapturePreset
     public string? BuiltInKey { get; init; }
     public string Name { get; init; } = "";
     public bool IsDefault { get; init; }
+    public StillClipboardContent ClipboardContent { get; init; }
     public ScreenshotColorDepth ColorDepth { get; init; }
     public bool OpenFolderAfterSave { get; init; }
     public string OcrSeparator { get; init; } = "_";
@@ -32,7 +35,7 @@ internal sealed record CapturePreset
             throw new ArgumentException("出力プリセット名は1～80文字で指定してください。");
         if (WhitePaddingPixels is < 0 or > ScreenshotPadding.MaximumPixels)
             throw new ArgumentException("白い余白は0～4096pxで指定してください。");
-        new AppSettings { DefaultDestination = Destination, ScreenshotPaddingPixels = PaddingPixels, WindowCrop = WindowCrop,
+        new AppSettings { DefaultDestination = Destination, ClipboardContent = ClipboardContent, ScreenshotPaddingPixels = PaddingPixels, WindowCrop = WindowCrop,
             SaveDirectory = SaveDirectory, FileNamePattern = FileNamePattern, MetadataMode = MetadataMode,
             ScreenshotColorDepth = ColorDepth, OcrSeparator = OcrSeparator }.Validate();
     }
@@ -40,7 +43,7 @@ internal sealed record CapturePreset
     internal AppSettings Apply(AppSettings settings)
     {
         Validate();
-        return settings with { DefaultDestination = Destination, ScreenshotPaddingPixels = ResolvePadding(settings.ScreenshotPaddingPixels),
+        return settings with { DefaultDestination = Destination, ClipboardContent = ClipboardContent, ScreenshotPaddingPixels = ResolvePadding(settings.ScreenshotPaddingPixels),
             SaveDirectory = SaveDirectory, FileNamePattern = FileNamePattern,
             WindowCrop = WindowCrop, ScreenshotColorDepth = ColorDepth, OpenFolderAfterSave = OpenFolderAfterSave, OcrSeparator = OcrSeparator,
             SelectedImageEditorId = ImageEditorId ?? "",
@@ -49,7 +52,7 @@ internal sealed record CapturePreset
 
     internal static CapturePreset FromSettings(string name, AppSettings settings) => new()
     {
-        Name = name.Trim(), Destination = settings.DefaultDestination,
+        Name = name.Trim(), Destination = settings.DefaultDestination, ClipboardContent = settings.ClipboardContent,
         WindowCrop = settings.WindowCrop, ColorDepth = settings.ScreenshotColorDepth, OpenFolderAfterSave = settings.OpenFolderAfterSave, OcrSeparator = settings.OcrSeparator,
         SaveDirectory = settings.SaveDirectory, FileNamePattern = settings.FileNamePattern,
         ImageEditorId = settings.SelectedImageEditorId, VideoEditorId = settings.SelectedVideoEditorId, MetadataMode = settings.MetadataMode

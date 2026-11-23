@@ -9,6 +9,19 @@ internal static partial class Program
 {
     static partial void FeedbackTests()
     {
+        Run("OCR進行通知は完了まで保持し同じ通知で処理結果を表示する", () =>
+        {
+            var toast = new FakeCaptureToast();
+            var timer = new FakeFeedbackTimer();
+            int created = 0;
+            using var feedback = new CaptureFeedback(createToast: () => { created++; return toast; }, timer: timer, sound: new FakeCompletionSound());
+            var settings = new AppSettings { ClipboardContent = StillClipboardContent.Tsv };
+            feedback.ShowOcrProgress(settings, null);
+            Equal("OCR中....", toast.Message); Check(!timer.Running, "認識中に表示時間が減る");
+            feedback.Notify(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, CaptureSettings: settings), settings);
+            Equal(1, created); Equal("表（TSV）をコピーしました", toast.Message); Check(timer.Running, "完了後の自動終了がない");
+        });
+
         Run("通知先はメイン・撮影面積・指定DISPLAYで決まり切断時はメイン", () =>
         {
             NotificationMonitor[] screens =

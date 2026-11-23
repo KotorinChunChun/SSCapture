@@ -23,10 +23,27 @@ internal static partial class Program
         {
             var store = new SettingsStore(Path.Combine(directory, "settings.json"));
             File.WriteAllText(Path.Combine(directory, "settings.json"), "{}");
-            Equal(3, store.Load(out var warning).CapturePresets.Length); Equal<string?>(null, warning);
+            Equal(5, store.Load(out var warning).CapturePresets.Length); Equal<string?>(null, warning);
             var settings = new AppSettings { CapturePresets = [CapturePreset.FromSettings("資料", new AppSettings { ScreenshotPaddingPixels = 20 })] };
             store.Save(settings); SettingsEqual(settings, store.Load(out warning)); Equal<string?>(null, warning);
         }));
+        Run("静止画のコピー内容は自動保存し、保存OFFのパスだけ赤で案内する", () =>
+        {
+            AppSettings? saved = null;
+            using var form = new SettingsForm(new AppSettings(), s => { saved = s; return null; }, _ => { }, () => []);
+            form.SelectCategory("出力プリセット");
+            var format = (ComboBox)form.Controls.Find("ClipboardContent", true).Single();
+            var warning = (Label)form.Controls.Find("TemporaryPathWarning", true).Single();
+            var file = (CheckBox)form.Controls.Find("FileOutput", true).Single();
+            format.SelectedIndex = (int)StillClipboardContent.FilePath;
+            Equal(StillClipboardContent.FilePath, saved!.ClipboardContent);
+            Equal(Color.DarkRed, warning.ForeColor);
+            Check(warning.Text.Contains("一時ファイル"), "一時パスの説明がない");
+            file.Checked = true;
+            Check(!warning.Visible, "保存時にも一時パス警告を表示");
+            format.SelectedIndex = (int)StillClipboardContent.Tsv;
+            Equal(StillClipboardContent.Tsv, saved!.CapturePresets.Single(p => p.IsDefault).ClipboardContent);
+        });
         Run("プリセットの不正値・重複・nullを拒否", () =>
         {
             var good = CapturePreset.FromSettings("資料", new AppSettings());
@@ -83,11 +100,11 @@ internal static partial class Program
             using var form = new SettingsForm(new AppSettings { ScreenshotPaddingPixels = 10 }, s => { saved = s; return null; }, _ => { }, () => []);
             var editor = (CapturePresetEditor)form.Controls.Find("CapturePresetEditor", true).Single();
             form.Controls.Find("CapturePresetName", true).Single().Text = "資料";
-            editor.StoreCurrent(); Equal(3, editor.Presets.Length);
+            editor.StoreCurrent(); Equal(5, editor.Presets.Length);
             Equal(1, form.Controls.Find("WhitePaddingPixels", true).Length);
             ((ComboBox)form.Controls.Find("ScreenshotColorDepth", true).Single()).SelectedIndex = (int)ScreenshotColorDepth.Indexed4;
-            editor.StoreCurrent(); Equal(3, editor.Presets.Length); Equal(ScreenshotColorDepth.Indexed4, editor.Presets[0].ColorDepth);
-            Equal(3, saved!.CapturePresets.Length); Equal(ScreenshotColorDepth.Indexed4, saved.CapturePresets[0].ColorDepth);
+            editor.StoreCurrent(); Equal(5, editor.Presets.Length); Equal(ScreenshotColorDepth.Indexed4, editor.Presets[0].ColorDepth);
+            Equal(5, saved!.CapturePresets.Length); Equal(ScreenshotColorDepth.Indexed4, saved.CapturePresets[0].ColorDepth);
             Equal(10, saved.ScreenshotPaddingPixels);
             form.Controls.Find("WhitePaddingPixels", true).Single().Text = "0";
             editor.StoreCurrent();

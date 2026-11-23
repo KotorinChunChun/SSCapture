@@ -21,6 +21,7 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
     private readonly ComboBox input = PresetChoice("ShortcutInputPreset", "入力プリセット");
     private readonly ComboBox output = PresetChoice("ShortcutOutputPreset", "出力プリセット");
     private readonly Button duplicate, remove;
+    private readonly Label conflict = new() { Name = "ShortcutConflict", AutoSize = true, ForeColor = Color.DarkRed };
     private PresetItem[] inputs = [], outputs = [];
     private string? defaultInput, defaultOutput;
     private bool loading;
@@ -59,6 +60,8 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
             fields.Controls.Add(new Label { Name = "PresetCaptureFieldLabel" + column, Text = labels[column], AutoSize = true },
                 Math.Max(0, column - 1), column == 0 ? 0 : 2);
         }
+        fields.Controls.Add(conflict, 1, 0);
+        fields.SetColumnSpan(conflict, 2);
         fields.Controls.Add(key, 0, 1);
         fields.SetColumnSpan(key, 3);
         intent.Items.AddRange(["静止画", "録画"]);
@@ -161,6 +164,7 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
             var row = index >= 0 ? rows[index] : null;
             duplicate.Enabled = remove.Enabled = key.Enabled = intent.Enabled = input.Enabled = output.Enabled = row is not null;
             key.Value = row?.Key ?? "";
+            ShowConflict();
             intent.SelectedIndex = row is null ? -1 : (int)row.Intent;
             SetChoices(input, inputs, row?.InputPresetId);
             SetChoices(output, outputs, row?.OutputPresetId);
@@ -171,6 +175,7 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
     private void UpdateRow()
     {
         if (loading || selected < 0) return;
+        ShowConflict();
         var previous = rows[selected];
         string? outputId = (output.SelectedItem as PresetItem)?.Id;
         string? inputId = (input.SelectedItem as PresetItem)?.Id;
@@ -186,6 +191,16 @@ internal sealed class PresetCaptureShortcutEditor : UserControl
         for (int column = 0; column < values.Length; column++) list.Rows[selected].Cells[column].Value = values[column];
         SetTooltips(list.Rows[selected], row);
         DraftChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ShowConflict()
+    {
+        conflict.Text = key.Value switch
+        {
+            "Win+Shift+T" => "Windowsのタスクバー操作・PowerToys Text Extractorの既定キーと競合しています。",
+            "Win+Shift+S" or "Win+Shift+R" or "PrintScreen" => "Windowsのスクリーンショット機能の既定キーと競合しています。",
+            _ => ""
+        };
     }
 
     private static void SetTooltips(DataGridViewRow displayRow, PresetCaptureShortcut row)

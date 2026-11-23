@@ -10,6 +10,9 @@ internal sealed class CapturePresetEditor : UserControl
     private readonly ComboBox imageApp, videoApp, metadataMode, color;
     private readonly NumericUpDown cropTop, cropBottom, cropLeft, cropRight;
     private readonly Label status;
+    private readonly ComboBox copyContent = new() { Name = "ClipboardContent", DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+    private readonly Label temporaryPathWarning = new() { AutoSize = true, ForeColor = Color.DarkRed,
+        Name = "TemporaryPathWarning", Text = "一時ファイルのパスは約1分後に使えなくなります。" };
     private readonly Func<AppSettings> readSettings;
     private readonly AppSettings initialSettings;
     private readonly TableLayoutPanel naming;
@@ -83,21 +86,31 @@ internal sealed class CapturePresetEditor : UserControl
         clipboard = Toggle("クリップボードへコピー", "ClipboardOutput"); file = Toggle("ファイル", "FileOutput"); external = Toggle("外部アプリ", "ExternalOutput");
         pinned = Toggle("ピン留め表示", "PinnedOutput"); outputs.Controls.AddRange([clipboard, file, external, pinned]); Add(output, "出力先", outputs, 0);
         output.RowStyles[0].Height = 70;
-        color = new ComboBox { Name = "ScreenshotColorDepth", DropDownStyle = ComboBoxStyle.DropDownList }; color.Items.AddRange(["原色を維持（減色なし）", "256色（8ビット）", "16色（4ビット）"]); Add(output, "静止画の減色", color, 1);
-        imageApp = new ComboBox { Name = "PresetImageEditor", DropDownStyle = ComboBoxStyle.DropDownList }; Add(output, "画像の外部アプリ", imageApp, 2);
-        videoApp = new ComboBox { Name = "PresetVideoEditor", DropDownStyle = ComboBoxStyle.DropDownList }; Add(output, "動画の外部アプリ", videoApp, 3);
+        copyContent.Items.AddRange(["画像", "テキスト（OCR）", "表（TSV）", "ファイルパス"]);
+        output.RowCount = 9;
+        output.RowStyles[7].SizeType = SizeType.Absolute;
+        output.RowStyles[7].Height = 38;
+        output.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        Add(output, "静止画のコピー内容", copyContent, 1);
+        output.Controls.Add(temporaryPathWarning, 1, 8);
+        clipboard.CheckedChanged += (_, _) => UpdateCopyOptions();
+        file.CheckedChanged += (_, _) => UpdateCopyOptions();
+        copyContent.SelectedIndexChanged += (_, _) => UpdateCopyOptions();
+        color = new ComboBox { Name = "ScreenshotColorDepth", DropDownStyle = ComboBoxStyle.DropDownList }; color.Items.AddRange(["原色を維持（減色なし）", "256色（8ビット）", "16色（4ビット）"]); Add(output, "静止画の減色", color, 2);
+        imageApp = new ComboBox { Name = "PresetImageEditor", DropDownStyle = ComboBoxStyle.DropDownList }; Add(output, "画像の外部アプリ", imageApp, 3);
+        videoApp = new ComboBox { Name = "PresetVideoEditor", DropDownStyle = ComboBoxStyle.DropDownList }; Add(output, "動画の外部アプリ", videoApp, 4);
         var cropFields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2, Margin = Padding.Empty };
         for (int i = 0; i < 4; i++) cropFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
         cropTop = AddCrop("上", nameof(WindowCrop.Top), 0);
         cropBottom = AddCrop("下", nameof(WindowCrop.Bottom), 1);
         cropLeft = AddCrop("左", nameof(WindowCrop.Left), 2);
         cropRight = AddCrop("右", nameof(WindowCrop.Right), 3);
-        output.Controls.Add(new Label { Text = "選択したウィンドウの内側を切り抜く（px）", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 4);
+        output.Controls.Add(new Label { Text = "選択したウィンドウの内側を切り抜く（px）", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 5);
         output.SetColumnSpan(output.Controls[output.Controls.Count - 1], 2);
-        output.Controls.Add(cropFields, 0, 5); output.SetColumnSpan(cropFields, 2);
-        output.RowStyles[5].Height = 62;
+        output.Controls.Add(cropFields, 0, 6); output.SetColumnSpan(cropFields, 2);
+        output.RowStyles[6].Height = 62;
         whitePadding = new TextBox { Name = "WhitePaddingPixels", MaxLength = 4, PlaceholderText = "空欄は0px（旧版で入力プリセットに設定した余白があればその値）" };
-        Add(output, "白い余白（px）", whitePadding, 6);
+        Add(output, "白い余白（px）", whitePadding, 7);
         NumericUpDown AddCrop(string title, string edge, int column)
         {
             cropFields.Controls.Add(new Label { Text = title, Anchor = AnchorStyles.Left, AutoSize = true }, column, 0);
@@ -202,6 +215,12 @@ internal sealed class CapturePresetEditor : UserControl
         UpdateFolder();
         return actions;
     }
+    private void UpdateCopyOptions()
+    {
+        copyContent.Enabled = clipboard.Checked;
+        temporaryPathWarning.Visible = clipboard.Checked && !file.Checked && copyContent.SelectedIndex == (int)StillClipboardContent.FilePath;
+    }
+
     private void UpdateFileFields()
     {
         metadataMode.Enabled = openFolder.Enabled = file.Checked;
@@ -215,6 +234,7 @@ internal sealed class CapturePresetEditor : UserControl
         {
         RefreshApps(imageApp, CurrentSettings().ImageEditors, p.ImageEditorId); RefreshApps(videoApp, CurrentSettings().VideoEditors, p.VideoEditorId);
         whitePadding.Text = p.WhitePaddingPixels?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "";
+        copyContent.SelectedIndex = (int)p.ClipboardContent;
         cropTop.Value = p.WindowCrop.Top; cropBottom.Value = p.WindowCrop.Bottom;
         cropLeft.Value = p.WindowCrop.Left; cropRight.Value = p.WindowCrop.Right;
         presetName.Text = p.Name; directory.Text = p.SaveDirectory; pattern.Text = p.FileNamePattern; separator.Text = p.OcrSeparator; color.SelectedIndex = (int)p.ColorDepth; openFolder.Checked = p.OpenFolderAfterSave; metadataMode.SelectedIndex = (int)p.MetadataMode;
@@ -233,6 +253,7 @@ internal sealed class CapturePresetEditor : UserControl
         Id = editing?.Id ?? Guid.NewGuid().ToString("N"), IsDefault = editing?.IsDefault == true, Name = presetName.Text.Trim(), BuiltInKey = editing?.BuiltInKey,
         SaveDirectory = Environment.ExpandEnvironmentVariables(directory.Text.Trim().Trim('"')), FileNamePattern = pattern.Text, ColorDepth = (ScreenshotColorDepth)color.SelectedIndex, OpenFolderAfterSave = openFolder.Checked, OcrSeparator = separator.Text,
         ImageEditorId = (imageApp.SelectedItem as ExternalApplication)?.Id, VideoEditorId = (videoApp.SelectedItem as ExternalApplication)?.Id, MetadataMode = (CaptureMetadataMode)metadataMode.SelectedIndex,
+        ClipboardContent = (StillClipboardContent)copyContent.SelectedIndex,
         WhitePaddingPixels = ReadPadding(), PaddingPixels = editing?.PaddingPixels ?? 0,
         WindowCrop = new((int)cropTop.Value, (int)cropBottom.Value, (int)cropLeft.Value, (int)cropRight.Value),
         Destination = (clipboard.Checked ? OutputDestination.Clipboard : 0) | (file.Checked ? OutputDestination.File : 0) | (external.Checked ? OutputDestination.ExternalApp : 0) | (pinned.Checked ? OutputDestination.Pinned : 0)

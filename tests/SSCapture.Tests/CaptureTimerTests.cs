@@ -196,7 +196,7 @@ internal static partial class Program
         {
             var settings = CaptureCommandSettings();
             var fallback = settings.CapturePresets.Single(p => p.IsDefault) with { FileNamePattern = "fallback.{ext}" };
-            settings = settings with { CapturePresets = [fallback] };
+            settings = settings with { CapturePresets = [fallback], PresetCaptureShortcuts = [] };
             var resolved = CaptureCommandLine.Resolve(new() { Schedule = new CaptureSchedule.Periodic(10, 3) }, settings);
             Equal(fallback.SaveDirectory, resolved.Settings.SaveDirectory);
             Equal("fallback.{ext}", resolved.Settings.FileNamePattern);
@@ -338,7 +338,7 @@ internal static partial class Program
         var output = new CapturePreset { Id = "initial-output-file", Name = "試験保存", FileNamePattern = pattern,
             SaveDirectory = Path.Combine(directory, "saved"), Destination = OutputDestination.File | OutputDestination.ExternalApp,
             ImageEditorId = application.Id, OpenFolderAfterSave = true };
-        return settings with { CapturePresets = [settings.CapturePresets.Single(p => p.IsDefault), output], ImageEditors = [.. settings.ImageEditors, application] };
+        return settings with { CapturePresets = [settings.CapturePresets.Single(p => p.IsDefault), output], PresetCaptureShortcuts = [], ImageEditors = [.. settings.ImageEditors, application] };
     }
 
     private static void Advance(CaptureReservation timer, TimerTestClock clock, int seconds, string? unavailable = null)
