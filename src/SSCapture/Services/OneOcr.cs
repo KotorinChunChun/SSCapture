@@ -89,8 +89,8 @@ internal static class OneOcr
     internal static Task<OcrResult> RecognizeAsync(Bitmap image, string configured, CancellationToken cancellationToken) =>
         RecognizeCoreAsync(image, configured, null, cancellationToken);
 
-    internal static Task<OcrResult> RecognizeForCopyAsync(Bitmap image, string configured, bool asTable, CancellationToken cancellationToken) =>
-        RecognizeCoreAsync(image, configured, asTable ? LayoutMode : TextMode, cancellationToken);
+    internal static Task<OcrResult> RecognizeForCopyAsync(Bitmap image, string configured, CancellationToken cancellationToken) =>
+        RecognizeCoreAsync(image, configured, LayoutMode, cancellationToken);
 
     private static async Task<OcrResult> RecognizeCoreAsync(Bitmap image, string configured, string? mode, CancellationToken cancellationToken)
     {
@@ -217,44 +217,95 @@ internal static class OneOcrNative
             Check(Bind<Create>("CreateOcrProcessOptions")(out options));
             if (forCopy) BindOptional<MaxLineCount>("OcrProcessOptionsSetMaxRecognitionLineCount")?.Invoke(options, 1000);
             double scale = Math.Min(1d, 10000d / Math.Max(source.Width, source.Height));
-            int width = Math.Max(1, (int)(source.Width * scale)), height = Math.Max(1, (int)(source.Height * scale));
-            var scaled = new Size(width, height);
-            using var pixels = new Bitmap(Math.Max(50, width), Math.Max(50, height), PixelFormat.Format32bppArgb);
-            using (var graphics = Graphics.FromImage(pixels)) { graphics.Clear(Color.White); graphics.DrawImage(source, new Rectangle(0, 0, width, height)); }
-            BitmapData data = pixels.LockBits(new Rectangle(Point.Empty, pixels.Size), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-            try
+            var original = RecognizeAtScale(source, scale);
+            if (!includeLayout) return original;
+            if (original.Lines.Length == 0 && (long)source.Width * source.Height <= 450_000 && Math.Max(source.Width, source.Height) <= 3000)
+                return RecognizeAtScale(source, 2);
+            if (original.Layout is not { } layout) return original;
+
+            var elapsed = Stopwatch.StartNew();
+            int attempts = 0;
+            for (int i = 0; i < layout.Length && attempts < 8 && elapsed.Elapsed.TotalSeconds < 4; i++)
             {
-                var image = new NativeImage { Type = 3, Width = pixels.Width, Height = pixels.Height, Stride = data.Stride, Data = data.Scan0 };
-                Check(Bind<Run>("RunOcrPipeline")(pipeline, ref image, options, out result));
-                Check(Bind<Count>("GetOcrLineCount")(result, out long count));
-                if (count is < 0 or > 10000) throw new IOException("OneOCRの認識行数が不正です。");
-                var lines = new List<string>((int)count);
-                var lineBox = includeLayout ? BindOptional<BoundingBox>("GetOcrLineBoundingBox") : null;
-                var wordCount = includeLayout ? BindOptional<Count>("GetOcrLineWordCount") : null;
-                var getWord = includeLayout ? BindOptional<Line>("GetOcrWord") : null;
-                var wordContent = includeLayout ? BindOptional<Content>("GetOcrWordContent") : null;
-                var wordBox = includeLayout ? BindOptional<BoundingBox>("GetOcrWordBoundingBox") : null;
-                List<OcrLineLayout?>? layout = lineBox is null ? null : new((int)count);
-                int remainingWords = 100_000;
-                var getLine = Bind<Line>("GetOcrLine");
-                var lineContent = Bind<Content>("GetOcrLineContent");
-                for (long index = 0; index < count; index++)
-                {
-                    Check(getLine(result, index, out long line));
-                    Check(lineContent(line, out nint text));
-                    string value = Marshal.PtrToStringUTF8(text) ?? "";
-                    if (!forCopy && string.IsNullOrWhiteSpace(value)) continue;
-                    lines.Add(value);
-                    if (layout is null) continue;
-                    var bounds = ReadBounds(line, lineBox!, pixels.Size, scaled, source.Size);
-                    var words = bounds is null || wordCount is null || getWord is null || wordContent is null || wordBox is null
-                        ? null : ReadWords(line, wordCount, getWord, wordContent, wordBox, pixels.Size,
-                            scaled, source.Size, ref remainingWords);
-                    layout.Add(bounds is { } box ? new OcrLineLayout(box, words) : null);
-                }
-                return new OcrResult(lines.ToArray()) { Layout = layout?.ToArray() };
+                if (layout[i] is not { Bounds.Height: <= 16, Words.Length: > 0 } first || Confidence(first) is < 0 or >= 0.90f) continue;
+                var box = first.Bounds;
+                var region = Rectangle.Intersect(new Rectangle(Point.Empty, source.Size), Rectangle.FromLTRB(
+                    (int)Math.Floor(box.Left) - 3, (int)Math.Floor(box.Top) - 3,
+                    (int)Math.Ceiling(box.Right) + 3, (int)Math.Ceiling(box.Bottom) + 3));
+                if (region.Width > 2000 || region.Width < region.Height * 2) continue;
+                attempts++;
+                using var crop = source.Clone(region, PixelFormat.Format32bppArgb);
+                var second = RecognizeAtScale(crop, 3);
+                if (second.Lines.Length != 1 || second.Lines[0] == original.Lines[i] || second.Layout?[0] is not { } reading
+                    || Confidence(reading) < Math.Max(0.60f, Confidence(first) - 0.10f)) continue;
+                var third = RecognizeAtScale(crop, 4);
+                if (third.Lines.Length != 1 || third.Lines[0] != second.Lines[0] || third.Layout?[0] is not { } confirmed
+                    || Confidence(confirmed) < Math.Max(0.60f, Confidence(first) - 0.10f)) continue;
+
+                // Each recognized word is local to the crop. TSV expects original capture coordinates.
+                OcrBounds Offset(OcrBounds position) => new(position.Left + region.X, position.Top + region.Y,
+                    position.Right + region.X, position.Bottom + region.Y);
+                var words = reading.Words!.Select(word => word with { Bounds = Offset(word.Bounds) }).ToArray();
+                original.Lines[i] = second.Lines[0];
+                layout[i] = new(Offset(reading.Bounds), words);
             }
-            finally { pixels.UnlockBits(data); }
+            return original;
+
+            OcrResult RecognizeAtScale(Bitmap input, double factor)
+            {
+                if (result != 0)
+                {
+                    Bind<Release>("ReleaseOcrResult")(result);
+                    result = 0;
+                }
+                int width = Math.Max(1, (int)(input.Width * factor)), height = Math.Max(1, (int)(input.Height * factor));
+                var scaled = new Size(width, height);
+                using var pixels = new Bitmap(Math.Max(50, width), Math.Max(50, height), PixelFormat.Format32bppArgb);
+                using (var graphics = Graphics.FromImage(pixels)) {
+                    graphics.Clear(Color.White);
+                    if (factor > 1)
+                    {
+                        graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
+                        graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+                    }
+                    graphics.DrawImage(input, new Rectangle(0, 0, width, height));
+                }
+                BitmapData data = pixels.LockBits(new Rectangle(Point.Empty, pixels.Size), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+                try
+                {
+                    var image = new NativeImage { Type = 3, Width = pixels.Width, Height = pixels.Height, Stride = data.Stride, Data = data.Scan0 };
+                    Check(Bind<Run>("RunOcrPipeline")(pipeline, ref image, options, out result));
+                    Check(Bind<Count>("GetOcrLineCount")(result, out long count));
+                    if (count is < 0 or > 10000) throw new IOException("OneOCRの認識行数が不正です。");
+                    var lines = new List<string>((int)count);
+                    var lineBox = includeLayout ? BindOptional<BoundingBox>("GetOcrLineBoundingBox") : null;
+                    var wordCount = includeLayout ? BindOptional<Count>("GetOcrLineWordCount") : null;
+                    var getWord = includeLayout ? BindOptional<Line>("GetOcrWord") : null;
+                    var wordContent = includeLayout ? BindOptional<Content>("GetOcrWordContent") : null;
+                    var confidence = includeLayout ? BindOptional<WordConfidence>("GetOcrWordConfidence") : null;
+                    var wordBox = includeLayout ? BindOptional<BoundingBox>("GetOcrWordBoundingBox") : null;
+                    List<OcrLineLayout?>? layout = lineBox is null ? null : new((int)count);
+                    int remainingWords = 100_000;
+                    var getLine = Bind<Line>("GetOcrLine");
+                    var lineContent = Bind<Content>("GetOcrLineContent");
+                    for (long index = 0; index < count; index++)
+                    {
+                        Check(getLine(result, index, out long line));
+                        Check(lineContent(line, out nint text));
+                        string value = Marshal.PtrToStringUTF8(text) ?? "";
+                        if (!forCopy && string.IsNullOrWhiteSpace(value)) continue;
+                        lines.Add(value);
+                        if (layout is null) continue;
+                        var bounds = ReadBounds(line, lineBox!, pixels.Size, scaled, input.Size);
+                        var words = bounds is null || wordCount is null || getWord is null || wordContent is null || wordBox is null
+                            ? null : ReadWords(line, wordCount, getWord, wordContent, wordBox, confidence, pixels.Size,
+                                scaled, input.Size, ref remainingWords);
+                        layout.Add(bounds is { } box ? new OcrLineLayout(box, words) : null);
+                    }
+                    return new OcrResult(lines.ToArray()) { Layout = layout?.ToArray() };
+                }
+                finally { pixels.UnlockBits(data); }
+            }
         }
         finally
         {
@@ -267,7 +318,13 @@ internal static class OneOcrNative
         }
     }
 
-    private static OcrWord[]? ReadWords(long line, Count count, Line get, Content content, BoundingBox box,
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate long WordConfidence(long word, out float value);
+
+    // The least certain word is useful for deciding whether one unclear character merits another reading.
+    private static float Confidence(OcrLineLayout line) =>
+        line.Words is { Length: > 0 } words ? words.Min(word => word.Confidence ?? -1f) : -1f;
+
+    private static OcrWord[]? ReadWords(long line, Count count, Line get, Content content, BoundingBox box, WordConfidence? confidence,
         Size pixels, Size scaled, Size source, ref int remaining)
     {
         if (count(line, out long length) != 0 || length < 1 || length > remaining) return null;
@@ -279,7 +336,9 @@ internal static class OneOcrNative
             string? value = Marshal.PtrToStringUTF8(text);
             var bounds = ReadBounds(word, box, pixels, scaled, source);
             if (string.IsNullOrWhiteSpace(value) || bounds is null) return null;
-            words[index] = new(value, bounds.Value);
+            float? score = confidence is not null && confidence(word, out float reading) == 0 && reading is >= 0 and <= 1
+                ? reading : null;
+            words[index] = new(value, bounds.Value, score);
         }
         return words;
     }

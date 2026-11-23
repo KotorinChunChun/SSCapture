@@ -11,7 +11,7 @@ internal readonly record struct OcrBounds(float Left, float Top, float Right, fl
         MathF.Max(Right, other.Right), MathF.Max(Bottom, other.Bottom));
 }
 
-internal sealed record OcrWord(string Text, OcrBounds Bounds);
+internal sealed record OcrWord(string Text, OcrBounds Bounds, float? Confidence = null);
 internal sealed record OcrLineLayout(OcrBounds Bounds, OcrWord[]? Words);
 
 internal enum OcrTableStatus { NotRequested, Ready, Empty, RecognitionFailed, PositionUnavailable, LowConfidence }
@@ -26,22 +26,22 @@ internal static class OcrCopyService
     internal static async Task<OcrCopyResult> RecognizeAsync(Bitmap image, string configured, CancellationToken token, bool asTable = true)
     {
         // Keep PNG encoding and engine discovery off the UI thread. The caller owns the image until completion.
-        var recognition = await Task.Run(() => OneOcr.RecognizeForCopyAsync(image, configured, asTable, token), token)
+        var recognition = await Task.Run(() => OneOcr.RecognizeForCopyAsync(image, configured, token), token)
             .ConfigureAwait(false);
         token.ThrowIfCancellationRequested();
-        var result = CreateCopyResult(recognition, asTable);
+        var result = CreateCopyResult(recognition, asTable, image);
         token.ThrowIfCancellationRequested();
         return result;
     }
 
-    internal static OcrCopyResult CreateCopyResult(OcrResult recognition, bool asTable)
+    internal static OcrCopyResult CreateCopyResult(OcrResult recognition, bool asTable, Bitmap? image = null)
     {
-        string text = recognition.Error is null ? string.Join(Environment.NewLine, recognition.Lines) : "";
-        var table = asTable ? ConvertTable(recognition) : new OcrTableResult(OcrTableStatus.NotRequested);
+        string text = recognition.Error is null ? (asTable ? string.Join(Environment.NewLine, recognition.Lines) : OcrParagraphs.Format(recognition)) : "";
+        var table = asTable ? ConvertTable(recognition, image) : new OcrTableResult(OcrTableStatus.NotRequested);
         return new(text, recognition.Error, recognition.Layout, table);
     }
 
-    internal static OcrTableResult ConvertTable(OcrResult recognition)
+    internal static OcrTableResult ConvertTable(OcrResult recognition, Bitmap? image = null)
     {
         if (recognition.Error is not null) return new(OcrTableStatus.RecognitionFailed);
         if (recognition.Lines.All(string.IsNullOrWhiteSpace)) return new(OcrTableStatus.Empty);
@@ -49,6 +49,7 @@ internal static class OcrCopyService
             return new(OcrTableStatus.PositionUnavailable);
 
         var cells = new List<Cell>();
+        var rules = image is null ? null : new OcrColumnRules(image, layout);
         for (int index = 0; index < layout.Length; index++)
         {
             string text = recognition.Lines[index].Trim();
@@ -56,13 +57,14 @@ internal static class OcrCopyService
             if (layout[index] is not { Bounds.IsValid: true, Words: { Length: > 0 } words }
                 || words.Any(word => !word.Bounds.IsValid || string.IsNullOrWhiteSpace(word.Text)))
                 return new(OcrTableStatus.PositionUnavailable);
-            if (!TryAddCells(text, words, cells)) return new(OcrTableStatus.LowConfidence);
+            if (!TryAddCells(text, words, cells, rules)) return new(OcrTableStatus.LowConfidence);
         }
 
-        return BuildTable(cells);
+        var table = BuildTable(cells, compact: false);
+        return table.Status == OcrTableStatus.LowConfidence ? BuildTable(cells, compact: true) : table;
     }
 
-    private static bool TryAddCells(string text, OcrWord[] recognized, List<Cell> cells)
+    private static bool TryAddCells(string text, OcrWord[] recognized, List<Cell> cells, OcrColumnRules? rules)
     {
         var words = recognized.OrderBy(word => word.Bounds.Left).ToArray();
         float height = MedianHeight(words.Select(word => word.Bounds));
@@ -75,7 +77,8 @@ internal static class OcrCopyService
         float right = words[0].Bounds.Right;
         for (int index = 1; index < words.Length; index++)
         {
-            if (words[index].Bounds.Left - right >= gap) starts.Add(index);
+            float next = words[index].Bounds.Left;
+            if (next - right >= gap || rules?.Between(right, next) == true) starts.Add(index);
             right = MathF.Max(right, words[index].Bounds.Right);
         }
         if (starts.Count == 1)
@@ -112,7 +115,7 @@ internal static class OcrCopyService
         return true;
     }
 
-    private static OcrTableResult BuildTable(List<Cell> cells)
+    private static OcrTableResult BuildTable(List<Cell> cells, bool compact)
     {
         float height = MedianHeight(cells.Select(cell => cell.Bounds));
         var positioned = new List<(Cell Cell, int Row)>(cells.Count);
@@ -137,11 +140,14 @@ internal static class OcrCopyService
         float right = float.NegativeInfinity;
         foreach (var (cell, row) in positioned.OrderBy(item => item.Cell.Bounds.Left))
         {
-            if (cell.Bounds.Left - right >= MathF.Max(2, height * 0.65f)) columns.Add(new());
+            if (cell.Bounds.Left - right >= (compact ? MathF.Max(1, height * 0.15f) : MathF.Max(2, height * 0.65f))) columns.Add(new());
             if (!columns[^1].TryAdd(row, cell.Text)) return new(OcrTableStatus.LowConfidence);
             right = MathF.Max(right, cell.Bounds.Right);
         }
         if (columns.Count < 2 || (long)rows * columns.Count > MaxTableCells) return new(OcrTableStatus.LowConfidence);
+
+        // Narrow whitespace alone is weak evidence. Each narrow column must recur on a different row.
+        if (compact && columns.Any(column => column.Count < 2)) return new(OcrTableStatus.LowConfidence);
 
         var rowCounts = new int[rows];
         foreach (var column in columns)

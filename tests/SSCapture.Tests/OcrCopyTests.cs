@@ -44,6 +44,49 @@ internal static partial class Program
             Equal(OcrTableStatus.Ready, result.Status);
             Equal(OcrRows("東京、  資料\t0012", "大阪\t1,250.00"), result.Tsv);
         });
+        Run("文字OCRは和文の折り返しをつなぎ、箇条書きと段落を分ける", () =>
+        {
+            string[] lines = ["画像を指定したファイ", "ルパスに保存します。", "● 日本語の認識結果をコピー", "します。", "新しい段落です。"];
+            var recognition = new OcrResult(lines)
+            {
+                Layout = [OcrCell(lines[0], 8, 0, 173).Layout, OcrCell(lines[1], 8, 19, 115).Layout,
+                    OcrCell(lines[2], 8, 42, 178).Layout, OcrCell(lines[3], 27, 61, 44).Layout,
+                    OcrCell(lines[4], 8, 101, 90).Layout]
+            };
+            Equal(OcrRows("画像を指定したファイルパスに保存します。", "・ 日本語の認識結果をコピーします。", "", lines[4]),
+                OcrCopyService.CreateCopyResult(recognition, false).Text);
+        });
+        Run("文字OCRは番号付き手順と異なる列を連結しない", () =>
+        {
+            string[] lines = ["1. 固定サイズで撮影", "2. 撮影した結果を保存", "別列の文章"];
+            var input = new OcrResult(lines)
+            {
+                Layout = [OcrCell(lines[0], 5, 6, 140).Layout, OcrCell(lines[1], 5, 25, 140).Layout,
+                    OcrCell(lines[2], 190, 44, 90).Layout]
+            };
+            Equal(OcrRows(lines), OcrCopyService.CreateCopyResult(input, false).Text);
+        });
+        Run("表OCRは別々に認識した近接列が複数行で揃えば復元する", () =>
+        {
+            var result = Table(OcrCell("項目", 5, 0, 31), OcrCell("個数", 40, 0, 31),
+                OcrCell("東京", 5, 24, 32), OcrCell("12", 43, 24, 24));
+            Equal(OcrRows("項目\t個数", "東京\t12"), result.Tsv);
+        });
+        Run("表OCRは狭い空白の縦罫線をセル境界として参照する", () =>
+        {
+            using var image = new Bitmap(90, 60);
+            using var g = Graphics.FromImage(image);
+            g.Clear(Color.White);
+            var recognition = new OcrResult(["商品 数量", "東京 12"])
+            {
+                Layout = [Row(5, "商品", "数量"), Row(31, "東京", "12")]
+            };
+            OcrLineLayout Row(int y, string a, string b) => new(new(4, y, 65, y + 15),
+                [new(a, new(4, y, 31, y + 15)), new(b, new(37, y, 65, y + 15))]);
+            Equal(OcrTableStatus.LowConfidence, OcrCopyService.ConvertTable(recognition, image).Status);
+            g.DrawLine(Pens.Gray, 34, 0, 34, 59);
+            Equal(OcrRows("商品\t数量", "東京\t12"), OcrCopyService.ConvertTable(recognition, image).Tsv);
+        });
         Run("表OCRは空の認識行を座標なしで扱える", () =>
         {
             var recognition = new OcrResult(["Name", "", "Count", "Alpha", "12"])
@@ -112,6 +155,28 @@ internal static partial class Program
 
     private static string OcrRows(params string[] lines) => string.Join(Environment.NewLine, lines);
 
+    private static bool VerifySmallJapaneseText(string configured)
+    {
+        string[] expected = ["撮影した画像から文字を認識します。", "設定画面に表の出力先を表示します。"];
+        foreach (int size in new[] { 10, 12, 14, 16 })
+        {
+            using var image = new Bitmap(430, 95);
+            using (var graphics = Graphics.FromImage(image))
+            using (var font = new Font("Meiryo", size, FontStyle.Regular, GraphicsUnit.Pixel))
+            {
+                graphics.Clear(Color.White);
+                graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                for (int i = 0; i < expected.Length; i++)
+                    graphics.DrawString(expected[i], font, Brushes.Black, 8, 5 + 28 * i);
+            }
+            var recognition = OneOcr.RecognizeForCopyAsync(image, configured, CancellationToken.None).GetAwaiter().GetResult();
+            bool match = recognition.Error is null && recognition.Lines.SequenceEqual(expected);
+            Console.WriteLine($"日本語の小文字 {size}px: {(match ? "一致" : "不一致")}");
+            if (!match) return false;
+        }
+        return true;
+    }
+
     internal static int RunOcrCopySmoke(string configured = "")
     {
         using var image = new Bitmap(660, 240);
@@ -131,7 +196,7 @@ internal static partial class Program
             || result.Table.Tsv != OcrRows("Item\tCount\tTotal", "Alpha\t12\t40", "Beta\t\t80")) return 1;
 
         var textOnly = OcrCopyService.RecognizeAsync(image, configured, CancellationToken.None, asTable: false).GetAwaiter().GetResult();
-        return textOnly.Error is null && textOnly.Layout is null && textOnly.Text == result.Text
-            && textOnly.Table.Status == OcrTableStatus.NotRequested ? 0 : 1;
+        return textOnly.Error is null && textOnly.Layout?.Length == result.Layout?.Length && textOnly.Text == result.Text
+            && textOnly.Table.Status == OcrTableStatus.NotRequested && VerifySmallJapaneseText(configured) ? 0 : 1;
     }
 }
