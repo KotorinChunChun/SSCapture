@@ -12,6 +12,9 @@ internal sealed partial class SessionController
     private Size controlDragThreshold;
     private CaptureControlTarget? startingControl;
     private Task? controlDragLookup;
+    private Dictionary<CaptureWindow, WindowCapturePreview>? controlDragPreviews;
+    private int previewedControlCount;
+    internal IReadOnlyList<WindowCaptureFrame> ControlDragFrames { get; private set; } = [];
     internal bool HasControlDrag => controlDrag is not null;
     internal int SelectedControlCount => controlDrag?.Selected.Count ?? 0;
     private Task? controlLookup;
@@ -121,6 +124,7 @@ internal sealed partial class SessionController
         controlRequest = null;
         controlCandidate = null;
         controlDrag = null;
+        ClearControlDragPreviews();
         startingControl = null;
         controlDragLookup = null;
         if (controlPress)
@@ -160,6 +164,7 @@ internal sealed partial class SessionController
             ResetTargetMargin();
         }
         controlDrag.Move(pointer, findWindow, startingControl);
+        UpdateControlDragPreviews(controlDrag);
         startingControl = null;
         if (controlDragLookup is not { IsCompleted: false } && controlDrag.NextWindow is not null)
             controlDragLookup = ResolveControlDragAsync(controlDrag);
@@ -185,6 +190,7 @@ internal sealed partial class SessionController
             catch (InvalidOperationException) { }
             if (completed || !ReferenceEquals(controlDrag, drag)) return;
             drag.SetLayout(window, observed, layout, SelectionMonitors);
+            UpdateControlDragPreviews(drag);
             RefreshOverlays();
         }
     }
@@ -210,7 +216,7 @@ internal sealed partial class SessionController
 
             var regions = targets.Select(target => target.Bounds).Distinct().ToArray();
             var group = new CaptureReplaySource.ControlGroup(targets, previewControl || UsesWindowSource);
-            CompleteSelection(new(regions.Aggregate(Rectangle.Union), null, Destination,
+            CompleteSelection(new(drag.SelectionBounds, null, Destination,
                 WindowTitle: $"コントロール {targets.Length} 件", Composite: new(Regions: regions), ReplaySource: group));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException)
@@ -223,12 +229,53 @@ internal sealed partial class SessionController
             {
                 confirmingControl = false;
                 controlDrag = null;
+                ClearControlDragPreviews();
                 controlDragLookup = null;
                 controlCandidate = null;
                 controlRequest = null;
                 RefreshOverlays();
             }
         }
+    }
+
+    private void UpdateControlDragPreviews(CaptureControlDrag drag)
+    {
+        if ((!previewControl && !UsesWindowSource) || previewedControlCount == drag.Selected.Count) return;
+        previewedControlCount = drag.Selected.Count;
+        var previews = controlDragPreviews ??= [];
+        foreach (var target in drag.Selected)
+        {
+            var window = target.Window;
+            if (previews.ContainsKey(window)) continue;
+            var preview = new WindowCapturePreview(window, OutputSettings.IncludeCursor, [window]);
+            previews.Add(window, preview);
+            _ = ShowControlDragFrameAsync(previews, preview);
+        }
+    }
+
+    private async Task ShowControlDragFrameAsync(Dictionary<CaptureWindow, WindowCapturePreview> previews, WindowCapturePreview pending)
+    {
+        try { await pending.Frame; }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException) { return; }
+        if (completed || !ReferenceEquals(controlDragPreviews, previews)) return;
+        ControlDragFrames = previews.Values.OrderByDescending(item => item.Target.ZOrder)
+            .Select(item => item.Frame).Where(frame => frame.IsCompletedSuccessfully).Select(frame => frame.Result).ToArray();
+        RefreshOverlays();
+    }
+
+    private Dictionary<CaptureWindow, WindowCapturePreview>? DetachControlDragPreviews()
+    {
+        var previews = controlDragPreviews;
+        controlDragPreviews = null;
+        previewedControlCount = 0;
+        ControlDragFrames = [];
+        return previews;
+    }
+
+    private void ClearControlDragPreviews()
+    {
+        if (DetachControlDragPreviews() is { } previews)
+            foreach (var preview in previews.Values) preview.Dispose();
     }
 
     private async void ConfirmControl(Point pointer)

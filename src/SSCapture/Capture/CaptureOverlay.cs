@@ -17,6 +17,7 @@ internal sealed class CaptureOverlay : Form
     private sealed record VisualState(DesktopSnapshot Snapshot, CaptureMode Mode, bool Dim, bool Highlight,
         Rectangle Selection, Rectangle Basis, Rectangle Target, WindowCaptureFrame? Preview, bool Valid, int Points, Rectangle Dimensions, string? DimensionsText,
         Rectangle Hint, string? HintText, string? Error, int TrailPoints, Rectangle TrailBounds, IReadOnlyList<Rectangle> DragHighlights,
+        IReadOnlyList<WindowCaptureFrame> ControlDragFrames,
         Rectangle Magnifier, Point MagnifierSample, Rectangle MagnifierSelection, bool MagnifierMarksOrigin,
         int MagnifierDotCount, int MagnifierZoom, bool Shared);
 
@@ -207,6 +208,14 @@ internal sealed class CaptureOverlay : Form
         if (!shared)
             foreach (Rectangle window in session.TargetDragHighlights)
                 DrawSnapshot(graphics, Rectangle.Intersect(Local(window), dirty));
+        foreach (var controlFrame in visual.ControlDragFrames)
+        {
+            Rectangle destination = Rectangle.Intersect(Local(controlFrame.Bounds), bright);
+            if (destination.Width <= 0 || destination.Height <= 0) continue;
+            Rectangle source = destination;
+            source.Offset(MonitorBounds.X - controlFrame.Bounds.X, MonitorBounds.Y - controlFrame.Bounds.Y);
+            graphics.DrawImage(controlFrame.Image, destination, source, GraphicsUnit.Pixel);
+        }
         DrawSelection(graphics, selection, Local(visual.Basis), dirty, shared);
         DrawTargetTrail(graphics, dirty);
         if (visual.DimensionsText is string dimensions)
@@ -269,6 +278,11 @@ internal sealed class CaptureOverlay : Form
         {
             if (old.Preview is not null) dirty.Union(Local(old.Target));
             if (next.Preview is not null) dirty.Union(Local(next.Target));
+        }
+        if (old.ControlDragFrames != next.ControlDragFrames || next.ControlDragFrames.Count > 0 && old.Target != next.Target)
+        {
+            dirty.Union(Local(old.Target));
+            dirty.Union(Local(next.Target));
         }
         if (old.DragHighlights != next.DragHighlights)
         {
@@ -335,7 +349,7 @@ internal sealed class CaptureOverlay : Form
         return new(session.Snapshot, session.Mode, session.DimCaptureBackground, session.HighlightWindow, selection, basis,
             session.HighlightForOverlay(MonitorBounds), session.PreviewFrame, session.FixedSelectionValid, session.Points.Count,
             dimensionsBounds, dimensions, hintBounds, hint, session.SelectionError, session.TargetDragPath.Count, session.TargetDragBounds,
-            session.TargetDragHighlights, lens.Bounds, lens.Bounds.IsEmpty ? Point.Empty : session.MagnifierSample,
+            session.TargetDragHighlights, session.ControlDragFrames, lens.Bounds, lens.Bounds.IsEmpty ? Point.Empty : session.MagnifierSample,
             lens.Bounds.IsEmpty ? Rectangle.Empty : session.MagnifierSelection,
             !lens.Bounds.IsEmpty && session.MagnifierMarksOrigin, dotCount, zoom, session.OutputSettings.ShareCapturePresentation);
     }

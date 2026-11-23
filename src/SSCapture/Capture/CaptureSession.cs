@@ -190,7 +190,7 @@ internal sealed partial class SessionController
     private bool HasWindowDrag => HasPointerPress && !desktopPress && HighlightWindow && gesture.HasDragged && targetDrag is not null;
     internal IReadOnlyList<Point> TargetDragPath => controlDrag?.Path ?? (HasWindowDrag ? targetDrag!.Path : []);
     internal Rectangle TargetDragBounds => controlDrag?.TrailBounds ?? (HasWindowDrag ? targetDrag!.TrailBounds : Rectangle.Empty);
-    internal IReadOnlyList<Rectangle> TargetDragHighlights => !DimCaptureBackground ? [] : controlDrag?.Highlights ?? (HasWindowDrag ? targetDrag!.BrightWindows : []);
+    internal IReadOnlyList<Rectangle> TargetDragHighlights => DimCaptureBackground && HasWindowDrag && !HasControlDrag ? targetDrag!.BrightWindows : [];
     internal bool PointerLabelsSuppressed => menuOpen || menuTransition;
     internal Point Pointer => gesture.RawCurrent;
     internal bool HighlightWindow => Mode == CaptureMode.Window;
@@ -203,9 +203,9 @@ internal sealed partial class SessionController
         : HasWindowDrag ? Rectangle.Empty : UsesWindowSource ? PreviewFrame?.Bounds ?? Rectangle.Empty
         : UsesClientWindowArea ? VisibleClientBounds()
         : HighlightWindow ? gesture.WindowAt(Pointer) : TwoPointSelection || Mode == CaptureMode.Scroll ? Rectangle.Empty : gesture.PressedWindow;
-    internal Rectangle HighlightForOverlay(Rectangle monitor) => SelectingControl ? HasControlDrag ? Rectangle.Empty : ControlBounds : MarginSelection is Rectangle adjusted ? adjusted : FreeDesktopDrag
+    internal Rectangle HighlightForOverlay(Rectangle monitor) => SelectingControl ? controlDrag?.SelectionBounds ?? ControlBounds : MarginSelection is Rectangle adjusted ? adjusted : FreeDesktopDrag
         ? targetDrag?.Monitors.Contains(monitor) == true ? monitor : Rectangle.Empty : HighlightedWindow;
-    internal Rectangle DisplaySelection => SelectingControl ? HasControlDrag ? Rectangle.Empty : ControlBounds
+    internal Rectangle DisplaySelection => SelectingControl ? controlDrag?.SelectionBounds ?? ControlBounds
         : UsesClientWindowArea && !SelectingDesktop ? HighlightedWindow : MarginSelection ??
             (SelectingDesktop || HasWindowDrag ? Rectangle.Empty : PreviewFrame?.Bounds ?? Selection);
 
@@ -1525,6 +1525,7 @@ internal sealed partial class SessionController
         using WindowCapturePreview? confirmedPreview = !clientOnly && useWindowSource && roots is null && target is not null && windowPreview?.Target == target
             ? windowPreview : null;
         if (confirmedPreview is not null) windowPreview = null;
+        var confirmedControlPreviews = controlGroup is { Isolated: true } ? DetachControlDragPreviews() : null;
         Bitmap? result = null;
         Services.CaptureMetadata? metadata = null;
         try
@@ -1566,6 +1567,7 @@ internal sealed partial class SessionController
                 {
                     var capture = await IsolatedWindowCapture.TakeControlsAsync(controlGroup.Targets,
                         OutputSettings with { DefaultDestination = Destination }, Snapshot.Context?.FocusedElement,
+                        takeFrame: confirmedControlPreviews is null ? null : TakeControlFrameAsync,
                         takeBackground: OutputSettings.FreezeFrame || options.Intent == CaptureIntent.Recording
                             ? bounds => CaptureGeometry.Crop(Snapshot.Image, Snapshot.Bounds, bounds, minimumSize: 1)
                                 ?? throw new InvalidOperationException("選択したコントロールが開始時の画面範囲にありません。")
@@ -1624,7 +1626,23 @@ internal sealed partial class SessionController
             result = null;
         }
         catch (Exception ex) { completion.TrySetException(ex); }
-        finally { result?.Dispose(); Snapshot.Dispose(); }
+        finally
+        {
+            if (confirmedControlPreviews is not null)
+                foreach (var preview in confirmedControlPreviews.Values) preview.Dispose();
+            result?.Dispose();
+            Snapshot.Dispose();
+        }
+
+        async Task<WindowCaptureFrame> TakeControlFrameAsync(CaptureWindow window, bool includeCursor, CancellationToken token)
+        {
+            if (confirmedControlPreviews!.TryGetValue(window, out var preview) && preview.IncludeCursor == includeCursor)
+            {
+                try { return await preview.TakeAsync(); }
+                catch (Exception ex) when (IsolatedWindowCapture.IsCaptureFailure(ex)) { }
+            }
+            return await IsolatedWindowCapture.TakeFrameAsync(window, includeCursor, token);
+        }
     }
 
     private void RestartAfterDelay(CaptureStartDelay delay)

@@ -8,6 +8,7 @@ internal sealed class CaptureHistory(int capacity = 20, long byteLimit = 256L * 
 {
     internal const int MaximumRetentionDays = 365;
     private readonly List<(HistoryEntry Entry, Bitmap Image, long Bytes)> items = [];
+    private readonly HashSet<Guid> savedEntries = [];
     private readonly object gate = new();
     private long usedBytes;
     private int retentionDays;
@@ -30,13 +31,16 @@ internal sealed class CaptureHistory(int capacity = 20, long byteLimit = 256L * 
             if (persistent && restore)
                 TryStorage(Restore);
             if ((wasPersistent || restore) && !persistent && storage is not null)
+            {
                 TryStorage(storage.Clear);
+                savedEntries.Clear();
+            }
             if (!keep) Clear();
             else
             {
                 Prune();
                 if (persistent && !wasPersistent && !restore)
-                    foreach (var item in items) TryStorage(() => storage!.Save(item.Entry, item.Image));
+                    foreach (var item in items) Save(item.Entry, item.Image);
             }
         }
     }
@@ -58,7 +62,7 @@ internal sealed class CaptureHistory(int capacity = 20, long byteLimit = 256L * 
             items.Insert(index, (entry, owned, bytes));
             usedBytes += bytes;
             while (items.Count > capacity || usedBytes > byteLimit) RemoveAt(items.Count - 1);
-            if (persistent && index < items.Count) TryStorage(() => storage!.Save(entry, owned));
+            if (persistent && index < items.Count) Save(entry, owned);
         }
     }
     internal Bitmap? CloneImage(Guid id)
@@ -74,6 +78,17 @@ internal sealed class CaptureHistory(int capacity = 20, long byteLimit = 256L * 
     internal HistoryEntry? Find(Guid id)
     {
         lock (gate) { Prune(); return items.FirstOrDefault(item => item.Entry.Id == id).Entry; }
+    }
+
+    internal (bool Stored, DateTimeOffset? ExpiresAt) RetentionFor(HistoryEntry entry)
+    {
+        lock (gate)
+        {
+            var period = TimeSpan.FromDays(retentionDays);
+            var expiresAt = retentionDays > 0 && entry.CapturedAt.UtcTicks <= DateTimeOffset.MaxValue.UtcTicks - period.Ticks
+                ? entry.CapturedAt.ToUniversalTime() + period : (DateTimeOffset?)null;
+            return (savedEntries.Contains(entry.Id), expiresAt);
+        }
     }
 
     internal void UpdateSavedPath(string previous, string? current)
@@ -140,22 +155,32 @@ internal sealed class CaptureHistory(int capacity = 20, long byteLimit = 256L * 
             if (storage.ReadImage(entry, byteLimit) is { } image)
             {
                 items.Add((entry, image, bytes));
+                savedEntries.Add(entry.Id);
                 usedBytes += bytes;
             }
             else storage.Remove(entry.Id);
         }
     }
 
-    private void TryStorage(Action action)
+    private void Save(HistoryEntry entry, Bitmap image)
     {
-        try { action(); }
+        if (TryStorage(() => storage!.Save(entry, image))) savedEntries.Add(entry.Id);
+    }
+
+    private bool TryStorage(Action action)
+    {
+        try { action(); return true; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.ExternalException)
-        { onStorageError?.Invoke("撮影履歴をディスク上で更新できません: " + ex.Message); }
+        {
+            onStorageError?.Invoke("撮影履歴をディスク上で更新できません: " + ex.Message);
+            return false;
+        }
     }
 
     private void RemoveAt(int index)
     {
         var item = items[index]; items.RemoveAt(index); usedBytes -= item.Bytes; item.Image.Dispose();
+        savedEntries.Remove(item.Entry.Id);
         if (persistent) TryStorage(() => storage!.Remove(item.Entry.Id));
     }
 
@@ -163,6 +188,7 @@ internal sealed class CaptureHistory(int capacity = 20, long byteLimit = 256L * 
     {
         foreach (var item in items) item.Image.Dispose();
         items.Clear();
+        savedEntries.Clear();
         usedBytes = 0;
     }
 

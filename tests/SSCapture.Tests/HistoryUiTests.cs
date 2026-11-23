@@ -58,6 +58,13 @@ internal static partial class Program
                     Equal(original + ".moved", after.Find(id)!.SavedPath);
                     using var copy = after.CloneImage(id);
                     Equal(Color.Blue.ToArgb(), copy!.GetPixel(0, 0).ToArgb());
+                    Equal((true, (DateTimeOffset?)clock.Now.AddDays(1)), after.RetentionFor(after.Find(id)!));
+                    using (var form = new HistoryForm(after, _ => Task.FromResult("コピー完了"), () => [], (_, _) => Task.FromResult("編集完了")))
+                    {
+                        var details = form.Controls.Find("HistoryDetails", true).Single();
+                        Check(details.Text.Contains("履歴をディスクに保存済み") && details.Text.Contains("保持期限")
+                            && details.Text.Contains(original + ".moved"), "保存状態、期限、撮影ファイルが表示されていない");
+                    }
                     Equal(2, storage.ReadEntries().Count);
                     clock.Now += TimeSpan.FromDays(1);
                     Equal(true, after.Prune());
@@ -65,6 +72,7 @@ internal static partial class Program
                     after.Configure(true, 2, false);
                     Equal(0, storage.ReadEntries().Count);
                     Equal(1, after.Entries.Count);
+                    Equal(false, after.RetentionFor(after.Entries[0]).Stored);
                     after.Configure(true, 2, true);
                     after.Clear();
                     Equal(0, storage.ReadEntries().Count);

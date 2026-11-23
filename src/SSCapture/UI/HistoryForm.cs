@@ -59,7 +59,7 @@ internal sealed class HistoryForm : Form
             ColumnCount = 1, RowCount = 2, Margin = Padding.Empty };
         preview.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         preview.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        preview.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+        preview.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
         body.Controls.Add(preview, 1, 0);
         picture = new PictureBox { Name = "HistoryPreview", Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom,
             BackColor = Color.FromArgb(224, 229, 234), BorderStyle = BorderStyle.FixedSingle, Margin = Padding.Empty };
@@ -164,7 +164,7 @@ internal sealed class HistoryForm : Form
             if (list.SelectedItems.Count == 0 && list.Items.Count > 0) list.SetSelected(0, true);
         }
         finally { list.EndUpdate(); refreshing = false; }
-        SetStatus(list.Items.Count == 0 ? "撮影履歴はありません。" : $"起動中の履歴 {list.Items.Count}枚");
+        SetStatus(list.Items.Count == 0 ? "撮影履歴はありません。" : $"撮影履歴 {list.Items.Count}枚");
         LoadPreview();
     }
 
@@ -186,8 +186,11 @@ internal sealed class HistoryForm : Form
         else
         {
             HistoryEntry entry = selected.Entry;
+            var (stored, expiresAt) = history.RetentionFor(entry);
+            string expiration = expiresAt is { } until ? $"　保持期限 {until.ToLocalTime():yyyy/MM/dd HH:mm:ss}" : "　保持期限なし";
             details.Text = $"{entry.CapturedAt:yyyy/MM/dd HH:mm:ss}　{entry.Size.Width} × {entry.Size.Height} px\n"
-                + (entry.SavedPath is null ? "メモリー内のみ" : "保存済み: " + entry.SavedPath);
+                + (stored ? "履歴をディスクに保存済み" : "履歴はメモリー内のみ") + expiration
+                + (entry.SavedPath is null ? "" : "\n撮影ファイル " + entry.SavedPath);
         }
         UpdateButtons();
     }

@@ -78,6 +78,7 @@ internal static partial class Program
             drag.Move(new(20, 10), Find);
             Check(drag.Selected.Select(target => target.Bounds).ToHashSet().SetEquals([thin, last]), "通過対象が抜けたか余分な対象を含めた");
             Equal(2, drag.Selected.Count);
+            Equal(Rectangle.Union(thin, last), drag.SelectionBounds);
             Equal(new Rectangle(-60, 10, 111, 1), drag.TrailBounds);
 
             static ControlLayoutEntry Entry(Rectangle r) => new(new(PixelBounds.From(r), null), PixelBounds.From(r), true, 0);

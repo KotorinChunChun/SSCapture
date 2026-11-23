@@ -109,7 +109,7 @@ internal static class IsolatedWindowCapture
         catch { result.Dispose(); throw; }
     }
 
-    private static bool IsCaptureFailure(Exception ex) => ex is InvalidOperationException or TimeoutException or NotSupportedException or UnauthorizedAccessException;
+    internal static bool IsCaptureFailure(Exception ex) => ex is InvalidOperationException or TimeoutException or NotSupportedException or UnauthorizedAccessException;
 
     internal static async Task<WindowCaptureFrame> TakeClientFrameAsync(CaptureWindow target, bool includeCursor,
         CancellationToken cancellationToken = default)

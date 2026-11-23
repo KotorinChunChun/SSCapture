@@ -17,7 +17,7 @@ internal sealed class CaptureControlDrag(Point start)
     private readonly HashSet<CaptureControlTarget> selected = [];
     internal IReadOnlyList<Point> Path => path;
     internal IReadOnlyCollection<CaptureControlTarget> Selected => selected;
-    internal IReadOnlyList<Rectangle> Highlights { get; private set; } = [];
+    internal Rectangle SelectionBounds { get; private set; }
     internal Rectangle TrailBounds { get; private set; } = new(start, new Size(1, 1));
     internal CaptureWindow? NextWindow => windows.FirstOrDefault(pair => pair.Value.Layout is null).Key;
     internal bool LayoutUnavailable { get; private set; }
@@ -71,6 +71,7 @@ internal sealed class CaptureControlDrag(Point start)
 
     private void Add(CaptureControlTarget target)
     {
-        if (selected.Add(target)) Highlights = selected.Select(control => control.Bounds).Distinct().ToArray();
+        if (selected.Add(target))
+            SelectionBounds = SelectionBounds.IsEmpty ? target.Bounds : Rectangle.Union(SelectionBounds, target.Bounds);
     }
 }

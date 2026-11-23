@@ -163,10 +163,14 @@ internal static partial class Program
                     session.MouseDown(overlay, MouseButtons.Left, start, Keys.Control);
                     session.Move(true, end, Keys.Control);
                     await WaitUntil(() => session.SelectedControlCount == 3, "実UIAでドラッグが通過した3件を取得できません。");
+                    Equal(Rectangle.Union(a, c), session.DisplaySelection);
+                    Equal(session.DisplaySelection, session.HighlightForOverlay(area));
+                    await WaitUntil(() => session.ControlDragFrames.Count == 1, "選択枠のWGCプレビューが表示できません。");
                     Check(session.TargetDragPath.SequenceEqual([start, end]), "ポインタの軌跡が一致しません。");
                     session.AbortSelection();
                     Check(!session.HasControlDrag && session.SelectedControlCount == 0 && !session.Completion.IsCompleted,
                         "取消後も軌跡または選択が残りました。");
+                    Equal(0, session.ControlDragFrames.Count);
                     session.MouseUp(MouseButtons.Left, end, Keys.None);
                     session.Move(true, start, Keys.None);
                     session.MouseDown(overlay, MouseButtons.Left, start, Keys.Control);
