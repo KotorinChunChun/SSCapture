@@ -48,6 +48,9 @@ internal static class OcrCopyService
         if (recognition.Layout is not { } layout || layout.Length != recognition.Lines.Length)
             return new(OcrTableStatus.PositionUnavailable);
 
+        if (image is not null && OcrRuledTable.Read(image, recognition.Lines, layout, MaxTableCells) is string ruled)
+            return new(OcrTableStatus.Ready, ruled);
+
         var cells = new List<Cell>();
         var rules = image is null ? null : new OcrColumnRules(image, layout);
         for (int index = 0; index < layout.Length; index++)

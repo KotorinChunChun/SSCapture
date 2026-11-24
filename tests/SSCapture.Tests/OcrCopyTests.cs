@@ -6,6 +6,21 @@ internal static partial class Program
 {
     private static void OcrCopyTests()
     {
+        Run("表OCRは薄い格子の1行を左揃え・空セル・右揃えの3列として復元する", () =>
+        {
+            using var image = new Bitmap(181, 31);
+            using (var g = Graphics.FromImage(image))
+            {
+                g.Clear(Color.White);
+                using var pen = new Pen(Color.Gainsboro);
+                foreach (int x in new[] { 0, 60, 120, 180 }) g.DrawLine(pen, x, 0, x, 30);
+                g.DrawLine(pen, 0, 0, 180, 0);
+                g.DrawLine(pen, 0, 30, 180, 30);
+            }
+            var row = new OcrResult(["東京 1250"]) { Layout = [new(new(4, 8, 177, 22),
+                [new("東京", new(4, 8, 30, 22)), new("1250", new(142, 8, 177, 22))])] };
+            Equal("東京\t\t1250", OcrCopyService.ConvertTable(row, image).Tsv);
+        });
         Run("文字OCRは座標の有無にかかわらず改行・空行・空白・全行を保つ", () =>
         {
             string[] lines = ["  東 京  ", "", "資料  0012", "4行目", "5行目"];
@@ -17,6 +32,20 @@ internal static partial class Program
             Equal(text.Text, table.Text);
             Equal(OcrTableStatus.PositionUnavailable, table.Table.Status);
             Check(table.Table.Tsv is null && table.Error is null, "座標なしでも文字を使える");
+        });
+        Run("表OCRは格子の外の余白をセルに含めず内側の空列を保つ", () =>
+        {
+            using var image = new Bitmap(196, 86);
+            using (var g = Graphics.FromImage(image))
+            {
+                g.Clear(Color.White);
+                foreach (int x in new[] { 7, 67, 127, 187 }) g.DrawLine(Pens.LightGray, x, 5, x, 80);
+                foreach (int y in new[] { 5, 42, 80 }) g.DrawLine(Pens.LightGray, 7, y, 187, y);
+            }
+            var recognition = new OcrResult(["東京", "1250", "大阪", "80"]) { Layout =
+                [OcrCell("東京", 10, 14).Layout, OcrCell("1250", 153, 14).Layout,
+                 OcrCell("大阪", 10, 51).Layout, OcrCell("80", 164, 51).Layout] };
+            Equal(OcrRows("東京\t\t1250", "大阪\t\t80"), OcrCopyService.ConvertTable(recognition, image).Tsv);
         });
         Run("表OCRは座標順に並べ、先頭・中間・末尾の空セルを保つ", () =>
         {
@@ -154,6 +183,15 @@ internal static partial class Program
     }
 
     private static string OcrRows(params string[] lines) => string.Join(Environment.NewLine, lines);
+
+    internal static int CheckOcrTableImage(string imagePath, string expectedTsv)
+    {
+        using var image = new Bitmap(imagePath);
+        var result = OcrCopyService.RecognizeAsync(image, "", CancellationToken.None).GetAwaiter().GetResult();
+        bool match = result.Table.Tsv?.ReplaceLineEndings("\n") == File.ReadAllText(expectedTsv).ReplaceLineEndings("\n");
+        Console.WriteLine($"表OCR: {result.Table.Status}, TSV一致: {match}, OCRエラー: {result.Error}");
+        return match ? 0 : 1;
+    }
 
     private static bool VerifySmallJapaneseText(string configured)
     {

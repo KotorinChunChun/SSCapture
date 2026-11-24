@@ -105,6 +105,8 @@ internal static partial class Program
         if (args.Contains("--capture-target-toast-smoke")) return RunCaptureTargetToastSmoke();
         if (args.Contains("--ocr-smoke")) return RunOcrSmoke();
         if (args is ["--ocr-copy-smoke"]) return RunOcrCopySmoke();
+        if (args is ["--ocr-table-check", var imagePath, var expectedTsv])
+            return CheckOcrTableImage(imagePath, expectedTsv);
         if (args is ["--ocr-copy-smoke", var oneOcrDirectory]) return RunOcrCopySmoke(oneOcrDirectory);
         if (args.Contains("--ocr-ui-preview")) return OcrPreview();
         if (args.Contains("--display-routing-smoke")) return DisplayRoutingSmoke();
