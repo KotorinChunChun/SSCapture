@@ -98,10 +98,20 @@ internal sealed class CaptureFeedback : IDisposable
 
     internal void Notify(CaptureDelivery result, AppSettings settings, Action? retryOutput = null)
     {
-        if (disposed || (!result.HasSuccess && !result.HasFailure)) { result.NotificationImage?.Dispose(); return; }
-        if (result.Intent == CaptureIntent.Screenshot)
+        RememberScreenshot(result);
+        ShowDelivery(result, settings, retryOutput);
+    }
+
+    internal void RememberScreenshot(CaptureDelivery result)
+    {
+        if (!disposed && !result.IsHistoryAction && result.Intent == CaptureIntent.Screenshot && (result.HasSuccess || result.HasFailure))
             previousScreenshot = new(result.Intent, result.Completed, result.Failed, result.FolderOpenFailed,
                 CaptureBounds: result.CaptureBounds, CaptureDescription: result.CaptureDescription, MetadataFailed: result.MetadataFailed);
+    }
+
+    internal void ShowDelivery(CaptureDelivery result, AppSettings settings, Action? retryOutput = null)
+    {
+        if (disposed || (!result.HasSuccess && !result.HasFailure)) { result.NotificationImage?.Dispose(); return; }
         Show(result, settings, retryOutput, reference: false);
     }
 

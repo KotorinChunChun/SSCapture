@@ -41,8 +41,7 @@ internal sealed class CursorSnapshot : IDisposable
         SafeIconHandle? ownedIcon = new(CopyIcon(cursor.Cursor));
         try
         {
-            if (ownedIcon.IsInvalid || !GetPhysicalCursorPos(out NativePoint position)) return null;
-            return FromOwnedIcon(ref ownedIcon, new Point(position.X, position.Y));
+            return ownedIcon.IsInvalid ? null : FromOwnedIcon(ref ownedIcon, new Point(cursor.Position.X, cursor.Position.Y));
         }
         finally { ownedIcon?.Dispose(); }
     }
@@ -187,9 +186,6 @@ internal sealed class CursorSnapshot : IDisposable
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetCursorInfo(ref NativeCursorInfo info);
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetPhysicalCursorPos(out NativePoint point);
     [DllImport("user32.dll")]
     private static extern nint CopyIcon(nint icon);
     [DllImport("user32.dll")]

@@ -25,9 +25,8 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     private OutputDestination currentDestination;
     private bool dispatchingCommand;
     private CaptureMode currentMode;
-    private ToolStripMenuItem? selectionMethod, selectDrag, selectTwoClicks, magnifier, sharePresentation, shortcut;
+    private ToolStripMenuItem? selectionMethod, selectDrag, selectTwoClicks, magnifier, sharePresentation;
     private ToolStripMenuItem? windowCrop, presetCrop, noCrop;
-    private string? shortcutControlName;
 
     internal event Action? CommandInvoking;
 
@@ -57,7 +56,7 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         int defaultPadding = 0, Action<int>? changePadding = null, IReadOnlyList<CapturePreset>? presets = null, Action<CapturePreset>? applyPreset = null,
         IReadOnlyList<ExternalApplication>? applications = null, string selectedApplication = "", Action<string>? changeApplication = null,
         IReadOnlyList<SavedRegion>? inputPresets = null, Action<SavedRegion>? applyInputPreset = null, CaptureMenuEditing? editing = null,
-        Action<bool>? changeWindowSource = null, Action<CaptureSettingsDestination, string?>? openSettingsLink = null, bool allowScroll = true, Action<CaptureStartDelay>? restartAfterDelay = null)
+        Action<bool>? changeWindowSource = null, bool allowScroll = true, Action<CaptureStartDelay>? restartAfterDelay = null)
     {
         this.cancel = cancel;
         Font = menuFont;
@@ -170,25 +169,8 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
         if (inputPresetsMenu.DropDownItems.Count == 0) EmptyHint(inputPresetsMenu);
         if (outputPresetsMenu.DropDownItems.Count == 0) EmptyHint(outputPresetsMenu);
         Items.Add(new ToolStripSeparator());
-        if (openSettingsLink is null)
-            Item("設定", "OpenSettings", openSettings, Items);
-        else
-        {
-            var settings = Menu("設定", "CaptureSettingsMenu", Items);
-            settings.ToolTipText = "撮影を終了して設定を開きます。";
-            SettingsItem("設定を開く", "OpenSettings", openSettings);
-            SettingsItem("選択中の入力プリセット", "OpenInputPresetSettings", () => openSettingsLink(CaptureSettingsDestination.InputPreset, null));
-            SettingsItem("選択中の出力プリセット", "OpenOutputPresetSettings", () => openSettingsLink(CaptureSettingsDestination.OutputPreset, null));
-            shortcut = SettingsItem("ショートカット", "OpenShortcutSettings", () => openSettingsLink(CaptureSettingsDestination.Shortcut, shortcutControlName));
-
-            ToolStripMenuItem SettingsItem(string text, string name, Action action)
-            {
-                var item = Item(text, name, action, settings.DropDownItems);
-                item.ToolTipText = settings.ToolTipText;
-                return item;
-            }
-        }
-        Item("撮影をキャンセル", "CancelCapture", cancel, Items);
+        Item("設定", "OpenSettings", openSettings, Items).ToolTipText = "撮影を終了して設定を開きます。";
+        Item("撮影をキャンセル", "CancelCapture", cancel, Items).ShortcutKeyDisplayString = KeyDisplay.Key(Keys.Escape);
         SetMode(mode); SetRatio(CaptureAspectRatio.Free); SetApplication(selectedApplication); SetDestination(selected);
         if (editing is not null) UpdateEditing(editing.Settings, editing.Size, editing.Anchor, editing.Limited);
     }
@@ -262,13 +244,6 @@ internal sealed class CaptureContextMenu : ContextMenuStrip
     {
         if (magnifier is not null) magnifier.Checked = showMagnifier;
         if (sharePresentation is not null) sharePresentation.Checked = shareCapturePresentation;
-    }
-
-    internal void SetControlSelectionShortcut(string shortcutLabel, string controlName)
-    {
-        if (shortcut is null) return;
-        shortcut.Text = $"コントロール選択キー（{shortcutLabel}）";
-        shortcutControlName = controlName;
     }
 
     internal void AddWindowCropOptions(Action usePreset, Action disable)

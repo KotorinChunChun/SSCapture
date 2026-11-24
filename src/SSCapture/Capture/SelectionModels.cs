@@ -3,14 +3,6 @@ namespace SSCapture.Capture;
 internal enum CaptureSelectionMethod { Drag, TwoClicks }
 internal enum CaptureStartDelay { None = 0, ThreeSeconds = 3, FiveSeconds = 5, TenSeconds = 10 }
 
-internal static class CaptureDelay
-{
-    internal static string Label(CaptureStartDelay delay) => delay == CaptureStartDelay.None ? "待ち時間なし" : $"{(int)delay}秒遅延";
-
-    internal static Task WaitAsync(CaptureStartDelay delay, Func<TimeSpan, Task>? wait = null) =>
-        delay == CaptureStartDelay.None ? Task.CompletedTask : (wait ?? Task.Delay)(TimeSpan.FromSeconds((int)delay));
-}
-
 internal sealed record CaptureRestartState(bool UseFixedCoordinates, bool ExclusiveWindow,
     CaptureAspectRatio AspectRatio, int? TemporaryPadding)
 {

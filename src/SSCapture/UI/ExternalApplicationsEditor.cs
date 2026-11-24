@@ -5,9 +5,9 @@ namespace SSCapture.UI;
 internal sealed class ExternalApplicationsEditor : UserControl
 {
     private readonly List<ExternalApplication> applications;
-    private readonly ComboBox selected;
     private const int VisibleRows = 6;
     private readonly DataGridView list;
+    private readonly Button defaultButton, duplicate, delete;
     private readonly TextBox appName;
     internal TextBox Executable { get; }
     internal TextBox Arguments { get; }
@@ -17,8 +17,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
     private readonly ContextMenuStrip newMenu = new();
     private readonly ToolTip argumentTips = new() { AutoPopDelay = 25000, ShowAlways = true };
     internal ExternalApplication[] Applications => applications.ToArray();
-    internal string SelectedId => (selected.SelectedItem as ExternalApplication)?.Id ?? "";
-    internal ExternalApplication? SelectedApplication => selected.SelectedItem as ExternalApplication;
+    internal string SelectedId { get; private set; } = "";
     private ExternalApplication? EditingApplication => list.SelectedRows.Count == 1
         ? list.SelectedRows[0].Tag as ExternalApplication : null;
     private bool refreshing;
@@ -27,10 +26,11 @@ internal sealed class ExternalApplicationsEditor : UserControl
     internal event Action<string>? SelectedChanged;
     internal void SelectApplication(string id)
     {
-        refreshing = true;
-        try { selected.SelectedIndex = applications.FindIndex(a => a.Id == id) + 1; }
-        finally { refreshing = false; }
+        UpdateDefaultId(id);
+        RefreshUsage();
     }
+
+    private void UpdateDefaultId(string id) => SelectedId = applications.Any(app => app.Id == id) ? id : "";
 
     internal ExternalApplicationsEditor(CaptureIntent intent, ExternalApplication[] apps, string selectedId, string legacyPath,
         string legacyArgs, IReadOnlyList<EditorPreset> examples, Func<(IReadOnlyList<CapturePreset> Presets, string NotificationId)> readUsage,
@@ -49,17 +49,11 @@ internal sealed class ExternalApplicationsEditor : UserControl
         }
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 7 };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (int row = 0; row < 5; row++) root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, SettingsEditorActions.Height));
+        for (int row = 0; row < 3; row++) root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, SettingsEditorActions.Height)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         Controls.Add(root);
-        selected = new ComboBox { Name = prefix + "SelectedEditor", DropDownStyle = ComboBoxStyle.DropDownList };
-        Add("既定の出力プリセットのアプリ", selected, 0);
-        selected.SelectedIndexChanged += (_, _) =>
-        {
-            if (refreshing) return;
-            SelectedChanged?.Invoke(SelectedId);
-            RefreshUsage();
-        };
         list = new DataGridView
         {
             Name = prefix + "EditorList", Dock = DockStyle.Fill, ReadOnly = true, MultiSelect = false,
@@ -71,7 +65,11 @@ internal sealed class ExternalApplicationsEditor : UserControl
         };
         list.Columns.AddRange(Column("ApplicationName", "アプリ名", 25), Column("Notification", "通知", 18),
             Column("OutputPresets", "出力プリセット", 57));
-        root.Controls.Add(list, 0, 1); root.SetColumnSpan(list, 2);
+        root.Controls.Add(list, 0, 0); root.SetColumnSpan(list, 2);
+        defaultButton = SettingsEditorActions.CreateDefaultButton(prefix + "EditorDefault", ChangeDefaultApplication);
+        defaultButton.Dock = DockStyle.Left;
+        defaultButton.Width = 160;
+        root.Controls.Add(defaultButton, 0, 1); root.SetColumnSpan(defaultButton, 2);
         UpdateListHeight();
         FontChanged += (_, _) => UpdateListHeight();
         DpiChangedAfterParent += (_, _) => UpdateListHeight();
@@ -106,7 +104,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
             }
         };
         newButton.Click += (_, _) => newMenu.Show(newButton, 0, newButton.Height);
-        var duplicate = SettingsEditorActions.CreateButton("複製", prefix + "EditorDuplicate", () =>
+        duplicate = SettingsEditorActions.CreateButton("複製", prefix + "EditorDuplicate", () =>
         {
             if (EditingApplication is null) return;
             string name = PresetSettings.UniqueName(appName.Text.Trim() + "のコピー", applications.Select(app => app.Name));
@@ -115,7 +113,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
             appName.Select();
         });
         var store = SettingsEditorActions.CreateButton("保存", prefix + "EditorStore", () => Edit(Store), ButtonRole.Primary);
-        var delete = SettingsEditorActions.CreateButton("削除", prefix + "EditorDelete", () => Edit(Delete), ButtonRole.Danger);
+        delete = SettingsEditorActions.CreateButton("削除", prefix + "EditorDelete", () => Edit(Delete), ButtonRole.Danger);
         var buttons = SettingsEditorActions.CreateRow(prefix + "EditorActions", newButton, duplicate, store, delete);
         root.Controls.Add(buttons, 0, 5);
         root.SetColumnSpan(buttons, 2);
@@ -126,14 +124,13 @@ internal sealed class ExternalApplicationsEditor : UserControl
         {
             if (refreshing) return;
             var app = EditingApplication;
-            duplicate.Enabled = delete.Enabled = app is not null;
+            UpdateSelectionActions(app);
             if (app is null) return;
             appName.Text = app.Name;
             SetLaunch(app.Launch, app.Executable, app.Arguments);
         };
         Refresh(selectedId);
-        if (applications.Count > 0) SelectRow(applications[Math.Max(0, applications.FindIndex(a => a.Id == selectedId))].Id);
-        duplicate.Enabled = delete.Enabled = EditingApplication is not null;
+        if (!SelectRow(selectedId)) SelectRow(applications.FirstOrDefault()?.Id);
 
         static DataGridViewTextBoxColumn Column(string name, string heading, float fillWeight) =>
             new() { Name = name, HeaderText = heading, FillWeight = fillWeight, SortMode = DataGridViewColumnSortMode.NotSortable };
@@ -144,7 +141,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
             list.RowTemplate.Height = rowHeight;
             foreach (DataGridViewRow row in list.Rows) row.Height = rowHeight;
             list.ColumnHeadersHeight = rowHeight;
-            root.RowStyles[1].Height = list.ColumnHeadersHeight + VisibleRows * rowHeight
+            root.RowStyles[0].Height = list.ColumnHeadersHeight + VisibleRows * rowHeight
                 + list.Margin.Vertical + LogicalToDeviceUnits(2);
         }
 
@@ -166,9 +163,11 @@ internal sealed class ExternalApplicationsEditor : UserControl
         applications.Clear();
         applications.AddRange(restored);
         Refresh(selectedId, notifySelection: false);
-        if (editingId is not null) SelectRow(editingId);
-        else if (applications.Count > 0) SelectRow(applications[0].Id);
-        else { appName.Clear(); SetLaunch(ExternalApplicationLaunch.Executable, "", EditorArguments.Default); }
+        if (!SelectRow(editingId))
+        {
+            appName.Clear();
+            SetLaunch(ExternalApplicationLaunch.Executable, "", "");
+        }
         status.Text = restoreSelectedId is null ? "変更しました。［適用］で確定します。" : "";
     }
     private void Refresh(string id, bool notifySelection = true)
@@ -179,9 +178,9 @@ internal sealed class ExternalApplicationsEditor : UserControl
             list.Rows.Clear();
             foreach (var app in applications)
                 list.Rows[list.Rows.Add(app.Name, "", "")].Tag = app;
+            list.CurrentCell = null;
             list.ClearSelection();
-            selected.Items.Clear(); selected.Items.Add("なし"); selected.Items.AddRange(applications.Cast<object>().ToArray());
-            selected.SelectedIndex = applications.FindIndex(a => a.Id == id) + 1;
+            UpdateDefaultId(id);
         }
         finally { refreshing = false; }
         if (notifySelection) SelectedChanged?.Invoke(SelectedId);
@@ -198,22 +197,39 @@ internal sealed class ExternalApplicationsEditor : UserControl
         {
             var app = (ExternalApplication)row.Tag!;
             var linked = presets.Where(preset => EditorId(preset) == app.Id).ToArray();
+            row.Cells[0].Value = app.Id == SelectedId ? "★ " + app.Name : app.Name;
             row.Cells[1].Value = app.Id == notificationId ? "通知用に指定"
                 : !notificationHasDirectApp && linked.Length > 0 ? "出力プリセットのアプリを使う" : "—";
             row.Cells[2].Value = linked.Length == 0 ? "—" : string.Join("、", linked.Select(DisplayName));
             row.Cells[2].ToolTipText = string.Join("\n", linked.Select(preset => DisplayName(preset)
                 + (preset.Destination.HasFlag(OutputDestination.ExternalApp) ? "" : "（自動で開く：OFF）")));
         }
+        UpdateSelectionActions(EditingApplication);
 
         static string DisplayName(CapturePreset preset) => (preset.IsDefault ? "★ " : "") + preset.Name;
     }
 
-    private void SelectRow(string id)
+    private void ChangeDefaultApplication()
+    {
+        if (EditingApplication is not { } app) return;
+        SelectedId = app.Id == SelectedId ? "" : app.Id;
+        SelectedChanged?.Invoke(SelectedId);
+        RefreshUsage();
+    }
+
+    private void UpdateSelectionActions(ExternalApplication? app)
+    {
+        defaultButton.Enabled = duplicate.Enabled = delete.Enabled = app is not null;
+        defaultButton.Text = app?.Id == SelectedId ? "既定を解除" : SettingsEditorActions.MakeDefaultText;
+    }
+
+    private bool SelectRow(string? id)
     {
         int index = applications.FindIndex(app => app.Id == id);
-        if (index < 0) return;
+        if (index < 0) return false;
         list.CurrentCell = list.Rows[index].Cells[0];
         list.Rows[index].Selected = true;
+        return true;
     }
     private void SetLaunch(ExternalApplicationLaunch kind, string path, string arguments)
     {
@@ -237,8 +253,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
         int index = next.FindIndex(candidate => candidate.Id == app.Id);
         if (index < 0) next.Add(app);
         else next[index] = app;
-        string id = SelectedId;
-        ApplyApplications(next.ToArray(), string.IsNullOrEmpty(id) ? app.Id : id, app.Id);
+        ApplyApplications(next.ToArray(), SelectedId, app.Id);
     }
 
     private void Delete()

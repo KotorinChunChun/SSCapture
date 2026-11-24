@@ -24,7 +24,7 @@ internal static partial class Program
                 _ = overlay.Handle;
                 Check(session.PointerHint is null, "未選択のウィンドウ名が表示された");
                 session.MouseDown(overlay, MouseButtons.Left, new(-300, -50));
-                Equal("ウィンドウを撮影　Esc / 右クリックで取り消し\nテストウィンドウ（" + process.ProcessName + "）\n座標（-340, -80　180 × 120）　余白0px", session.PointerHint);
+                Equal("ウィンドウを撮影　Esc / 右クリックで取り消し\nテストウィンドウ（" + process.ProcessName + "）\n座標（-340, -80　180 × 120）", session.PointerHint);
                 session.MoveTo(new(-211, 27));
                 Equal("選択範囲を撮影　Esc / 右クリックで取り消し\n座標（-300, -50　89 × 77）", session.PointerHint);
                 session.AbortSelection();
@@ -259,16 +259,16 @@ internal static partial class Program
             try
             {
                 _ = overlay.Handle;
-                Check(session.MagnifierMarksOrigin, "起点を選ぶ前に十字線がない");
+                Equal(Rectangle.Empty, session.MagnifierSelection);
                 Click(new(240, 180));
                 Check(!session.Completion.IsCompleted && session.Dragging, "1点目で選択を終えた");
-                Check(session.MagnifierMarksOrigin, "起点を決めた直後に十字線が消えた");
+                Equal(Rectangle.Empty, session.MagnifierSelection);
                 Equal(new Point(240, 180), session.MagnifierSample);
                 Click(new(240, 180));
                 Check(!session.Completion.IsCompleted, "ゼロ寸法を確定した");
                 session.MoveTo(new(40, 50));
                 Equal(new Rectangle(40, 50, 200, 130), session.DisplaySelection);
-                Check(!session.MagnifierMarksOrigin, "終点でも起点用の十字線が表示された");
+                Equal(session.DisplaySelection, session.MagnifierSelection);
                 Equal(new Point(40, 50), session.MagnifierSample);
                 Click(new(40, 50));
                 using var result = session.Completion.GetAwaiter().GetResult();

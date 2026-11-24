@@ -1,25 +1,29 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace SSCapture.Services;
 
 internal sealed record ControlIdentity(string AutomationId, int Type);
 internal sealed record ControlLookup(long Window, uint ProcessId, PixelBounds WindowBounds, PixelPoint? Point, ControlIdentity? Identity = null);
 internal sealed record ControlHit(PixelBounds Bounds, ControlIdentity? Identity);
-internal sealed record ControlLayoutEntry(ControlHit Hit, PixelBounds HitArea, bool Interactive, int Depth);
+internal sealed record ControlLayoutEntry(ControlHit Hit, PixelBounds HitArea, bool Interactive, int Depth,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SnapshotId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TreePath = null);
 internal sealed record ControlLayout(ControlLayoutEntry[] Entries, bool Incomplete = false);
 
 internal static partial class CaptureContextWorker
 {
-    private static ControlLayout ReadControlLayout(IAutomation automation, ControlLookup lookup)
+    private static ControlLayout ReadControlLayout(IAutomation automation, ControlLookup lookup, bool frozen)
     {
         var entries = new List<ControlLayoutEntry>();
         bool incomplete = false;
-        LookupControl(automation, lookup, entries, () => incomplete = true);
+        LookupControl(automation, lookup, entries, () => incomplete = true, frozen);
         return new(entries.OrderByDescending(entry => entry.Interactive).ThenByDescending(entry => entry.Depth).ToArray(), incomplete);
     }
 
-    private static ControlHit? LookupControl(IAutomation automation, ControlLookup lookup, List<ControlLayoutEntry>? layout = null, Action? markIncomplete = null)
+    private static ControlHit? LookupControl(IAutomation automation, ControlLookup lookup, List<ControlLayoutEntry>? layout = null,
+        Action? markIncomplete = null, bool frozen = false)
     {
         nint handle = (nint)lookup.Window;
         if (GetWindowThreadProcessId(handle, out uint pid) == 0 || pid != lookup.ProcessId)
@@ -54,13 +58,13 @@ internal static partial class CaptureContextWorker
                 bool bestInteractive = false;
                 try
                 {
-                    VisitChildren(start, 0, window);
+                    VisitChildren(start, 0, window, "");
                     if (remaining <= 0) markIncomplete?.Invoke();
                     return lookup.Identity is not null && (remaining <= 0 || matches != 1) ? null : best;
                 }
                 finally { Marshal.ReleaseComObject(walker); }
 
-                void VisitChildren(IElement parent, int depth, Rectangle ancestorArea)
+                void VisitChildren(IElement parent, int depth, Rectangle ancestorArea, string parentPath)
                 {
                     if (remaining <= 0 || matches >= 2) return;
                     if (depth > depthLimit)
@@ -74,10 +78,12 @@ internal static partial class CaptureContextWorker
                         return;
                     }
                     IElement? child = walker.FirstChild(parent);
+                    int sibling = 0;
                     try
                     {
                         while (child is not null && remaining-- > 0)
                         {
+                            string path = frozen ? $"{parentPath}/{sibling++}" : "";
                             bool visible = child.Property(30022) is not true;
                             Rectangle bounds = visible ? ReadControlBounds(child, window) : Rectangle.Empty;
                             if (visible && (pointer is null || bounds.IsEmpty || bounds.Contains(pointer.Value)))
@@ -92,7 +98,17 @@ internal static partial class CaptureContextWorker
                                     string? id = child.Property(30011) as string;
                                     ControlIdentity? identity = string.IsNullOrEmpty(id) || id.Length > 160 ? null : new(id, type);
                                     if (layout is not null && hitArea.Width > 0 && hitArea.Height > 0)
-                                        layout.Add(new(new(PixelBounds.From(bounds), identity), PixelBounds.From(hitArea), interactive, depth));
+                                    {
+                                        string? snapshotId = null;
+                                        if (frozen)
+                                        {
+                                            int[]? runtimeId = child.RuntimeId();
+                                            if (runtimeId is not { Length: > 0 }) markIncomplete?.Invoke();
+                                            else snapshotId = string.Join(',', runtimeId);
+                                        }
+                                        layout.Add(new(new(PixelBounds.From(bounds), identity), PixelBounds.From(hitArea), interactive, depth,
+                                            snapshotId, frozen ? path : null));
+                                    }
                                     if (lookup.Identity is { } wanted)
                                     {
                                         if (identity == wanted && ++matches == 1) best = new(PixelBounds.From(bounds), identity);
@@ -105,7 +121,7 @@ internal static partial class CaptureContextWorker
                                     }
                                 }
                                 if (layout is null || hitArea.Width > 0 && hitArea.Height > 0)
-                                    VisitChildren(child, depth + 1, hitArea);
+                                    VisitChildren(child, depth + 1, hitArea, path);
                             }
                             if (remaining <= 0 || matches >= 2) break;
                             IElement? next = walker.NextSibling(child);

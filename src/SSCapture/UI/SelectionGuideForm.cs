@@ -22,6 +22,7 @@ internal sealed class SelectionGuideForm : Form
     private readonly CaptureSelectionMethod selectionMethod;
     private readonly CaptureActivation controlActivation, windowActivation;
     private bool dragging, canCrossMonitors;
+    private string? marginHint;
     private readonly Label help;
     internal SelectionGuideForm(Rectangle monitor, CaptureIntent intent, Action cancel, Size? fixedSize = null,
         Func<Keys, bool>? handleKey = null, CaptureAnchor fixedAnchor = CaptureAnchor.TopLeft, Action? modifiersChanged = null,
@@ -68,19 +69,16 @@ internal sealed class SelectionGuideForm : Form
         PositionGuide();
     }
 
-    protected override void OnShown(EventArgs e)
-    {
-        ResizeToText();
-        PositionGuide();
-        base.OnShown(e);
-    }
-
-    private void PositionGuide() => Location = new Point(Math.Max(workArea.Left, workArea.Right - Width - 16),
+    private Point AnchoredLocation => new(Math.Max(workArea.Left, workArea.Right - Width - 16),
         Math.Max(workArea.Top, Math.Min(monitor.Bottom - 36, workArea.Bottom - 16) - Height));
+
+    private void PositionGuide() => Location = AnchoredLocation;
 
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
+        ResizeToText();
+        PositionGuide();
         ApplyDisplayAffinity();
     }
 
@@ -103,21 +101,19 @@ internal sealed class SelectionGuideForm : Form
         base.OnFormClosing(e);
     }
 
-    internal static bool ShouldHideForPointer(Rectangle bounds, Point pointer, bool dragging, int dpi, bool hidden)
+    internal static bool ShouldHideForPointer(Rectangle bounds, Point pointer, int dpi, bool hidden)
     {
-        if (!dragging) return false;
         int margin = (int)Math.Ceiling((hidden ? 40 : 24) * Math.Max(96, dpi) / 96.0);
         bounds.Inflate(margin, margin);
         return bounds.Contains(pointer);
     }
 
-    internal void UpdatePointer(Point pointer, bool dragging)
+    internal void UpdatePointer(Point pointer)
     {
         if (IsDisposed || Disposing) return;
-        bool hide = ShouldHideForPointer(Bounds, pointer, dragging, DeviceDpi, hiddenForPointer);
-        if (hide == hiddenForPointer) return;
-        hiddenForPointer = hide;
-        if (hide) Hide(); else Show();
+        hiddenForPointer = ShouldHideForPointer(Bounds, pointer, DeviceDpi, hiddenForPointer);
+        if (hiddenForPointer) Hide();
+        else if (!Visible) Show();
     }
 
     internal void ShowSaveError(string message)
@@ -126,11 +122,12 @@ internal sealed class SelectionGuideForm : Form
         ResizeToText();
     }
 
-    internal void UpdateOperations(bool dragPhase, bool crossMonitors)
+    internal void UpdateOperations(bool dragPhase, bool crossMonitors, string? margin = null)
     {
-        if (dragging == dragPhase && canCrossMonitors == crossMonitors) return;
+        if (dragging == dragPhase && canCrossMonitors == crossMonitors && marginHint == margin) return;
         dragging = dragPhase;
         canCrossMonitors = crossMonitors;
+        marginHint = margin;
         UpdateText();
     }
 
@@ -144,6 +141,7 @@ internal sealed class SelectionGuideForm : Form
     {
         help.Text = SelectionGuideText.Create(mode, intent, fixedSize, currentAnchor,
             dragging ? dragKeys : beforeKeys, mouse, dragging, spaceEnabled, canCrossMonitors, selectionMethod, controlActivation, windowActivation, dragKeys.SpaceCycle, registeredFrame, fixedWheelEnabled);
+        if (marginHint is not null) help.Text += "\n" + marginHint;
         ResizeToText();
     }
 
@@ -155,8 +153,10 @@ internal sealed class SelectionGuideForm : Form
         var textArea = new Size(Math.Max(1, width - help.Padding.Horizontal), int.MaxValue);
         int preferredHeight = TextRenderer.MeasureText(help.Text, help.Font, textArea, TextFormatFlags.WordBreak).Height
             + help.Padding.Vertical + LogicalToDeviceUnits(8);
+        bool anchored = Location == AnchoredLocation;
         ClientSize = new Size(width, Math.Min(preferredHeight, Math.Max(1, workArea.Height - frameHeight - 52)));
-        if (IsHandleCreated && workArea.Contains(Location))
+        if (anchored) PositionGuide();
+        else if (IsHandleCreated && workArea.Contains(Location))
             Location = new Point(Math.Clamp(Left, workArea.Left, Math.Max(workArea.Left, workArea.Right - Width)),
                 Math.Clamp(Top, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - Height)));
     }

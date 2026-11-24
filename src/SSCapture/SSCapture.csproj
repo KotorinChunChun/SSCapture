@@ -8,12 +8,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <AssemblyVersion>0.1.12.0</AssemblyVersion>
-    <FileVersion>0.1.12.0</FileVersion>
-    <InformationalVersion>0.1.12</InformationalVersion>
-    <Version>0.1.12</Version>
+    <AssemblyVersion>0.1.13.0</AssemblyVersion>
+    <FileVersion>0.1.13.0</FileVersion>
+    <InformationalVersion>0.1.13</InformationalVersion>
+    <Version>0.1.13</Version>
     <ProductChannel>beta</ProductChannel>
-    <ProductUpdatedOn>2026-11-24</ProductUpdatedOn>
+    <ProductUpdatedOn>2026-11-25</ProductUpdatedOn>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AppHostDotNetSearch Condition="'$(SelfContained)' != 'true'">AppRelative;Global</AppHostDotNetSearch>

@@ -371,6 +371,7 @@ internal static partial class Program
                         host.Refresh();
                         await Down(overlay, 120, 80); input.LeftUp();
                     }, token, windows: [target.Bounds], findWindow: point => target.Bounds.Contains(point) ? target : null, showGuide: false,
+                        freeze: false, currentFrameFactory: () => throw new InvalidOperationException("WGCはデスクトップを取り直しません。"),
                         settings: new() { CaptureBeforeKeys = CaptureKeyMap.BeforeDefaults with { Win = CaptureKeyAction.HighlightWindowToggle } });
                     var source = (CaptureReplaySource.Windows)result.Selection!.ReplaySource!;
                     Check(source.Isolated, "WGCの撮影方式が失われた");
@@ -501,6 +502,7 @@ internal static partial class Program
                         }
                         input.LeftUp();
                     }, token, windows: targets.Select(window => window.Bounds).ToArray(), showGuide: false, dimBackground: !owned,
+                        freeze: false, currentFrameFactory: () => throw new InvalidOperationException("WGCはデスクトップを取り直しません。"),
                         findWindow: point => targets.FirstOrDefault(window => window.Bounds.Contains(point)),
                         findWindowGroup: window => CaptureWindowGroups.ForegroundGroup(window, targets),
                         settings: new() { CaptureBeforeKeys = CaptureKeyMap.BeforeDefaults with { Win = CaptureKeyAction.HighlightWindowToggle } });

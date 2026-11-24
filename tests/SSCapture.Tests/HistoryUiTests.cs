@@ -8,6 +8,58 @@ internal static partial class Program
 {
     static partial void HistoryUiTests()
     {
+        Run("古い履歴のコピー・編集通知の後も前回の撮影結果は最新の撮影を表示する", () =>
+        {
+            var toast = new FakeCaptureToast();
+            using var feedback = new CaptureFeedback(createToast: () => toast, sound: new FakeCompletionSound(), timer: new FakeFeedbackTimer());
+            var settings = new AppSettings { NotificationDurationSeconds = 5 };
+            Rectangle latest = new(20, 30, 40, 50), older = new(60, 70, 80, 90), next = new(10, 20, 30, 40);
+            var capture = new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.File, OutputDestination.None,
+                CaptureBounds: latest, CaptureDescription: "撮影A");
+            feedback.Notify(capture, settings);
+            foreach (var destination in new[] { OutputDestination.Clipboard, OutputDestination.ExternalApp })
+            {
+                foreach (bool success in new[] { true, false })
+                {
+                    var result = new CaptureDelivery(CaptureIntent.Screenshot, success ? destination : OutputDestination.None,
+                        success ? OutputDestination.None : destination, CaptureBounds: older, IsHistoryAction: true);
+                    feedback.Notify(result, settings);
+                    Equal<Rectangle?>(older, toast.CaptureBounds);
+                    Equal(result.Message, toast.Message);
+
+                    feedback.HideForCapture();
+                    feedback.ShowPreviousScreenshot(settings);
+                    Equal<Rectangle?>(latest, toast.CaptureBounds);
+                    Equal(capture.Message, toast.Message);
+                }
+            }
+            var nextCapture = capture with { CaptureBounds = next, CaptureDescription = "撮影C" };
+            feedback.Notify(nextCapture, settings);
+            feedback.ShowPreviousScreenshot(settings);
+            Equal<Rectangle?>(next, toast.CaptureBounds);
+            Equal(nextCapture.Message, toast.Message);
+        });
+        Run("保留中の撮影通知が履歴の編集通知に差し替わっても前回の撮影結果を保持する", () =>
+        {
+            var toast = new FakeCaptureToast();
+            using var feedback = new CaptureFeedback(createToast: () => toast, sound: new FakeCompletionSound(), timer: new FakeFeedbackTimer());
+            var settings = new AppSettings { NotificationDurationSeconds = 5 };
+            var capture = new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.File, OutputDestination.None,
+                CaptureDescription: "撮影A");
+            var history = new CaptureDelivery(CaptureIntent.Screenshot, OutputDestination.ExternalApp, OutputDestination.None,
+                CaptureDescription: "履歴B", IsHistoryAction: true);
+            feedback.RememberScreenshot(history);
+            Check(!feedback.CanShowPreviousScreenshot(settings), "履歴操作だけで前回の撮影結果が作られた");
+
+            feedback.RememberScreenshot(capture);
+            feedback.RememberScreenshot(history);
+            Equal(0, toast.Shows);
+            feedback.ShowDelivery(history, settings);
+            Equal(history.Message, toast.Message);
+            feedback.ShowPreviousScreenshot(settings);
+            Equal(capture.Message, toast.Message);
+        });
+
         Run("履歴の期限は撮影時刻から計算し、期限後は取得できない", () =>
         {
             var clock = new HistoryClock();

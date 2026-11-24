@@ -31,8 +31,8 @@ internal sealed partial class TrayApplicationContext
         try
         {
             PrepareCaptureUi();
-            await CaptureDelay.WaitAsync(region.StartDelay);
-            Rectangle bounds = RegionCoordinates.Resolve(region, RegionCoordinates.ReadDisplays());
+            if (await CaptureDelay.WaitForRegionAsync(region, RegionCoordinates.ReadDisplays) is not Rectangle bounds)
+                return;
             DateTimeOffset capturedAt = DateTimeOffset.Now;
             var regionSettings = presetCapture?.Settings ?? (region.ProfileVersion >= 1
                 ? ResolvedPresetCapture.Resolve(settings, region.Id, null).Settings : settings);

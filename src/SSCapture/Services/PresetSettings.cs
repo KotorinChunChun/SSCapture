@@ -4,6 +4,7 @@ internal static class PresetSettings
 {
     internal const string StandardInputKey = "standard-input";
     internal const string StandardOutputKey = "standard-output";
+    internal const string InitialFileOutputKey = "initial-output-file";
     internal const string PaintKey = "builtin-paint";
     internal const string InitialWindowKey = "initial-input-window";
     internal const string InitialFixedKey = "initial-input-fixed";
@@ -43,7 +44,7 @@ internal static class PresetSettings
         }
         foreach (var (name, id, key, destination) in new[]
         {
-            ("ファイル保存", "initial-output-file", "initial-output-file", OutputDestination.File),
+            ("ファイル保存", InitialFileOutputKey, InitialFileOutputKey, OutputDestination.File),
             ("クリップボード＋ファイル", "initial-output-both", "initial-output-both", OutputDestination.Clipboard | OutputDestination.File),
             ("クリップボード", "initial-output-clipboard", StandardOutputKey, OutputDestination.Clipboard)
         })

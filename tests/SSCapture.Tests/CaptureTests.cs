@@ -7,6 +7,7 @@ internal static partial class Program
 {
     static partial void CaptureTests()
     {
+        FrozenCaptureTests();
         Run("GDI撮影引数が.NETの許可する単一ROP値である", () =>
         {
             Check(Enum.IsDefined(DesktopSnapshot.CopyOperation), "CopyFromScreenはROP値のbitwise合成を拒否する");

@@ -8,7 +8,7 @@ internal sealed partial class SessionController
         get
         {
             if (!OutputSettings.ShowPointerGuide || PointerLabelsSuppressed) return null;
-            string hint = string.Join('\n', CaptureTargetHints().Prepend(OperationHint).OfType<string>());
+            string hint = string.Join('\n', CaptureTargetHints().Prepend(OperationHint).Append(SelectionMarginHint).OfType<string>());
             return hint.Length == 0 ? null : hint;
         }
     }
@@ -30,7 +30,7 @@ internal sealed partial class SessionController
     private string ControlSelectionHint()
     {
         string controlOperation = controlConfirmationError ?? (confirmingControl ? "コントロールを取得中"
-            : ControlBounds.IsEmpty ? "対象のコントロールが見つかりません"
+            : ControlBounds.IsEmpty ? FrozenScreenshot ? FrozenCaptureTargets.ControlUnavailable : "対象のコントロールが見つかりません"
             : UsesControlPreview && !ControlPreviewReady ? windowPreview?.Frame.IsFaulted == true
                 ? "コントロールのプレビューを取得できません" : "コントロールをプレビュー中"
             : "ボタンを離してコントロールを撮影");

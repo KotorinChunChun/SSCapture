@@ -151,9 +151,11 @@ internal sealed partial class TrayApplicationContext
         foreach (ToolStripItem item in savedRegionMenu.DropDownItems.Cast<ToolStripItem>().ToArray())
             item.Dispose();
         savedRegionMenu.DropDownItems.Clear();
-        sameSettingsItem.ShortcutKeyDisplayString = HotkeyBinding.Parse(settings.LastRecipeShortcut) is { } repeat ? KeyDisplay.Binding(repeat) : "";
         foreach (var region in settings.SavedRegions)
-            savedRegionMenu.DropDownItems.Add(new ToolStripMenuItem(region.Name, null, (_, _) => _ = TakeRegionAsync(region)));
+            savedRegionMenu.DropDownItems.Add(new ToolStripMenuItem(region.Name, null, (_, _) => _ = TakeRegionAsync(region))
+            {
+                ShortcutKeyDisplayString = TrayMenuShortcuts.Region(settings, region)
+            });
         savedRegionMenu.Enabled = !busy && pendingRecording is null && savedRegionMenu.DropDownItems.Count > 0;
         tray.Text = recorder?.IsPaused == true ? "SSCapture — 録画一時停止中" : recorder?.IsRecording == true ? "SSCapture — 録画中" : pause.Checked ? "SSCapture — ショートカット停止中" : "SSCapture";
     }

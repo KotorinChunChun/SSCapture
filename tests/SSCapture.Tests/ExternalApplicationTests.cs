@@ -29,6 +29,11 @@ internal static partial class Program
                 .SequenceEqual(["アプリ名", "通知", "出力プリセット"]), "一覧の列が違う");
             Equal(7, table.Rows.Count);
             Equal(6, table.DisplayedRowCount(false));
+            Check(!editor.Controls.Find("ImageSelectedEditor", true).Any(), "上段の既定コンボが残っている");
+            var defaultButton = editor.Controls.Find("ImageEditorDefault", true).Single();
+            Check(defaultButton.Top >= table.Bottom && defaultButton.Bottom <= editor.Controls.Find("ImageEditorName", true).Single().Top,
+                "既定ボタンが一覧と編集欄の間に収まらない");
+            Equal(4, editor.Controls.Find("ImageEditorActions", true).Single().Controls.Count);
             Equal("出力プリセットのアプリを使う", table.Rows[0].Cells[1].Value);
             Equal("★ クリップボード、資料用", table.Rows[0].Cells[2].Value);
             Check(table.Rows[0].Cells[2].ToolTipText.Contains("自動で開く：OFF"), "自動起動OFFの説明がない");
@@ -97,7 +102,10 @@ internal static partial class Program
             apps.SelectedChanged += id => presets.SetDefaultApplication(true, id);
             presets.DefaultApplicationsChanged += (image, _) => apps.SelectApplication(image ?? "");
             var name = (TextBox)presets.Controls.Find("CapturePresetName", true).Single(); name.Text = "編集を保持";
-            ((ComboBox)apps.Controls.Find("ImageSelectedEditor", true).Single()).SelectedIndex = 2;
+            var table = (DataGridView)apps.Controls.Find("ImageEditorList", true).Single();
+            SelectApplicationRow(table, 1);
+            Equal("a", apps.SelectedId);
+            ConsolidationClick(apps, "ImageEditorDefault");
             Equal("編集を保持", name.Text);
             var combo = (ComboBox)presets.Controls.Find("PresetImageEditor", true).Single();
             Equal("b", ((ExternalApplication)combo.SelectedItem!).Id);
@@ -116,12 +124,20 @@ internal static partial class Program
             AppSettings? saved = null;
             using var form = new SettingsForm(settings, next => { saved = next; return null; }, _ => { }, () => []);
             var appTable = (DataGridView)form.Controls.Find("ImageEditorList", true).Single();
+            var videoTable = (DataGridView)form.Controls.Find("VideoEditorList", true).Single();
+            Equal("★ A", appTable.Rows[0].Cells[0].Value);
+            Equal("A", form.Controls.Find("ImageEditorName", true).Single().Text);
             Equal("出力プリセットのアプリを使う", appTable.Rows[0].Cells[1].Value);
             var list = (ListBox)form.Controls.Find("CapturePresetList", true).Single(); list.SelectedIndex = 1;
             string? nonDefaultApp = ((CapturePreset)list.SelectedItem!).ImageEditorId;
             form.Controls.Find("CapturePresetName", true).Single().Text = "別出力を編集中";
-            ((ComboBox)form.Controls.Find("ImageSelectedEditor", true).Single()).SelectedIndex = 2;
-            ((ComboBox)form.Controls.Find("VideoSelectedEditor", true).Single()).SelectedIndex = 2;
+            SelectApplicationRow(appTable, 1);
+            Equal("★ A", appTable.Rows[0].Cells[0].Value);
+            ConsolidationClick(form, "ImageEditorDefault");
+            Equal("★ B", appTable.Rows[1].Cells[0].Value);
+            Equal("★ A", videoTable.Rows[0].Cells[0].Value);
+            SelectApplicationRow(videoTable, 1);
+            ConsolidationClick(form, "VideoEditorDefault");
             Check(appTable.Rows[1].Cells[2].Value is string usage && usage.StartsWith("★ ", StringComparison.Ordinal), "既定出力の変更を表に反映しない");
             Equal("別出力を編集中", form.Controls.Find("CapturePresetName", true).Single().Text);
             form.SelectCategory("外部アプリ");
@@ -141,6 +157,53 @@ internal static partial class Program
             typeof(Control).GetMethod("OnEnter", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(image, [EventArgs.Empty]);
             Equal("a", ((ExternalApplicationsEditor)form.Controls.Find("ImageApplicationsEditor", true).Single()).SelectedId);
             ConsolidationClick(form, "StoreCapturePreset"); Equal("a", saved!.SelectedImageEditorId); Equal("b", saved.SelectedVideoEditorId);
+
+            SelectApplicationRow(appTable, 0);
+            Equal("既定を解除", form.Controls.Find("ImageEditorDefault", true).Single().Text);
+            ConsolidationClick(form, "ImageEditorDefault");
+            Equal("A", appTable.Rows[0].Cells[0].Value);
+            var apply = SettingsApplyButton(form, "外部アプリ");
+            ConsolidationClick(apply.Parent!, "RevertPageSettings");
+            Equal("★ A", appTable.Rows[0].Cells[0].Value);
+            Equal("a", ((ExternalApplication)image.SelectedItem!).Id);
+            ConsolidationClick(form, "ImageEditorDefault");
+            ApplySettingsPage(form, "外部アプリ");
+            Equal("", saved!.SelectedImageEditorId);
+            Equal("b", saved.SelectedVideoEditorId);
+            using var reopened = new SettingsForm(saved, _ => null, _ => { }, () => []);
+            var reopenedImages = (DataGridView)reopened.Controls.Find("ImageEditorList", true).Single();
+            Equal("A", reopenedImages.Rows[0].Cells[0].Value);
+            Equal("B", reopenedImages.Rows[1].Cells[0].Value);
+        });
+        Run("通知設定では画像・動画で同名のアプリを区別し元の登録IDを使う", () =>
+        {
+            var image = new ExternalApplication { Id = "image", Name = "編集", Executable = @"C:\image.exe" };
+            var video = image with { Id = "video", Executable = @"C:\video.exe" };
+            var single = image with { Id = "single", Name = "単独" };
+            var settings = new AppSettings { ImageEditors = [image, single], VideoEditors = [video],
+                SelectedImageEditorId = single.Id, SelectedVideoEditorId = video.Id }.ApplyDefaults();
+            foreach (var (app, label, intent) in new[]
+            {
+                (image, "編集（画像用）", CaptureIntent.Screenshot), (video, "編集（動画用）", CaptureIntent.Recording)
+            })
+            {
+                AppSettings? saved = null;
+                using var form = new SettingsForm(settings, next => { saved = next; return null; }, _ => { }, () => []);
+                var combo = (ComboBox)form.Controls.Find("NotificationApplication", true).Single();
+                Equal("単独", combo.Items[2]!.ToString());
+                combo.SelectedItem = combo.Items.Cast<object>().Single(item => item.ToString() == label);
+                ApplySettingsPage(form, "通知");
+                Equal(app.Id, saved!.NotificationApplicationId);
+                Equal(image.Name, saved.ImageEditors[0].Name);
+                Equal(video.Name, saved.VideoEditors[0].Name);
+                using var reopened = new SettingsForm(saved, _ => null, _ => { }, () => []);
+                Equal(label, ((ComboBox)reopened.Controls.Find("NotificationApplication", true).Single()).SelectedItem!.ToString());
+                var result = new CaptureDelivery(intent, OutputDestination.File, OutputDestination.None, CaptureSettings: settings);
+                Equal(app, NotificationPresentation.ResolveApplication(result, saved));
+                var otherIntent = intent == CaptureIntent.Screenshot ? CaptureIntent.Recording : CaptureIntent.Screenshot;
+                Equal(otherIntent == CaptureIntent.Screenshot ? single : video,
+                    NotificationPresentation.ResolveApplication(result with { Intent = otherIntent }, saved));
+            }
         });
         Run("Schema2の外部アプリは原本退避後に1回だけ移行し欠損exeを保持", () => WithServiceDirectory(directory =>
         {
@@ -187,11 +250,55 @@ internal static partial class Program
             var name = (TextBox)ui.Controls.Find("ImageEditorName", true).Single();
             name.Text = "A"; ui.Executable.Text = @"C:\a.exe";
             ((Button)ui.Controls.Find("ImageEditorStore", true).Single()).PerformClick();
-            Equal(1, ui.Applications.Length); Equal(ui.Applications[0].Id, ui.SelectedId);
+            Equal(1, ui.Applications.Length); Equal("", ui.SelectedId);
+            ConsolidationClick(ui, "ImageEditorDefault");
+            Equal(ui.Applications[0].Id, ui.SelectedId);
             ((Button)ui.Controls.Find("ImageEditorDelete", true).Single()).PerformClick(); Equal(1, ui.Applications.Length);
             ((ToolStripMenuItem)ui.Controls.Find("ImageEditorNew", true).Single().ContextMenuStrip!.Items[0]).PerformClick();
             name.Text = "B"; ui.Executable.Text = @"C:\b.exe";
             ((Button)ui.Controls.Find("ImageEditorStore", true).Single()).PerformClick(); Equal(2, ui.Applications.Length);
+        });
+        Run("外部アプリの追加・改名・複製で既定なしを保ち戻すで消えた入力を破棄する", () =>
+        {
+            foreach (var (intent, prefix) in new[] { (CaptureIntent.Screenshot, "Image"), (CaptureIntent.Recording, "Video") })
+            {
+                using var editor = new ExternalApplicationsEditor(intent, [], "", "", "", [], () => ([], ""));
+                Control Find(string name) => editor.Controls.Find(prefix + "Editor" + name, true).Single();
+                void Click(string name) => ConsolidationClick(editor, prefix + "Editor" + name);
+                var list = (DataGridView)Find("List");
+                Check(!Find("Default").Enabled, "未選択で既定ボタンが有効");
+                Find("Name").Text = "登録";
+                editor.Executable.Text = @"C:\editor.exe";
+                editor.Arguments.Text = "--edit {file}";
+                Click("Store");
+                Equal("", editor.SelectedId);
+                Find("Name").Text = "改名";
+                Click("Store");
+                Equal("", editor.SelectedId);
+                var original = editor.Applications.Single();
+                Click("Duplicate");
+                Click("Store");
+                Equal("", editor.SelectedId);
+                Equal("改名のコピー", list.Rows[1].Cells[0].Value);
+                editor.LoadRestoredApplications([original], "");
+                CheckEmptyEditor();
+                Equal(original, editor.Applications.Single());
+                SelectApplicationRow(list, 0);
+                editor.LoadRestoredApplications([], "");
+                CheckEmptyEditor();
+                Equal(0, editor.Applications.Length);
+
+                void CheckEmptyEditor()
+                {
+                    Equal(0, list.SelectedRows.Count);
+                    Equal("", Find("Name").Text);
+                    Equal("", editor.Executable.Text);
+                    Equal("", editor.Arguments.Text);
+                    Check(!Find("Duplicate").Enabled && !Find("Delete").Enabled && !Find("Default").Enabled,
+                        "消えた登録に対する操作が有効");
+                    Click("Store");
+                }
+            }
         });
         Run("新規メニューは入力例から別の登録名とexeを入力するだけ", () =>
         {
@@ -212,5 +319,11 @@ internal static partial class Program
             store.Save(settings); Equal("{broken", File.ReadAllText(path + ".invalid.bak")); SettingsEqual(settings, store.Load(out warning));
             Equal<string?>(null, warning);
         }));
+    }
+
+    private static void SelectApplicationRow(DataGridView list, int index)
+    {
+        list.CurrentCell = list.Rows[index].Cells[0];
+        list.Rows[index].Selected = true;
     }
 }

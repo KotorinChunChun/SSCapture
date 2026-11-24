@@ -6,7 +6,7 @@ internal static class CaptureTimerOutput
 {
     internal static CapturePreset InitialPeriodic(AppSettings settings)
     {
-        CapturePreset template = settings.CapturePresets.FirstOrDefault(p => p.Id == "initial-output-file")
+        CapturePreset template = settings.CapturePresets.FirstOrDefault(p => p.BuiltInKey == PresetSettings.InitialFileOutputKey)
             ?? settings.CapturePresets.Single(p => p.IsDefault);
         return template with { Name = "ファイル保存のみ（予約用）", Destination = OutputDestination.File, OpenFolderAfterSave = false,
             ImageEditorId = null, VideoEditorId = null };

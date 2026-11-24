@@ -91,15 +91,17 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         }
 
         InitializeMonitorMenu();
+        menu.Items.Add(new ToolStripSeparator());
         recordItem = new ToolStripMenuItem("録画", null, (_, _) => OnCaptureKey(CaptureIntent.Recording));
         menu.Items.Add(recordItem);
         menu.Items.Add(CreateTimerMenu());
+        menu.Items.Add(new ToolStripSeparator());
         savedRegionMenu = new ToolStripMenuItem("範囲を再撮影");
         menu.Items.Add(savedRegionMenu);
         menu.Items.Add(presetCaptureMenu);
         sameSettingsItem = new ToolStripMenuItem("直前の設定で再撮影", null, (_, _) => _ = TakeSameSettingsAsync());
         menu.Items.Add(sameSettingsItem);
-        menu.Items.Add("入力プリセット", null, (_, _) => ShowRegions());
+        menu.Items.Add(new ToolStripSeparator());
         AddPreviousCaptureMenu();
         menu.Items.Add("撮影履歴", null, (_, _) => ShowHistory());
         pinnedVisibility = new ToolStripMenuItem("すべてのピン留めを一時非表示", null, (_, _) => pinnedImages.ToggleVisibility()) { Enabled = false };
@@ -111,13 +113,15 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         };
         retryOutputItem = new ToolStripMenuItem("失敗した出力を再実行", null, (_, _) => _ = RetryOutputAsync());
         menu.Items.Add(retryOutputItem);
+        menu.Items.Add("保存先を開く", null, (_, _) => OpenFolder());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("設定", null, (_, _) => ShowSettings());
-        menu.Items.Add("保存先を開く", null, (_, _) => OpenFolder());
+        menu.Items.Add("入力プリセット", null, (_, _) => ShowRegions());
         pause = new ToolStripMenuItem("ショートカットを一時停止", null, (_, _) => ToggleShortcut());
         menu.Items.Add(pause);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("終了", null, (_, _) => ExitThread());
+        menu.Opening += (_, _) => RefreshMenuShortcuts();
         tray = new NotifyIcon
         {
             Text = "SSCapture",

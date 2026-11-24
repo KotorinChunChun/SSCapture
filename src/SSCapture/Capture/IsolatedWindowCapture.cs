@@ -146,7 +146,7 @@ internal sealed record WindowCaptureFrame(Bitmap Image, Rectangle Bounds, DateTi
 
 // Each hover owns one frame until the pointer leaves the target or the user confirms it.
 internal sealed class WindowCapturePreview(CaptureWindow target, bool includeCursor, IReadOnlyList<CaptureWindow> foregroundFirst,
-    bool clientAreaOnly = false) : IDisposable
+    bool clientAreaOnly = false, Func<WindowCaptureFrame>? frozenFrame = null) : IDisposable
 {
     private readonly CancellationTokenSource cancellation = new();
     private Task<WindowCaptureFrame>? frame;
@@ -159,6 +159,7 @@ internal sealed class WindowCapturePreview(CaptureWindow target, bool includeCur
 
     private async Task<WindowCaptureFrame> LoadAsync(CancellationToken token)
     {
+        if (frozenFrame is not null) return frozenFrame();
         // Skip GPU setup for windows the pointer only passes over.
         await Task.Delay(80, token).ConfigureAwait(false);
         if (ClientAreaOnly) return await IsolatedWindowCapture.TakeClientFrameAsync(Target, IncludeCursor, token).ConfigureAwait(false);

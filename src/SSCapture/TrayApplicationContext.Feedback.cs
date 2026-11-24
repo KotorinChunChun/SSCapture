@@ -16,6 +16,7 @@ internal sealed partial class TrayApplicationContext
             result.NotificationImage?.Dispose();
             return;
         }
+        feedback.RememberScreenshot(result);
         if (OperationPolicy.MustDeferFeedback)
         {
             deferredFeedback?.NotificationImage?.Dispose(); deferredFeedback = result;
@@ -48,7 +49,7 @@ internal sealed partial class TrayApplicationContext
     }
 
     private void ShowDeliveryFeedback(CaptureDelivery result) =>
-        feedback.Notify(result, settings, result.RetrySerial is long serial && output.CanRetry(serial)
+        feedback.ShowDelivery(result, settings, result.RetrySerial is long serial && output.CanRetry(serial)
             ? () => _ = RetryOutputAsync(serial) : null);
 
     private void StoreStatus(string text, bool error = false)

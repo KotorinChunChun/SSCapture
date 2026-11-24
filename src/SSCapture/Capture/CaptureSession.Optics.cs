@@ -7,6 +7,7 @@ internal sealed partial class SessionController
 
     private MarginTarget? marginTarget;
     private int targetMargin, requestedTargetMargin, wheelRemainder;
+    private bool targetWheelAdjusted;
 
     private void WatchGuideBounds(UI.SelectionGuideForm form)
     {
@@ -26,17 +27,27 @@ internal sealed partial class SessionController
     private bool PressedRectangleWindow => Mode == CaptureMode.Rectangle && !TwoPointSelection
         && pressedButton == MouseButtons.Left && gesture.IsPressed && !gesture.HasDragged;
 
-    internal bool MagnifierMarksOrigin => IsRectangleMode && !gesture.HasDragged
-        && !SelectingControl && !SelectingDesktop && !(PressedRectangleWindow && MarginSelection is { IsEmpty: false });
-
-    internal Point MagnifierSample => MagnifierMarksOrigin || (!SelectingControl && !SelectingDesktop
-        && (IsRectangleMode || Mode == CaptureMode.FixedRegion && gesture.FixedPosition is null)
-        && MarginSelection is null) ? gesture.MagnifierPoint : Pointer;
+    internal Point MagnifierSample => Pointer;
 
     internal Rectangle MagnifierSelection => SelectingDesktop ? gesture.MonitorAt(Pointer)
         : UsesWindowSource && !SelectingControl && PreviewFrame is null ? Rectangle.Empty : DisplaySelection;
     internal IReadOnlyList<Point>? MagnifierPolygon => !SelectingControl && Mode == CaptureMode.Freeform
         && gesture.HasDragged ? Points : null;
+
+    internal IReadOnlyList<Rectangle> MagnifierRegions
+    {
+        get
+        {
+            if (HasControlDrag) return controlDrag!.Selected.Select(hit => hit.Bounds).Distinct().ToArray();
+            if (FreeDesktopDrag && targetDrag is { Monitors.Count: > 0 }) return targetDrag.Monitors.ToArray();
+            if (!HasWindowDrag) return [];
+            if (!UsesWindowSource)
+                return targetDrag!.BrightWindows.Select(bounds => CaptureGeometry.Clip(bounds, selectionBounds ?? Snapshot.Bounds))
+                    .Where(CaptureGeometry.IsUsable).ToArray();
+            return FrozenScreenshot
+                ? Snapshot.FrozenTargets?.WindowRegions(targetDrag!.IncludedWindows.ToArray(), Snapshot.Monitors) ?? [] : [];
+        }
+    }
 
     private MarginTarget? VisibleMarginTarget => marginTarget is { } target
         && (target.Control || HighlightWindow || HasPointerPress) ? target : null;
@@ -47,12 +58,31 @@ internal sealed partial class SessionController
     internal Rectangle SelectionBasis => VisibleMarginTarget?.Original
         ?? (SelectingControl || PreviewFrame is not null ? Rectangle.Empty : gesture.SelectionBasis);
 
+    internal string? SelectionMarginHint
+    {
+        get
+        {
+            if (VisibleMarginTarget is not null ? !targetWheelAdjusted : !gesture.HasWheelAdjustment) return null;
+            Rectangle basis = SelectionBasis, frame = DisplaySelection;
+            if (basis.Width <= 0 || basis.Height <= 0 || frame.Width <= 0 || frame.Height <= 0) return null;
+            int left = basis.Left - frame.Left, top = basis.Top - frame.Top;
+            int right = frame.Right - basis.Right, bottom = frame.Bottom - basis.Bottom;
+            if (left == right && top == bottom)
+                return left == top ? left == 0 ? "0 px" : $"各辺 {Format(left)}"
+                    : $"左右 {Format(left)} ／ 上下 {Format(top)}";
+            return $"左 {Format(left)} ／ 上 {Format(top)} ／ 右 {Format(right)} ／ 下 {Format(bottom)}";
+
+            static string Format(int value) => $"{value:+0;-0;0} px";
+        }
+    }
+
     private int? AppliedTargetMargin => targetMargin == 0 ? null : targetMargin;
 
     private void ResetTargetMargin()
     {
         marginTarget = null;
         wheelRemainder = requestedTargetMargin = targetMargin = 0;
+        targetWheelAdjusted = false;
     }
 
     private bool UpdateTargetMargin()
@@ -145,6 +175,7 @@ internal sealed partial class SessionController
         hasSelectionInput = true;
         if (steps != 0)
         {
+            targetWheelAdjusted = true;
             requestedTargetMargin = targetMargin + steps;
             ReapplyTargetMargin();
         }

@@ -148,6 +148,9 @@ internal static partial class Program
         if (args is ["--scroll-ui-smoke"]) return ScrollDesktopSmoke();
         if (args.SequenceEqual(["--scroll-tests"]))
         { ScrollTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
+        if (args is ["--frozen-capture-tests"])
+        { FrozenCaptureTests(); Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }
+        if (args is ["--frozen-capture-benchmark"]) return FrozenCaptureBenchmark();
         Run("6つの撮影モード", () => Equal(6, Enum.GetValues<CaptureMode>().Length));
         ScrollTests();
         PinnedImageTests();

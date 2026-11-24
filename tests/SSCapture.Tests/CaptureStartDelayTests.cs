@@ -27,23 +27,98 @@ internal static partial class Program
             var resumed = initial with { Destination = OutputDestination.File };
             List<string> events = [];
             var completion = new CaptureOutcome(null, null);
-            using var result = await CaptureSession.SelectWithDelayAsync(initial, options =>
+            using var result = await CaptureSession.SelectWithCountdownAsync(initial, options =>
             {
                 events.Add("選択 " + options.Destination);
                 Check(options.StartWasDelayed, "待機が撮影開始へ渡らない");
                 return Task.FromResult(options.Destination == OutputDestination.Clipboard
                     ? new CaptureOutcome(null, null, delayedRestart: new(CaptureStartDelay.TenSeconds, resumed)) : completion);
-            }, duration => { events.Add("待機 " + duration.TotalSeconds); return Task.CompletedTask; });
+            }, (delay, _) =>
+            {
+                events.Add("待機 " + (int)delay);
+                events.Add("表示終了");
+                return Task.FromResult(CaptureDelayResult.Ready);
+            });
             Check(ReferenceEquals(completion, result), "再開前の中間結果が返った");
-            Equal("待機 3,選択 Clipboard,待機 10,選択 File", string.Join(',', events));
+            Equal("待機 3,表示終了,選択 Clipboard,待機 10,表示終了,選択 File", string.Join(',', events));
 
             foreach (var excluded in new[] { initial with { Intent = CaptureIntent.Recording }, initial with { SelectionOnly = true } })
             {
-                using var immediate = await CaptureSession.SelectWithDelayAsync(excluded, options =>
+                using var immediate = await CaptureSession.SelectWithCountdownAsync(excluded, options =>
                 {
                     Check(!options.StartWasDelayed, "対象外の撮影を遅延した");
                     return Task.FromResult(new CaptureOutcome(null, null));
-                }, _ => throw new InvalidOperationException("録画や予約用の選択で待機した"));
+                }, (_, _) => throw new InvalidOperationException("録画や予約用の選択で待機した"));
+            }
+        }));
+
+        Run("開始待機の残り秒とバーは同じ経過時間で減り期限付近のEscを優先する", () =>
+        {
+            foreach (int seconds in new[] { 3, 5, 10 })
+            {
+                var duration = TimeSpan.FromSeconds(seconds);
+                CaptureCountdownFrame At(double elapsed) => CaptureCountdownFrame.FromElapsed(duration, TimeSpan.FromSeconds(elapsed));
+                Equal(new CaptureCountdownFrame(seconds, 1), At(-1));
+                Equal(new CaptureCountdownFrame(seconds, (seconds - 0.25) / seconds), At(0.25));
+                Equal(new CaptureCountdownFrame(seconds - 1, (seconds - 1d) / seconds), At(1));
+                Equal(1, At(seconds - 0.001).Seconds);
+                Equal<CaptureDelayResult?>(null, At(seconds - 0.001).Result(false));
+                Equal(new CaptureCountdownFrame(0, 0), At(seconds));
+                Equal<CaptureDelayResult?>(CaptureDelayResult.Ready, At(seconds).Result(false));
+                Equal<CaptureDelayResult?>(CaptureDelayResult.Cancelled, At(seconds).Result(true));
+                Equal(new CaptureCountdownFrame(0, 0), At(seconds + 1));
+            }
+
+            using var countdown = new UI.CaptureCountdownForm(new Rectangle(-1280, 20, 1280, 900), 144);
+            Equal(new Rectangle(-162, 839, 144, 63), countdown.Bounds);
+            Check(!countdown.ShowInTaskbar, "カウントダウンがタスクバーに出る");
+        });
+
+        Run("開始前と再開待機のEscは選択・出力へ進まず次の撮影を妨げない", () => RunOutputTask(async () =>
+        {
+            var options = new CaptureOptions(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
+                InitialInputPreset: new SavedRegion { StartDelay = CaptureStartDelay.ThreeSeconds }) { EnableStartDelay = true };
+            int selections = 0;
+            Task<CaptureOutcome> Select(CaptureOptions current)
+            {
+                selections++;
+                return Task.FromResult(new CaptureOutcome(null, null, delayedRestart: new(CaptureStartDelay.FiveSeconds, current)));
+            }
+            foreach (bool restart in new[] { false, true })
+            {
+                int waits = 0;
+                selections = 0;
+                using var result = await CaptureSession.SelectWithCountdownAsync(options, Select, (_, _) =>
+                    Task.FromResult(++waits == 1 && restart ? CaptureDelayResult.Ready : CaptureDelayResult.Cancelled));
+                Equal(restart ? 2 : 1, waits);
+                Equal(restart ? 1 : 0, selections);
+                Check(result.Selection is null && result.Image is null && result.DelayedRestart is null
+                    && !result.EscapedBeforeSelectionInput, "待機の取消が撮影または前回結果の表示へ進んだ");
+            }
+            using var next = await CaptureSession.SelectWithCountdownAsync(options, current =>
+                Task.FromResult(new CaptureOutcome(null, new CaptureSelection(new(2, 3, 4, 5), null, current.Destination))),
+                (_, _) => Task.FromResult(CaptureDelayResult.Ready));
+            Check(next.Selection is not null, "取消後に選択を開始できない");
+        }));
+
+        Run("固定位置の遅延は対象座標を通知し完了後に再解決する。Escは撮影座標を返さない", () => RunOutputTask(async () =>
+        {
+            var display = new DisplayLayout("fixture", "画面", new(-800, 0, 800, 600), 96, 96);
+            var region = RegionCoordinates.FromBounds("登録枠", new(-790, 4, 30, 20), [display]) with
+                { StartDelay = CaptureStartDelay.FiveSeconds };
+            int reads = 0;
+            IReadOnlyList<DisplayLayout> Read() => ++reads == 1 ? [display] : [display with { Bounds = new(800, 0, 800, 600) }];
+            foreach (var result in new[] { CaptureDelayResult.Cancelled, CaptureDelayResult.Ready })
+            {
+                reads = 0;
+                var bounds = await CaptureDelay.WaitForRegionAsync(region, Read, (delay, target) =>
+                {
+                    Equal(region.StartDelay, delay);
+                    Equal<Rectangle?>(region.Bounds, target);
+                    return Task.FromResult(result);
+                });
+                Equal(result == CaptureDelayResult.Cancelled ? 1 : 2, reads);
+                Equal<Rectangle?>(result == CaptureDelayResult.Cancelled ? null : new Rectangle(810, 4, 30, 20), bounds);
             }
         }));
 

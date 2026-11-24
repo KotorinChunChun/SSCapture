@@ -5,6 +5,7 @@ internal static class SettingsEditorActions
     internal const int Height = 44;
     internal const int PresetListWidth = 264;
     internal const int PresetListGap = 12;
+    internal const string MakeDefaultText = "★既定にする";
 
     internal static FlowLayoutPanel CreateRow(string name, Button add, Button duplicate, Button save, Button delete)
     {
@@ -31,9 +32,15 @@ internal static class SettingsEditorActions
 
     internal static void AddDefaultButton(TableLayoutPanel listColumn, string name, Action action)
     {
-        var button = CreateButton("★既定にする", name, action);
+        var button = CreateDefaultButton(name, action);
         button.Dock = DockStyle.Fill;
-        button.Margin = new Padding(0, 4, 0, 0);
         listColumn.Controls.Add(button, 0, 1);
+    }
+
+    internal static Button CreateDefaultButton(string name, Action action)
+    {
+        var button = CreateButton(MakeDefaultText, name, action);
+        button.Margin = new Padding(0, 4, 0, 0);
+        return button;
     }
 }

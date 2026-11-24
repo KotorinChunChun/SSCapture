@@ -52,7 +52,7 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("拡大鏡の起点は偶数ドットを赤い十字で四等分し各画素の色を保つ", () =>
+        Run("拡大鏡の1点目は偶数ドットを青い十字で四等分し各画素の色を保つ", () =>
         {
             const int dots = 6, zoom = 7, size = dots * zoom, center = size / 2;
             Rectangle source = new(-20, -30, 40, 40), lens = new(0, 0, size, size);
@@ -64,15 +64,61 @@ internal static partial class Program
                     frame.SetPixel(x, y, colors[(x < boundary.X - source.X ? 0 : 1) + (y < boundary.Y - source.Y ? 0 : 2)]);
             using var image = new Bitmap(size, size);
             using (Graphics graphics = Graphics.FromImage(image))
-                CaptureMagnifier.Draw(graphics, lens, frame, source, boundary, new(-4, -5, 2, 2), markOrigin: true,
+                CaptureMagnifier.Draw(graphics, lens, frame, source, boundary,
                     dotCount: dots, zoom: zoom);
             for (int y = 1; y < size - 1; y++)
                 for (int x = 1; x < size - 1; x++)
                 {
-                    Color expected = x == center || y == center ? Color.Red
+                    Color expected = x == center || y == center ? Color.DodgerBlue
                         : colors[(x < center ? 0 : 1) + (y < center ? 0 : 2)];
                     Equal(expected.ToArgb(), image.GetPixel(x, y).ToArgb());
                 }
+        });
+        Run("拡大鏡は合成領域の共有境界を省き、範囲外の隙間を暗くする", () =>
+        {
+            Rectangle source = new(-4, -4, 8, 8), lens = new(0, 0, 32, 32);
+            using var frame = new Bitmap(8, 8);
+            using var image = new Bitmap(32, 32);
+            using (var graphics = Graphics.FromImage(frame)) graphics.Clear(Color.Lime);
+            using var magnifier = Graphics.FromImage(image);
+            CaptureMagnifier.Draw(magnifier, lens, frame, source, Point.Empty, dotCount: 8, zoom: 4,
+                regions: [new(-3, -3, 3, 6), new(0, -3, 3, 6)]);
+            Equal(Color.DodgerBlue.ToArgb(), image.GetPixel(16, 10).ToArgb());
+            Equal(Color.Lime.ToArgb(), image.GetPixel(18, 10).ToArgb());
+            CaptureMagnifier.Draw(magnifier, lens, frame, source, Point.Empty, dotCount: 8, zoom: 4,
+                regions: [new(-3, -3, 3, 6), new(1, -3, 2, 6)]);
+            Equal(Color.Red.ToArgb(), image.GetPixel(16, 10).ToArgb());
+            Equal(Color.Red.ToArgb(), image.GetPixel(20, 10).ToArgb());
+            Check(image.GetPixel(18, 10).G is > 0 and < 255, "領域間の隙間が暗くならない");
+        });
+        Run("矩形ホイールで800×600を広げても拡大鏡は実ポインタで撮影枠は804×604", () =>
+        {
+            Rectangle desktop = new(-200, -100, 1280, 960);
+            using var snapshot = new DesktopSnapshot(new Bitmap(desktop.Width, desktop.Height), desktop, [desktop]);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard),
+                snapshot, []);
+            try
+            {
+                var start = new Point(-100, -50);
+                var end = new Point(700, 550);
+                Rectangle basis = new(start, new Size(800, 600));
+                BeginOpticsPress(session, start);
+                session.MoveTo(end);
+                session.MouseWheel(end, 240);
+                Equal(end, session.MagnifierSample);
+                Equal(Rectangle.Inflate(basis, 2, 2), session.MagnifierSelection);
+                Equal("各辺 +2 px", session.SelectionMarginHint);
+                Check(session.PointerHint!.EndsWith("各辺 +2 px"), "ポインタ横のガイドに各辺の量が出ない");
+                session.MouseWheel(end, -240);
+                Equal(basis, session.MagnifierSelection);
+                Equal("0 px", session.SelectionMarginHint);
+                session.MouseWheel(end, 240);
+                session.MouseUp(MouseButtons.Left, end);
+                using var outcome = session.Completion.GetAwaiter().GetResult();
+                Equal(Rectangle.Inflate(basis, 2, 2), outcome.Selection!.Bounds);
+                Equal(new Size(804, 604), outcome.Image!.Size);
+            }
+            finally { session.Cancel(); }
         });
         Run("四方向の矩形で拡大鏡の赤線と明るい象限が実際の切り抜き端に合う", () =>
         {
@@ -90,12 +136,12 @@ internal static partial class Program
                     var gesture = new SelectionGesture(CaptureMode.Rectangle, [source], []);
                     gesture.Begin(start, new(2, 2));
                     gesture.Move(end);
-                    Equal(end, gesture.MagnifierPoint);
+                    Equal(end, gesture.RawCurrent);
                     Point inside = new(x - (endsRight ? 1 : 0), y - (endsBottom ? 1 : 0));
                     frame.SetPixel(inside.X - source.X, inside.Y - source.Y, Color.Cyan);
                     using var image = new Bitmap(size, size);
                     using (Graphics graphics = Graphics.FromImage(image))
-                        CaptureMagnifier.Draw(graphics, lens, frame, source, gesture.MagnifierPoint, gesture.Selection,
+                        CaptureMagnifier.Draw(graphics, lens, frame, source, gesture.RawCurrent, gesture.Selection,
                             dotCount: dots, zoom: zoom);
                     var confirmed = gesture.End(end, OutputDestination.Clipboard)!;
                     Equal(selection, confirmed.Bounds);
@@ -105,8 +151,10 @@ internal static partial class Program
                     Equal(cropped.GetPixel(endsRight ? cropped.Width - 1 : 0, endsBottom ? cropped.Height - 1 : 0).ToArgb(),
                         image.GetPixel(inX, inY).ToArgb());
                     Equal(Color.Cyan.ToArgb(), image.GetPixel(inX, inY).ToArgb());
-                    Equal(Color.Red.ToArgb(), image.GetPixel(center, inY).ToArgb());
-                    Equal(Color.Red.ToArgb(), image.GetPixel(inX, center).ToArgb());
+                    Equal(Color.Red.ToArgb(), image.GetPixel(center, inY - 2).ToArgb());
+                    Equal(Color.Red.ToArgb(), image.GetPixel(inX - 2, center).ToArgb());
+                    Equal(Color.DodgerBlue.ToArgb(), image.GetPixel(center, inY).ToArgb());
+                    Equal(Color.DodgerBlue.ToArgb(), image.GetPixel(inX, center).ToArgb());
                     int outX = 2 * center - inX, outY = 2 * center - inY;
                     foreach (Point outside in new Point[] { new(outX, outY), new(inX, outY), new(outX, inY) })
                     {
@@ -147,19 +195,19 @@ internal static partial class Program
                 ExpectSettingsFailure<ArgumentException>(() => store.Save(invalid));
             Equal(18, store.Load(out _).MagnifierDotCount);
         }));
-        Run("拡大鏡は離れたウィンドウ・モニター境界とグリッドの補正済み端点を使う", () =>
+        Run("ウィンドウ・モニター境界とグリッドは選択を補正しても実ポインタを動かさない", () =>
         {
             Rectangle monitor = new(-400, -400, 400, 400), window = new(-288, -258, 100, 100);
             var gesture = new SelectionGesture(CaptureMode.Rectangle, [monitor], [window]);
             gesture.Begin(new(-298, -240), new(2, 2), snap: true);
-            Equal(new Point(-288, -240), gesture.MagnifierPoint);
+            Equal(new Point(-298, -240), gesture.RawCurrent);
             gesture.Move(new(-199, -167), snap: true);
-            Equal(new Point(-188, -158), gesture.MagnifierPoint);
+            Equal(new Point(-188, -158), gesture.Current);
             Equal(new Rectangle(-288, -240, 100, 82), gesture.Selection);
             gesture.Move(new(-4, -1), snap: true);
-            Equal(Point.Empty, gesture.MagnifierPoint);
+            Equal(Point.Empty, gesture.Current);
             gesture.Move(new(-253, -191), action: CaptureKeyAction.Grid);
-            Equal(new Point(-248, -200), gesture.MagnifierPoint);
+            Equal(new Point(-248, -200), gesture.Current);
             Equal(new Point(-253, -191), gesture.RawCurrent);
         });
         Run("拡大鏡は画面四隅・四辺でガイドを避け、空きが戻ると再表示する", () =>
@@ -227,21 +275,21 @@ internal static partial class Program
                 session.MouseWheel(point, 300);
                 Equal(Rectangle.Inflate(first.Bounds, 2, 2), session.DisplaySelection);
                 Equal(first.Bounds, session.SelectionBasis);
-                Check(session.PointerHint!.Contains("座標（0, 8　24 × 14）　余白+2px"), "適用済みの余白と表示が合わない");
+                Check(session.PointerHint!.EndsWith("座標（0, 8　24 × 14）\n各辺 +2 px"), "適用済みの余白と表示が合わない");
                 session.MouseWheel(point, 120);
                 Equal(Rectangle.Inflate(first.Bounds, 2, 2), session.MagnifierSelection);
                 session.MouseWheel(point, -120);
                 Equal(Rectangle.Inflate(first.Bounds, 1, 1), session.DisplaySelection);
                 session.MoveTo(point + new Size(1, 0));
-                Check(session.PointerHint!.EndsWith("余白+1px"), "同一対象で余白を失った");
+                Check(session.PointerHint!.EndsWith("各辺 +1 px"), "同一対象で余白を失った");
                 session.MouseWheel(point, -120);
-                Check(session.PointerHint!.EndsWith("余白0px"), "元の枠へ戻っていない");
+                Check(session.PointerHint!.EndsWith("0 px"), "元の枠へ戻っていない");
                 session.MouseWheel(point, -1200);
                 Equal(Rectangle.Inflate(first.Bounds, -4, -4), session.DisplaySelection);
                 session.MouseWheel(point, 60);
                 session.MoveTo(other.Bounds.Location);
                 session.MouseWheel(other.Bounds.Location, 60);
-                Check(session.PointerHint!.EndsWith("余白0px"), "対象切替で以前の量か端数が残った");
+                Equal<string?>(null, session.SelectionMarginHint);
                 session.MouseWheel(other.Bounds.Location, 60);
                 Equal(Rectangle.Inflate(other.Bounds, 1, 1), session.DisplaySelection);
                 session.AbortSelection();
@@ -286,7 +334,7 @@ internal static partial class Program
             Rectangle extended = new(106, 29, 17, 15);
             var target = new CaptureWindow(new(80, 10, 60, 60), "対象", 1, 2, 3);
             var session = new SessionController(new CaptureOptions(CaptureMode.Rectangle, CaptureIntent.Screenshot,
-                OutputDestination.Clipboard) { SelectionOnly = true },
+                OutputDestination.Clipboard, FreezeFrame: false) { SelectionOnly = true },
                 new DesktopSnapshot(new Bitmap(monitor.Width, monitor.Height), monitor, [monitor]), [target.Bounds]);
             try
             {
@@ -402,7 +450,6 @@ internal static partial class Program
                     session.MouseWheel(point, -720);
                     Rectangle adjusted = Rectangle.Inflate(basis, -6, -6);
                     Equal(adjusted, session.MagnifierSelection);
-                    Check(!session.MagnifierMarksOrigin, "単押し調整中に拡大鏡が始点の十字を表示する");
                     object visual = ReadOpticsVisual(overlay);
                     Equal(dim ? "基準 140 × 100" : "128 × 88", VisualProperty<string>(visual, "DimensionsText"));
                     string? hint = VisualProperty<string>(visual, "HintText");
@@ -428,7 +475,7 @@ internal static partial class Program
                     Check(!lens.IsEmpty, "拡大鏡の表示領域を確保できない");
                     int redY = lens.Top + (adjusted.Top - point.Y + CaptureMagnifier.DefaultDotCount / 2) * CaptureMagnifier.DefaultZoom;
                     using Bitmap magnified = DrawOpticsOverlay(overlay, visual, shared: true);
-                    Equal(Color.Red.ToArgb(), magnified.GetPixel(lens.Left + lens.Width / 2, redY).ToArgb());
+                    Equal(Color.Red.ToArgb(), magnified.GetPixel(lens.Left + lens.Width / 2 + 1, redY).ToArgb());
                 }
                 finally { session.Cancel(); }
             }
@@ -564,6 +611,10 @@ internal static partial class Program
                     fixedSession.MouseWheel(basis.Location, 120);
                     Equal(basis, fixedSession.SelectionBasis);
                     Equal(Rectangle.Inflate(basis, 1, 1), fixedSession.DisplaySelection);
+                    Equal(basis.Location, fixedSession.MagnifierSample);
+                    Equal("各辺 +1 px", fixedSession.SelectionMarginHint);
+                    fixedSession.MouseWheel(basis.Location, -120);
+                    Equal("0 px", fixedSession.SelectionMarginHint);
                 }
                 finally { fixedSession.Cancel(); }
             }

@@ -127,7 +127,11 @@ internal sealed partial class SettingsForm
             case "外部アプリ":
                 imageApps.LoadRestoredApplications(committed.ImageEditors, committed.SelectedImageEditorId);
                 videoApps.LoadRestoredApplications(committed.VideoEditors, committed.SelectedVideoEditorId);
+                presetEditor.SetDefaultApplication(true, imageApps.SelectedId);
+                presetEditor.SetDefaultApplication(false, videoApps.SelectedId);
                 presetEditor.RefreshApplications();
+                imageApps.RefreshUsage();
+                videoApps.RefreshUsage();
                 break;
             case "即時撮影キー":
                 lastRecipeKey.Value = committed.LastRecipeShortcut;

@@ -60,11 +60,13 @@ internal sealed partial class TrayApplicationContext
         }
         catch
         {
-            NotifyDelivery(new(CaptureIntent.Screenshot, OutputDestination.None, OutputDestination.Clipboard, CaptureBounds: entry.CaptureBounds));
+            NotifyDelivery(new(CaptureIntent.Screenshot, OutputDestination.None, OutputDestination.Clipboard,
+                CaptureBounds: entry.CaptureBounds, IsHistoryAction: true));
             throw;
         }
 
-        NotifyDelivery(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None, CaptureBounds: entry.CaptureBounds));
+        NotifyDelivery(new(CaptureIntent.Screenshot, OutputDestination.Clipboard, OutputDestination.None,
+            CaptureBounds: entry.CaptureBounds, IsHistoryAction: true));
         return "コピーしました。";
     }
 
@@ -82,17 +84,19 @@ internal sealed partial class TrayApplicationContext
             }
             catch
             {
-                NotifyDelivery(new(CaptureIntent.Screenshot, OutputDestination.None, OutputDestination.ExternalApp, CaptureBounds: entry.CaptureBounds));
+                NotifyDelivery(new(CaptureIntent.Screenshot, OutputDestination.None, OutputDestination.ExternalApp,
+                    CaptureBounds: entry.CaptureBounds, IsHistoryAction: true));
                 throw;
             }
 
-            NotifyDelivery(new(CaptureIntent.Screenshot, OutputDestination.ExternalApp, OutputDestination.None, CaptureBounds: entry.CaptureBounds));
+            NotifyDelivery(new(CaptureIntent.Screenshot, OutputDestination.ExternalApp, OutputDestination.None,
+                CaptureBounds: entry.CaptureBounds, IsHistoryAction: true));
             return "保存済みファイルを画像編集アプリへ送りました。";
         }
 
         using var image = history.CloneImage(id) ?? throw new InvalidOperationException("この画像は履歴から削除されています。");
         // 履歴画像は撮影時に加工済み。現在の設定で余白・減色を重ねない。
-        using var router = new OutputRouter(workRoot, delivered: DispatchDelivery);
+        using var router = new OutputRouter(workRoot, delivered: result => DispatchDelivery(result with { IsHistoryAction = true }));
         return await router.ScreenshotAsync(image, OutputDestination.ExternalApp,
             editorSettings with { KeepHistory = false, OpenFolderAfterSave = false, ScreenshotPaddingPixels = 0, ScreenshotColorDepth = ScreenshotColorDepth.Original },
             captureBounds: entry.CaptureBounds);

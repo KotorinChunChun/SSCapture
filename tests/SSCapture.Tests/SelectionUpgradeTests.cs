@@ -312,7 +312,7 @@ internal static partial class Program
             Equal(new Rectangle(-60, 10, 70, 60), gesture.Selection);
             gesture.ResizeRectangle(60);
             Equal(new Rectangle(-61, 9, 72, 62), gesture.Selection);
-            Equal(new Point(11, 71), gesture.MagnifierPoint);
+            Equal(new Point(10, 70), gesture.RawCurrent);
             gesture.Move(new(40, 70));
             Equal(new Rectangle(-61, 9, 102, 62), gesture.Selection);
             gesture.ResizeRectangle(-240);

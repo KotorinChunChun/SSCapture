@@ -33,7 +33,7 @@ internal static partial class CaptureContextWorker
                         if (request.Control is ControlLookup lookup)
                         {
                             string response = request.ReadControlLayout
-                                ? JsonSerializer.Serialize(ReadControlLayout(automation, lookup), JsonLineOptions)
+                                ? JsonSerializer.Serialize(ReadControlLayout(automation, lookup, request.FrozenControlLayout), JsonLineOptions)
                                 : JsonSerializer.Serialize(LookupControl(automation, lookup), JsonLineOptions);
                             Console.WriteLine(response);
                             continue;
@@ -127,7 +127,9 @@ internal static partial class CaptureContextWorker
     [ComImport, Guid("d22108aa-8ac5-49a5-837b-37bbb3d7591e"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IElement
     {
-        void SetFocus(); nint RuntimeId(); nint FindFirst(int scope, nint condition); nint FindAll(int scope, nint condition);
+        void SetFocus();
+        [return: MarshalAs(UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_I4)] int[] RuntimeId();
+        nint FindFirst(int scope, nint condition); nint FindAll(int scope, nint condition);
         nint FindFirstBuildCache(int scope, nint condition, nint cache); nint FindAllBuildCache(int scope, nint condition, nint cache);
         nint BuildUpdatedCache(nint cache);
         [return: MarshalAs(UnmanagedType.Struct)] object Property(int id);
@@ -143,7 +145,8 @@ internal static partial class CaptureContextWorker
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetWindowRect(nint window, out NativeRect rect);
 }
 
-internal sealed record ContextRequest(PixelPoint? Point, int ParentProcessId, ControlLookup? Control = null, bool ReadControlLayout = false);
+internal sealed record ContextRequest(PixelPoint? Point, int ParentProcessId, ControlLookup? Control = null,
+    bool ReadControlLayout = false, bool FrozenControlLayout = false);
 
 internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory = null, int? originatingProcessId = null) : IDisposable
 {
@@ -168,6 +171,13 @@ internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory 
     {
         var response = await RequestAsync<ControlLayout>(new(null, originatingProcessId ?? Environment.ProcessId, lookup, ReadControlLayout: true),
             1500, responseLimit: 2 * 1024 * 1024, waitForWorker: true);
+        return response.Value;
+    }
+
+    internal async Task<ControlLayout?> FindFrozenControlLayoutAsync(ControlLookup lookup)
+    {
+        var response = await RequestAsync<ControlLayout>(new(null, originatingProcessId ?? Environment.ProcessId, lookup,
+            ReadControlLayout: true, FrozenControlLayout: true), 350, responseLimit: 2 * 1024 * 1024);
         return response.Value;
     }
 

@@ -45,13 +45,17 @@ internal sealed partial class TrayApplicationContext
         foreach (ToolStripItem item in presetCaptureMenu.DropDownItems.Cast<ToolStripItem>().ToArray())
             item.Dispose();
         presetCaptureMenu.DropDownItems.Clear();
-        foreach (var row in settings.PresetCaptureShortcuts ?? [])
+        var rows = (settings.PresetCaptureShortcuts ?? []).Select(row => (Row: row, Preset:
+            ResolvedPresetCapture.Resolve(settings, row.InputPresetId, row.OutputPresetId, row.LegacyInstantOutput)));
+        foreach (var group in rows.GroupBy(entry => (entry.Row.Intent, InputId: entry.Preset.Input.Id,
+            OutputId: entry.Preset.Output.Id, entry.Preset.LegacyInstantOutput,
+            Direct: entry.Row.UsesDirectCapture(entry.Preset.Input), Normal: entry.Row.UsesNormalSelection)))
         {
-            var preset = ResolvedPresetCapture.Resolve(settings, row.InputPresetId, row.OutputPresetId, row.LegacyInstantOutput);
+            var (row, preset) = group.First();
             presetCaptureMenu.DropDownItems.Add(new ToolStripMenuItem(
                 $"{row.IntentLabel}  {preset.Input.Name} → {preset.Output.Name}", null, (_, _) => _ = TakePresetCaptureAsync(row))
             {
-                ShortcutKeyDisplayString = KeyDisplay.Binding(row.Key)
+                ShortcutKeyDisplayString = TrayMenuShortcuts.Format(group.Select(entry => entry.Row.Key))
             });
         }
         if (presetCaptureMenu.DropDownItems.Count > 0)

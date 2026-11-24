@@ -1,4 +1,5 @@
 using SSCapture.Capture;
+using SSCapture.Services;
 
 namespace SSCapture;
 
@@ -20,11 +21,25 @@ internal sealed partial class TrayApplicationContext
                 int number = index + 1;
                 monitors.DropDownItems.Add(new ToolStripMenuItem(
                     $"画面{number}{(display.IsPrimary ? "（主）" : "")}（{display.Bounds.Width}×{display.Bounds.Height}）",
-                    null, (_, _) => Post(() => _ = TakeInstantAsync(number, display))));
+                    null, (_, _) => Post(() => _ = TakeInstantAsync(number, display)))
+                {
+                    ShortcutKeyDisplayString = TrayMenuShortcuts.Format([settings.InstantShortcuts.ElementAtOrDefault(index)])
+                });
             }
 
             monitors.Enabled = displays.Count != 0 && !busy && pendingRecording is null && !OperationPolicy.Naming;
         };
+    }
+
+    private void RefreshMenuShortcuts()
+    {
+        string captureKey = TrayMenuShortcuts.Capture(settings, CaptureIntent.Screenshot);
+        foreach (var (mode, item) in modeItems)
+            item.ShortcutKeyDisplayString = mode == settings.DefaultMode ? captureKey : "";
+        recordItem.ShortcutKeyDisplayString = TrayMenuShortcuts.Capture(settings, CaptureIntent.Recording,
+            recordingActive: recorder is not null || pendingRecording is not null);
+        sameSettingsItem.ShortcutKeyDisplayString = TrayMenuShortcuts.Format([settings.LastRecipeShortcut]);
+        TrayMenuShortcuts.UpdateSeparators(menu.Items);
     }
 
     private void AddPreviousCaptureMenu()

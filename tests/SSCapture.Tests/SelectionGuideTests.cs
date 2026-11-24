@@ -89,7 +89,7 @@ internal static partial class Program
             guide.Dispose();
             Equal(0, cancelled); Equal(0, dismissed);
         });
-        Run("案内の近接判定はドラッグ中のみ・負座標とDPIと復帰幅に対応", () =>
+        Run("案内の近接判定は負座標とDPIと復帰幅に対応", () =>
         {
             Rectangle bounds = new(-600, 100, 400, 150);
             foreach (int dpi in new[] { 96, 144, 192 })
@@ -97,33 +97,31 @@ internal static partial class Program
                 int hideMargin = (int)Math.Ceiling(24 * dpi / 96.0);
                 int restoreMargin = (int)Math.Ceiling(40 * dpi / 96.0);
                 Point near = new(bounds.Left - hideMargin + 1, bounds.Top);
-                Check(SelectionGuideForm.ShouldHideForPointer(bounds, near, true, dpi, false), "近接で隠れない");
-                Check(!SelectionGuideForm.ShouldHideForPointer(bounds, near, false, dpi, false), "ドラッグ外でも隠れる");
+                Check(SelectionGuideForm.ShouldHideForPointer(bounds, near, dpi, false), "近接で隠れない");
                 Point between = new(bounds.Left - hideMargin - 1, bounds.Top);
-                Check(!SelectionGuideForm.ShouldHideForPointer(bounds, between, true, dpi, false), "範囲外で隠れる");
-                Check(SelectionGuideForm.ShouldHideForPointer(bounds, between, true, dpi, true), "復帰境界でちらつく");
+                Check(!SelectionGuideForm.ShouldHideForPointer(bounds, between, dpi, false), "範囲外で隠れる");
+                Check(SelectionGuideForm.ShouldHideForPointer(bounds, between, dpi, true), "復帰境界でちらつく");
                 Check(!SelectionGuideForm.ShouldHideForPointer(bounds,
-                    new(bounds.Left - restoreMargin - 1, bounds.Top), true, dpi, true), "離れても復帰しない");
-                Check(!SelectionGuideForm.ShouldHideForPointer(bounds, near, false, dpi, true), "ドラッグ終了後も隠れる");
+                    new(bounds.Left - restoreMargin - 1, bounds.Top), dpi, true), "離れても復帰しない");
             }
         });
-        Run("案内はドラッグ中だけ隠れ位置も手動OFF設定も変えない", () =>
+        Run("案内は初回クリック前から接近で隠れ位置も手動OFF設定も変えない", () =>
         {
             int saved = 0, cancelled = 0;
             using var guide = new SelectionGuideForm(new(0, 0, 1000, 700), CaptureIntent.Screenshot,
                 () => cancelled++, dismiss: () => saved++);
             Equal(664, guide.Bottom);
             _ = guide.Handle;
-            guide.Show();
             Point near = guide.Bounds.Location;
-            guide.UpdatePointer(near, false);
-            Check(guide.Visible && guide.Location == near, "ドラッグ外で隠れた・逃げた");
-            guide.UpdatePointer(near, true);
-            Check(!guide.Visible && guide.Location == near, "ドラッグ中に隠れない・逃げた");
-            guide.UpdatePointer(new(guide.Left - 200, guide.Top), true);
+            guide.UpdatePointer(near);
+            Check(!guide.Visible && guide.Location == near, "開始時に表示された・逃げた");
+            var far = new Point(guide.Left - 200, guide.Top);
+            guide.UpdatePointer(far);
             Check(guide.Visible, "離れても復帰しない");
-            guide.UpdatePointer(near, true); Check(!guide.Visible, "再近接で隠れない");
-            guide.UpdatePointer(near, false); Check(guide.Visible, "ドラッグ終了で復帰しない");
+            guide.UpdatePointer(near); Check(!guide.Visible, "再近接で隠れない");
+            guide.UpdatePointer(far); Check(guide.Visible, "再離脱で復帰しない");
+            guide.UpdateOperations(true, true, "各辺 +2 px");
+            Equal(664, guide.Bottom);
             Equal(0, saved); Equal(0, cancelled);
         });
         Run("操作ガイドは負座標モニターのタスクバーを除いた作業領域に収まる", () =>
@@ -157,6 +155,10 @@ internal static partial class Program
                 "Windows キー＋Alt　一時グリッドスナップ", "Esc　選択だけ中断" })
                 Check(Read().Contains(match), "ドラッグ中の操作がない: " + match);
             Check(!Read().Contains("右クリック") && !Read().Contains("短押し"), "ドラッグ中に別段階の操作を案内");
+            guide.UpdateOperations(true, true, "各辺 +2 px");
+            Check(Read().EndsWith("各辺 +2 px"), "右下に実効調整量が出ない");
+            guide.UpdateOperations(true, true, "0 px");
+            Check(Read().EndsWith("0 px"), "右下に元の寸法への復帰が出ない");
             string custom = SelectionGuideText.Create(CaptureMode.Rectangle, CaptureIntent.Screenshot, null, CaptureAnchor.TopLeft,
                 new(Alt: CaptureKeyAction.LockAspectRatio), new(), true, false, false);
             Check(custom.Contains("Alt　縦横比を固定") && !custom.Contains("Shift") && !custom.Contains("Ctrl"), "変更した割り当てを反映しない");

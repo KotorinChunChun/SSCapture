@@ -75,8 +75,8 @@ internal static class CaptureMagnifier
     }
 
     internal static void Draw(Graphics graphics, Rectangle lens, Bitmap frame, Rectangle frameBounds, Point boundary,
-        Rectangle selection = default, IReadOnlyList<Point>? polygon = null, bool markOrigin = false,
-        int dotCount = DefaultDotCount, int zoom = DefaultZoom)
+        Rectangle selection = default, IReadOnlyList<Point>? polygon = null,
+        int dotCount = DefaultDotCount, int zoom = DefaultZoom, IReadOnlyList<Rectangle>? regions = null)
     {
         int half = dotCount / 2;
         Rectangle requested = new(boundary.X - half, boundary.Y - half, dotCount, dotCount);
@@ -93,11 +93,11 @@ internal static class CaptureMagnifier
             graphics.Restore(state);
         }
 
-        if (markOrigin)
+        if (regions is { Count: > 0 })
         {
-            // Each axis is between source pixels. None of the four quadrants is selected yet.
-            graphics.FillRectangle(Brushes.Red, lens.Left + half * zoom, lens.Top, 1, lens.Height);
-            graphics.FillRectangle(Brushes.Red, lens.Left, lens.Top + half * zoom, lens.Width, 1);
+            using var dim = new SolidBrush(Color.FromArgb(72, Color.Black));
+            DrawShapedBoundary(graphics, lens, requested, zoom, dim,
+                (x, y) => IsInRegions(regions, x, y));
         }
         else if (selection.Width > 0 && selection.Height > 0)
         {
@@ -107,8 +107,31 @@ internal static class CaptureMagnifier
             else
                 DrawRectangleBoundary(graphics, lens, requested, selection, zoom, dim);
         }
+        else DrawPointer(graphics, lens);
 
         graphics.DrawRectangle(Pens.Black, lens.Left, lens.Top, lens.Width - 1, lens.Height - 1);
+    }
+
+    private static void DrawPointer(Graphics graphics, Rectangle lens)
+    {
+        graphics.FillRectangle(Brushes.DodgerBlue, lens.Left + lens.Width / 2, lens.Top, 1, lens.Height);
+        graphics.FillRectangle(Brushes.DodgerBlue, lens.Left, lens.Top + lens.Height / 2, lens.Width, 1);
+    }
+
+    private static void DrawBoundary(Graphics graphics, Rectangle lens, int x, int y, int length, bool vertical)
+    {
+        int axis = vertical ? x - lens.Left : y - lens.Top;
+        int half = (vertical ? lens.Width : lens.Height) / 2;
+        if (axis != half)
+        {
+            graphics.FillRectangle(Brushes.Red, x, y, vertical ? 1 : length, vertical ? length : 1);
+            return;
+        }
+
+        int offset = vertical ? y - lens.Top : x - lens.Left;
+        for (int i = 0; i < length; i++)
+            if (((offset + i) & 7) < 4)
+                graphics.FillRectangle(Brushes.Red, x + (vertical ? 0 : i), y + (vertical ? i : 0), 1, 1);
     }
 
     private static Rectangle InLens(Rectangle area, Rectangle requested, Rectangle lens, int zoom) =>
@@ -122,6 +145,7 @@ internal static class CaptureMagnifier
         if (selected.Width <= 0 || selected.Height <= 0)
         {
             graphics.FillRectangle(dim, lens);
+            DrawPointer(graphics, lens);
             return;
         }
 
@@ -130,15 +154,16 @@ internal static class CaptureMagnifier
         graphics.FillRectangle(dim, lens.Left, inside.Bottom, lens.Width, lens.Bottom - inside.Bottom);
         graphics.FillRectangle(dim, lens.Left, inside.Top, inside.Left - lens.Left, inside.Height);
         graphics.FillRectangle(dim, inside.Right, inside.Top, lens.Right - inside.Right, inside.Height);
+        DrawPointer(graphics, lens);
 
         if (inside.Left > lens.Left)
-            graphics.FillRectangle(Brushes.Red, inside.Left, inside.Top, 1, inside.Height);
+            DrawBoundary(graphics, lens, inside.Left, inside.Top, inside.Height, vertical: true);
         if (inside.Right < lens.Right)
-            graphics.FillRectangle(Brushes.Red, inside.Right, inside.Top, 1, inside.Height);
+            DrawBoundary(graphics, lens, inside.Right, inside.Top, inside.Height, vertical: true);
         if (inside.Top > lens.Top)
-            graphics.FillRectangle(Brushes.Red, inside.Left, inside.Top, inside.Width, 1);
+            DrawBoundary(graphics, lens, inside.Left, inside.Top, inside.Width, vertical: false);
         if (inside.Bottom < lens.Bottom)
-            graphics.FillRectangle(Brushes.Red, inside.Left, inside.Bottom, inside.Width, 1);
+            DrawBoundary(graphics, lens, inside.Left, inside.Bottom, inside.Width, vertical: false);
         if (inside.Right < lens.Right && inside.Bottom < lens.Bottom)
             graphics.FillRectangle(Brushes.Red, inside.Right, inside.Bottom, 1, 1);
     }
@@ -148,25 +173,40 @@ internal static class CaptureMagnifier
     {
         using var shape = new GraphicsPath(FillMode.Alternate);
         shape.AddPolygon(polygon.ToArray());
+        DrawShapedBoundary(graphics, lens, requested, zoom, dim,
+            (x, y) => selection.Contains(x, y) && shape.IsVisible(x + 0.5f, y + 0.5f));
+    }
+
+    private static bool IsInRegions(IReadOnlyList<Rectangle> regions, int x, int y)
+    {
+        foreach (Rectangle region in regions)
+            if (region.Contains(x, y)) return true;
+        return false;
+    }
+
+    private static void DrawShapedBoundary(Graphics graphics, Rectangle lens, Rectangle requested, int zoom, Brush dim,
+        Func<int, int, bool> contains)
+    {
         int count = requested.Width;
         Span<bool> included = stackalloc bool[count * count];
         for (int y = 0; y < count; y++)
             for (int x = 0; x < count; x++)
             {
                 int sx = requested.X + x, sy = requested.Y + y;
-                bool inside = selection.Contains(sx, sy) && shape.IsVisible(sx + 0.5f, sy + 0.5f);
+                bool inside = contains(sx, sy);
                 included[y * count + x] = inside;
                 if (!inside) graphics.FillRectangle(dim, lens.X + x * zoom, lens.Y + y * zoom, zoom, zoom);
             }
 
+        DrawPointer(graphics, lens);
         for (int y = 0; y < count; y++)
             for (int x = 0; x < count; x++)
             {
                 int index = y * count + x, left = lens.X + x * zoom, top = lens.Y + y * zoom;
                 if (x > 0 && included[index - 1] != included[index])
-                    graphics.FillRectangle(Brushes.Red, left, top, 1, zoom);
+                    DrawBoundary(graphics, lens, left, top, zoom, vertical: true);
                 if (y > 0 && included[index - count] != included[index])
-                    graphics.FillRectangle(Brushes.Red, left, top, zoom, 1);
+                    DrawBoundary(graphics, lens, left, top, zoom, vertical: false);
             }
     }
 }

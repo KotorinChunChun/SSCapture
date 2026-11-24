@@ -251,8 +251,17 @@ internal sealed partial class SettingsForm : Form
             string id = NotificationAppId();
             notificationApplication.Items.Clear();
             notificationApplication.Items.Add(new NotificationAppItem("", "撮影時の出力プリセットのアプリ"));
-            foreach (var app in imageApps.Applications.Concat(videoApps.Applications).DistinctBy(a => a.Id))
-                notificationApplication.Items.Add(new NotificationAppItem(app.Id, app.Name));
+            var images = imageApps.Applications;
+            var videos = videoApps.Applications;
+            var candidates = images.Select(app => (App: app, Image: true)).Concat(videos.Select(app => (App: app, Image: false)));
+            foreach (var (app, image) in candidates.DistinctBy(candidate => candidate.App.Id))
+            {
+                var other = image ? videos : images;
+                bool duplicateName = other.Any(candidate => candidate.Id != app.Id &&
+                    candidate.Name.Trim().Equals(app.Name.Trim(), StringComparison.OrdinalIgnoreCase));
+                string label = duplicateName ? app.Name + (image ? "（画像用）" : "（動画用）") : app.Name;
+                notificationApplication.Items.Add(new NotificationAppItem(app.Id, label));
+            }
             notificationApplication.SelectedIndex = Enumerable.Range(0, notificationApplication.Items.Count)
                 .FirstOrDefault(i => ((NotificationAppItem)notificationApplication.Items[i]!).Id == id);
             notificationApplication.Enabled = true;
@@ -266,11 +275,17 @@ internal sealed partial class SettingsForm : Form
         var presetPage = new TabPage("出力プリセット") { BackColor = BackColor, Padding = new Padding(8) };
         presetEditor = new CapturePresetEditor(settings, () => committed with { ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications }, id => ShowPresetShortcuts(outputId: id));
         presetEditor.PreviousOutput = lastOutputSettings;
-        imageApps.SelectedChanged += id => presetEditor.SetDefaultApplication(true, id);
-        videoApps.SelectedChanged += id => presetEditor.SetDefaultApplication(false, id);
+        imageApps.SelectedChanged += id => SetDefaultApplication(true, id);
+        videoApps.SelectedChanged += id => SetDefaultApplication(false, id);
+        void SetDefaultApplication(bool image, string id)
+        {
+            presetEditor.SetDefaultApplication(image, id);
+            refreshSettingControls?.Invoke();
+        }
         presetEditor.DefaultApplicationsChanged += (image, video) =>
         {
             imageApps.SelectApplication(image ?? ""); videoApps.SelectApplication(video ?? "");
+            refreshSettingControls?.Invoke();
         };
         notificationApplication.SelectedIndexChanged += (_, _) =>
         {

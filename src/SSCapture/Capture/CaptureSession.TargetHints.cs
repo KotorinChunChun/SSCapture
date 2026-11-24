@@ -30,7 +30,7 @@ internal sealed partial class SessionController
             if (controlCandidate is { } control)
             {
                 yield return DescribeWindow(control.Window);
-                yield return MarginSelection is Rectangle adjusted ? DescribeMarginBounds(adjusted) : DescribeBounds(control.Bounds);
+                yield return DescribeBounds(MarginSelection ?? control.Bounds);
             }
             yield break;
         }
@@ -54,7 +54,7 @@ internal sealed partial class SessionController
         {
             if (findWindow?.Invoke(gesture.WindowTargetPoint) is { } window) yield return DescribeWindow(window);
             else if (readTitle?.Invoke(gesture.WindowTargetPoint) is { Length: > 0 } title) yield return title;
-            yield return DescribeMarginBounds(windowBounds);
+            yield return DescribeBounds(windowBounds);
             yield break;
         }
 
@@ -111,8 +111,6 @@ internal sealed partial class SessionController
         string title = string.IsNullOrWhiteSpace(window.Title) ? "タイトルなし" : window.Title;
         return $"{title}（{name}）";
     }
-
-    private string DescribeMarginBounds(Rectangle bounds) => $"{DescribeBounds(bounds)}　余白{targetMargin:+0;-0;0}px";
 
     private static string DescribeBounds(Rectangle bounds) =>
         $"座標（{bounds.X}, {bounds.Y}　{bounds.Width} × {bounds.Height}）";

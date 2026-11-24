@@ -58,7 +58,7 @@ internal static partial class Program
                     ShowSelectionGuide = false
                 };
                 var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.File,
-                    ShowSelectionGuide: false, OutputSettings: settings), new(frame, area, [area]), [occluder.Bounds, window.Bounds],
+                    FreezeFrame: false, ShowSelectionGuide: false, OutputSettings: settings), new(frame, area, [area]), [occluder.Bounds, window.Bounds],
                     initialPointer: hit, confineCursor: _ => new System.IO.MemoryStream(), captureWindowsKey: true,
                     findWindow: point => cover.Bounds.Contains(point) ? occluder : area.Contains(point) ? window : null);
                 try
@@ -154,7 +154,7 @@ internal static partial class Program
                 int clicked = 0;
                 foreach (Control button in host.Controls) button.Click += (_, _) => clicked++;
                 var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
-                    ShowSelectionGuide: false), new DesktopSnapshot(new Bitmap(area.Width, area.Height), area, [area]),
+                    FreezeFrame: false, ShowSelectionGuide: false), new DesktopSnapshot(new Bitmap(area.Width, area.Height), area, [area]),
                     [window.Bounds], initialPointer: start, findWindow: point => area.Contains(point) ? window : null);
                 using var overlay = new CaptureOverlay(session, area);
                 try
@@ -230,7 +230,7 @@ internal static partial class Program
                 CaptureWindow target = CaptureNative.CaptureWindows(area).Single(window => window.Handle == host.Handle);
                 var settings = new AppSettings { DefaultDestination = OutputDestination.Clipboard, ShowSelectionGuide = false };
                 var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
-                    ShowSelectionGuide: false, OutputSettings: settings), new DesktopSnapshot(new Bitmap(area.Width, area.Height), area, [area]),
+                    FreezeFrame: false, ShowSelectionGuide: false, OutputSettings: settings), new DesktopSnapshot(new Bitmap(area.Width, area.Height), area, [area]),
                     [target.Bounds], initialPointer: hit, findWindow: point => area.Contains(point) ? target : null);
                 using var overlay = new CaptureOverlay(session, area);
                 try

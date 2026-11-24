@@ -36,6 +36,51 @@ internal static partial class Program
 
     private static void CaptureMenuEditingTests()
     {
+        Run("通知領域の区切りは表示中の操作の間だけに出る", () =>
+        {
+            using var menu = new ContextMenuStrip();
+            var start = new ToolStripSeparator();
+            var first = new ToolStripMenuItem("静止画");
+            var middle = new ToolStripSeparator();
+            var conditional = new ToolStripMenuItem("結果") { Available = false };
+            var next = new ToolStripSeparator();
+            var last = new ToolStripMenuItem("終了");
+            var end = new ToolStripSeparator();
+            menu.Items.AddRange([start, first, middle, conditional, next, last, end]);
+            TrayMenuShortcuts.UpdateSeparators(menu.Items);
+            Check(!start.Available && middle.Available && !next.Available && !end.Available, "先頭・末尾または連続した区切りが残った");
+            conditional.Available = true;
+            TrayMenuShortcuts.UpdateSeparators(menu.Items);
+            Check(middle.Available && next.Available, "操作が再表示されたまとまりに区切りがない");
+        });
+
+        Run("通知領域のキー表示は既定の撮影と同じ対象・出力の割り当てだけを併記する", () =>
+        {
+            var defaults = new AppSettings().ApplyDefaults();
+            var input = defaults.SavedRegions.Single(p => p.IsDefault);
+            var other = defaults.SavedRegions.First(p => !p.IsDefault);
+            var output = defaults.CapturePresets.Single(p => p.IsDefault);
+            var otherOutput = defaults.CapturePresets.First(p => !p.IsDefault);
+            PresetCaptureShortcut[] rows =
+            [
+                new("Ctrl+F5") { SelectRangeWithDefaultInput = true },
+                new("Ctrl+F6", input.Id, output.Id),
+                new("Ctrl+F7", other.Id),
+                new("Ctrl+F8", OutputPresetId: otherOutput.Id),
+                new("Ctrl+F9", Intent: CaptureIntent.Recording),
+                new("Ctrl+F10", other.Id, Intent: CaptureIntent.Recording)
+            ];
+            var settings = defaults with { PresetCaptureShortcuts = rows };
+            Equal("Ctrl＋F5 / Ctrl＋F6", TrayMenuShortcuts.Capture(settings, CaptureIntent.Screenshot));
+            Equal("Ctrl＋F9", TrayMenuShortcuts.Capture(settings, CaptureIntent.Recording));
+            Equal("Ctrl＋F9 / Ctrl＋F10", TrayMenuShortcuts.Capture(settings, CaptureIntent.Recording, recordingActive: true));
+            Equal("Ctrl＋F7", TrayMenuShortcuts.Region(settings, other));
+            var cleared = settings with { PresetCaptureShortcuts = [] };
+            Equal("", TrayMenuShortcuts.Capture(cleared, CaptureIntent.Screenshot));
+            Equal("", TrayMenuShortcuts.Format([null, "", " "]));
+            Equal("Ctrl＋F5", TrayMenuShortcuts.Format(["Ctrl+F5", "CTRL+F5"]));
+        });
+
         Run("ウィンドウ撮影時だけ取得方式を選べる", () =>
         {
             bool? isolated = null;
@@ -56,7 +101,7 @@ internal static partial class Program
             try
             {
                 var menu = session.SelectionMenu;
-                Equal("InputPresetMenu,CapturePresetMenu,CaptureRangeGroup,CaptureOutputGroup,CaptureOperationGroup,CaptureSettingsMenu,CancelCapture",
+                Equal("InputPresetMenu,CapturePresetMenu,CaptureRangeGroup,CaptureOutputGroup,CaptureOperationGroup,OpenSettings,CancelCapture",
                     string.Join(',', menu.Items.OfType<ToolStripMenuItem>().Select(i => i.Name)));
                 foreach (string name in new[] { "CaptureModeMenu", "FixedAnchorMenu", "FreezeFrame", "IncludeCursor" })
                     Check(menu.Command("CaptureRangeGroup").DropDownItems.Contains(menu.Command(name)), name + "の分類不一致");
@@ -232,7 +277,7 @@ internal static partial class Program
             }
             finally { session.Cancel(); }
         });
-        Run("Escと設定リンクは開いたメニューを閉じて撮影せずに終了する", () =>
+        Run("Escとルートの設定は開いたメニューを閉じて撮影せずに終了する", () =>
         {
             foreach (bool openSettings in new[] { false, true })
             {
@@ -245,19 +290,30 @@ internal static partial class Program
                     var menu = session.SelectionMenu;
                     host.Show();
                     menu.Show(host, new Point(20, 20));
-                    var command = menu.Command("OpenInputPresetSettings");
-                    var popup = RevealMenuCommand(menu, command);
-                    Check(popup.Visible && command.ToolTipText?.Contains("撮影を終了") == true, "設定先とツールチップが表示されない");
-                    if (openSettings) command.PerformClick();
+                    var command = menu.Command("OpenSettings");
+                    Check(menu.Items.Contains(command) && !command.HasDropDownItems, "設定が直接開けない");
+                    Check(command.ToolTipText?.Contains("撮影を終了") == true, "設定のツールチップがない");
+                    var cancel = menu.Command("CancelCapture");
+                    Equal("Esc", cancel.ShortcutKeyDisplayString);
+                    Equal(Keys.None, cancel.ShortcutKeys);
+                    ToolStripDropDown? popup = null;
+                    if (openSettings)
+                    {
+                        int invocations = 0;
+                        menu.CommandInvoking += () => { Check(!menu.Visible, "設定の実行前にメニューが閉じていない"); invocations++; };
+                        command.PerformClick();
+                        Equal(1, invocations);
+                    }
                     else
                     {
+                        popup = RevealMenuCommand(menu, menu.Command("ModeRectangle"));
                         var escape = Message.Create(popup.Handle, 0x0100, (IntPtr)Keys.Escape, IntPtr.Zero);
                         Check(popup.PreProcessMessage(ref escape), "子メニューがEscを処理しない");
                     }
                     using var outcome = session.Completion.GetAwaiter().GetResult();
-                    Check(!menu.Visible && !popup.Visible && outcome.Selection is null && outcome.Image is null, "撮影後のUIが残った");
+                    Check(!menu.Visible && popup?.Visible != true && outcome.Selection is null && outcome.Image is null, "撮影後のUIが残った");
                     Equal(openSettings, outcome.OpenSettings);
-                    Equal(openSettings ? new CaptureSettingsLink(CaptureSettingsDestination.InputPreset, preset.Id) : null, outcome.SettingsLink);
+                    Equal<CaptureSettingsLink?>(null, outcome.SettingsLink);
                 }
                 finally { session.Cancel(); }
             }

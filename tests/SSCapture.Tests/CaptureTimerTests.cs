@@ -203,6 +203,45 @@ internal static partial class Program
             Equal(OutputDestination.File, resolved.Settings.DefaultDestination);
             Equal(OutputDestination.Clipboard, CaptureCommandLine.Resolve(new(), settings).Settings.DefaultDestination);
         });
+        Run("定期の予約画面とCLIはIDが変わった標準保存を使い明示指定を優先する", () => WithOutputDirectory(directory =>
+        {
+            const string oldId = "initial-output-file";
+            var defaults = CaptureCommandSettings();
+            var custom = defaults.CapturePresets.Single(preset => preset.Id == oldId) with
+            {
+                BuiltInKey = null, Name = "自作保存", SaveDirectory = Path.Combine(directory, "custom"), FileNamePattern = "custom.{ext}"
+            };
+            var restored = StandardRegistrationReset.RestoreOutputs(defaults with
+            {
+                CapturePresets = defaults.CapturePresets.Select(preset => preset.Id == oldId ? custom : preset).ToArray()
+            });
+            var standard = restored.CapturePresets.Single(preset => preset.BuiltInKey == oldId) with
+            {
+                SaveDirectory = Path.Combine(directory, "standard"), FileNamePattern = "standard.{ext}"
+            };
+            Check(standard.Id != custom.Id, "標準の復元時にIDが変わらなかった");
+            var settings = restored with
+            {
+                CapturePresets = restored.CapturePresets.Select(preset => preset.Id == standard.Id ? standard : preset).ToArray()
+            };
+            using var form = new CaptureTimerForm(settings, []);
+            ((ComboBox)form.Controls.Find("CaptureScheduleMode", true).Single()).SelectedIndex = 2;
+            Equal(standard.SaveDirectory, form.Controls.Find("CaptureTimerSaveDirectory", true).Single().Text);
+            Equal(standard.FileNamePattern, form.Controls.Find("CaptureTimerFileName", true).Single().Text);
+
+            var request = CaptureCommandLine.Parse(["--capture-region", "0", "0", "4", "4", "--interval-seconds", "1", "--count", "1"]);
+            RunOutputTask(async () =>
+            {
+                using var output = new OutputRouter(Path.Combine(directory, "work"), readDisplays: () => []);
+                foreach (var (id, expected, name) in new[] { ((string?)null, standard, "standard.png"), (custom.Id, custom, "custom.png") })
+                {
+                    var command = CaptureCommandLine.Resolve(request with { OutputPresetId = id }, settings);
+                    Equal(0, await CaptureCommandRunner.ExecuteAsync(command, output, take: (_, _) =>
+                        Task.FromResult<(Bitmap, CaptureMetadata?)>((new Bitmap(4, 4), null))));
+                    Equal(Path.Combine(expected.SaveDirectory, name), Directory.GetFiles(expected.SaveDirectory).Single());
+                }
+            });
+        }));
         Run("定期の予約用出力は合成画像を保存しOCR成功・取得不能・連番衝突を処理", () =>
             WithOutputDirectory(directory => RunOutputTask(async () =>
             {
@@ -335,7 +374,7 @@ internal static partial class Program
         string editor = Path.Combine(directory, "fixture.exe");
         File.WriteAllBytes(editor, [0]);
         var application = new ExternalApplication { Id = "timer-editor", Name = "試験", Executable = editor };
-        var output = new CapturePreset { Id = "initial-output-file", Name = "試験保存", FileNamePattern = pattern,
+        var output = new CapturePreset { Id = "initial-output-file", BuiltInKey = "initial-output-file", Name = "試験保存", FileNamePattern = pattern,
             SaveDirectory = Path.Combine(directory, "saved"), Destination = OutputDestination.File | OutputDestination.ExternalApp,
             ImageEditorId = application.Id, OpenFolderAfterSave = true };
         return settings with { CapturePresets = [settings.CapturePresets.Single(p => p.IsDefault), output], PresetCaptureShortcuts = [], ImageEditors = [.. settings.ImageEditors, application] };

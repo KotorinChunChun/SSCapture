@@ -44,10 +44,9 @@ internal sealed class SelectionGesture
     internal bool HasDragged { get; private set; }
     internal Point Current { get; private set; }
     internal Point RawCurrent { get; private set; }
-    internal Point MagnifierPoint => mode == CaptureMode.Rectangle && IsPressed && !HasDragged ? start
-        : mode == CaptureMode.Rectangle && Selection != rectangleBase && centerMove is null ? AnchorPoint(Selection, PointerCorner(rectangleBase, Current)) : Current;
     internal Point WindowTargetPoint => IsPressed && !HasDragged ? rawStart : RawCurrent;
     internal Rectangle Selection { get; private set; }
+    internal bool HasWheelAdjustment { get; private set; }
     internal Rectangle SelectionBasis => mode == CaptureMode.FixedRegion ? FixedBase
         : mode == CaptureMode.Rectangle && HasDragged ? rectangleBase : Rectangle.Empty;
     internal Rectangle PressedWindow => IsPressed && !HasDragged && mode is (CaptureMode.Rectangle or CaptureMode.Freeform)
@@ -78,6 +77,7 @@ internal sealed class SelectionGesture
         HasDragged = false;
         if (mode != CaptureMode.FixedRegion)
         {
+            HasWheelAdjustment = false;
             swappedPointer = null;
             ResetRectangleAdjustments();
             dragAspect = null;
@@ -283,6 +283,7 @@ internal sealed class SelectionGesture
             int effective = (Selection.Width - FixedBase.Width) / 2;
             var adjusted = CaptureTargetMargin.Apply(FixedBase, ClampOffset(effective + steps), desktop, 1, monitors);
             fixedWheelMargin = adjusted.Margin;
+            HasWheelAdjustment = true;
             Selection = adjusted.Bounds;
         }
         return true;
@@ -306,6 +307,7 @@ internal sealed class SelectionGesture
                 rectangleWheelOffset = new(x, y);
             }
             Selection = AdjustedRectangle();
+            HasWheelAdjustment = true;
             if (centerMove is not null) Current = AnchorPoint(Selection, CaptureAnchor.Center);
         }
         return true;
@@ -424,10 +426,18 @@ internal sealed class SelectionGesture
         vertical.Reset();
         if (mode == CaptureMode.FixedRegion)
         {
-            if (!keepFixedWheel) fixedWheelMargin = 0;
+            if (!keepFixedWheel)
+            {
+                fixedWheelMargin = 0;
+                HasWheelAdjustment = false;
+            }
             UpdateFixedSelection();
         }
-        else Selection = Rectangle.Empty;
+        else
+        {
+            Selection = Rectangle.Empty;
+            HasWheelAdjustment = false;
+        }
         Points.Clear();
     }
 

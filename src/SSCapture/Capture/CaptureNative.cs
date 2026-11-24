@@ -185,27 +185,46 @@ internal static class CaptureNative
 
     internal static IReadOnlyList<CaptureWindow> EnumerateCaptureWindows() => EnumerateCaptureWindows(null, false);
 
-    private static IReadOnlyList<CaptureWindow> EnumerateCaptureWindows(Rectangle? desktop, bool includeClientBounds)
+    internal static IReadOnlyList<FrozenWindow>? ReadFrozenWindows(Rectangle desktop)
+    {
+        List<FrozenWindow> result = [];
+        bool complete = true;
+        EnumerateCaptureWindows(desktop, includeClientBounds: true, frozen: result, markIncomplete: () => complete = false);
+        return complete ? result : null;
+    }
+
+    private static IReadOnlyList<CaptureWindow> EnumerateCaptureWindows(Rectangle? desktop, bool includeClientBounds,
+        List<FrozenWindow>? frozen = null, Action? markIncomplete = null)
     {
         List<CaptureWindow> windows = [];
         nint shell = GetShellWindow();
         var title = new StringBuilder(512);
         var className = new StringBuilder(256);
-        EnumWindows((window, data) =>
+        bool completed = EnumWindows((window, data) =>
         {
             if (window == shell || !IsWindowVisible(window) || IsIconic(window)) return true;
             uint thread = GetWindowThreadProcessId(window, out uint process);
-            if (thread == 0 || process == 0) return true;
+            if (thread == 0 || process == 0)
+            {
+                markIncomplete?.Invoke();
+                return true;
+            }
             long style = GetWindowLongPtr(window, -20 /* GWL_EXSTYLE */).ToInt64();
-            // 入力透過の補助画面や完全透明な画面の矩形で、背後の撮影対象を遮らない。
-            if ((style & 0x20 /* WS_EX_TRANSPARENT */) != 0) return true;
-            if ((style & 0x80000 /* WS_EX_LAYERED */) != 0 && GetLayeredWindowAttributes(window, out _, out byte alpha, out uint flags)
+            bool inputTransparent = (style & 0x20 /* WS_EX_TRANSPARENT */) != 0;
+            bool layered = (style & 0x80000 /* WS_EX_LAYERED */) != 0;
+            if (inputTransparent && frozen is null) return true;
+            if (layered && GetLayeredWindowAttributes(window, out _, out byte alpha, out uint flags)
                 && (flags & 2 /* LWA_ALPHA */) != 0 && alpha == 0) return true;
             if (DwmGetWindowAttributeInt(window, 14, out int cloaked, sizeof(int)) == 0 && cloaked != 0) return true;
             if (DwmGetWindowAttribute(window, 9, out NativeRect bounds, Marshal.SizeOf<NativeRect>()) != 0
-                && !GetWindowRect(window, out bounds)) return true;
+                && !GetWindowRect(window, out bounds))
+            {
+                markIncomplete?.Invoke();
+                return true;
+            }
             Rectangle clipped = desktop is Rectangle area ? CaptureGeometry.Clip(bounds.ToRectangle(), area) : bounds.ToRectangle();
-            if (desktop.HasValue ? CaptureGeometry.IsUsable(clipped) : clipped.Width > 0 && clipped.Height > 0)
+            bool selectable = !inputTransparent && (desktop.HasValue ? CaptureGeometry.IsUsable(clipped) : clipped.Width > 0 && clipped.Height > 0);
+            if (selectable || frozen is not null && clipped.Width > 0 && clipped.Height > 0)
             {
                 title.Clear();
                 className.Clear();
@@ -215,14 +234,52 @@ internal static class CaptureNative
                 string caption = title.ToString();
                 if (desktop.HasValue) caption = caption.Replace('\r', ' ').Replace('\n', ' ').Trim();
                 var target = new CaptureWindow(clipped, caption, window, process, thread,
-                    GetWindow(window, 4 /* GW_OWNER */), windows.Count, className.ToString())
-                    { ClientBoundsAtSelection = includeClientBounds ? ReadClientBounds(window) : null };
+                    GetWindow(window, 4 /* GW_OWNER */), frozen?.Count ?? windows.Count, className.ToString())
+                    { ClientBoundsAtSelection = includeClientBounds && selectable ? ReadClientBounds(window) : null };
                 if (GetWindowThreadProcessId(window, out uint currentProcess) == thread && currentProcess == process)
-                    windows.Add(target);
+                {
+                    if (selectable) windows.Add(target);
+                    frozen?.Add(new(target, bounds.ToRectangle(), selectable, layered,
+                        selectable && !layered && !FrozenCaptureTargets.IsBrowser(target) && target.ClientBoundsAtSelection is Rectangle client
+                            ? ReadFrozenControls(window, client) : null));
+                }
+                else markIncomplete?.Invoke();
             }
             return true;
         }, 0);
+        if (!completed) markIncomplete?.Invoke();
         return windows;
+    }
+
+    // Native child geometry is inexpensive enough to sample on both sides of the desktop copy.
+    // UI Automation providers can respond later with unrelated layout, so frozen selection never queries them.
+    private static IReadOnlyList<FrozenControl>? ReadFrozenControls(nint window, Rectangle client)
+    {
+        List<FrozenControl> controls = [];
+        int remaining = 256;
+        return ReadChildren(window, client, depth: 0) ? controls : null;
+
+        bool ReadChildren(nint parent, Rectangle viewport, int depth)
+        {
+            List<Rectangle> foreground = [];
+            for (nint child = GetWindow(parent, 5 /* GW_CHILD */); child != 0; child = GetWindow(child, 2 /* GW_HWNDNEXT */))
+            {
+                if (remaining-- == 0 || depth == 24) return false;
+                if (!IsWindowVisible(child)) continue;
+                if (!GetWindowRect(child, out var native)) return false;
+                Rectangle bounds = native.ToRectangle();
+                Rectangle visible = Rectangle.Intersect(bounds, viewport);
+                if (visible.Width <= 0 || visible.Height <= 0) continue;
+                long style = GetWindowLongPtr(child, -20 /* GWL_EXSTYLE */).ToInt64();
+                if (foreground.Any(rectangle => rectangle.IntersectsWith(visible))) return false;
+                foreground.Add(visible);
+                if ((style & (0x20 /* WS_EX_TRANSPARENT */ | 0x80000 /* WS_EX_LAYERED */)) != 0) return false;
+                if (ReadClientBounds(child) is Rectangle childClient && !ReadChildren(child, Rectangle.Intersect(visible, childClient), depth + 1))
+                    return false;
+                if (bounds == visible && bounds != viewport) controls.Add(new(child, bounds));
+            }
+            return true;
+        }
     }
 
     internal static IReadOnlyList<Rectangle> WindowBounds(Rectangle desktop) =>
