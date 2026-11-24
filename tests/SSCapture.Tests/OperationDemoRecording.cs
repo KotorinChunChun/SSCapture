@@ -195,11 +195,12 @@ internal static partial class Program
         {
             Rectangle entry = s.Entry.Bounds, report = s.Report.Bounds;
             await d.StartAsync(new Point(640, 670));
-            await d.WaitAsync(600);
-            d.Press(DemoKey.Win);
             await d.WaitAsync(400);
+            // 背景の上でWinを押すと背景全体が対象になるため、先に資料の窓の上へ移る。
             await d.MoveAsync(s.Center(report), 900);
-            await d.WaitAsync(1200);
+            await d.WaitAsync(300);
+            d.Press(DemoKey.Win);
+            await d.WaitAsync(1300);
             // 申請フォームの見えている左側を指すと、隠れていた右側も含めて手前に表示される。
             await d.MoveAsync(new Point(entry.Left + 220, entry.Top + 260), 1000);
             await d.WaitAsync(1600);
@@ -211,11 +212,12 @@ internal static partial class Program
         {
             Rectangle entry = s.Entry.Bounds;
             await d.StartAsync(new Point(900, 660));
-            await d.WaitAsync(600);
-            d.Press(DemoKey.Win);
             await d.WaitAsync(400);
+            // 背景の上でWinを押すと背景全体が対象になるため、先に申請フォームの上へ移る。
             await d.MoveAsync(new Point(entry.Left + 110, entry.Bottom - 110), 800);
-            await d.WaitAsync(1200);
+            await d.WaitAsync(300);
+            d.Press(DemoKey.Win);
+            await d.WaitAsync(1300);
             await d.MoveAsync(s.Center(s.Dialog.Bounds), 800);
             await d.WaitAsync(1200);
             await d.MoveAsync(new Point(entry.Left + 130, entry.Bottom - 90), 800);
@@ -227,11 +229,13 @@ internal static partial class Program
         {
             Rectangle entry = s.Entry.Bounds;
             await d.StartAsync(new Point(900, 660));
-            await d.WaitAsync(600);
-            d.Press(DemoKey.Win);
             await d.WaitAsync(400);
+            // 背景の上でWinを押すと背景全体が対象になるため、先に申請フォームの上へ移る。
+            // 資料の窓は申請フォームの右端に重ねてあり、ドラッグは背景を通らない。
             await d.MoveAsync(new Point(entry.Left + 110, entry.Bottom - 110), 800);
-            await d.WaitAsync(900);
+            await d.WaitAsync(300);
+            d.Press(DemoKey.Win);
+            await d.WaitAsync(1000);
             d.LeftDown();
             await d.MoveAsync(s.Center(s.Dialog.Bounds), 800);
             await d.MoveAsync(s.Center(s.Report) + new Size(-100, 40), 900);
@@ -549,6 +553,10 @@ internal static partial class Program
     private sealed class DemoAbortException(string message) : Exception(message);
 
     // 全画面の架空のデスクトップ。録画中は前面に置き、利用者の窓を隠す。
+    // 背景もSSCaptureからは通常のウィンドウに見え、申請フォーム・資料の窓を所有している。
+    // Winを押している間にポインタが背景の上にあると、背景と全部の窓がまとめて対象になるため、
+    // Winの場面では窓の上へ移ってからWinを押し、窓の間の隙間も通らない。
+    // 背景を入力透過にして候補から外すと、裏にある利用者の実際の窓が対象になり録画に映るため、そうしない。
     private sealed class DemoStage : IDisposable
     {
         internal readonly Form Backdrop, Entry, Report, Dialog, Manual;
@@ -557,6 +565,8 @@ internal static partial class Program
         private static readonly Rectangle EntryBounds = new(40, 128, 620, 500);
         private static readonly Rectangle ReportBounds = new(700, 150, 540, 440);
         private static readonly Rectangle OverlapReportBounds = new(420, 200, 540, 440);
+        // Winで左ドラッグする場面は、申請フォームから資料の窓へ背景を通らずに移れるよう、端を重ねる。
+        private static readonly Rectangle DialogReportBounds = new(620, 150, 540, 440);
         internal readonly TextBox NameBox, Notes;
         internal readonly ComboBox Department;
         internal readonly CheckBox Notify, Attach;
@@ -676,7 +686,12 @@ internal static partial class Program
         // 場面ごとの窓の配置にする。背景を前面にした後に呼ぶ。
         internal void Arrange(DemoLayout layout)
         {
-            Report.Bounds = layout == DemoLayout.Overlap ? OverlapReportBounds : ReportBounds;
+            Report.Bounds = layout switch
+            {
+                DemoLayout.Overlap => OverlapReportBounds,
+                DemoLayout.Dialog => DialogReportBounds,
+                _ => ReportBounds,
+            };
             if (layout == DemoLayout.Dialog)
             {
                 if (!Dialog.Visible) Dialog.Show(Entry);
