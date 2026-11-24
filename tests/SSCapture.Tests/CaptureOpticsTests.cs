@@ -432,11 +432,11 @@ internal static partial class Program
 
     private static void SelectionFrameTests()
     {
-        Run("基準の実線と撮影の破線、暗転と拡大鏡は配信用描画でも実際の枠と一致する", () =>
+        Run("青い基準枠と赤い撮影枠、暗転と拡大鏡は配信用描画でも実際の枠と一致する", () =>
         {
             Rectangle desktop = new(-200, -110, 400, 300), basis = new(-120, -60, 140, 100);
             Point point = basis.Location + new Size(38, 8);
-            Color border = Color.FromArgb(55, 195, 255);
+            Color reference = Color.FromArgb(55, 195, 255);
             foreach (bool dim in new[] { false, true })
             {
                 var snapshot = new DesktopSnapshot(new Bitmap(desktop.Width, desktop.Height), desktop, [desktop]);
@@ -458,16 +458,17 @@ internal static partial class Program
                     foreach (bool shared in new[] { false, true })
                     {
                         using Bitmap image = DrawOpticsOverlay(overlay, visual, shared);
-                        int solid = Enumerable.Range(92, 80).Count(x => image.GetPixel(x, 50).ToArgb() == border.ToArgb());
+                        int solid = Enumerable.Range(92, 80).Count(x => image.GetPixel(x, 50).ToArgb() == reference.ToArgb());
                         Equal(80, solid);
-                        int dashed = Enumerable.Range(92, 80).Count(x => image.GetPixel(x, 56).ToArgb() == border.ToArgb());
-                        Check(dashed is > 0 and < 80, "撮影枠が破線でない");
+                        int dashed = Enumerable.Range(92, 80).Count(x => image.GetPixel(x, 56).ToArgb() == Color.Red.ToArgb());
+                        Check(dashed is > 0 and < 80, "撮影枠が赤い破線でない");
                         Equal(Color.White.ToArgb(), image.GetPixel(90, 80).ToArgb());
                         Equal(dim ? 140 : 255, (int)image.GetPixel(82, 80).R);
                     }
                     session.MouseWheel(point, 720);
                     using Bitmap reset = DrawOpticsOverlay(overlay, ReadOpticsVisual(overlay), shared: false);
-                    Check(Enumerable.Range(92, 80).All(x => reset.GetPixel(x, 50).ToArgb() == border.ToArgb()), "一致した枠が実線に戻らない");
+                    Check(Enumerable.Range(92, 80).All(x => reset.GetPixel(x, 50).ToArgb() == Color.Red.ToArgb()),
+                        "一致した枠が赤い実線に戻らない");
                     Equal(Color.White.ToArgb(), reset.GetPixel(92, 56).ToArgb());
                     session.MouseWheel(point, -720);
                     session.ChangeMagnifierVisibility(true);
@@ -703,7 +704,15 @@ internal static partial class Program
                     session.MoveTo(end);
                     Check(a.InvalidateChanges() && b.InvalidateChanges(), "両方のモニターを更新しない");
                     Equal<Point?>(null, VisualProperty<Point?>(ReadOpticsVisual(a), "Crosshair"));
-                    Equal<Point?>(new(24, 50), VisualProperty<Point?>(ReadOpticsVisual(b), "Crosshair"));
+                    var endVisual = ReadOpticsVisual(b);
+                    Equal<Point?>(new(24, 50), VisualProperty<Point?>(endVisual, "Crosshair"));
+                    foreach (bool shared in new[] { false, true })
+                    {
+                        using var image = DrawOpticsOverlay(b, endVisual, shared);
+                        Equal(Color.Red.ToArgb(), image.GetPixel(24, 45).ToArgb());
+                        Equal(Color.Red.ToArgb(), image.GetPixel(12, 50).ToArgb());
+                        Equal(Color.White.ToArgb(), image.GetPixel(60, 50).ToArgb());
+                    }
                     if (method == CaptureSelectionMethod.TwoClicks) session.MouseDown(b, MouseButtons.Left, end);
                     session.MouseUp(MouseButtons.Left, end);
                     using var outcome = session.Completion.GetAwaiter().GetResult();

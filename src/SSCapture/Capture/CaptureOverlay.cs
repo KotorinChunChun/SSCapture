@@ -228,9 +228,8 @@ internal sealed class CaptureOverlay : Form
             source.Offset(MonitorBounds.X - controlFrame.Bounds.X, MonitorBounds.Y - controlFrame.Bounds.Y);
             graphics.DrawImage(controlFrame.Image, destination, source, GraphicsUnit.Pixel);
         }
-        DrawSelection(graphics, selection, Local(visual.Basis), dirty, shared);
+        DrawSelection(graphics, selection, Local(visual.Basis), dirty, shared, visual.Crosshair);
         DrawTargetTrail(graphics, dirty);
-        if (visual.Crosshair is Point crosshair) DrawCrosshair(graphics, ClientRectangle, crosshair);
         if (visual.DimensionsText is string dimensions)
             DrawPointerLabel(graphics, dimensions, visual.Dimensions, shared);
         if (visual.HintText is string hint)
@@ -419,23 +418,39 @@ internal sealed class CaptureOverlay : Form
         return screen;
     }
 
-    private void DrawSelection(Graphics graphics, Rectangle selection, Rectangle basis, Rectangle dirty, bool shared)
+    private void DrawSelection(Graphics graphics, Rectangle selection, Rectangle basis, Rectangle dirty, bool shared, Point? crosshair)
     {
         bool adjusted = HasAdjustedFrame(selection, basis);
-        using Pen border = new(session.FixedSelectionValid ? Color.FromArgb(55, 195, 255) : Color.OrangeRed, adjusted ? 1 : 2);
+        using Pen border = new(session.FixedSelectionValid ? Color.Red : Color.Orange, adjusted ? 1 : 2);
         if (!session.SelectingControl && session.Mode == CaptureMode.Freeform && session.Dragging
             && session.Points.Count >= 2 && (selection.IsEmpty || session.MagnifierPolygon is not null))
-            DrawFreeformSelection(graphics, border, dirty, shared);
-        else if (selection.Width > 0 && selection.Height > 0)
         {
-            if (!session.HighlightWindow && !session.SelectingControl && !shared) DrawSnapshot(graphics, Rectangle.Intersect(selection, dirty));
-            if (adjusted)
-            {
-                graphics.DrawRectangle(border, basis);
-                border.DashStyle = DashStyle.Dash;
-            }
-            graphics.DrawRectangle(border, selection);
+            DrawFreeformSelection(graphics, border, dirty, shared);
+            return;
         }
+        bool hasSelection = selection.Width > 0 && selection.Height > 0;
+        if (hasSelection && !session.HighlightWindow && !session.SelectingControl && !shared)
+            DrawSnapshot(graphics, Rectangle.Intersect(selection, dirty));
+
+        if (crosshair is Point center) DrawCrosshair(graphics, ClientRectangle, center);
+        if (!hasSelection) return;
+
+        if (adjusted)
+        {
+            using var reference = new Pen(Color.FromArgb(55, 195, 255));
+            DrawReferenceFrame(graphics, reference, basis, selection);
+            border.DashStyle = DashStyle.Dash;
+        }
+        graphics.DrawRectangle(border, selection);
+    }
+
+    private static void DrawReferenceFrame(Graphics graphics, Pen pen, Rectangle basis, Rectangle selection)
+    {
+        // A coincident side belongs to the capture frame, including the gaps of its dashed line.
+        if (basis.Top != selection.Top) graphics.DrawLine(pen, basis.Left, basis.Top, basis.Right, basis.Top);
+        if (basis.Bottom != selection.Bottom) graphics.DrawLine(pen, basis.Left, basis.Bottom, basis.Right, basis.Bottom);
+        if (basis.Left != selection.Left) graphics.DrawLine(pen, basis.Left, basis.Top, basis.Left, basis.Bottom);
+        if (basis.Right != selection.Right) graphics.DrawLine(pen, basis.Right, basis.Top, basis.Right, basis.Bottom);
     }
 
     private static bool HasAdjustedFrame(Rectangle selection, Rectangle basis) =>
