@@ -4,7 +4,7 @@ namespace SSCapture;
 
 internal sealed partial class TrayApplicationContext
 {
-    private readonly ToolStripMenuItem presetCaptureMenu = new("プリセット撮影");
+    private readonly ToolStripMenuItem presetCaptureMenu = new TraySubmenuItem("プリセット撮影");
     private bool CanStartPresetCapture => !exiting && !busy && pendingRecording is null && recorder is null
         && !recordingTransition && namingForm is null;
 

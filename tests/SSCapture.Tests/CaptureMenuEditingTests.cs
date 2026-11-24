@@ -36,6 +36,45 @@ internal static partial class Program
 
     private static void CaptureMenuEditingTests()
     {
+        Run("通知領域のサブメニューは親モニター内で右・左・下端を選ぶ", () =>
+        {
+            Rectangle leftMonitor = new(-1920, -120, 1920, 1040);
+            Size menuSize = new(280, 160);
+            Equal(new Point(-540, 760), TraySubmenuItem.Place(new(-261, 890, 260, 24), menuSize, leftMonitor));
+            Equal(new Point(-1661, -110), TraySubmenuItem.Place(new(-1900, -110, 240, 24), menuSize, leftMonitor));
+            Equal(leftMonitor.Location, TraySubmenuItem.Place(new(-1100, 200, 260, 24), new(2100, 1300), leftMonitor));
+            Rectangle rightMonitor = new(0, 80, 2560, 1360);
+            Equal(new Point(560, 1280), TraySubmenuItem.Place(new(301, 1400, 260, 24), menuSize, rightMonitor));
+        });
+        Run("実際のWinFormsサブメニューを各モニターの右端で開き直しても同じ画面に収まる", () =>
+        {
+            using var menu = new ContextMenuStrip();
+            var parent = new TraySubmenuItem("プリセット撮影");
+            int clicks = 0;
+            parent.DropDownItems.Add("撮影する", null, (_, _) => clicks++);
+            menu.Items.Add(parent);
+            foreach (Screen screen in Screen.AllScreens)
+            {
+                Rectangle work = screen.WorkingArea;
+                menu.Show(new Point(work.Right - Math.Min(400, work.Width), work.Top + 30));
+                try
+                {
+                    // Use the width after layout on this monitor, including its DPI.
+                    menu.Location = new Point(work.Right - menu.Width, menu.Top);
+                    Equal(screen.DeviceName, Screen.FromControl(menu).DeviceName);
+                    parent.ShowDropDown();
+                    Check(parent.DropDown.Visible, "サブメニューが開かない");
+                    Equal(Screen.FromControl(menu).DeviceName, Screen.FromControl(parent.DropDown).DeviceName);
+                    Check(work.Contains(parent.DropDown.Bounds),
+                        $"対象={screen.DeviceName} 作業領域={work} 親={menu.Bounds} 子={parent.DropDown.Bounds}");
+                    Rectangle anchor = menu.RectangleToScreen(parent.Bounds);
+                    Check(parent.DropDown.Right <= anchor.Left + 1, "右端では親の左に開く");
+                    parent.DropDownItems[0].PerformClick();
+                }
+                finally { menu.Close(); }
+            }
+            Equal(Screen.AllScreens.Length, clicks);
+        });
         Run("通知領域の区切りは表示中の操作の間だけに出る", () =>
         {
             using var menu = new ContextMenuStrip();

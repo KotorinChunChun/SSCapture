@@ -7,7 +7,7 @@ internal sealed partial class TrayApplicationContext
 {
     private void InitializeMonitorMenu()
     {
-        var monitors = new ToolStripMenuItem("モニターを即時撮影") { Name = "InstantMonitorCapture" };
+        var monitors = new TraySubmenuItem("モニターを即時撮影") { Name = "InstantMonitorCapture" };
         menu.Items.Add(monitors);
         menu.Opening += (_, _) =>
         {

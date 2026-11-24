@@ -15,7 +15,7 @@ internal sealed partial class TrayApplicationContext
 
     private ToolStripMenuItem CreateTimerMenu()
     {
-        var item = new ToolStripMenuItem("タイマー撮影");
+        var item = new TraySubmenuItem("タイマー撮影");
         item.DropDownItems.AddRange([timerReserveItem, timerNextItem, timerStopItem]);
         item.DropDownOpening += (_, _) => RefreshTimerMenu();
         timerReserveItem.Click += (_, _) => Post(() => _ = ReserveTimerAsync());
