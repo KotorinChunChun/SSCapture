@@ -61,10 +61,10 @@ internal static partial class Program
             try
             {
                 session.ApplyPointerInput(bounds.Location, CaptureModifiers.Win);
-                Check(session.PreviewFrame is null && session.SelectionError == FrozenCaptureTargets.WindowUnavailable,
+                Check(session.PreviewFrame is null && session.SelectionError is null,
                     "遮蔽した対象のプレビューを表示しました。");
                 session.CompleteSelection(new(bounds, null, OutputDestination.Clipboard, WindowHitPoint: bounds.Location));
-                Check(!session.Completion.IsCompleted, "撮影開始時の画面を維持できませんでした。");
+                Check(!session.Completion.IsCompleted && session.SelectionError == FrozenCaptureTargets.WindowUnavailable, "確定を試みた後の案内と撮影継続を確認できません。");
                 session.ApplyPointerInput(bounds.Location, CaptureModifiers.None);
                 session.CompleteSelection(new(bounds, null, OutputDestination.Clipboard));
                 using var result = WaitForFrozenSelection(session);
@@ -139,9 +139,10 @@ internal static partial class Program
 
             var changed = new FrozenCaptureTargets([window]);
             changed.SetBrowserControls(browser, bounds, layout, new([Entry(control, "17,99", "/0/0"), layout.Entries[1]]));
-            Check(changed.ControlLayout(browser, [desktop]) is null, "同じ位置に新設された要素を採用しました。");
+            Equal(layout.Entries[1], changed.ControlLayout(browser, [desktop])!.Entries.Single());
             changed.SetBrowserControls(browser, bounds, layout, new([Entry(new(42, 13, 20, 18), "17,42", "/0/0"), layout.Entries[1]]));
-            Check(changed.ControlLayout(browser, [desktop]) is null, "画像取得中に移動した要素を採用しました。");
+            Equal(layout.Entries[1], changed.ControlLayout(browser, [desktop])!.Entries.Single());
+            changed = new FrozenCaptureTargets([window]);
             changed.SetBrowserControls(browser, bounds, layout, layout with { Incomplete = true });
             Check(changed.ControlLayout(browser, [desktop]) is null, "途中で切れたツリーを採用しました。");
 
@@ -149,11 +150,107 @@ internal static partial class Program
             changed.SetBrowserControls(browser, bounds, overlap, overlap);
             Equal(0, changed.ControlLayout(browser, [desktop])!.Entries.Length);
 
+            var document = layout.Entries[0] with { InDocument = true };
+            var toolbar = Entry(new(18, 11, 8, 12), "17,81", "/1");
+            var chromeOverlap = new ControlLayout([document, toolbar]);
+            changed.SetBrowserControls(browser, bounds, chromeOverlap, chromeOverlap);
+            Equal(document, changed.ControlLayout(browser, [desktop])!.Entries.Single());
+            var popupOverlap = new ControlLayout([document, toolbar with { Popup = true }]);
+            changed.SetBrowserControls(browser, bounds, popupOverlap, popupOverlap);
+            Equal(0, changed.ControlLayout(browser, [desktop])!.Entries.Length);
+
             CaptureWindow blocker = new(new(40, 22, 10, 10), "前面", 9, 9, 9);
             var obscuredBrowser = browser with { ZOrder = 1 };
             var obscured = new FrozenCaptureTargets([new(blocker, blocker.Bounds, true, false), window with { Target = obscuredBrowser }]);
             obscured.SetBrowserControls(obscuredBrowser, bounds, layout, layout);
             Equal(layout.Entries[1], obscured.ControlLayout(obscuredBrowser, [desktop])!.Entries.Single());
+        });
+
+        Run("固定対象と無関係な窓の増減・順序はWinとネイティブコントロールを無効にしない", () =>
+        {
+            Rectangle desktop = new(0, 0, 180, 100), area = new(12, 14, 65, 65), control = new(20, 25, 24, 16);
+            var native = new CaptureWindow(area, "一般のアプリ", 1, 1, 1, ZOrder: 2);
+            var unrelated = new CaptureWindow(new(100, 10, 45, 50), "別窓", 2, 2, 2);
+            var before = new FrozenWindow(native, area, true, false, [new(3, control)]);
+            var after = before with { Target = native with { ZOrder = 0, Title = "更新" }, Controls = [new(3, control), new(4, new(50, 50, 16, 16))] };
+            var targets = FrozenCaptureTargets.Compare([new(unrelated, unrelated.Bounds, true, false), before], [after]);
+            Equal(PixelBounds.From(control), targets.HitControl(native, control.Location, [desktop])!.Hit.Bounds);
+            Check(targets.HitControl(native, new(55, 55), [desktop]) is null, "取得後に現れたネイティブコントロールが選べました。");
+            using var frame = Frame(desktop, [desktop], Color.Firebrick, targets);
+            var frozen = targets.ReadWindows(frame, [native]);
+            using (frozen.Image)
+            {
+                Equal(area, frozen.Bounds);
+                Equal(Color.Firebrick.ToArgb(), frozen.Image.GetPixel(8, 8).ToArgb());
+            }
+            var blocked = FrozenCaptureTargets.Compare([before], [new(unrelated with { ZOrder = 0 }, control, true, false),
+                after with { Target = after.Target with { ZOrder = 1 } }]);
+            Check(blocked.HitControl(native, control.Location, [desktop]) is null && !blocked.CanRead(native, area, [desktop]),
+                "取得時の対象範囲に重なった別窓を見落としました。");
+        });
+
+        Run("開始時の別々のブラウザーを選べ、開始後に現れた対象から同じ固定画像の矩形へ戻れる", () =>
+        {
+            Rectangle desktop = new(0, 0, 220, 100), a = new(0, 0, 70, 90), b = new(100, 0, 70, 90);
+            Rectangle first = new(10, 13, 24, 18), second = new(110, 13, 24, 18), newControl = new(140, 45, 24, 18);
+            var left = new CaptureWindow(a, "最初のブラウザー", 7, 7, 7, ClassName: "Chrome_WidgetWin_1");
+            var right = new CaptureWindow(b, "別のブラウザー", 8, 8, 8, ZOrder: 1, ClassName: "MozillaWindowClass");
+            var targets = new FrozenCaptureTargets([new(left, a, true, false), new(right, b, true, false)]);
+            var firstLayout = new ControlLayout([Entry(first, "17,1", "/0")]);
+            var secondLayout = new ControlLayout([Entry(second, "18,1", "/0")]);
+            targets.SetBrowserControls(left, a, firstLayout, firstLayout);
+            targets.SetBrowserControls(right, b, secondLayout, new([secondLayout.Entries[0], Entry(newControl, "18,2", "/1")]));
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
+                LimitToStartingMonitor: false), Frame(desktop, [desktop], Color.CornflowerBlue, targets), [a, b],
+                initialPointer: new(198, 45), findWindow: point => a.Contains(point) ? left : b.Contains(point) ? right : null,
+                currentFrameFactory: () => throw new InvalidOperationException("固定画像を撮り直しました。"));
+            try
+            {
+                session.ApplyPointerInput(first.Location, CaptureModifiers.Ctrl);
+                Equal(first, session.ControlBounds);
+                session.ApplyPointerInput(second.Location, CaptureModifiers.Ctrl);
+                Equal(second, session.ControlBounds);
+                session.ApplyPointerInput(newControl.Location, CaptureModifiers.Ctrl);
+                Check(session.ControlBounds.IsEmpty && session.SelectionError is null, "未確認の要素に枠またはエラーを出しました。");
+                typeof(SessionController).GetMethod("ConfirmControl", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                    .Invoke(session, [newControl.Location]);
+                Check(!session.Completion.IsCompleted, "確認できない要素で撮影が終わりました。");
+                session.ApplyPointerInput(newControl.Location, CaptureModifiers.None);
+                Check(session.SelectionError is null, "Ctrlを離した後もエラーが残りました。");
+                session.CompleteSelection(new(newControl, null, OutputDestination.Clipboard));
+                using var outcome = WaitForFrozenSelection(session);
+                Equal(newControl, outcome.Selection!.Bounds);
+                Equal(Color.CornflowerBlue.ToArgb(), outcome.Image!.GetPixel(0, 0).ToArgb());
+            }
+            finally { session.Cancel(); }
+        });
+
+        Run("ブラウザーの照合完了前に押したCtrlクリックは、確認済みの固定画像で確定する", () =>
+        {
+            Rectangle desktop = new(0, 0, 100, 80), area = new(4, 4, 88, 72), control = new(20, 24, 30, 20);
+            var browser = new CaptureWindow(area, "ブラウザー", 7, 7, 7, ClassName: "Chrome_WidgetWin_1");
+            var targets = new FrozenCaptureTargets([new(browser, area, true, false)]);
+            var snapshot = Frame(desktop, [desktop], Color.CornflowerBlue, targets);
+            var ready = new TaskCompletionSource();
+            typeof(DesktopSnapshot).GetProperty(nameof(DesktopSnapshot.FrozenControlsReady), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .SetValue(snapshot, ready.Task);
+            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard),
+                snapshot, [area], initialPointer: control.Location, findWindow: point => area.Contains(point) ? browser : null);
+            try
+            {
+                session.ApplyPointerInput(control.Location, CaptureModifiers.Ctrl);
+                Check(session.ControlBounds.IsEmpty && session.SelectionError is null, "照合完了前に枠かエラーを表示しました。");
+                typeof(SessionController).GetMethod("ConfirmControl", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                    .Invoke(session, [control.Location]);
+                Check(!session.Completion.IsCompleted, "照合完了前に確定しました。");
+                var layout = new ControlLayout([Entry(control, "17,42", "/0")]);
+                targets.SetBrowserControls(browser, area, layout, layout);
+                ready.SetResult();
+                using var outcome = WaitForFrozenSelection(session);
+                Equal(control, outcome.Selection!.Bounds);
+                Equal(Color.CornflowerBlue.ToArgb(), outcome.Image!.GetPixel(0, 0).ToArgb());
+            }
+            finally { ready.TrySetResult(); session.Cancel(); }
         });
 
         Run("固定ONの取り直しだけが画像を交換し、固定OFFは確定時に最新画像を使う", () =>

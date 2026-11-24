@@ -49,7 +49,10 @@ internal static class CaptureSession
         {
             windows = ReadTargets(snapshot);
             if (metadata)
+            {
+                await snapshot.FrozenControlsReady;
                 snapshot.Context = await Services.CaptureContextClient.Shared.ObserveAsync(new Point(snapshot.Pointer!.Screen.X, snapshot.Pointer.Screen.Y));
+            }
         }
         catch { snapshot.Dispose(); throw; }
         return await SelectAsync(options, snapshot, windows.Select(window => window.Bounds).ToArray(),
@@ -253,8 +256,7 @@ internal sealed partial class SessionController
     private string? selectionError;
     internal string? SelectionError
     {
-        get => frozenSelectionError ?? selectionError ??
-            (FrozenScreenshot && windowPreview?.Frame.IsFaulted == true ? FrozenCaptureTargets.WindowUnavailable : null);
+        get => frozenSelectionError ?? selectionError;
         private set => selectionError = value;
     }
 

@@ -33,7 +33,7 @@ internal static partial class CaptureContextWorker
                         if (request.Control is ControlLookup lookup)
                         {
                             string response = request.ReadControlLayout
-                                ? JsonSerializer.Serialize(ReadControlLayout(automation, lookup, request.FrozenControlLayout), JsonLineOptions)
+                                ? JsonSerializer.Serialize(request.FrozenControlLayout ? ReadFrozenControlLayout(automation, lookup) : ReadControlLayout(automation, lookup), JsonLineOptions)
                                 : JsonSerializer.Serialize(LookupControl(automation, lookup), JsonLineOptions);
                             Console.WriteLine(response);
                             continue;
@@ -117,12 +117,17 @@ internal static partial class CaptureContextWorker
         void CompareElements(nint a, nint b, out int same);
         void CompareRuntimeIds(nint a, nint b, out int same);
         IElement Root(); IElement FromHandle(nint handle); IElement FromPoint(NativePoint point); IElement Focused();
-        nint RootWithCache(nint cache); nint FromHandleWithCache(nint handle, nint cache);
+        nint RootWithCache(nint cache);
+        IElement? FromHandleWithCache(nint handle, IAutomationCacheRequest cache);
         nint FromPointWithCache(NativePoint point, nint cache); nint FocusedWithCache(nint cache);
         nint CreateTreeWalker(nint condition);
         ITreeWalker ControlViewWalker();
         ITreeWalker ContentViewWalker();
         ITreeWalker RawViewWalker();
+        nint RawViewCondition();
+        nint ControlViewCondition();
+        nint ContentViewCondition();
+        IAutomationCacheRequest CreateCacheRequest();
     }
     [ComImport, Guid("d22108aa-8ac5-49a5-837b-37bbb3d7591e"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IElement
@@ -133,6 +138,15 @@ internal static partial class CaptureContextWorker
         nint FindFirstBuildCache(int scope, nint condition, nint cache); nint FindAllBuildCache(int scope, nint condition, nint cache);
         nint BuildUpdatedCache(nint cache);
         [return: MarshalAs(UnmanagedType.Struct)] object Property(int id);
+        [return: MarshalAs(UnmanagedType.Struct)] object PropertyEx(int id, [MarshalAs(UnmanagedType.Bool)] bool ignoreDefault);
+        [return: MarshalAs(UnmanagedType.Struct)] object CachedProperty(int id);
+        [return: MarshalAs(UnmanagedType.Struct)] object CachedPropertyEx(int id, [MarshalAs(UnmanagedType.Bool)] bool ignoreDefault);
+        nint CurrentPatternAs(int id, in Guid iid);
+        nint CachedPatternAs(int id, in Guid iid);
+        nint CurrentPattern(int id);
+        nint CachedPattern(int id);
+        nint CachedParent();
+        IAutomationElementArray? CachedChildren();
     }
     [StructLayout(LayoutKind.Sequential)] private readonly record struct NativePoint(int X, int Y);
     [StructLayout(LayoutKind.Sequential)] private struct NativeRect { public int Left, Top, Right, Bottom; }
@@ -174,10 +188,10 @@ internal sealed class CaptureContextClient(Func<ProcessStartInfo>? startFactory 
         return response.Value;
     }
 
-    internal async Task<ControlLayout?> FindFrozenControlLayoutAsync(ControlLookup lookup)
+    internal async Task<ControlLayout?> FindFrozenControlLayoutAsync(ControlLookup lookup, int timeoutMilliseconds)
     {
         var response = await RequestAsync<ControlLayout>(new(null, originatingProcessId ?? Environment.ProcessId, lookup,
-            ReadControlLayout: true, FrozenControlLayout: true), 350, responseLimit: 2 * 1024 * 1024);
+            ReadControlLayout: true, FrozenControlLayout: true), timeoutMilliseconds, responseLimit: 2 * 1024 * 1024);
         return response.Value;
     }
 

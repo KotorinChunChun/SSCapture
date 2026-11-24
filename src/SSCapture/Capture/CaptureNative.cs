@@ -185,16 +185,16 @@ internal static class CaptureNative
 
     internal static IReadOnlyList<CaptureWindow> EnumerateCaptureWindows() => EnumerateCaptureWindows(null, false);
 
-    internal static IReadOnlyList<FrozenWindow>? ReadFrozenWindows(Rectangle desktop)
+    internal static IReadOnlyList<FrozenWindow>? ReadFrozenWindows(Rectangle desktop, bool includeControls = true)
     {
         List<FrozenWindow> result = [];
         bool complete = true;
-        EnumerateCaptureWindows(desktop, includeClientBounds: true, frozen: result, markIncomplete: () => complete = false);
+        EnumerateCaptureWindows(desktop, includeClientBounds: true, frozen: result, includeControls: includeControls, markIncomplete: () => complete = false);
         return complete ? result : null;
     }
 
     private static IReadOnlyList<CaptureWindow> EnumerateCaptureWindows(Rectangle? desktop, bool includeClientBounds,
-        List<FrozenWindow>? frozen = null, Action? markIncomplete = null)
+        List<FrozenWindow>? frozen = null, bool includeControls = false, Action? markIncomplete = null)
     {
         List<CaptureWindow> windows = [];
         nint shell = GetShellWindow();
@@ -206,7 +206,7 @@ internal static class CaptureNative
             uint thread = GetWindowThreadProcessId(window, out uint process);
             if (thread == 0 || process == 0)
             {
-                markIncomplete?.Invoke();
+                if (IsWindowVisible(window) && !IsIconic(window)) markIncomplete?.Invoke();
                 return true;
             }
             long style = GetWindowLongPtr(window, -20 /* GWL_EXSTYLE */).ToInt64();
@@ -219,7 +219,7 @@ internal static class CaptureNative
             if (DwmGetWindowAttribute(window, 9, out NativeRect bounds, Marshal.SizeOf<NativeRect>()) != 0
                 && !GetWindowRect(window, out bounds))
             {
-                markIncomplete?.Invoke();
+                if (IsWindowVisible(window) && !IsIconic(window)) markIncomplete?.Invoke();
                 return true;
             }
             Rectangle clipped = desktop is Rectangle area ? CaptureGeometry.Clip(bounds.ToRectangle(), area) : bounds.ToRectangle();
@@ -240,10 +240,10 @@ internal static class CaptureNative
                 {
                     if (selectable) windows.Add(target);
                     frozen?.Add(new(target, bounds.ToRectangle(), selectable, layered,
-                        selectable && !layered && !FrozenCaptureTargets.IsBrowser(target) && target.ClientBoundsAtSelection is Rectangle client
+                        includeControls && selectable && !layered && !FrozenCaptureTargets.IsBrowser(target) && target.ClientBoundsAtSelection is Rectangle client
                             ? ReadFrozenControls(window, client) : null));
                 }
-                else markIncomplete?.Invoke();
+                else if (IsWindowVisible(window) && !IsIconic(window)) markIncomplete?.Invoke();
             }
             return true;
         }, 0);

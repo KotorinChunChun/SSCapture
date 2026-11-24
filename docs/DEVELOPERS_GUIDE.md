@@ -67,6 +67,7 @@ dotnet $test --recording-desktop-smoke artifacts/app/tools/ffmpeg.exe artifacts/
 後片付けの回帰は `dotnet $test --browser-job-tests "$run/browser-jobs"` で実行できます。テスト用の親子プロセスで、通常終了、例外、ランナーの強制終了後に残存プロセスがないことを確認します。
 
 実ブラウザーでDOMを確認する場合は、利用者が明示した専用デスクトップで `dotnet $test --browser-control-smoke --interactive $browser "$run/browser-ui"` を実行します。`$browser` にはChromeまたはEdgeの実行ファイルの絶対パスを指定します。実行ごとに新しいゲスト用プロファイルを作り、初回案内を抑制します。Windowsのジョブでテストのブラウザーと子プロセスをまとめて終了し、通常の終了時にはジョブ内の残存数がゼロになるまで確認します。 [Windowsのジョブオブジェクト](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)
+画面固定の実入力は、専用デスクトップで `dotnet $test --frozen-browser-smoke --interactive $browser "$run/browser-ui"` を実行します。ブラウザーの外から撮影を開始し、テストページのボタン表示を変えた後にCtrl＋クリックします。プレビューと撮影範囲、クリップボードの画像を開始時の画素と照合します。実クリップボードを一時的に使います。通常のWindowsアプリでのCtrl・Winは `dotnet $test --frozen-window-smoke --interactive` で検証します。
 
 ### 撮影CLIの保存を検証する
 

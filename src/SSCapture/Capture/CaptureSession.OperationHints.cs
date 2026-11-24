@@ -30,7 +30,7 @@ internal sealed partial class SessionController
     private string ControlSelectionHint()
     {
         string controlOperation = controlConfirmationError ?? (confirmingControl ? "コントロールを取得中"
-            : ControlBounds.IsEmpty ? FrozenScreenshot ? FrozenCaptureTargets.ControlUnavailable : "対象のコントロールが見つかりません"
+            : ControlBounds.IsEmpty ? FrozenScreenshot ? "Ctrlを離すと範囲を選べます" : "対象のコントロールが見つかりません"
             : UsesControlPreview && !ControlPreviewReady ? windowPreview?.Frame.IsFaulted == true
                 ? "コントロールのプレビューを取得できません" : "コントロールをプレビュー中"
             : "ボタンを離してコントロールを撮影");
@@ -49,7 +49,7 @@ internal sealed partial class SessionController
     {
         string? idleHint = controlConfirmationError ?? ModifierHint ?? (windowPreview?.Frame switch
         {
-            { IsFaulted: true } => windowPreview.Frame.Exception?.GetBaseException().Message,
+            { IsFaulted: true } when !FrozenScreenshot => windowPreview.Frame.Exception?.GetBaseException().Message,
             { IsCompleted: false } => "ウィンドウのプレビューを取得中",
             _ => null
         });

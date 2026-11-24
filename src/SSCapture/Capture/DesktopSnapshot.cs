@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using SSCapture.Services;
@@ -16,6 +17,7 @@ internal sealed class DesktopSnapshot : IDisposable
     internal Services.PointerObservation? Pointer { get; private init; }
     internal Services.CaptureContext? Context { get; set; }
     internal FrozenCaptureTargets? FrozenTargets { get; }
+    internal Task FrozenControlsReady { get; private set; } = Task.CompletedTask;
 
     /// <summary>Takes ownership of image. Also used with synthetic pixels for isolated overlay checks.</summary>
     internal DesktopSnapshot(Bitmap image, Rectangle bounds, IReadOnlyList<Rectangle> monitors,
@@ -32,39 +34,61 @@ internal sealed class DesktopSnapshot : IDisposable
         FrozenTargets = frozenTargets;
     }
 
+    // Two bounded UIA passes bracket a single immutable pixel capture.
+    private const int LayoutPassMilliseconds = 450;
+
     internal static async Task<DesktopSnapshot> TakeFrozenSelectionAsync(bool includeCursor, bool observePointer)
     {
-        Rectangle desktop = CaptureNative.MonitorBounds().Aggregate(Rectangle.Union);
-        Point pointer = CaptureNative.CursorPosition();
-        CaptureWindow? candidate = CaptureNative.CaptureWindows(desktop).FirstOrDefault(window => window.Bounds.Contains(pointer));
-        if (candidate is null || !FrozenCaptureTargets.IsBrowser(candidate))
+        var monitors = CaptureNative.MonitorBounds();
+        Rectangle desktop = monitors.Aggregate(Rectangle.Union);
+        if (CaptureNative.ReadFrozenWindows(desktop, includeControls: false) is not { } windows)
             return Take(includeCursor, observePointer, captureTargets: true);
 
-        Rectangle bounds;
-        try { bounds = CaptureNative.RequireCaptureWindow(candidate); }
-        catch (InvalidOperationException) { return Take(includeCursor, observePointer, captureTargets: true); }
-
-        ControlLayout? before = await ReadLayoutAsync(candidate, bounds);
+        Point pointer = CaptureNative.CursorPosition();
+        nint foreground = CaptureNative.GetForegroundWindow();
+        var candidates = FrozenCaptureTargets.VisibleBrowsers(windows, monitors)
+            .OrderByDescending(window => window.Target.Handle == foreground)
+            .ThenByDescending(window => window.Target.Bounds.Contains(pointer)).ToArray();
+        var before = await ObserveLayoutsAsync(candidates);
         var snapshot = Take(includeCursor, observePointer, captureTargets: true);
-        try
-        {
-            if (before is { Incomplete: false, Entries.Length: > 0 })
-                snapshot.FrozenTargets?.SetBrowserControls(candidate, bounds, before, await ReadLayoutAsync(candidate, bounds));
-            return snapshot;
-        }
-        catch { snapshot.Dispose(); throw; }
+        if (snapshot.FrozenTargets is { } targets && before.Count != 0)
+            snapshot.FrozenControlsReady = Task.Run(() => VerifyLayoutsAsync(targets, before));
+        return snapshot;
+    }
 
-        static async Task<ControlLayout?> ReadLayoutAsync(CaptureWindow target, Rectangle bounds)
+    private static async Task VerifyLayoutsAsync(FrozenCaptureTargets targets, Dictionary<FrozenWindow, ControlLayout> before)
+    {
+        var after = await ObserveLayoutsAsync(before.Keys);
+        foreach (var pair in before)
         {
+            var window = pair.Key;
+            if (after.TryGetValue(window, out var layout))
+                targets.SetBrowserControls(window.Target, window.FullBounds, pair.Value, layout);
+        }
+    }
+
+    private static async Task<Dictionary<FrozenWindow, ControlLayout>> ObserveLayoutsAsync(IEnumerable<FrozenWindow> windows)
+    {
+        var observed = new Dictionary<FrozenWindow, ControlLayout>();
+        var clock = Stopwatch.StartNew();
+        foreach (var window in windows)
+        {
+            int remaining = LayoutPassMilliseconds - (int)clock.ElapsedMilliseconds;
+            if (remaining < 75) break;
+            var target = window.Target;
             try
             {
-                if (CaptureNative.RequireCaptureWindow(target) != bounds) return null;
+                if (CaptureNative.RequireCaptureWindow(target) != window.FullBounds) continue;
+                // Leave another target a chance to respond when a provider stalls.
+                int timeout = Math.Min(remaining, CaptureContextClient.Shared.IsStarted ? 250 : 425);
                 var layout = await CaptureContextClient.Shared.FindFrozenControlLayoutAsync(
-                    new(target.Handle.ToInt64(), target.ProcessId, PixelBounds.From(bounds), null));
-                return CaptureNative.RequireCaptureWindow(target) == bounds ? layout : null;
+                    new(target.Handle.ToInt64(), target.ProcessId, PixelBounds.From(window.FullBounds), null), timeout);
+                if (layout is { Incomplete: false, Entries.Length: > 0 } && CaptureNative.RequireCaptureWindow(target) == window.FullBounds)
+                    observed.Add(window, layout);
             }
-            catch (InvalidOperationException) { return null; }
+            catch (InvalidOperationException) { }
         }
+        return observed;
     }
 
     internal static DesktopSnapshot Take(bool includeCursor = false, bool observePointer = false, bool captureTargets = false)

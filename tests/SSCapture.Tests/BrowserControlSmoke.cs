@@ -6,16 +6,26 @@ namespace SSCapture.Tests;
 
 internal static partial class Program
 {
-    private static int RunBrowserControlSmoke(string browser, string scratch)
+    private static int RunBrowserControlSmoke(string browser, string scratch, bool frozen = false)
     {
         string marker = "SSCapture DOM " + Guid.NewGuid().ToString("N")[..8];
         string directory = Path.Combine(Path.GetFullPath(scratch), marker);
         Directory.CreateDirectory(directory);
         string page = Path.Combine(directory, "control.html");
-        File.WriteAllText(page, $"""
-            <!doctype html><title>{marker}</title><div style="display:flex;gap:12px">
-            <button id="RootButton" style="width:190px;height:75px"><span>Save item</span></button>
+        File.WriteAllText(page, $$"""
+            <!doctype html><title>{{marker}}</title><div style="display:flex;gap:12px">
+            <button id="RootButton" autofocus style="width:190px;height:75px;background:#2664c2;forced-color-adjust:none"><span>Save item</span></button>
             <iframe title="Embedded page" srcdoc="<button id='NestedButton' style='width:170px;height:65px'><span>Open details</span></button>"></iframe></div>
+            <script>
+            const button = document.getElementById('RootButton');
+            button.addEventListener('click', () => {
+                setTimeout(() => {
+                    button.style.background = '#de7617';
+                    button.firstElementChild.textContent = 'Updated';
+                    document.title += ' updated';
+                }, 2100);
+            }, { once: true });
+            </script>
             """);
         try
         {
@@ -36,12 +46,13 @@ internal static partial class Program
             double scale = GetDpiForWindow(target.Handle) / 96.0;
             Check(scale > 0, "検証用ブラウザーの表示倍率を取得できません。");
             using var client = new CaptureContextClient();
-            CheckControl(95, 190, 75, "ページ内のボタン");
+            var first = CheckControl(95, 190, 75, "ページ内のボタン");
             CheckControl(282, 170, 65, "iframe内のボタン");
+            if (frozen) return RunFrozenBrowserCapture(target, first.Bounds, directory);
             Console.WriteLine("BROWSER CONTROL PASS ページとiframeのボタンをCSS寸法と照合");
             return 0;
 
-            void CheckControl(int x, int width, int height, string description)
+            ControlHit CheckControl(int x, int width, int height, string description)
             {
                 Rectangle window = CaptureNative.RequireCaptureWindow(target);
                 for (int attempt = 0; attempt < 3; attempt++)
@@ -55,7 +66,7 @@ internal static partial class Program
                         if (hit is null || Math.Abs(hit.Bounds.Width - Math.Round(width * scale)) > 1
                             || Math.Abs(hit.Bounds.Height - Math.Round(height * scale)) > 1) continue;
                         Console.WriteLine($"PASS {description} {hit.Bounds}");
-                        return;
+                        return hit;
                     }
                 }
                 WindowCaptureFrame diagnostic = IsolatedWindowCapture.TakeFrameAsync(target, false).GetAwaiter().GetResult();

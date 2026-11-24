@@ -18,9 +18,9 @@ internal static partial class Program
             StandardRegistrationResetTests();
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }
-        if (args.FirstOrDefault() == "--browser-control-smoke" && args is not ["--browser-control-smoke", "--interactive", _, _])
+        if (args.FirstOrDefault() is "--browser-control-smoke" or "--frozen-browser-smoke" && args is not [_, "--interactive", _, _])
         {
-            Console.Error.WriteLine("専用デスクトップで --browser-control-smoke --interactive <ブラウザーexe> <検証フォルダ> を指定してください。");
+            Console.Error.WriteLine("専用デスクトップで --browser-control-smoke または --frozen-browser-smoke に続けて --interactive <ブラウザーexe> <検証フォルダ> を指定してください。");
             return 2;
         }
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
@@ -96,6 +96,8 @@ internal static partial class Program
         if (args.Contains("--control-capture-smoke")) return RunControlCaptureSmoke();
         if (args.Contains("--control-quick-output-smoke")) return RunQuickControlOutputSmoke();
         if (args is ["--browser-control-smoke", "--interactive", var browser, var scratch]) return RunBrowserControlSmoke(browser, scratch);
+        if (args is ["--frozen-browser-smoke", "--interactive", var frozenBrowser, var frozenScratch]) return RunBrowserControlSmoke(frozenBrowser, frozenScratch, frozen: true);
+        if (args is ["--frozen-window-smoke", "--interactive"]) return RunFrozenWindowSmoke();
         if (args.Length == 2 && args[0] == "--timer-native-smoke") return RunTimerNativeSmoke(args[1]);
         if (args.Contains("--selection-monitor-smoke")) return RunSelectionMonitorSmoke();
         if (args.Contains("--window-hit-smoke")) return RunWindowHitSmoke();

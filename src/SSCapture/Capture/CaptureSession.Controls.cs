@@ -56,8 +56,19 @@ internal sealed partial class SessionController
         if (UsesControlPreview && controlCandidate is { } selected && selected.Bounds.Contains(pointer)
             && window?.Handle != selected.Window.Handle)
             return; // The preview stays selectable over the window that originally covered it.
+        if (FrozenScreenshot && window is not null && FrozenCaptureTargets.IsBrowser(window) && !Snapshot.FrozenControlsReady.IsCompleted)
+        {
+            controlRequest = null;
+            if (controlCandidate is not null)
+            {
+                controlCandidate = null;
+                RefreshOverlays();
+            }
+            return;
+        }
         if (controlRequest is { } previous && previous.Point == pointer && previous.Window == window) return;
         controlRequest = (pointer, window);
+        if (FrozenScreenshot) controlConfirmationError = null;
         controlVersion++;
         if (controlCandidate is { } candidate && (candidate.Window.Handle != window?.Handle || !candidate.Bounds.Contains(pointer)))
         {
@@ -66,8 +77,7 @@ internal sealed partial class SessionController
         }
         if (FrozenScreenshot)
         {
-            var entry = window is not null ? Snapshot.FrozenTargets?.ControlLayout(window, SelectionMonitors)?.Entries
-                .FirstOrDefault(item => ToRectangle(item.HitArea).Contains(pointer)) : null;
+            var entry = window is not null ? Snapshot.FrozenTargets?.HitControl(window, pointer, SelectionMonitors) : null;
             controlCandidate = window is not null && entry is not null ? (window, ToRectangle(entry.Hit.Bounds), entry.Hit.Identity) : null;
             RefreshOverlays();
             return;
@@ -109,6 +119,7 @@ internal sealed partial class SessionController
     {
         if (!selectingControl) return;
         selectingControl = false;
+        controlConfirmationError = null;
         confirmingControl = false;
         controlActivation++;
         controlVersion++;
@@ -159,11 +170,16 @@ internal sealed partial class SessionController
         startingControl = null;
         if (FrozenScreenshot)
         {
-            while (controlDrag.NextWindow is { } window)
-                controlDrag.SetLayout(window, window, Snapshot.FrozenTargets?.ControlLayout(window, SelectionMonitors), SelectionMonitors);
+            ResolveFrozenControlDrag(controlDrag);
         }
         else if (controlDragLookup is not { IsCompleted: false } && controlDrag.NextWindow is not null)
             controlDragLookup = ResolveControlDragAsync(controlDrag);
+    }
+
+    private void ResolveFrozenControlDrag(CaptureControlDrag drag)
+    {
+        while (drag.NextWindow is { } window && (!FrozenCaptureTargets.IsBrowser(window) || Snapshot.FrozenControlsReady.IsCompleted))
+            drag.SetLayout(window, window, Snapshot.FrozenTargets?.ControlLayout(window, SelectionMonitors), SelectionMonitors);
     }
 
     private async Task ResolveControlDragAsync(CaptureControlDrag drag)
@@ -197,8 +213,14 @@ internal sealed partial class SessionController
         try
         {
             RefreshOverlays();
-            if (controlDragLookup is { } pending) await pending;
+            if (FrozenScreenshot)
+            {
+                ResolveFrozenControlDrag(drag);
+                if (drag.NextWindow is not null) await Snapshot.FrozenControlsReady;
+            }
+            else if (controlDragLookup is { } pending) await pending;
             if (completed || !ReferenceEquals(controlDrag, drag)) return;
+            if (FrozenScreenshot) ResolveFrozenControlDrag(drag);
             if (drag.LayoutUnavailable)
                 throw new InvalidOperationException(FrozenScreenshot ? FrozenCaptureTargets.ControlUnavailable
                     : "ドラッグ経路のコントロール情報を取得できませんでした。選び直してください。");
@@ -287,7 +309,12 @@ internal sealed partial class SessionController
         try
         {
             RefreshOverlays();
-            if (!FrozenScreenshot && controlLookup is { } lookup) await lookup;
+            if (FrozenScreenshot && findWindow?.Invoke(pointer) is { } window && FrozenCaptureTargets.IsBrowser(window))
+            {
+                await Snapshot.FrozenControlsReady;
+                if (StillConfirming()) UpdateControlSelection(true, pointer, previewControl);
+            }
+            else if (!FrozenScreenshot && controlLookup is { } lookup) await lookup;
             if (!StillConfirming()) return;
             if (controlCandidate is not { } control || !control.Bounds.Contains(pointer))
                 throw new InvalidOperationException(FrozenScreenshot ? FrozenCaptureTargets.ControlUnavailable
