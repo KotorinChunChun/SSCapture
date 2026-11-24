@@ -62,7 +62,8 @@ internal static class PresetSettings
         settings = PresetCaptureShortcut.Migrate(UpgradeFixedSizes(UpgradePresets(settings)));
         if (newAssignments && PresetCaptureShortcut.FindDefaultFixedAssignment(settings) is { } assignment)
             settings = settings with { PresetCaptureShortcuts = [..settings.PresetCaptureShortcuts!, assignment] };
-        if (settings.PresetSchemaVersion >= 5) return settings;
+        if (settings.PresetSchemaVersion >= 6) return settings;
+        if (settings.PresetSchemaVersion == 5) return RenameOcrPresets(settings);
         var outputs = settings.CapturePresets.ToList();
         foreach (var (id, name, content, _) in OcrTemplates)
         {
@@ -72,14 +73,28 @@ internal static class PresetSettings
             outputs.Add(preset with { Id = UniqueId(id, outputs.Select(p => p.Id)), BuiltInKey = id, ClipboardContent = content });
         }
         settings = settings with { CapturePresets = outputs.ToArray(), PresetSchemaVersion = 5 };
-        return settings.PresetCaptureShortcuts is { Length: > 0 } rows
+        settings = settings.PresetCaptureShortcuts is { Length: > 0 } rows
             ? settings with { PresetCaptureShortcuts = WithOcrShortcuts(settings, rows) } : settings;
+        return RenameOcrPresets(settings);
+    }
+
+    private static AppSettings RenameOcrPresets(AppSettings settings)
+    {
+        var outputs = settings.CapturePresets.ToArray();
+        foreach (var (id, name, content, _) in OcrTemplates)
+        {
+            string oldName = content == StillClipboardContent.Text ? "テキスト（OCR）" : "表（TSV）";
+            int index = Array.FindIndex(outputs, preset => preset.BuiltInKey == id && preset.Name == oldName);
+            if (index >= 0)
+                outputs[index] = outputs[index] with { Name = UniqueName(name, outputs.Select(preset => preset.Name)) };
+        }
+        return settings with { CapturePresets = outputs, PresetSchemaVersion = 6 };
     }
 
     private static readonly (string Id, string Name, StillClipboardContent Content, string Shortcut)[] OcrTemplates =
     [
-        ("initial-output-text", "テキスト（OCR）", StillClipboardContent.Text, "Win+Shift+T"),
-        ("initial-output-tsv", "表（TSV）", StillClipboardContent.Tsv, "Win+Shift+L")
+        ("initial-output-text", "OCR（文字列）", StillClipboardContent.Text, "Win+Shift+T"),
+        ("initial-output-tsv", "OCR（表）", StillClipboardContent.Tsv, "Win+Shift+L")
     ];
 
     internal static PresetCaptureShortcut[] WithOcrShortcuts(AppSettings settings, PresetCaptureShortcut[] existing)

@@ -61,7 +61,8 @@ internal static partial class Program
             LimitToStartingMonitor = false
         };
         // 1点目を決めた後の矩形ドラッグ。資料のグラフを囲んでいる途中。
-        await CaptureSceneAsync(Path.Combine(output, "capture-scene-drag.png"), settingsImage, settings, CaptureMode.Rectangle, null,
+        await CaptureSceneAsync(Path.Combine(output, "capture-scene-drag.png"), settingsImage,
+            settings with { ShowCrosshairGuide = true }, CaptureMode.Rectangle, null,
             new Point(1215, 330), session =>
             {
                 var start = new Point(1215, 330);

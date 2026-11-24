@@ -68,11 +68,18 @@ internal sealed partial class SettingsForm
                     persistHistory.Checked = defaults.PersistHistory;
                     break;
                 case "外部アプリ":
-                    var restored = StandardRegistrationReset.RestoreExternalApplications(committed with { ImageEditors = imageApps.Applications, VideoEditors = videoApps.Applications });
-                    imageApps.LoadRestoredApplications(restored.ImageEditors);
-                    videoApps.LoadRestoredApplications(restored.VideoEditors);
-                    presetEditor.RefreshApplications();
-                    break;
+                    if (ConfirmPresetReset())
+                    {
+                        var restored = StandardRegistrationReset.RestoreExternalApplications(committed);
+                        if (CommitEditorSettings(restored) is { } error) { SetStatus(error, true); return; }
+                        imageApps.LoadRestoredApplications(committed.ImageEditors, committed.SelectedImageEditorId);
+                        videoApps.LoadRestoredApplications(committed.VideoEditors, committed.SelectedVideoEditorId);
+                        presetEditor.RefreshApplications();
+                        imageApps.RefreshUsage();
+                        videoApps.RefreshUsage();
+                        SetStatus("標準の外部アプリを初期設定に戻しました。");
+                    }
+                    return;
                 case "ショートカット":
                     ResetShortcutDraft(defaults);
                     break;
@@ -124,15 +131,6 @@ internal sealed partial class SettingsForm
                 historyRetentionDays.Value = committed.HistoryRetentionDays;
                 persistHistory.Checked = committed.PersistHistory;
                 break;
-            case "外部アプリ":
-                imageApps.LoadRestoredApplications(committed.ImageEditors, committed.SelectedImageEditorId);
-                videoApps.LoadRestoredApplications(committed.VideoEditors, committed.SelectedVideoEditorId);
-                presetEditor.SetDefaultApplication(true, imageApps.SelectedId);
-                presetEditor.SetDefaultApplication(false, videoApps.SelectedId);
-                presetEditor.RefreshApplications();
-                imageApps.RefreshUsage();
-                videoApps.RefreshUsage();
-                break;
             case "即時撮影キー":
                 lastRecipeKey.Value = committed.LastRecipeShortcut;
                 for (int index = 0; index < instantKeys.Length; index++) instantKeys[index].Value = committed.InstantShortcuts[index];
@@ -168,6 +166,7 @@ internal sealed partial class SettingsForm
         guideEnabled.Checked = defaults.ShowSelectionGuide;
         guideDisplay.SelectedIndex = (int)defaults.SelectionGuideDisplay;
         pointerGuideEnabled.Checked = defaults.ShowPointerGuide;
+        crosshairGuideEnabled.Checked = defaults.ShowCrosshairGuide;
         magnifierEnabled.Checked = defaults.ShowMagnifier;
         magnifierDotCount.SelectedItem = defaults.MagnifierDotCount;
         magnifierZoom.Value = defaults.MagnifierZoom;
@@ -217,7 +216,9 @@ internal sealed partial class SettingsForm
             MinimizeBox = MaximizeBox = ShowInTaskbar = false;
 
             var content = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(16) };
-            content.Controls.Add(new Label { AutoSize = true, Text = $"「{category}」の標準プリセットを初期値に戻して保存します。\n自作プリセットは保持します。" });
+            content.Controls.Add(new Label { AutoSize = true, Text = category == "外部アプリ"
+                ? "標準の外部アプリを初期値に戻して保存します。\n利用者が追加したアプリと既定の指定は保持します。"
+                : $"「{category}」の標準プリセットを初期値に戻して保存します。\n自作プリセットは保持します。" });
             var buttons = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill, WrapContents = false };
             var cancel = MakeButton("キャンセル", "CancelResetSettingsPage", ButtonRole.Neutral);
             cancel.Width = 120;

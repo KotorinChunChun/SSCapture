@@ -63,6 +63,7 @@ internal sealed record AppSettings
     public bool ShowSelectionGuide { get; init; } = true;
     public SelectionGuideDisplay SelectionGuideDisplay { get; init; }
     public bool ShowPointerGuide { get; init; } = true;
+    public bool ShowCrosshairGuide { get; init; }
     public bool ShowMagnifier { get; init; }
     public int MagnifierDotCount { get; init; } = Capture.CaptureMagnifier.DefaultDotCount;
     public int MagnifierZoom { get; init; } = Capture.CaptureMagnifier.DefaultZoom;

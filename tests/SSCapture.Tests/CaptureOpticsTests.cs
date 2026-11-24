@@ -8,6 +8,7 @@ internal static partial class Program
 {
     private static void CaptureOpticsTests()
     {
+        CrosshairGuideTests();
         SelectionFrameTests();
         Run("通常の矩形モードでは左単押し中のホイールを確定画像の四辺に反映する", () =>
         {
@@ -659,6 +660,64 @@ internal static partial class Program
     }
 
     private const BindingFlags OpticsPrivate = BindingFlags.Instance | BindingFlags.NonPublic;
+
+    private static void CrosshairGuideTests()
+    {
+        Run("矩形の全画面ガイド線は独立し1点目・ドラッグ・2点クリックで実ポインタを追う", () =>
+        {
+            Rectangle left = new(-100, -20, 100, 80), right = new(0, -20, 140, 80);
+            Rectangle desktop = Rectangle.Union(left, right);
+            foreach (var method in Enum.GetValues<CaptureSelectionMethod>())
+            {
+                using var bitmap = new Bitmap(desktop.Width, desktop.Height);
+                using (var graphics = Graphics.FromImage(bitmap)) graphics.Clear(Color.Teal);
+                var options = new CaptureOptions(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
+                    LimitToStartingMonitor: false, ShowSelectionGuide: false, OutputSettings: new AppSettings
+                    {
+                        ShowCrosshairGuide = true, ShowPointerGuide = false, ShowMagnifier = false, SelectionMethod = method,
+                        ShowSelectionGuide = false
+                    });
+                using var snapshot = new DesktopSnapshot((Bitmap)bitmap.Clone(), desktop, [left, right]);
+                var session = new SessionController(options, snapshot, [], initialPointer: new(-70, 5));
+                using var a = new CaptureOverlay(session, left);
+                using var b = new CaptureOverlay(session, right);
+                try
+                {
+                    var start = new Point(-70, 5);
+                    session.MoveTo(start);
+                    var visual = ReadOpticsVisual(a);
+                    Equal<Point?>(new(30, 25), VisualProperty<Point?>(visual, "Crosshair"));
+                    Equal<Point?>(null, VisualProperty<Point?>(ReadOpticsVisual(b), "Crosshair"));
+                    a.InvalidateChanges();
+                    b.InvalidateChanges();
+                    foreach (bool shared in new[] { false, true })
+                    {
+                        using var image = DrawOpticsOverlay(a, visual, shared);
+                        foreach (Point pixel in new Point[] { new(0, 25), new(99, 25), new(30, 0), new(30, 79) })
+                            Equal(Color.White.ToArgb(), image.GetPixel(pixel.X, pixel.Y).ToArgb());
+                        Equal(Color.Black.ToArgb(), image.GetPixel(0, 24).ToArgb());
+                    }
+                    session.MouseDown(a, MouseButtons.Left, start);
+                    if (method == CaptureSelectionMethod.TwoClicks) session.MouseUp(MouseButtons.Left, start);
+                    Point end = new(24, 30);
+                    session.MoveTo(end);
+                    Check(a.InvalidateChanges() && b.InvalidateChanges(), "両方のモニターを更新しない");
+                    Equal<Point?>(null, VisualProperty<Point?>(ReadOpticsVisual(a), "Crosshair"));
+                    Equal<Point?>(new(24, 50), VisualProperty<Point?>(ReadOpticsVisual(b), "Crosshair"));
+                    if (method == CaptureSelectionMethod.TwoClicks) session.MouseDown(b, MouseButtons.Left, end);
+                    session.MouseUp(MouseButtons.Left, end);
+                    using var outcome = session.Completion.GetAwaiter().GetResult();
+                    for (int y = 0; y < outcome.Image!.Height; y++)
+                        for (int x = 0; x < outcome.Image.Width; x++)
+                            Equal(Color.Teal.ToArgb(), outcome.Image.GetPixel(x, y).ToArgb());
+                }
+                finally { session.Cancel(); }
+            }
+            var (horizontal, vertical) = CaptureOverlay.CrosshairBands(new(0, 0, 140, 80), Point.Empty);
+            Equal(new Rectangle(0, 0, 140, 2), horizontal);
+            Equal(new Rectangle(0, 0, 2, 80), vertical);
+        });
+    }
 
     private static MethodInfo OpticsMethod(Type type, string name) => type.GetMethod(name, OpticsPrivate)!;
 

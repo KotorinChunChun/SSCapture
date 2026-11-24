@@ -13,7 +13,6 @@ internal sealed partial class SettingsForm
         "通知" => ReadNotificationSettings,
         "履歴" => () => committed with { KeepHistory = keepHistory.Checked,
             HistoryRetentionDays = SettingNumber(historyRetentionDays), PersistHistory = persistHistory.Checked },
-        "外部アプリ" => ReadExternalApplicationSettings,
         "即時撮影キー" => ReadInstantShortcuts,
         FirstPointTab => ReadBeforeShortcuts,
         SecondPointTab => ReadDragShortcuts,
@@ -170,12 +169,6 @@ internal sealed partial class SettingsForm
             DragMiddleAction = captureKeys.ClickAt(MouseButtons.Middle)
         }
     };
-
-    private AppSettings ReadExternalApplicationSettings()
-    {
-        var next = WithExternalApplications(committed, CaptureIntent.Screenshot, imageApps.Applications, imageApps.SelectedId);
-        return WithExternalApplications(next, CaptureIntent.Recording, videoApps.Applications, videoApps.SelectedId);
-    }
 
     private static AppSettings WithExternalApplications(AppSettings current, CaptureIntent intent, ExternalApplication[] apps, string id)
     {

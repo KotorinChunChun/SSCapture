@@ -29,6 +29,10 @@ internal sealed partial class SessionController
 
     internal Point MagnifierSample => Pointer;
 
+    internal Point? CrosshairGuide => OutputSettings.ShowCrosshairGuide && Mode == CaptureMode.Rectangle
+        && !SelectingControl && !SelectingDesktop && !PointerLabelsSuppressed && !completed && !refreshing
+        ? Pointer : null;
+
     internal Rectangle MagnifierSelection => SelectingDesktop ? gesture.MonitorAt(Pointer)
         : UsesWindowSource && !SelectingControl && PreviewFrame is null ? Rectangle.Empty : DisplaySelection;
     internal IReadOnlyList<Point>? MagnifierPolygon => !SelectingControl && Mode == CaptureMode.Freeform

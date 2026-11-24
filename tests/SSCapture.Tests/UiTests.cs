@@ -20,7 +20,7 @@ internal static partial class Program
             foreach (var control in Descendants(form)) _ = control.Handle;
             LayoutTree(form);
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
-            var basic = tabs.TabPages[0].Controls.OfType<TableLayoutPanel>().Single();
+            var basic = (TableLayoutPanel)tabs.TabPages[0].Controls.Find("BasicSettingsFields", true).Single();
             string[] groups = basic.Controls.Cast<Control>()
                 .OfType<Label>()
                 .OrderBy(basic.GetRow)
@@ -45,6 +45,8 @@ internal static partial class Program
             Check(!grid.Checked && step.Enabled, "既定OFFでグリッド間隔が編集できない");
             var screenGuide = Box("ShowSelectionGuide");
             var pointerGuide = Box("ShowPointerGuide");
+            var crosshair = Box("ShowCrosshairGuide");
+            Check(!crosshair.Checked, "全画面ガイド線が初期ON");
             var magnifier = Box("ShowMagnifier");
             var dots = (ComboBox)form.Controls.Find("MagnifierDotCount", true).Single();
             var zoom = (NumericUpDown)form.Controls.Find("MagnifierZoom", true).Single();
@@ -69,8 +71,9 @@ internal static partial class Program
             display.SelectedIndex = 1;
             Equal(screenGuide.Left, pointerGuide.Left);
             Equal(pointerGuide.Left, magnifier.Left);
-            Check(screenGuide.Bottom <= pointerGuide.Top && pointerGuide.Bottom <= magnifier.Top &&
-                magnifier.Bottom <= magnifier.Parent!.ClientSize.Height, "操作ガイドの3項目が縦に収まらない");
+            Check(screenGuide.Bottom <= pointerGuide.Top && pointerGuide.Bottom <= crosshair.Top
+                && crosshair.Bottom <= magnifier.Top && magnifier.Bottom <= magnifier.Parent!.ClientSize.Height,
+                "操作ガイドの項目が縦に収まらない");
             Equal("画面右下に操作ガイドを表示する", screenGuide.Text);
             Equal("ポインタ横に操作ガイドを表示する", pointerGuide.Text);
             using var tooltip = new ToolTip();
@@ -85,9 +88,10 @@ internal static partial class Program
             Check(Tip(step).Contains("10px単位", StringComparison.Ordinal) && Tip(distance).Contains("端・角", StringComparison.Ordinal),
                 "グリッド間隔またはウィンドウスナップ距離の説明がない");
             screenGuide.Checked = false;
+            crosshair.Checked = true;
             step.Value = 10;
             ApplySettingsPage(form, "基本");
-            Check(saved is { ShowSelectionGuide: false, ShowPointerGuide: true, Grid20: false, GridStepPixels: 10,
+            Check(saved is { ShowSelectionGuide: false, ShowPointerGuide: true, ShowCrosshairGuide: true, Grid20: false, GridStepPixels: 10,
                 SelectionGuideDisplay: SelectionGuideDisplay.Main, MagnifierDotCount: 18, MagnifierZoom: 7 }, "ガイド、表示先、グリッド間隔または拡大鏡が保存されない");
             screenGuide.Checked = true;
             pointerGuide.Checked = false;
@@ -108,17 +112,16 @@ internal static partial class Program
             var tabs = (TabControl)form.Controls.Find("SettingsTabs", true).Single();
             var close = form.Controls.Find("CloseSettings", true).Single();
             Equal(1, close.Parent!.Controls.Count);
-            foreach (string category in new[] { "入力プリセット", "コマンド生成" })
+            foreach (string category in new[] { "入力プリセット", "外部アプリ", "コマンド生成" })
                 Check(tabs.TabPages.Cast<TabPage>().Single(page => page.Text == category).Controls.Find("ApplyPageSettings", true).Length == 0,
                     category + "に適用がある");
 
             var basic = SettingsApplyButton(form, "基本");
             var notice = SettingsApplyButton(form, "通知");
-            var external = SettingsApplyButton(form, "外部アプリ");
             var before = SettingsApplyButton(form, "ショートカット", "1点目");
             var instant = SettingsApplyButton(form, "ショートカット", "即時撮影キー");
             var drag = SettingsApplyButton(form, "ショートカット", "2点目");
-            Check(new[] { basic, notice, external, before, instant, drag }.All(button => button.Text == "適用" && !button.Enabled),
+            Check(new[] { basic, notice, before, instant, drag }.All(button => button.Text == "適用" && !button.Enabled),
                 "未変更なのに適用できる");
             var dim = (CheckBox)form.Controls.Find("DimCaptureBackground", true).Single();
             var duration = (NumericUpDown)form.Controls.Find("NotificationDurationSeconds", true).Single();

@@ -40,7 +40,7 @@ internal sealed partial class SettingsForm : Form
     private readonly ListBox categories;
     private readonly NumericUpDown snapDistance, gridStep;
     private readonly CheckBox gridEnabled, guideEnabled, pointerGuideEnabled;
-    private readonly CheckBox magnifierEnabled, shareCapturePresentation;
+    private readonly CheckBox magnifierEnabled, crosshairGuideEnabled, shareCapturePresentation;
     private readonly ComboBox guideDisplay, magnifierDotCount;
     private readonly NumericUpDown magnifierZoom;
     private readonly StartupSettingsControl startupSettings;
@@ -314,12 +314,16 @@ internal sealed partial class SettingsForm : Form
         }
         // 旧単独ページを廃止し、プリセットの編集欄だけを公開する。
         basic.Controls.Clear();
+        basic.Name = "BasicSettingsFields";
         basic.RowStyles.Clear(); basic.RowCount = 6;
-        foreach (int height in new[] { 100, 110, 174, 36, 78, 46 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        foreach (int height in new[] { 100, 110, 205, 36, 78, 46 }) basic.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
         basic.Dock = DockStyle.Top;
         basic.AutoSize = true;
         basic.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        ((TabPage)basic.Parent!).AutoScroll = true;
+        var basicPage = (TabPage)basic.Parent!;
+        var basicBody = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        basicPage.Controls.Add(basicBody);
+        basicBody.Controls.Add(basic);
 
         var selectionOptions = BasicFields(31, 31, 31);
         limitToStartingMonitor = BasicCheckBox("LimitToStartingMonitor", "開始したモニター内で選択する", settings.LimitToStartingMonitor);
@@ -337,9 +341,10 @@ internal sealed partial class SettingsForm : Form
         snapDistance = PixelField(precisionOptions, "ウィンドウスナップ距離（px）", "SnapDistancePixels", settings.SnapDistancePixels, 2);
         Add(basic, "位置・寸法の補正", precisionOptions, 1);
 
-        var guideOptions = BasicFields(32, 31, 31, 36, 37);
+        var guideOptions = BasicFields(32, 31, 31, 31, 36, 37);
         guideEnabled = BasicCheckBox("ShowSelectionGuide", "画面右下に操作ガイドを表示する", settings.ShowSelectionGuide);
         pointerGuideEnabled = BasicCheckBox("ShowPointerGuide", "ポインタ横に操作ガイドを表示する", settings.ShowPointerGuide);
+        crosshairGuideEnabled = BasicCheckBox("ShowCrosshairGuide", "画面全体に水平・垂直ガイド線を表示する", settings.ShowCrosshairGuide);
         magnifierEnabled = BasicCheckBox("ShowMagnifier", "拡大鏡を表示する", settings.ShowMagnifier);
         guideOptions.Controls.Add(guideEnabled, 0, 0);
         guideDisplay = new ComboBox { Name = "SelectionGuideDisplay", AccessibleName = "画面右下の操作ガイドの表示先",
@@ -348,8 +353,9 @@ internal sealed partial class SettingsForm : Form
         guideDisplay.SelectedIndex = (int)settings.SelectionGuideDisplay;
         guideOptions.Controls.Add(guideDisplay, 1, 0);
         AddFullRow(guideOptions, pointerGuideEnabled, 1);
-        AddFullRow(guideOptions, magnifierEnabled, 2);
-        magnifierDotCount = Combo(guideOptions, "拡大鏡の表示ドット数", "MagnifierDotCount", 3);
+        AddFullRow(guideOptions, crosshairGuideEnabled, 2);
+        AddFullRow(guideOptions, magnifierEnabled, 3);
+        magnifierDotCount = Combo(guideOptions, "拡大鏡の表示ドット数", "MagnifierDotCount", 4);
         for (int dots = CaptureMagnifier.MinDotCount; dots <= CaptureMagnifier.MaxDotCount; dots += 2)
             magnifierDotCount.Items.Add(dots);
         magnifierDotCount.FormattingEnabled = true;
@@ -357,7 +363,7 @@ internal sealed partial class SettingsForm : Form
         magnifierDotCount.SelectedItem = settings.MagnifierDotCount;
         magnifierZoom = new NumericUpDown { Name = "MagnifierZoom", Minimum = CaptureMagnifier.MinZoom,
             Maximum = CaptureMagnifier.MaxZoom, Value = settings.MagnifierZoom };
-        Add(guideOptions, "拡大鏡の拡大倍率（倍）", magnifierZoom, 4);
+        Add(guideOptions, "拡大鏡の拡大倍率（倍）", magnifierZoom, 5);
         Add(basic, "操作ガイド", guideOptions, 2);
 
         var launchOptions = BasicFields(29);
@@ -574,6 +580,7 @@ internal sealed partial class SettingsForm : Form
     {
         LimitToStartingMonitor = limitToStartingMonitor.Checked, DimCaptureBackground = dimCaptureBackground.Checked,
         Grid20 = gridEnabled.Checked, ShowSelectionGuide = guideEnabled.Checked, ShowPointerGuide = pointerGuideEnabled.Checked,
+        ShowCrosshairGuide = crosshairGuideEnabled.Checked,
         SelectionGuideDisplay = (SelectionGuideDisplay)guideDisplay.SelectedIndex,
         ShowMagnifier = magnifierEnabled.Checked, ShareCapturePresentation = shareCapturePresentation.Checked,
         MagnifierDotCount = (int)magnifierDotCount.SelectedItem!, MagnifierZoom = SettingNumber(magnifierZoom),

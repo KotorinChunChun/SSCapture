@@ -51,7 +51,7 @@ internal static partial class Program
         }
         if (args.SequenceEqual(["--snap-tests"]))
         {
-            SnapTests(); SelectionGuideTests(); SelectionUpgradeTests(); SelectionMonitorTests(); SelectionInteractionTests(); FixedCaptureTests(); OverlayWindowTests(); PreparationTests(); CaptureCompositeTests();
+            SnapTests(); SelectionGuideTests(); CrosshairGuideTests(); SelectionUpgradeTests(); SelectionMonitorTests(); SelectionInteractionTests(); FixedCaptureTests(); OverlayWindowTests(); PreparationTests(); CaptureCompositeTests();
             Console.WriteLine($"RESULT: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1;
         }
         if (args.SequenceEqual(["--menu-tests"]))

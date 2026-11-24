@@ -102,7 +102,7 @@ internal static partial class Program
         Run("新規は入力4件・出力5件と矩形コピー既定・暗転ON", () =>
         {
             var settings = new AppSettings().ApplyDefaults(); settings.Validate();
-            Equal(5, settings.PresetSchemaVersion); Equal(4, settings.SavedRegions.Length); Equal(5, settings.CapturePresets.Length);
+            Equal(6, settings.PresetSchemaVersion); Equal(4, settings.SavedRegions.Length); Equal(5, settings.CapturePresets.Length);
             Equal(CaptureMode.Rectangle, settings.DefaultMode); Equal(OutputDestination.Clipboard, settings.DefaultDestination);
             Check(settings.DimCaptureBackground && settings.FreezeFrame && !settings.IncludeCursor && !settings.Grid20, "標準入力の初期条件が異なる");
             Equal(0, settings.ScreenshotPaddingPixels); Equal(ScreenshotColorDepth.Original, settings.ScreenshotColorDepth);
@@ -205,6 +205,21 @@ internal static partial class Program
             Check(warning.Text.Contains("スクリーンショット"), "Sの競合表示がない");
             editor.LoadRows([new("Win+Shift+L")]);
             Equal("", warning.Text); Equal("Win+Shift+L", key.Value);
+        });
+        Run("OCR標準名を移行し、独自名・同名の自作項目・ショートカットを保持", () =>
+        {
+            var defaults = new AppSettings().ApplyDefaults();
+            var text = defaults.CapturePresets.Single(p => p.Name == "OCR（文字列）");
+            var table = defaults.CapturePresets.Single(p => p.Name == "OCR（表）");
+            var custom = text with { Id = "custom-text", BuiltInKey = null };
+            var old = defaults with { PresetSchemaVersion = 5, CapturePresets = [
+                text with { Name = "テキスト（OCR）" }, table with { Name = "表（TSV）" }, custom] };
+            var migrated = old.EnsurePresets();
+            Equal(text with { Name = "OCR（文字列） 2" }, migrated.CapturePresets[0]);
+            Equal(table, migrated.CapturePresets[1]); Equal(custom, migrated.CapturePresets[2]);
+            Equal(old.PresetCaptureShortcuts, migrated.PresetCaptureShortcuts);
+            var renamed = old with { CapturePresets = [text with { Name = "自分の文字認識" }] };
+            Equal(renamed.CapturePresets.Single(), renamed.EnsurePresets().CapturePresets.Single());
         });
         Run("初期候補追加はv1の既定・ID・値と重複名を保持", () =>
         {

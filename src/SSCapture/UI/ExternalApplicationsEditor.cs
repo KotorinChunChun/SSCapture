@@ -66,7 +66,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
         list.Columns.AddRange(Column("ApplicationName", "アプリ名", 25), Column("Notification", "通知", 18),
             Column("OutputPresets", "出力プリセット", 57));
         root.Controls.Add(list, 0, 0); root.SetColumnSpan(list, 2);
-        defaultButton = SettingsEditorActions.CreateDefaultButton(prefix + "EditorDefault", ChangeDefaultApplication);
+        defaultButton = SettingsEditorActions.CreateDefaultButton(prefix + "EditorDefault", () => Edit(ChangeDefaultApplication));
         defaultButton.Dock = DockStyle.Left;
         defaultButton.Width = 160;
         root.Controls.Add(defaultButton, 0, 1); root.SetColumnSpan(defaultButton, 2);
@@ -123,11 +123,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
         list.SelectionChanged += (_, _) =>
         {
             if (refreshing) return;
-            var app = EditingApplication;
-            UpdateSelectionActions(app);
-            if (app is null) return;
-            appName.Text = app.Name;
-            SetLaunch(app.Launch, app.Executable, app.Arguments);
+            UpdateEditingApplication();
         };
         Refresh(selectedId);
         if (!SelectRow(selectedId)) SelectRow(applications.FirstOrDefault()?.Id);
@@ -156,9 +152,8 @@ internal sealed class ExternalApplicationsEditor : UserControl
         if (disposing) { newMenu.Dispose(); argumentTips.Dispose(); }
         base.Dispose(disposing);
     }
-    internal void LoadRestoredApplications(ExternalApplication[] restored, string? restoreSelectedId = null)
+    internal void LoadRestoredApplications(ExternalApplication[] restored, string selectedId)
     {
-        string selectedId = restoreSelectedId ?? SelectedId;
         string? editingId = EditingApplication?.Id;
         applications.Clear();
         applications.AddRange(restored);
@@ -168,7 +163,7 @@ internal sealed class ExternalApplicationsEditor : UserControl
             appName.Clear();
             SetLaunch(ExternalApplicationLaunch.Executable, "", "");
         }
-        status.Text = restoreSelectedId is null ? "変更しました。［適用］で確定します。" : "";
+        status.Text = "";
     }
     private void Refresh(string id, bool notifySelection = true)
     {
@@ -212,9 +207,21 @@ internal sealed class ExternalApplicationsEditor : UserControl
     private void ChangeDefaultApplication()
     {
         if (EditingApplication is not { } app) return;
-        SelectedId = app.Id == SelectedId ? "" : app.Id;
+        string id = app.Id == SelectedId ? "" : app.Id;
+        if (saveApplications?.Invoke(Applications, id) is { } error) throw new ArgumentException(error);
+        SelectedId = id;
         SelectedChanged?.Invoke(SelectedId);
         RefreshUsage();
+        status.Text = id.Length == 0 ? "外部アプリの既定を解除しました。" : "外部アプリの既定を保存しました。";
+    }
+
+    private void UpdateEditingApplication()
+    {
+        var app = EditingApplication;
+        UpdateSelectionActions(app);
+        if (app is null) return;
+        appName.Text = app.Name;
+        SetLaunch(app.Launch, app.Executable, app.Arguments);
     }
 
     private void UpdateSelectionActions(ExternalApplication? app)
@@ -227,8 +234,16 @@ internal sealed class ExternalApplicationsEditor : UserControl
     {
         int index = applications.FindIndex(app => app.Id == id);
         if (index < 0) return false;
-        list.CurrentCell = list.Rows[index].Cells[0];
-        list.Rows[index].Selected = true;
+        refreshing = true;
+        try
+        {
+            list.ClearSelection();
+            var row = list.Rows[index];
+            list.CurrentCell = row.Cells[0];
+            row.Selected = true;
+        }
+        finally { refreshing = false; }
+        UpdateEditingApplication();
         return true;
     }
     private void SetLaunch(ExternalApplicationLaunch kind, string path, string arguments)
@@ -263,7 +278,8 @@ internal sealed class ExternalApplicationsEditor : UserControl
         if (SelectedId == app.Id || notificationId == app.Id || presets.Any(preset => EditorId(preset) == app.Id))
             throw new ArgumentException("通知または出力プリセットで参照中です。先に指定を変更してください。");
         ExternalApplication[] next = applications.Where(candidate => candidate.Id != app.Id).ToArray();
-        ApplyApplications(next, SelectedId, next.FirstOrDefault()?.Id);
+        int index = list.SelectedRows[0].Index;
+        ApplyApplications(next, SelectedId, next.Length == 0 ? null : next[Math.Min(index, next.Length - 1)].Id);
         if (next.Length == 0)
         {
             appName.Clear();

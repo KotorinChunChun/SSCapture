@@ -9,6 +9,7 @@ internal sealed class CaptureOverlay : Form
     private bool sessionNotifications;
     private CapturePresentation? sharedPresentation;
     private VisualState? rendered;
+    private Region? paintRegion;
     private Keys? mouseButtonModifiers;
     private int magnifierQuadrant = -1;
     internal Rectangle MonitorBounds { get; }
@@ -19,7 +20,7 @@ internal sealed class CaptureOverlay : Form
         Rectangle Hint, string? HintText, string? Error, int TrailPoints, Rectangle TrailBounds, IReadOnlyList<Rectangle> DragHighlights,
         IReadOnlyList<WindowCaptureFrame> ControlDragFrames,
         Rectangle Magnifier, Point MagnifierSample, Rectangle MagnifierSelection,
-        IReadOnlyList<Rectangle> MagnifierRegions, int MagnifierDotCount, int MagnifierZoom, bool Shared);
+        IReadOnlyList<Rectangle> MagnifierRegions, int MagnifierDotCount, int MagnifierZoom, Point? Crosshair, bool Shared);
 
     internal CaptureOverlay(SessionController session, Rectangle monitorBounds)
     {
@@ -89,6 +90,16 @@ internal sealed class CaptureOverlay : Form
 
     protected override void WndProc(ref Message m)
     {
+        if (session is null) { base.WndProc(ref m); return; }
+        if (m.Msg == 0x000F && session.OutputSettings.ShowCrosshairGuide) // WM_PAINT
+        {
+            using var region = CapturePresentation.ReadUpdateRegion(m.HWnd);
+            var previousRegion = paintRegion;
+            paintRegion = region;
+            try { base.WndProc(ref m); }
+            finally { paintRegion = previousRegion; }
+            return;
+        }
         if (m.Msg == 0x0021 && session.SelectingControl) { m.Result = 3; return; } // MA_NOACTIVATE
         if (CaptureNative.IsModifierTransition(m.Msg, m.WParam))
         {
@@ -157,12 +168,13 @@ internal sealed class CaptureOverlay : Form
     {
         base.OnPaint(e);
         Rectangle dirty = Rectangle.Intersect(ClientRectangle, e.ClipRectangle);
+        if (paintRegion is not null) e.Graphics.SetClip(paintRegion, CombineMode.Intersect);
         DrawSnapshot(e.Graphics, dirty);
         VisualState visual = ReadVisualState();
         if (visual.Shared && Visible && !session.Refreshing)
         {
             sharedPresentation ??= new CapturePresentation(MonitorBounds, Handle);
-            if (sharedPresentation.Present(dirty, (graphics, area, shared) => DrawForeground(graphics, area, shared, visual)))
+            if (sharedPresentation.Present(dirty, (graphics, area, shared) => DrawForeground(graphics, area, shared, visual), paintRegion))
             {
                 rendered ??= visual;
                 return;
@@ -218,6 +230,7 @@ internal sealed class CaptureOverlay : Form
         }
         DrawSelection(graphics, selection, Local(visual.Basis), dirty, shared);
         DrawTargetTrail(graphics, dirty);
+        if (visual.Crosshair is Point crosshair) DrawCrosshair(graphics, ClientRectangle, crosshair);
         if (visual.DimensionsText is string dimensions)
             DrawPointerLabel(graphics, dimensions, visual.Dimensions, shared);
         if (visual.HintText is string hint)
@@ -306,6 +319,11 @@ internal sealed class CaptureOverlay : Form
             dirty.Union(old.Hint);
             dirty.Union(next.Hint);
         }
+        if (old.Crosshair != next.Crosshair)
+        {
+            AddCrosshair(old.Crosshair);
+            AddCrosshair(next.Crosshair);
+        }
         if (old.Magnifier != next.Magnifier || old.MagnifierSample != next.MagnifierSample
             || old.MagnifierSelection != next.MagnifierSelection || !old.MagnifierRegions.SequenceEqual(next.MagnifierRegions)
             || old.MagnifierDotCount != next.MagnifierDotCount || old.MagnifierZoom != next.MagnifierZoom
@@ -322,6 +340,13 @@ internal sealed class CaptureOverlay : Form
         return true;
 
         Rectangle Inflate(Rectangle bounds) => bounds.IsEmpty ? Rectangle.Empty : Rectangle.Inflate(Local(bounds), 3, 3);
+        void AddCrosshair(Point? point)
+        {
+            if (point is not Point center) return;
+            var (horizontal, vertical) = CrosshairBands(ClientRectangle, center);
+            dirty.Union(horizontal);
+            dirty.Union(vertical);
+        }
         void AddBorder(Rectangle bounds)
         {
             if (bounds.Width <= 0 || bounds.Height <= 0) return;
@@ -351,7 +376,23 @@ internal sealed class CaptureOverlay : Form
             dimensionsBounds, dimensions, hintBounds, hint, session.SelectionError, session.TargetDragPath.Count, session.TargetDragBounds,
             session.TargetDragHighlights, session.ControlDragFrames, lens.Bounds, lens.Bounds.IsEmpty ? Point.Empty : session.MagnifierSample,
             lens.Bounds.IsEmpty ? Rectangle.Empty : session.MagnifierSelection,
-            lens.Bounds.IsEmpty ? [] : session.MagnifierRegions, dotCount, zoom, session.OutputSettings.ShareCapturePresentation);
+            lens.Bounds.IsEmpty ? [] : session.MagnifierRegions, dotCount, zoom,
+            session.CrosshairGuide is Point point && MonitorBounds.Contains(point)
+                ? new Point(point.X - MonitorBounds.X, point.Y - MonitorBounds.Y) : null,
+            session.OutputSettings.ShareCapturePresentation);
+    }
+
+    internal static (Rectangle Horizontal, Rectangle Vertical) CrosshairBands(Rectangle bounds, Point center) =>
+        (Rectangle.Intersect(bounds, new Rectangle(bounds.Left, center.Y - 1, bounds.Width, 3)),
+         Rectangle.Intersect(bounds, new Rectangle(center.X - 1, bounds.Top, 3, bounds.Height)));
+
+    private static void DrawCrosshair(Graphics graphics, Rectangle bounds, Point center)
+    {
+        var (horizontal, vertical) = CrosshairBands(bounds, center);
+        graphics.FillRectangle(Brushes.Black, horizontal);
+        graphics.FillRectangle(Brushes.Black, vertical);
+        graphics.FillRectangle(Brushes.White, bounds.Left, center.Y, bounds.Width, 1);
+        graphics.FillRectangle(Brushes.White, center.X, bounds.Top, 1, bounds.Height);
     }
 
     private static Rectangle SegmentBounds(Point start, Point end) => Rectangle.FromLTRB(

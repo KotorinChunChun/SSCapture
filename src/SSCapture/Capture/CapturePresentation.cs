@@ -34,13 +34,19 @@ internal sealed class CapturePresentation : NativeWindow, IDisposable
         base.WndProc(ref message);
     }
 
-    internal unsafe bool Present(Rectangle dirty, Action<Graphics, Rectangle, bool> paint)
+    internal bool Present(Rectangle dirty, Action<Graphics, Rectangle, bool> paint, Region? updateRegion = null)
     {
         if (drawing is null && !CreateSurface()) return false;
         Graphics graphics = drawing!;
         if (!Visible) dirty = new Rectangle(Point.Empty, bounds.Size);
         if (dirty.Width <= 0 || dirty.Height <= 0) return Visible;
         graphics.SetClip(dirty);
+        using var clip = Visible ? updateRegion?.Clone() : null;
+        if (clip is not null)
+        {
+            clip.Intersect(dirty);
+            graphics.SetClip(clip, CombineMode.Intersect);
+        }
         try
         {
             graphics.CompositingMode = CompositingMode.SourceCopy;
@@ -50,6 +56,27 @@ internal sealed class CapturePresentation : NativeWindow, IDisposable
         }
         finally { graphics.ResetClip(); }
         graphics.Flush();
+        if (clip is null)
+        {
+            if (!Upload(dirty)) return false;
+        }
+        else
+        {
+            using var identity = new Matrix();
+            foreach (var band in clip.GetRegionScans(identity))
+                if (!Upload(Rectangle.Round(band))) return false;
+        }
+        if (!Visible)
+        {
+            // Avoid WinForms' active-window bookkeeping for a purely visual layer.
+            if (!CaptureNative.SetWindowPos(Handle, -1, 0, 0, 0, 0, 0x0053)) return false;
+            Visible = true;
+        }
+        return true;
+    }
+
+    private unsafe bool Upload(Rectangle dirty)
+    {
         Point location = bounds.Location, source = Point.Empty;
         Size size = bounds.Size;
         var blend = new Blend { Alpha = 255, AlphaFormat = 1 };
@@ -60,14 +87,19 @@ internal sealed class CapturePresentation : NativeWindow, IDisposable
             Location = &location, SurfaceSize = &size, SourceDc = memoryDc, Source = &source,
             Blend = &blend, Flags = 2 /* ULW_ALPHA */, Dirty = &area
         };
-        if (!UpdateLayeredWindowIndirect(Handle, ref update)) return false;
-        if (!Visible)
+        return UpdateLayeredWindowIndirect(Handle, ref update);
+    }
+
+    internal static Region? ReadUpdateRegion(nint window)
+    {
+        nint region = CreateRectRgn(0, 0, 0, 0);
+        if (region == 0) return null;
+        try
         {
-            // Avoid WinForms' active-window bookkeeping for a purely visual layer.
-            if (!CaptureNative.SetWindowPos(Handle, -1, 0, 0, 0, 0, 0x0053)) return false;
-            Visible = true;
+            // WinForms exposes only the bounding rectangle to OnPaint.
+            return GetUpdateRgn(window, region, false) == 3 /* COMPLEXREGION */ ? Region.FromHrgn(region) : null;
         }
-        return true;
+        finally { _ = DeleteObject(region); }
     }
 
     private bool CreateSurface()
@@ -144,6 +176,8 @@ internal sealed class CapturePresentation : NativeWindow, IDisposable
         uint colorUsage, out nint bits, nint section, uint offset);
     [DllImport("gdi32.dll")] private static extern nint SelectObject(nint dc, nint obj);
     [DllImport("gdi32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool DeleteObject(nint obj);
+    [DllImport("gdi32.dll")] private static extern nint CreateRectRgn(int left, int top, int right, int bottom);
+    [DllImport("user32.dll")] private static extern int GetUpdateRgn(nint window, nint region, [MarshalAs(UnmanagedType.Bool)] bool erase);
     [DllImport("gdi32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool DeleteDC(nint dc);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool UpdateLayeredWindowIndirect(nint window, ref LayeredUpdate update);

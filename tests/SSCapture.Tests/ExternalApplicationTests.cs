@@ -116,7 +116,7 @@ internal static partial class Program
             var loaded = store.Load(out var warning); Equal<string?>(null, warning); Equal("a", loaded.SelectedImageEditorId);
             Equal("編集を保持", loaded.CapturePresets.Single(p => p.IsDefault).Name);
         }));
-        Run("外部アプリの適用で画像動画の選択を保持し別プリセットの下書きは変えない", () =>
+        Run("外部アプリの既定を即時保存し別プリセットの下書きは変えない", () =>
         {
             var a = new ExternalApplication { Id = "a", Name = "A", Executable = @"C:\a.exe" };
             var b = a with { Id = "b", Name = "B", Executable = @"C:\b.exe" };
@@ -134,6 +134,8 @@ internal static partial class Program
             SelectApplicationRow(appTable, 1);
             Equal("★ A", appTable.Rows[0].Cells[0].Value);
             ConsolidationClick(form, "ImageEditorDefault");
+            Equal("b", saved!.SelectedImageEditorId);
+            Equal("a", saved.SelectedVideoEditorId);
             Equal("★ B", appTable.Rows[1].Cells[0].Value);
             Equal("★ A", videoTable.Rows[0].Cells[0].Value);
             SelectApplicationRow(videoTable, 1);
@@ -141,11 +143,10 @@ internal static partial class Program
             Check(appTable.Rows[1].Cells[2].Value is string usage && usage.StartsWith("★ ", StringComparison.Ordinal), "既定出力の変更を表に反映しない");
             Equal("別出力を編集中", form.Controls.Find("CapturePresetName", true).Single().Text);
             form.SelectCategory("外部アプリ");
-            var pending = saved;
-            typeof(Form).GetMethod("OnFormClosing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-                .Invoke(form, [new FormClosingEventArgs(CloseReason.UserClosing, false)]);
-            Equal(pending, saved);
-            ApplySettingsPage(form, "外部アプリ"); Check(saved is not null, "外部アプリを適用しない");
+            var externalPage = form.Controls.Find("SettingsTabs", true).OfType<TabControl>().Single()
+                .TabPages.Cast<TabPage>().Single(tab => tab.Text == "外部アプリ");
+            Equal(0, externalPage.Controls.Find("ApplyPageSettings", true).Length);
+            Equal(0, externalPage.Controls.Find("RevertPageSettings", true).Length);
             Equal("b", saved!.SelectedImageEditorId); Equal("b", saved.SelectedVideoEditorId);
             Check(saved.CapturePresets.All(p => p.Name != "別出力を編集中"), "未確定の別出力まで適用された");
             Equal("別出力を編集中", form.Controls.Find("CapturePresetName", true).Single().Text);
@@ -162,18 +163,65 @@ internal static partial class Program
             Equal("既定を解除", form.Controls.Find("ImageEditorDefault", true).Single().Text);
             ConsolidationClick(form, "ImageEditorDefault");
             Equal("A", appTable.Rows[0].Cells[0].Value);
-            var apply = SettingsApplyButton(form, "外部アプリ");
-            ConsolidationClick(apply.Parent!, "RevertPageSettings");
-            Equal("★ A", appTable.Rows[0].Cells[0].Value);
-            Equal("a", ((ExternalApplication)image.SelectedItem!).Id);
-            ConsolidationClick(form, "ImageEditorDefault");
-            ApplySettingsPage(form, "外部アプリ");
             Equal("", saved!.SelectedImageEditorId);
             Equal("b", saved.SelectedVideoEditorId);
             using var reopened = new SettingsForm(saved, _ => null, _ => { }, () => []);
             var reopenedImages = (DataGridView)reopened.Controls.Find("ImageEditorList", true).Single();
             Equal("A", reopenedImages.Rows[0].Cells[0].Value);
             Equal("B", reopenedImages.Rows[1].Cells[0].Value);
+        });
+        Run("外部アプリの既定変更と標準復元は保存成功時だけ反映する", () =>
+        {
+            var initial = new AppSettings().ApplyDefaults();
+            var paint = initial.ImageEditors.Single() with { Name = "ペイント変更済み" };
+            var other = new ExternalApplication { Id = "other-editor", Name = "別のアプリ", Executable = @"C:\editor.exe" };
+            initial = initial with { ImageEditors = [paint, other] };
+            AppSettings? saved = null;
+            bool reject = true;
+            using var form = new SettingsForm(initial, next =>
+            {
+                if (reject) return "検証用の保存エラー";
+                saved = next;
+                return null;
+            }, _ => { }, () => []);
+            form.SelectCategory("外部アプリ");
+            var list = (DataGridView)form.Controls.Find("ImageEditorList", true).Single();
+            SelectApplicationRow(list, 1);
+            ConsolidationClick(form, "ImageEditorDefault");
+            Equal("★ ペイント変更済み", list.Rows[0].Cells[0].Value);
+            Equal("別のアプリ", list.Rows[1].Cells[0].Value);
+            form.ResetSelectedPage(() => true);
+            Equal("★ ペイント変更済み", list.Rows[0].Cells[0].Value);
+            reject = false;
+            form.ResetSelectedPage(() => false);
+            Equal<AppSettings?>(null, saved);
+            form.ResetSelectedPage(() => true);
+            Equal("★ ペイント", list.Rows[0].Cells[0].Value);
+            Equal("別のアプリ", list.Rows[1].Cells[0].Value);
+            Equal(paint.Id, saved!.SelectedImageEditorId);
+            Equal(2, saved.ImageEditors.Length);
+            Equal(other.Id, list.SelectedRows[0].Tag is ExternalApplication selected ? selected.Id : null);
+        });
+        Run("外部アプリを削除して隣へ移ると再選択せず複製と削除ができる", () =>
+        {
+            var paint = new ExternalApplication { Id = "paint", Name = "ペイント", Executable = @"C:\paint.exe" };
+            var temporary = paint with { Id = "temporary", Name = "削除対象" };
+            using var editor = new ExternalApplicationsEditor(CaptureIntent.Screenshot, [temporary, paint], "", "", "", [], () => ([], ""));
+            Control Find(string name) => editor.Controls.Find("ImageEditor" + name, true).Single();
+            var list = (DataGridView)Find("List");
+            SelectApplicationRow(list, 0);
+            ConsolidationClick(editor, "ImageEditorDelete");
+            Equal(paint, list.SelectedRows[0].Tag);
+            Equal(paint.Name, Find("Name").Text);
+            Check(Find("Duplicate").Enabled && Find("Delete").Enabled, "選択した行の操作が無効");
+            ConsolidationClick(editor, "ImageEditorDuplicate");
+            Equal("ペイントのコピー", Find("Name").Text);
+            ConsolidationClick(editor, "ImageEditorStore");
+            ConsolidationClick(editor, "ImageEditorDelete");
+            Equal(paint, list.SelectedRows[0].Tag);
+            ConsolidationClick(editor, "ImageEditorDelete");
+            Equal(0, list.Rows.Count);
+            Check(!Find("Duplicate").Enabled && !Find("Delete").Enabled, "一覧が空なのに操作が有効");
         });
         Run("通知設定では画像・動画で同名のアプリを区別し元の登録IDを使う", () =>
         {
@@ -258,7 +306,7 @@ internal static partial class Program
             name.Text = "B"; ui.Executable.Text = @"C:\b.exe";
             ((Button)ui.Controls.Find("ImageEditorStore", true).Single()).PerformClick(); Equal(2, ui.Applications.Length);
         });
-        Run("外部アプリの追加・改名・複製で既定なしを保ち戻すで消えた入力を破棄する", () =>
+        Run("外部アプリの追加・改名・複製で既定なしを保ち一覧の復元で消えた入力を破棄する", () =>
         {
             foreach (var (intent, prefix) in new[] { (CaptureIntent.Screenshot, "Image"), (CaptureIntent.Recording, "Video") })
             {

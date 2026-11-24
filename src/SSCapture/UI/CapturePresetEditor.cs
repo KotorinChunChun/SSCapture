@@ -86,7 +86,7 @@ internal sealed class CapturePresetEditor : UserControl
         clipboard = Toggle("クリップボードへコピー", "ClipboardOutput"); file = Toggle("ファイル", "FileOutput"); external = Toggle("外部アプリ", "ExternalOutput");
         pinned = Toggle("ピン留め表示", "PinnedOutput"); outputs.Controls.AddRange([clipboard, file, external, pinned]); Add(output, "出力先", outputs, 0);
         output.RowStyles[0].Height = 70;
-        copyContent.Items.AddRange(["画像", "テキスト（OCR）", "表（TSV）", "ファイルパス"]);
+        copyContent.Items.AddRange(["画像", "OCR（文字列）", "OCR（表）", "ファイルパス"]);
         output.RowCount = 9;
         output.RowStyles[7].SizeType = SizeType.Absolute;
         output.RowStyles[7].Height = 38;
