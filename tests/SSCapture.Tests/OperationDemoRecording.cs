@@ -22,10 +22,19 @@ internal static partial class Program
     private static Rectangle ScrollRecordArea => Screen.PrimaryScreen!.WorkingArea is var area
         ? new Rectangle(area.Right - MainRecordArea.Width, area.Bottom - MainRecordArea.Height, MainRecordArea.Width, MainRecordArea.Height) : default;
     private static Rectangle RecordArea = MainRecordArea;
+    // 録画範囲のうち、上の字幕（題名と説明、y＜112）と下のキー表示（y≧644）の帯を除いた範囲。
+    // SSCaptureにはポインタ横の案内と拡大鏡をこの範囲の内側に置かせ、録画範囲からのはみ出しと字幕との重なりを防ぐ。
+    private const int CaptionTop = 112, CaptionBottom = 644;
+    private static Rectangle DemoPresentationArea => Rectangle.FromLTRB(RecordArea.Left, RecordArea.Top + CaptionTop, RecordArea.Right, RecordArea.Top + CaptionBottom);
     private const string DemoMarkerFile = "operation-demo.marker";
     private const int DemoSnapPixels = 100;
-    private const int DemoMagnifierZoom = 20;
+    private const int DemoMagnifierDots = 20;
+    private const int DemoMagnifierZoom = 10;
     private const string DemoScrollPreset = "demo-input-scroll";
+    private const string DemoFixedPreset = "demo-input-fixed";
+    private static readonly Size DemoFixedSize = new(560, 480);
+    // 撮影結果を複数の対象から1枚に合成する場面。結果の題名を「合成された1枚の画像」にする。
+    private static readonly HashSet<string> CompositeScenes = ["win-windows-drag", "ctrl-controls-drag", "scroll"];
 
     private sealed record DemoScene(string Id, string Title, string Detail, Func<DemoDriver, DemoStage, Task> Run, DemoLayout Layout = DemoLayout.Normal);
 
@@ -125,12 +134,22 @@ internal static partial class Program
             // 既定の20pxではグリッドの変化が動画で見分けにくいため、100pxにする。動画の説明にもこの値を書く。
             // ウィンドウスナップ距離は既定の20pxのままにする。100pxにすると、窓の辺より先にモニターの端へ吸着してしまう。
             GridStepPixels = DemoSnapPixels,
-            // 動画用の拡大鏡は10×10画素を20倍で表示する（表示の切り替えは中クリック）。
-            MagnifierDotCount = 10,
+            // 動画用の拡大鏡は20×20画素を10倍で表示する（レンズは200px。表示の切り替えは中クリック）。
+            MagnifierDotCount = DemoMagnifierDots,
             MagnifierZoom = DemoMagnifierZoom,
-            // スクロール撮影の場面で --input-preset に指定する入力プリセット。
-            SavedRegions = [.. settings.SavedRegions, SavedRegion.FromSettings("スクロール撮影（録画用）", new AppSettings() with { DefaultMode = CaptureMode.Scroll })
-                with { Id = DemoScrollPreset, UseFixedCoordinates = false, Mode = CaptureMode.Scroll, IsDefault = false }]
+            // 画面右下の操作ガイドは録画範囲の外にあるが、右下を録画するスクロール撮影では映り込むため表示しない。
+            ShowSelectionGuide = false,
+            // Spaceで切り替える基点を「四方と中心」にする（初期値は四方）。固定サイズの枠の基点を中心にできる。
+            // ドラッグ中も左下の次が中心になるため、ドラッグ中のSpaceの場面は左下の角から押さない。
+            CaptureKeys = settings.CaptureKeys with { SpaceCycle = CaptureAnchorCycle.CornersAndCenter },
+            // スクロール撮影と固定サイズの場面で --input-preset に指定する入力プリセット。
+            // 固定サイズは、資料の窓（540×440）を中央に置いた枠が録画範囲に収まる大きさにする。
+            SavedRegions = [.. settings.SavedRegions,
+                SavedRegion.FromSettings("スクロール撮影（録画用）", new AppSettings() with { DefaultMode = CaptureMode.Scroll })
+                    with { Id = DemoScrollPreset, UseFixedCoordinates = false, Mode = CaptureMode.Scroll, IsDefault = false },
+                SavedRegion.FromSettings($"固定サイズ {DemoFixedSize.Width}×{DemoFixedSize.Height}",
+                    new AppSettings() with { DefaultMode = CaptureMode.FixedRegion, FixedWidth = DemoFixedSize.Width, FixedHeight = DemoFixedSize.Height })
+                    with { Id = DemoFixedPreset, UseFixedCoordinates = false, Mode = CaptureMode.FixedRegion, IsDefault = false }]
         }).ApplyDefaults();
         new SettingsStore(settingsPath).Save(settings);
     }
@@ -188,7 +207,6 @@ internal static partial class Program
             d.LeftDown();
             await d.WaitAsync(1200);
             d.LeftUp();
-            d.ShowResultAfterFinish();
             await d.FinishAsync();
         }, DemoLayout.Overlap),
         new("win-back-window", "撮影前に Win を押しながらクリック（重なった窓）", "後ろにあるウィンドウを前に出して、隠れた部分も含めて撮影", async (d, s) =>
@@ -204,7 +222,6 @@ internal static partial class Program
             // 申請フォームの見えている左側を指すと、隠れていた右側も含めて手前に表示される。
             await d.MoveAsync(new Point(entry.Left + 220, entry.Top + 260), 1000);
             await d.WaitAsync(1600);
-            d.ShowResultAfterFinish();
             await d.ClickAsync();
             await d.FinishAsync();
         }, DemoLayout.Overlap),
@@ -258,11 +275,12 @@ internal static partial class Program
         new("ctrl-control", "撮影前に Ctrl を押しながらクリック", "ポインタの下のボタンや入力欄を1つだけ撮影", async (d, s) =>
         {
             await d.StartAsync(s.Center(s.NameBox) + new Size(-120, -60));
-            await d.WaitAsync(600);
-            d.Press(DemoKey.Ctrl);
-            await d.WaitAsync(500);
+            await d.WaitAsync(400);
+            // コントロールのない位置でCtrlを押すと「対象のコントロールが見つかりません」と出るため、先に入力欄の上へ移る。
             await d.MoveAsync(s.Center(s.NameBox), 500);
-            await d.WaitAsync(800);
+            await d.WaitAsync(300);
+            d.Press(DemoKey.Ctrl);
+            await d.WaitAsync(1000);
             await d.MoveAsync(s.Center(s.Notify), 600);
             await d.WaitAsync(800);
             await d.MoveAsync(s.Center(s.Send), 600);
@@ -273,10 +291,12 @@ internal static partial class Program
         new("ctrl-controls-drag", "撮影前に Ctrl を押しながら左ドラッグ", "通ったコントロールを元の位置関係のまま1枚にまとめる", async (d, s) =>
         {
             await d.StartAsync(s.Center(s.NameBox) + new Size(-120, -60));
-            await d.WaitAsync(600);
-            d.Press(DemoKey.Ctrl);
+            await d.WaitAsync(400);
+            // コントロールのない位置でCtrlを押すと「対象のコントロールが見つかりません」と出るため、先に入力欄の上へ移る。
             await d.MoveAsync(s.Center(s.NameBox), 500);
-            await d.WaitAsync(700);
+            await d.WaitAsync(300);
+            d.Press(DemoKey.Ctrl);
+            await d.WaitAsync(900);
             d.LeftDown();
             await d.MoveAsync(s.Center(s.Department), 600);
             await d.MoveAsync(s.Center(s.Notify), 700);
@@ -288,11 +308,12 @@ internal static partial class Program
         new("ctrl-wheel-margin", "撮影前に Ctrl を押しながらホイール回転", "撮影対象の余白を広げる（1目盛りで四辺1pxずつ）", async (d, s) =>
         {
             await d.StartAsync(s.Center(s.Send) + new Size(-140, -70));
-            await d.WaitAsync(600);
-            d.Press(DemoKey.Ctrl);
             await d.WaitAsync(400);
+            // コントロールのない位置でCtrlを押すと「対象のコントロールが見つかりません」と出るため、先に送信ボタンの上へ移る。
             await d.MoveAsync(s.Center(s.Send), 600);
-            await d.WaitAsync(900);
+            await d.WaitAsync(300);
+            d.Press(DemoKey.Ctrl);
+            await d.WaitAsync(1000);
             await d.WheelAsync(24, 70);
             await d.WaitAsync(1200);
             await d.ClickAsync();
@@ -303,18 +324,19 @@ internal static partial class Program
         new("drag-space-corners", "ドラッグ中に Space", "範囲を保ったまま、ポインタを次の角へ移して反対側から調整する", async (d, s) =>
         {
             Rectangle chart = s.Chart;
-            Point start = chart.Location + new Size(40, 30);
+            // 左下から右上へドラッグし、Spaceで右上→右下→左下と移る（録画では左下の次が中心になるため、左下からは押さない）。
+            Point start = chart.Location + new Size(40, 200);
             await d.StartAsync(start);
             await d.WaitAsync(600);
             d.LeftDown();
-            await d.MoveAsync(start + new Size(280, 170), 1000);
+            await d.MoveAsync(start + new Size(280, -170), 1000);
             await d.WaitAsync(700);
             // Spaceを押すたびに、ポインタが範囲の角を時計回りに移る。移った角から範囲を広げ直せる。
             await d.TapKeyAsync(0x20, "Space", 1, 900, movesPointer: true);
-            await d.MoveAsync(d.Pointer + new Size(-30, 40), 800);
+            await d.MoveAsync(d.Pointer + new Size(30, 30), 800);
             await d.WaitAsync(600);
             await d.TapKeyAsync(0x20, "Space", 1, 900, movesPointer: true);
-            await d.MoveAsync(d.Pointer + new Size(-25, -20), 800);
+            await d.MoveAsync(d.Pointer + new Size(-25, 20), 800);
             await d.WaitAsync(900);
             d.LeftUp();
             await d.FinishAsync();
@@ -485,19 +507,23 @@ internal static partial class Program
             d.LeftUp();
             await d.FinishAsync();
         }),
-        new("fixed-size", "固定サイズの枠を置いて撮影", "入力プリセット「固定サイズ 960×540」の枠を動かし、Spaceで基点を四隅に切り替える", async (d, s) =>
+        new("fixed-size", "固定サイズの枠を置いて撮影", $"入力プリセット「固定サイズ {DemoFixedSize.Width}×{DemoFixedSize.Height}」の枠を、Spaceで基点を中心にして窓の中央に合わせる", async (d, s) =>
         {
-            await d.StartAsync(new Point(150, 200), "--capture-preset", "--input-preset", "initial-input-fixed");
+            Rectangle report = s.Report.Bounds;
+            await d.StartAsync(new Point(160, 150), "--capture-preset", "--input-preset", DemoFixedPreset);
             await d.WaitAsync(800);
             // Shift＋矢印（10px移動）は、Shiftを押している間はモニター全体の選択表示になって枠が見えなくなるため、この動画では使わない。
-            // 録画範囲（1280×720）に枠が収まり、左下の基点が字幕に隠れにくい位置に置く。
-            await d.MoveAsync(new Point(380, 240), 1000);
-            await d.WaitAsync(600);
-            await d.MoveAsync(new Point(240, 120), 800);
+            // 枠は基点（最初は左上）でポインタに付いて動く。録画範囲と字幕の帯の内側に枠が収まる位置で動かす。
+            await d.MoveAsync(new Point(300, 130), 1000);
             await d.WaitAsync(700);
-            // 既定ではSpaceで左上→右上→右下→左下→左上と移る。枠はそのままで、ポインタだけが次の基点へ移る。
-            await d.TapKeyAsync(0x20, "Space", 4, 1100, movesPointer: true);
-            await d.WheelAsync(12, 90);
+            // 既定ではSpaceで左上→右上→右下→左下→中心と移る。枠はそのままで、ポインタだけが次の基点へ移る。4回で中心になる。
+            await d.TapKeyAsync(0x20, "Space", 4, 1000, movesPointer: true);
+            await d.WaitAsync(500);
+            // 中心を基点にしたまま資料の窓の中心へ動かし、窓が枠の中央に収まるようにする。
+            await d.MoveAsync(s.Center(report), 1200);
+            await d.WaitAsync(800);
+            // ホイールで枠の四辺を少し広げ、窓の周りに余白を取る。
+            await d.WheelAsync(10, 90);
             await d.WaitAsync(1000);
             await d.ClickAsync();
             await d.FinishAsync();
@@ -523,7 +549,6 @@ internal static partial class Program
             await d.WaitAsync(1200);
             await d.MoveAsync(s.Center(confirm), 1000);
             await d.WaitAsync(500);
-            d.ShowResultAfterFinish();
             await d.ClickAsync();
             await d.FinishAsync();
         }, DemoLayout.Scroll)
@@ -776,7 +801,6 @@ internal static partial class Program
         private DateTime sceneWallStart;
         private Rectangle? hiddenPanel;
         private double hiddenPanelAt;
-        private bool appendResult;
         private Point cursor;
         // 送った、またはSSCaptureが動かした後に読み直したポインタの位置。
         internal Point Pointer => cursor;
@@ -831,7 +855,6 @@ internal static partial class Program
             RecordArea = scene.Layout == DemoLayout.Scroll ? ScrollRecordArea : MainRecordArea;
             pointerMovedByApplicationUntil = 0;
             hiddenPanel = null;
-            appendResult = false;
             stage.Backdrop.Activate();
             stage.Arrange(scene.Layout);
             await Task.Delay(300);
@@ -856,6 +879,8 @@ internal static partial class Program
             Mark();
             var start = new ProcessStartInfo(app) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
             foreach (string argument in arguments.Length == 0 ? ["--capture-select"] : arguments) start.ArgumentList.Add(argument);
+            Rectangle area = DemoPresentationArea;
+            start.Environment[SSCapture.Capture.PresentationArea.EnvironmentVariable] = $"{area.X},{area.Y},{area.Width},{area.Height}";
             capture = Process.Start(start) ?? throw new InvalidOperationException("SSCaptureを起動できません。");
             captureOutput = capture.StandardOutput.ReadToEndAsync();
             captureError = capture.StandardError.ReadToEndAsync();
@@ -1043,9 +1068,6 @@ internal static partial class Program
             throw new InvalidOperationException("スクロール撮影の操作窓が見つかりません。");
         }
 
-        // 撮影後に、保存された画像を動画の最後に表示する。
-        internal void ShowResultAfterFinish() => appendResult = true;
-
         internal async Task MiddleClickAsync()
         {
             Check();
@@ -1138,7 +1160,7 @@ internal static partial class Program
             var parts = new List<string>();
             foreach (DemoKey key in new[] { DemoKey.Ctrl, DemoKey.Shift, DemoKey.Alt, DemoKey.Win })
                 if (keys.Contains(key)) parts.Add(key.ToString());
-            if (leftDown) parts.Add("左ボタン");
+            if (leftDown) parts.Add("左クリック");
             if (action is not null) parts.Add(action);
             labels.Add((clock.Elapsed.TotalSeconds, string.Join(" ＋ ", parts)));
         }
@@ -1243,33 +1265,36 @@ internal static partial class Program
                 filter.Append(Text("panel.txt", 20, "0x1f2937@0.88", $"x={panel.X - RecordArea.X}:y={panel.Y - RecordArea.Y - 44}", shown));
             }
             filter.Length--;
-            string? result = appendResult
-                ? new DirectoryInfo(Path.Combine(work, "captures")).EnumerateFiles("*.png")
-                    .Where(file => file.LastWriteTimeUtc >= sceneWallStart).OrderByDescending(file => file.LastWriteTimeUtc).FirstOrDefault()?.FullName
-                : null;
-            if (appendResult && result is null) throw new InvalidOperationException("撮影結果の画像が見つかりません。");
-            string captioned;
-            if (result is null) captioned = filter + "[c]";
-            else
-            {
-                // 撮影結果を約3.5秒、録画の後ろにつなげる。
-                using (var image = Image.FromFile(result))
-                    File.WriteAllText(Path.Combine(directory, "result.txt"), $"合成された1枚の画像（{image.Width}×{image.Height}px）", utf8);
-                string resultTitle = Text("result.txt", 28, "0x1f2937@0.88", "x=24:y=18").TrimEnd(',');
-                captioned = filter + "[m];" +
-                    $"[1:v]scale=w={RecordArea.Width - 40}:h={RecordArea.Height - 100}:force_original_aspect_ratio=decrease," +
-                    $"pad={RecordArea.Width}:{RecordArea.Height}:(ow-iw)/2:(oh-ih)/2+30:color=0x34404f,setsar=1,fps=30,format=yuv420p,{resultTitle}[r];" +
-                    "[m]setsar=1,fps=30,format=yuv420p[mm];[mm][r]concat=n=2:v=1:a=0[c]";
-            }
+            // どの場面も、撮影結果の画像を録画の後ろに約3秒つなげる。
+            string result = new DirectoryInfo(Path.Combine(work, "captures")).EnumerateFiles("*.png")
+                .Where(file => file.LastWriteTimeUtc >= sceneWallStart).OrderByDescending(file => file.LastWriteTimeUtc).FirstOrDefault()?.FullName
+                ?? throw new InvalidOperationException("撮影結果の画像が見つかりません。");
+            int viewWidth = RecordArea.Width - 40, viewHeight = RecordArea.Height - 100;
+            Size resultSize;
+            using (var image = Image.FromFile(result)) resultSize = image.Size;
+            string resultName = CompositeScenes.Contains(scene.Id) ? "合成された1枚の画像" : "撮影した画像";
+            File.WriteAllText(Path.Combine(directory, "result.txt"), $"{resultName}（{resultSize.Width}×{resultSize.Height}px）", utf8);
+            string resultTitle = Text("result.txt", 28, "0x1f2937@0.88", "x=24:y=18").TrimEnd(',');
+            // 縦長の結果（スクロール撮影）は縮めると読めないため、幅が収まれば等倍のまま上から下へ流して見せる。
+            bool pan = resultSize.Height > viewHeight * 2 && resultSize.Width <= viewWidth;
+            double resultSeconds = pan ? 4.5 : 3;
+            string fit = pan
+                ? $"crop=w=iw:h={viewHeight}:x=0:y='(ih-{viewHeight})*min(1,max(0,(t-0.6)/{(resultSeconds - 1.2).ToString(System.Globalization.CultureInfo.InvariantCulture)}))',"
+                : $"scale=w={viewWidth}:h={viewHeight}:force_original_aspect_ratio=decrease,";
+            // 合成結果の透明な部分が黒くならないよう、背景色の上に重ねる。
+            string seconds = resultSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            string captioned = filter + "[m];" +
+                $"[1:v]{fit}format=rgba[img];color=c=0x34404f:s={RecordArea.Width}x{RecordArea.Height}:r=30:d={seconds}[bg];" +
+                $"[bg][img]overlay=x=(W-w)/2:y=(H-h)/2+30:eof_action=repeat,setsar=1,fps=30,format=yuv420p,{resultTitle}[r];" +
+                "[m]setsar=1,fps=30,format=yuv420p[mm];[mm][r]concat=n=2:v=1:a=0[c]";
             string mp4Script = Path.Combine(directory, "mp4.filter");
             File.WriteAllText(mp4Script, captioned, utf8);
             string gifScript = Path.Combine(directory, "gif.filter");
             File.WriteAllText(gifScript, captioned + ";[c]fps=12,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle[g]", utf8);
             string seek = from.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture);
             string length = (to - from).ToString("0.000", System.Globalization.CultureInfo.InvariantCulture);
-            string[] inputs = result is null
-                ? ["-ss", seek, "-t", length, "-i", Raw(scene)]
-                : ["-ss", seek, "-t", length, "-i", Raw(scene), "-loop", "1", "-framerate", "30", "-t", "3.5", "-i", result];
+            string[] inputs = ["-ss", seek, "-t", length, "-i", Raw(scene),
+                "-loop", "1", "-framerate", "30", "-t", seconds, "-i", result];
             await RunFfmpegAsync(["-hide_banner", "-y", .. inputs, "-/filter_complex", mp4Script, "-map", "[c]",
                 "-c:v", "libx264", "-crf", "20", "-pix_fmt", "yuv420p", Path.Combine(work, scene.Id + ".mp4")]);
             string gif = Path.Combine(gifOutput, scene.Id + ".gif");

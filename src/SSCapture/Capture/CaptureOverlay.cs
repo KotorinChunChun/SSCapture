@@ -342,7 +342,7 @@ internal sealed class CaptureOverlay : Form
         Rectangle hintBounds = hint is null ? Rectangle.Empty : PointerLabelBounds(hint, session.Pointer, HintOffset(dimensions, dimensionsPointer));
         int dotCount = session.OutputSettings.MagnifierDotCount, zoom = session.OutputSettings.MagnifierZoom;
         CaptureMagnifier.Placement lens = session.OutputSettings.ShowMagnifier && MonitorBounds.Contains(session.Pointer)
-            ? CaptureMagnifier.Place(ClientRectangle, new Point(session.Pointer.X - MonitorBounds.X, session.Pointer.Y - MonitorBounds.Y),
+            ? CaptureMagnifier.Place(LabelArea, new Point(session.Pointer.X - MonitorBounds.X, session.Pointer.Y - MonitorBounds.Y),
                 [dimensionsBounds, hintBounds, Local(session.VisibleGuideBounds)], magnifierQuadrant, dotCount * zoom)
             : new(Rectangle.Empty);
         magnifierQuadrant = lens.Quadrant;
@@ -451,11 +451,14 @@ internal sealed class CaptureOverlay : Form
 
     private int PointerLabelLineHeight => TextRenderer.MeasureText("国", dimensionsFont).Height;
 
+    // ポインタ横の案内と拡大鏡を置く範囲。通常はモニター全体で、録画時に指定があればその範囲に収める。
+    private Rectangle LabelArea => PresentationArea.Within(ClientRectangle, MonitorBounds, PresentationArea.Current);
+
     private string? PointerHintText()
     {
         if (!MonitorBounds.Contains(session.Pointer) || session.PointerHint is not string hint) return null;
         int lineHeight = PointerLabelLineHeight;
-        int maximumLines = Math.Max(2, (ClientSize.Height - lineHeight - 16) / lineHeight);
+        int maximumLines = Math.Max(2, (LabelArea.Height - lineHeight - 16) / lineHeight);
         if (1 + hint.Count(c => c == '\n') <= maximumLines) return hint;
         string[] lines = hint.Split('\n');
         bool hasMargin = lines[^1].Contains("）　余白", StringComparison.Ordinal);
@@ -468,10 +471,11 @@ internal sealed class CaptureOverlay : Form
         string[] lines = text.Split('\n');
         int lineHeight = PointerLabelLineHeight;
         int height = lineHeight * lines.Length + 4;
-        int width = Math.Min(ClientSize.Width, lines.Max(line => TextRenderer.MeasureText(line, dimensionsFont).Width) + 8);
-        int x = Math.Clamp(pointer.X - MonitorBounds.X + 18, 0, Math.Max(0, ClientSize.Width - width));
+        Rectangle area = LabelArea;
+        int width = Math.Min(area.Width, lines.Max(line => TextRenderer.MeasureText(line, dimensionsFont).Width) + 8);
+        int x = Math.Clamp(pointer.X - MonitorBounds.X + 18, area.Left, Math.Max(area.Left, area.Right - width));
         int reserved = hintBelow is null ? 0 : (1 + hintBelow.Count(c => c == '\n')) * lineHeight + 12;
-        int y = Math.Clamp(pointer.Y - MonitorBounds.Y + offset, 0, Math.Max(0, ClientSize.Height - height - reserved));
+        int y = Math.Clamp(pointer.Y - MonitorBounds.Y + offset, area.Top, Math.Max(area.Top, area.Bottom - height - reserved));
         return new(x, y, width, height);
     }
 

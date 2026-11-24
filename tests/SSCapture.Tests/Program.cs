@@ -168,6 +168,7 @@ internal static partial class Program
         UiTests();
         StartupTests();
         HotkeyBridgeTests();
+        PresentationAreaTests();
         SettingsTransferTests();
         RecordingTests();
         RecordingSessionTests();
