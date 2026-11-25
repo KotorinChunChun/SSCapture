@@ -102,7 +102,9 @@ internal sealed class FrozenCaptureTargets
                         var chrome = first.InDocument ? second : first;
                         var document = first.InDocument ? first : second;
                         rejected.Add(chrome);
-                        if (chrome.Popup || ToRectangle(chrome.HitArea).Contains(ToRectangle(document.HitArea)))
+                        // A stale toolbar rectangle can entirely contain a short document label.
+                        // Only a popup makes that cross-tree overlap ambiguous for static text.
+                        if (chrome.Popup || !document.StaticText && ToRectangle(chrome.HitArea).Contains(ToRectangle(document.HitArea)))
                             rejected.Add(document);
                     }
                     else

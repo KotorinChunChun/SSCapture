@@ -69,7 +69,7 @@ internal static partial class CaptureContextWorker
                             string? id = child.CachedProperty(30011) as string;
                             ControlIdentity? identity = string.IsNullOrEmpty(id) || id.Length > 160 ? null : new(id, type);
                             entries.Add(new(new(PixelBounds.From(area), identity), PixelBounds.From(hit), interactive, depth,
-                                snapshotId, childPath, documentChild, popupChild));
+                                snapshotId, childPath, documentChild, popupChild, StaticText: type == 50020 /* Text */));
                         }
                         Visit(child, depth + 1, hit, childPath, documentChild, popupChild);
                     }

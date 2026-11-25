@@ -11,7 +11,8 @@ internal sealed record ControlLayoutEntry(ControlHit Hit, PixelBounds HitArea, b
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SnapshotId = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TreePath = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool InDocument = false,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Popup = false);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Popup = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool StaticText = false);
 internal sealed record ControlLayout(ControlLayoutEntry[] Entries, bool Incomplete = false);
 
 internal static partial class CaptureContextWorker

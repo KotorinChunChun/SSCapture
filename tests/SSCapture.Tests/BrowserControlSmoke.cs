@@ -6,13 +6,14 @@ namespace SSCapture.Tests;
 
 internal static partial class Program
 {
-    private static int RunBrowserControlSmoke(string browser, string scratch, bool frozen = false)
+    private static int RunBrowserControlSmoke(string browser, string scratch, bool frozen = false, string? textKind = null)
     {
         string marker = "SSCapture DOM " + Guid.NewGuid().ToString("N")[..8];
         string directory = Path.Combine(Path.GetFullPath(scratch), marker);
         Directory.CreateDirectory(directory);
         string page = Path.Combine(directory, "control.html");
-        File.WriteAllText(page, $$"""
+        if (textKind is not null) File.WriteAllText(Path.Combine(directory, "change-target.js"), "");
+        File.WriteAllText(page, textKind is not null ? BrowserTextFixture(marker, textKind) : $$"""
             <!doctype html><title>{{marker}}</title><div style="display:flex;gap:12px">
             <button id="RootButton" autofocus style="width:190px;height:75px;background:#2664c2;forced-color-adjust:none"><span>Save item</span></button>
             <iframe title="Embedded page" srcdoc="<button id='NestedButton' style='width:170px;height:65px'><span>Open details</span></button>"></iframe></div>
@@ -46,6 +47,8 @@ internal static partial class Program
             double scale = GetDpiForWindow(target.Handle) / 96.0;
             Check(scale > 0, "検証用ブラウザーの表示倍率を取得できません。");
             using var client = new CaptureContextClient();
+            if (textKind is not null)
+                return RunFrozenBrowserCapture(target, FindTextFixtureBounds(target, scale, client), directory, textKind);
             var first = CheckControl(95, 190, 75, "ページ内のボタン");
             CheckControl(282, 170, 65, "iframe内のボタン");
             if (frozen) return RunFrozenBrowserCapture(target, first.Bounds, directory);

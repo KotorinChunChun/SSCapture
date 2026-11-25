@@ -68,6 +68,7 @@ dotnet $test --recording-desktop-smoke artifacts/app/tools/ffmpeg.exe artifacts/
 
 実ブラウザーでDOMを確認する場合は、利用者が明示した専用デスクトップで `dotnet $test --browser-control-smoke --interactive $browser "$run/browser-ui"` を実行します。`$browser` にはChromeまたはEdgeの実行ファイルの絶対パスを指定します。実行ごとに新しいゲスト用プロファイルを作り、初回案内を抑制します。Windowsのジョブでテストのブラウザーと子プロセスをまとめて終了し、通常の終了時にはジョブ内の残存数がゼロになるまで確認します。 [Windowsのジョブオブジェクト](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)
 画面固定の実入力は、専用デスクトップで `dotnet $test --frozen-browser-smoke --interactive $browser "$run/browser-ui"` を実行します。ブラウザーの外から撮影を開始し、テストページのボタン表示を変えた後にCtrl＋クリックします。プレビューと撮影範囲、クリップボードの画像を開始時の画素と照合します。実クリップボードを一時的に使います。通常のWindowsアプリでのCtrl・Winは `dotnet $test --frozen-window-smoke --interactive` で検証します。
+Edgeの文字ラベルは `dotnet $test --frozen-browser-label-smoke --interactive $browser "$run/browser-label" span` で検証します。末尾の引数は `span`、`label`、`button`、`span-compact`、`label-compact` から選べます。短い文字のケースではページ左上に配置し、ブラウザー側の候補との重なりを検査します。撮影開始後に検証ページの色を変更し、選択枠・プレビュー・撮影結果・クリップボードを開始時の画像と照合します。
 
 ### 撮影CLIの保存を検証する
 

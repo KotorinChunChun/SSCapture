@@ -23,6 +23,12 @@ internal static partial class Program
             Console.Error.WriteLine("専用デスクトップで --browser-control-smoke または --frozen-browser-smoke に続けて --interactive <ブラウザーexe> <検証フォルダ> を指定してください。");
             return 2;
         }
+        if (args.FirstOrDefault() == "--frozen-browser-label-smoke" &&
+            args is not ["--frozen-browser-label-smoke", "--interactive", _, _, "span" or "label" or "button" or "span-compact" or "label-compact"])
+        {
+            Console.Error.WriteLine("専用デスクトップで --frozen-browser-label-smoke --interactive <ブラウザーexe> <検証フォルダ> <span|label|button|span-compact|label-compact> を指定してください。");
+            return 2;
+        }
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         if (args.FirstOrDefault() == "--notification-drag-preview") return NotificationDragPreview(args[1]);
@@ -97,6 +103,8 @@ internal static partial class Program
         if (args.Contains("--control-quick-output-smoke")) return RunQuickControlOutputSmoke();
         if (args is ["--browser-control-smoke", "--interactive", var browser, var scratch]) return RunBrowserControlSmoke(browser, scratch);
         if (args is ["--frozen-browser-smoke", "--interactive", var frozenBrowser, var frozenScratch]) return RunBrowserControlSmoke(frozenBrowser, frozenScratch, frozen: true);
+        if (args is ["--frozen-browser-label-smoke", "--interactive", var textBrowser, var textScratch, var textKind])
+            return RunBrowserControlSmoke(textBrowser, textScratch, frozen: true, textKind);
         if (args is ["--frozen-window-smoke", "--interactive"]) return RunFrozenWindowSmoke();
         if (args.Length == 2 && args[0] == "--timer-native-smoke") return RunTimerNativeSmoke(args[1]);
         if (args.Contains("--selection-monitor-smoke")) return RunSelectionMonitorSmoke();

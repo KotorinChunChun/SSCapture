@@ -166,6 +166,36 @@ internal static partial class Program
             Equal(layout.Entries[1], obscured.ControlLayout(obscuredBrowser, [desktop])!.Entries.Single());
         });
 
+        Run("固定中の短いブラウザー文字はツールバー候補では捨てず、ポップアップや前面の別窓では遮蔽扱いにする", () =>
+        {
+            Rectangle desktop = new(0, 0, 200, 120), bounds = new(12, 10, 150, 100);
+            Rectangle text = new(30, 34, 16, 16);
+            var browser = new CaptureWindow(bounds, "ブラウザー", 1, 1, 1, ZOrder: 1, ClassName: "Chrome_WidgetWin_1");
+            var window = new FrozenWindow(browser, bounds, true, false);
+            var label = Entry(text, "17,42", "/0") with { InDocument = true, Interactive = false, StaticText = true };
+            var toolbar = Entry(new(22, 26, 32, 32), "17,43", "/1");
+            var targets = new FrozenCaptureTargets([window]);
+            Point pointer = new(35, 39);
+            var layout = new ControlLayout([toolbar, label]);
+            targets.SetBrowserControls(browser, bounds, layout, layout);
+            Equal(label, targets.HitControl(browser, pointer, [desktop]));
+
+            // A fully overlapping non-text control retains the existing conservative rule.
+            var button = label with { StaticText = false, Interactive = true };
+            var buttonLayout = new ControlLayout([toolbar, button]);
+            targets.SetBrowserControls(browser, bounds, buttonLayout, buttonLayout);
+            Check(targets.HitControl(browser, pointer, [desktop]) is null, "配置が曖昧なボタンを採用しました。");
+
+            var popup = new ControlLayout([toolbar with { Popup = true }, label]);
+            targets.SetBrowserControls(browser, bounds, layout, popup);
+            Check(targets.HitControl(browser, pointer, [desktop]) is null, "始点付近のポップアップの遮蔽を見落としました。");
+
+            var cover = new CaptureWindow(new(22, 26, 32, 32), "別窓", 2, 2, 2);
+            var obscured = new FrozenCaptureTargets([new(cover, cover.Bounds, true, false), window]);
+            obscured.SetBrowserControls(browser, bounds, layout, layout);
+            Check(obscured.HitControl(browser, pointer, [desktop]) is null, "前面の別ウィンドウの遮蔽を見落としました。");
+        });
+
         Run("固定対象と無関係な窓の増減・順序はWinとネイティブコントロールを無効にしない", () =>
         {
             Rectangle desktop = new(0, 0, 180, 100), area = new(12, 14, 65, 65), control = new(20, 25, 24, 16);
