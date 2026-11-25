@@ -8,11 +8,12 @@ internal static class IsolatedWindowCapture
     internal static async Task<(Bitmap Image, Rectangle Bounds, CaptureMetadata? Metadata)> TakeAsync(
         CaptureWindow target, AppSettings settings, ElementMetadata? focusAtSelectionStart = null, WindowCapturePreview? preview = null,
         IReadOnlyList<CaptureWindow>? foregroundFirst = null, IReadOnlyList<CaptureWindow>? requiredWindows = null,
-        bool clientAreaOnly = false)
+        bool clientAreaOnly = false, DesktopSnapshot? selectionStart = null,
+        Func<CancellationToken, Task<WindowCaptureFrame>>? takeSelectionFrame = null)
     {
-        _ = CaptureNative.RequireCaptureWindow(target);
+        if (takeSelectionFrame is null) _ = CaptureNative.RequireCaptureWindow(target);
         bool observe = settings.DefaultDestination.HasFlag(OutputDestination.File) && settings.MetadataMode != CaptureMetadataMode.None;
-        using var cursor = observe ? CursorSnapshot.Capture() : null;
+        using var cursor = observe && selectionStart is null ? CursorSnapshot.Capture() : null;
         Point point = observe ? cursor?.ScreenPosition ?? CaptureNative.CursorPosition() : Point.Empty;
         DateTimeOffset observedAt = DateTimeOffset.Now;
         WindowCaptureFrame frame = await CaptureOrReuseAsync();
@@ -21,8 +22,11 @@ internal static class IsolatedWindowCapture
         {
             Rectangle bounds = frame.Bounds;
             if (!observe) return (image, bounds, null);
-            var pointer = new PointerObservation(observedAt, PixelPoint.From(point), cursor is not null, cursor is not null && settings.IncludeCursor);
-            var context = await CaptureContextClient.Shared.ObserveAsync(point);
+            var pointer = selectionStart?.Pointer ?? new PointerObservation(observedAt, PixelPoint.From(point), cursor is not null, cursor is not null && settings.IncludeCursor);
+            if (selectionStart is not null)
+                pointer = pointer with { Drawn = settings.IncludeCursor && frame.CursorComposited };
+            var context = selectionStart is null ? await CaptureContextClient.Shared.ObserveAsync(point)
+                : selectionStart.Context ?? CaptureContextWorker.Unavailable("snapshotContextUnavailable");
             var selected = context.PointerApplication.ProcessId == target.ProcessId && context.PointerApplication.Bounds == PixelBounds.From(bounds)
                 ? context.PointerApplication : null;
             return (image, bounds, CaptureMetadata.Create(bounds, settings.ScreenshotPaddingPixels, frame.CapturedAt, pointer,
@@ -32,12 +36,13 @@ internal static class IsolatedWindowCapture
 
         async Task<WindowCaptureFrame> CaptureOrReuseAsync()
         {
-            if (clientAreaOnly) return await TakeClientFrameAsync(target, settings.IncludeCursor);
-            if (preview is not null)
+            if (preview is not null && (!clientAreaOnly || preview.ClientAreaOnly))
             {
                 try { return await preview.TakeAsync(); }
                 catch (Exception ex) when (IsCaptureFailure(ex)) { /* Try a fresh capture after a failed hover. */ }
             }
+            if (takeSelectionFrame is not null) return await takeSelectionFrame(CancellationToken.None);
+            if (clientAreaOnly) return await TakeClientFrameAsync(target, settings.IncludeCursor);
             return await TakeGroupAsync(foregroundFirst ?? [target], settings.IncludeCursor,
                 required: (requiredWindows ?? [target]).Select(window => window.Handle).ToHashSet());
         }
@@ -59,9 +64,28 @@ internal static class IsolatedWindowCapture
                 catch (Exception ex) when (required is not null && !required.Contains(window.Handle) && IsCaptureFailure(ex)) { }
             }
             Rectangle bounds = frames.Select(frame => frame.Bounds).Aggregate(Rectangle.Union);
-            return new(CaptureGeometry.ComposeWindows(bounds, frames), bounds, frames[0].CapturedAt);
+            return new(CaptureGeometry.ComposeWindows(bounds, frames), bounds, frames[0].CapturedAt, frames.Any(frame => frame.CursorComposited));
         }
         finally { foreach (var frame in frames) frame.Image.Dispose(); }
+    }
+
+    internal static Task<WindowCaptureFrame> TakeSelectionFrameAsync(IReadOnlyList<CaptureWindow> foregroundFirst,
+        IReadOnlySet<nint> required, bool clientAreaOnly, CursorSnapshot? cursor, CancellationToken token,
+        Func<CaptureWindow, bool, CancellationToken, Task<WindowCaptureFrame>>? takeWindowFrame = null)
+    {
+        takeWindowFrame ??= TakeFrameAsync;
+        return TakeGroupAsync(foregroundFirst, false, token, required, async (window, _, cancellation) =>
+        {
+            var frame = clientAreaOnly ? await TakeClientFrameAsync(window, false, cancellation).ConfigureAwait(false)
+                : await takeWindowFrame(window, false, cancellation).ConfigureAwait(false);
+            if (cursor is null || !frame.Bounds.Contains(cursor.ScreenPosition)) return frame;
+            try
+            {
+                cursor.Draw(frame.Image, frame.Bounds.Location);
+                return frame with { CursorComposited = true };
+            }
+            catch { frame.Image.Dispose(); throw; }
+        });
     }
 
     internal static async Task<(Bitmap Image, CaptureMetadata? Metadata)> TakeControlsAsync(
@@ -142,11 +166,12 @@ internal static class IsolatedWindowCapture
     }
 }
 
-internal sealed record WindowCaptureFrame(Bitmap Image, Rectangle Bounds, DateTimeOffset CapturedAt);
+internal sealed record WindowCaptureFrame(Bitmap Image, Rectangle Bounds, DateTimeOffset CapturedAt, bool CursorComposited = false);
 
 // Each hover owns one frame until the pointer leaves the target or the user confirms it.
 internal sealed class WindowCapturePreview(CaptureWindow target, bool includeCursor, IReadOnlyList<CaptureWindow> foregroundFirst,
-    bool clientAreaOnly = false, Func<WindowCaptureFrame>? frozenFrame = null) : IDisposable
+    bool clientAreaOnly = false, Func<WindowCaptureFrame>? frozenFrame = null, bool useSelectionCursor = false,
+    CursorSnapshot? selectionCursor = null, Func<CaptureWindow, bool, CancellationToken, Task<WindowCaptureFrame>>? takeWindowFrame = null) : IDisposable
 {
     private readonly CancellationTokenSource cancellation = new();
     private Task<WindowCaptureFrame>? frame;
@@ -162,6 +187,9 @@ internal sealed class WindowCapturePreview(CaptureWindow target, bool includeCur
         if (frozenFrame is not null) return frozenFrame();
         // Skip GPU setup for windows the pointer only passes over.
         await Task.Delay(80, token).ConfigureAwait(false);
+        if (useSelectionCursor)
+            return await IsolatedWindowCapture.TakeSelectionFrameAsync(Windows, new HashSet<nint> { Target.Handle },
+                ClientAreaOnly, selectionCursor, token, takeWindowFrame).ConfigureAwait(false);
         if (ClientAreaOnly) return await IsolatedWindowCapture.TakeClientFrameAsync(Target, IncludeCursor, token).ConfigureAwait(false);
         return await IsolatedWindowCapture.TakeGroupAsync(Windows, IncludeCursor, token,
             new HashSet<nint> { Target.Handle }).ConfigureAwait(false);
@@ -187,6 +215,10 @@ internal sealed class WindowCapturePreview(CaptureWindow target, bool includeCur
             if (!transferred && frame is not null) (await frame.ConfigureAwait(false)).Image.Dispose();
         }
         catch (Exception) when (frame is { IsFaulted: true } or { IsCanceled: true }) { }
-        finally { cancellation.Dispose(); }
+        finally
+        {
+            selectionCursor?.Dispose();
+            cancellation.Dispose();
+        }
     }
 }

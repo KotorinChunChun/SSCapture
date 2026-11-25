@@ -8,46 +8,54 @@ internal static partial class Program
 {
     private static void FrozenCaptureTests()
     {
-        Run("固定中のWin選択は後から取得した画面に切り替わらない", () =>
+        Run("Win選択は画面固定と遮蔽にかかわらずWGCを使い、開始カーソル付きのプレビューを再利用する", () =>
         {
             Rectangle desktop = new(-50, -30, 120, 100), bounds = new(-30, -10, 50, 50);
             var window = new CaptureWindow(bounds, "固定対象", 1, 0, 0);
             Rectangle[] monitors = [new(-50, -30, 50, 100), new(0, -30, 70, 100)];
-            var targets = new FrozenCaptureTargets([new(window, bounds, true, false)]);
-            var frame = Frame(desktop, monitors, Color.Firebrick, targets);
+            var covered = new CaptureWindow(new Rectangle(0, 10, 15, 20), "遮蔽物", 2, 0, 0);
+            var targets = new FrozenCaptureTargets([new(covered, covered.Bounds, true, true), new(window, bounds, true, false)]);
             using var shape = new Bitmap(4, 3);
             using (var graphics = Graphics.FromImage(shape)) graphics.Clear(Color.FromArgb(128, Color.Lime));
-            using var cursor = CursorSnapshot.FromImage(shape, new(0, 0), new(1, 1));
-            cursor.Draw(frame.Image, desktop.Location);
-            int cursorColor = Pixel(frame.Image, desktop, new(-1, -1));
-            Check(cursorColor != Color.Firebrick.ToArgb(), "ポインタの画素が合成されていません。");
-            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
-                IncludeCursor: true, LimitToStartingMonitor: false),
-                frame, [bounds], initialPointer: bounds.Location,
-                currentFrameFactory: () => throw new InvalidOperationException("開始後の画像を要求しました。"),
-                findWindow: point => bounds.Contains(point) ? window : null);
-            try
+            foreach (var (freeze, includeCursor, cursorPoint) in new[] {
+                (true, true, Point.Empty), (false, false, Point.Empty), (true, true, new Point(bounds.Right, 0)) })
             {
-                session.ApplyPointerInput(bounds.Location, CaptureModifiers.Win);
-                Equal(bounds, session.PreviewFrame?.Bounds);
-                Equal(cursorColor, Pixel(session.PreviewFrame!.Image, bounds, new(-1, -1)));
-                Equal(cursorColor, Pixel(session.PreviewFrame.Image, bounds, new(1, -1)));
-                session.ApplyPointerInput(new(60, 40), CaptureModifiers.Win);
-                Check(session.PreviewFrame is null, "対象を外れても元のプレビューが残りました。");
-                session.ApplyPointerInput(new(60, 40), CaptureModifiers.None);
-                Equal(CaptureMode.Rectangle, session.Mode);
-                session.ApplyPointerInput(new(10, 30), CaptureModifiers.Win);
-                session.CompleteSelection(new(bounds, null, OutputDestination.Clipboard, WindowHitPoint: new(10, 30)));
-                using var result = WaitForFrozenSelection(session);
-                Equal(bounds, result.Selection!.Bounds);
-                Equal(cursorColor, Pixel(result.Image!, bounds, new(-1, -1)));
-                Equal(Color.Firebrick.ToArgb(), Pixel(result.Image!, bounds, new(10, 30)));
-                Check(result.Selection.ReplaySource is CaptureReplaySource.Windows { Isolated: true }, "再撮影の対象が失われました。");
+                using var cursor = CursorSnapshot.FromImage(shape, cursorPoint, new(1, 1));
+                var frame = new DesktopSnapshot(SolidCaptureImage(desktop.Size, Color.Firebrick), desktop, monitors, targets, cursor.Copy());
+                int calls = 0;
+                var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
+                    FreezeFrame: freeze, IncludeCursor: includeCursor, LimitToStartingMonitor: false), frame, [bounds], initialPointer: cursorPoint,
+                    currentFrameFactory: () => throw new InvalidOperationException("デスクトップを取り直しました。"),
+                    findWindow: point => bounds.Contains(point) ? window : null, takeWindowFrame: (target, nativeCursor, _) =>
+                    {
+                        Check(!nativeCursor, "WGC側のカーソルが有効です。");
+                        Equal(window, target);
+                        Interlocked.Increment(ref calls);
+                        return Task.FromResult(WindowFrame(target, Color.RoyalBlue));
+                    });
+                try
+                {
+                    Point point = new(-16, 30);
+                    session.ApplyPointerInput(point, CaptureModifiers.Win);
+                    var preview = WaitForWindowPreview(session);
+                    Equal(bounds, preview.Bounds);
+                    Equal(Color.RoyalBlue.ToArgb(), Pixel(preview.Image, bounds, covered.Bounds.Location));
+                    using var expected = SolidCaptureImage(bounds.Size, Color.RoyalBlue);
+                    if (includeCursor && bounds.Contains(cursorPoint)) cursor.Draw(expected, bounds.Location);
+                    Equal(expected.GetPixel(29, 9).ToArgb(), Pixel(preview.Image, bounds, new(-1, -1)));
+                    Equal(expected.GetPixel(bounds.Width - 1, 10).ToArgb(), preview.Image.GetPixel(bounds.Width - 1, 10).ToArgb());
+                    session.CompleteSelection(new(bounds, null, OutputDestination.Clipboard, WindowHitPoint: point));
+                    using var result = WaitForFrozenSelection(session);
+                    Equal(bounds, result.Selection!.Bounds);
+                    Check(ReferenceEquals(preview.Image, result.Image), "確定時にプレビューを再利用しませんでした。");
+                    Equal(1, calls);
+                    Check(result.Selection.ReplaySource is CaptureReplaySource.Windows { Isolated: true }, "再撮影の対象が失われました。");
+                }
+                finally { session.Cancel(); }
             }
-            finally { session.Cancel(); }
         });
 
-        Run("固定の単独ウィンドウは遮蔽物と画面外を拒否し、撮影を続けられる", () =>
+        Run("開始時画像では遮蔽物の背後やモニター間の隙間を読めない", () =>
         {
             Rectangle desktop = new(-50, 0, 100, 80), bounds = new(-30, 10, 60, 60), coverBounds = new(20, 30, 6, 6);
             CaptureWindow window = new(bounds, "対象", 1, 0, 0, ZOrder: 1);
@@ -55,25 +63,55 @@ internal static partial class Program
             var targets = new FrozenCaptureTargets([new(cover, coverBounds, false, true), new(window, bounds, true, false)]);
             Check(!targets.CanRead(window, bounds, [desktop]), "入力透過ウィンドウの下を写せると判定しました。");
             Check(!targets.CanRead(window, bounds, [new(-50, 0, 50, 80), new(1, 0, 49, 80)]), "モニター間の1pxの隙間を見落としました。");
-            var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard),
-                Frame(desktop, [desktop], Color.Firebrick, targets), [bounds], initialPointer: bounds.Location,
-                findWindow: point => bounds.Contains(point) ? window : null);
-            try
-            {
-                session.ApplyPointerInput(bounds.Location, CaptureModifiers.Win);
-                Check(session.PreviewFrame is null && session.SelectionError is null,
-                    "遮蔽した対象のプレビューを表示しました。");
-                session.CompleteSelection(new(bounds, null, OutputDestination.Clipboard, WindowHitPoint: bounds.Location));
-                Check(!session.Completion.IsCompleted && session.SelectionError == FrozenCaptureTargets.WindowUnavailable, "確定を試みた後の案内と撮影継続を確認できません。");
-                session.ApplyPointerInput(bounds.Location, CaptureModifiers.None);
-                session.CompleteSelection(new(bounds, null, OutputDestination.Clipboard));
-                using var result = WaitForFrozenSelection(session);
-                Equal(Color.Firebrick.ToArgb(), result.Image!.GetPixel(0, 0).ToArgb());
-            }
-            finally { session.Cancel(); }
         });
 
-        Run("開始時の所有窓と複数対象は固定画素で合成し、選択外の隙間は透過する", () =>
+        Run("修飾キーなしの左単押し4候補は開始時画像を使い、矩形ドラッグは最新画面を使う", () =>
+        {
+            Rectangle monitor = new(-200, -50, 200, 160), windowBounds = new(-180, -40, 150, 120);
+            Rectangle controlBounds = new(-151, -22, 31, 18);
+            var window = new CaptureWindow(windowBounds, "開始時の窓", 1, 1, 1, ClassName: "Chrome_WidgetWin_1");
+            var frozen = new FrozenCaptureTargets([new(window, windowBounds, true, false)]);
+            var layout = new ControlLayout([Entry(controlBounds, "17,42", "/0")]);
+            frozen.SetBrowserControls(window, windowBounds, layout, layout);
+            Point start = controlBounds.Location + new Size(4, 5), end = start + new Size(40, 35);
+            foreach (var action in Enum.GetValues<CaptureSingleClickAction>())
+            {
+                var settings = new AppSettings { CaptureMouse = new(UnmodifiedLeftClick: action) };
+                var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
+                    FreezeFrame: false, OutputSettings: settings), Frame(monitor, [monitor], Color.Firebrick, frozen), [windowBounds],
+                    currentFrameFactory: () => Frame(monitor, [monitor], Color.RoyalBlue), initialPointer: start,
+                    findWindow: point => windowBounds.Contains(point) ? window : null);
+                using var overlay = new CaptureOverlay(session, monitor);
+                try
+                {
+                    _ = overlay.Handle;
+                    session.MouseDown(overlay, MouseButtons.Left, start, Keys.None);
+                    session.MouseUp(MouseButtons.Left, start, Keys.None);
+                    if (action == CaptureSingleClickAction.None)
+                    {
+                        Check(!session.Completion.IsCompleted && !session.HasPointerPress, "「なし」で撮影を終了しました。");
+                        session.MouseDown(overlay, MouseButtons.Left, start, Keys.None);
+                        session.MoveTo(end);
+                        session.MouseUp(MouseButtons.Left, end, Keys.None);
+                        using var dragged = WaitForFrozenSelection(session);
+                        Equal(Rectangle.FromLTRB(start.X, start.Y, end.X, end.Y), dragged.Selection!.Bounds);
+                        Equal(Color.RoyalBlue.ToArgb(), dragged.Image!.GetPixel(0, 0).ToArgb());
+                        continue;
+                    }
+                    using var outcome = WaitForFrozenSelection(session);
+                    Equal(action switch
+                    {
+                        CaptureSingleClickAction.Control => controlBounds,
+                        CaptureSingleClickAction.Desktop => monitor,
+                        _ => windowBounds
+                    }, outcome.Selection!.Bounds);
+                    Equal(Color.Firebrick.ToArgb(), outcome.Image!.GetPixel(0, 0).ToArgb());
+                }
+                finally { session.Cancel(); }
+            }
+        });
+
+        Run("画面固定中も所有窓と複数対象はWGCで合成し、選択外の隙間は透過する", () =>
         {
             Rectangle desktop = new(0, 0, 160, 100), bounds = new(10, 15, 60, 50);
             CaptureWindow root = new(bounds, "親", 1, 1, 1, ZOrder: 2);
@@ -82,24 +120,22 @@ internal static partial class Program
             CaptureWindow[] windows = [owned, other, root];
             var targets = new FrozenCaptureTargets(windows.Select(window => new FrozenWindow(window, window.Bounds, true, false)).ToArray());
             var frame = Frame(desktop, [desktop], Color.Firebrick, targets);
-            using (var graphics = Graphics.FromImage(frame.Image))
-            {
-                graphics.FillRectangle(Brushes.Gold, owned.Bounds);
-                graphics.FillRectangle(Brushes.CornflowerBlue, other.Bounds);
-            }
             var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard),
                 frame, windows.Select(window => window.Bounds).ToArray(), initialPointer: root.Bounds.Location,
                 findWindow: point => windows.FirstOrDefault(window => window.Bounds.Contains(point)),
-                findWindowGroup: window => CaptureWindowGroups.ForegroundGroup(window, windows));
+                findWindowGroup: window => CaptureWindowGroups.ForegroundGroup(window, windows),
+                takeWindowFrame: (window, _, _) => Task.FromResult(WindowFrame(window,
+                    window == owned ? Color.Gold : window == other ? Color.CornflowerBlue : Color.RoyalBlue)));
             try
             {
                 session.ApplyPointerInput(bounds.Location, CaptureModifiers.Win);
-                Equal(Color.Gold.ToArgb(), Pixel(session.PreviewFrame!.Image, session.PreviewFrame.Bounds, owned.Bounds.Location));
+                var preview = WaitForWindowPreview(session);
+                Equal(Color.Gold.ToArgb(), Pixel(preview.Image, preview.Bounds, owned.Bounds.Location));
                 session.CompleteSelection(new(Rectangle.Union(root.Bounds, other.Bounds), null, OutputDestination.Clipboard,
                     Composite: new(WindowRoots: [root, other])));
                 using var result = WaitForFrozenSelection(session);
                 Rectangle output = result.Selection!.Bounds;
-                Equal(Color.Firebrick.ToArgb(), Pixel(result.Image!, output, root.Bounds.Location));
+                Equal(Color.RoyalBlue.ToArgb(), Pixel(result.Image!, output, root.Bounds.Location));
                 Equal(Color.Gold.ToArgb(), Pixel(result.Image!, output, owned.Bounds.Location));
                 Equal(Color.CornflowerBlue.ToArgb(), Pixel(result.Image!, output, other.Bounds.Location));
                 Equal(0, result.Image!.GetPixel(80 - output.X, 26 - output.Y).A);
@@ -313,7 +349,8 @@ internal static partial class Program
             var session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard, FreezeFrame: false),
                 Frame(desktop, [desktop], Color.Firebrick), [area], initialPointer: area.Location,
                 recapture: (_, _) => Frame(desktop, [desktop], Color.Gold, targets),
-                findWindow: point => area.Contains(point) ? window : null);
+                findWindow: point => area.Contains(point) ? window : null,
+                takeWindowFrame: (target, _, _) => Task.FromResult(WindowFrame(target, Color.RoyalBlue)));
             try
             {
                 session.ApplyPointerInput(area.Location, CaptureModifiers.Win);
@@ -323,10 +360,11 @@ internal static partial class Program
                 session.ChangeCaptureSourceAsync(true, false).GetAwaiter().GetResult();
                 try { pending.WaitAsync(TimeSpan.FromSeconds(2)).GetAwaiter().GetResult(); }
                 catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException) { }
-                Equal(Color.Gold.ToArgb(), session.PreviewFrame!.Image.GetPixel(0, 0).ToArgb());
+                Equal(Color.Gold.ToArgb(), session.Snapshot.Image.GetPixel(10, 10).ToArgb());
+                Equal(Color.RoyalBlue.ToArgb(), WaitForWindowPreview(session).Image.GetPixel(0, 0).ToArgb());
                 session.CompleteSelection(new(area, null, OutputDestination.Clipboard, WindowHitPoint: area.Location));
                 using var result = WaitForFrozenSelection(session);
-                Equal(Color.Gold.ToArgb(), result.Image!.GetPixel(0, 0).ToArgb());
+                Equal(Color.RoyalBlue.ToArgb(), result.Image!.GetPixel(0, 0).ToArgb());
             }
             finally { session.Cancel(); }
         });
@@ -334,6 +372,23 @@ internal static partial class Program
 
     private static CaptureOutcome WaitForFrozenSelection(SessionController session) =>
         session.Completion.WaitAsync(TimeSpan.FromSeconds(2)).GetAwaiter().GetResult();
+
+    private static WindowCaptureFrame WaitForWindowPreview(SessionController session)
+    {
+        Check(SpinWait.SpinUntil(() => session.PreviewFrame is not null, TimeSpan.FromSeconds(3)), "WGCのプレビューがありません。");
+        return session.PreviewFrame!;
+    }
+
+    private static WindowCaptureFrame WindowFrame(CaptureWindow window, Color color) =>
+        new(SolidCaptureImage(window.Bounds.Size, color), window.Bounds, DateTimeOffset.Now);
+
+    private static Bitmap SolidCaptureImage(Size size, Color color)
+    {
+        var image = new Bitmap(size.Width, size.Height);
+        using var graphics = Graphics.FromImage(image);
+        graphics.Clear(color);
+        return image;
+    }
 
     private static int FrozenCaptureBenchmark()
     {

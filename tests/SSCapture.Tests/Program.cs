@@ -106,6 +106,7 @@ internal static partial class Program
         if (args is ["--frozen-browser-label-smoke", "--interactive", var textBrowser, var textScratch, var textKind])
             return RunBrowserControlSmoke(textBrowser, textScratch, frozen: true, textKind);
         if (args is ["--frozen-window-smoke", "--interactive"]) return RunFrozenWindowSmoke();
+        if (args is ["--wgc-covered-window-test"]) return RunCoveredWindowWgcTest();
         if (args.Length == 2 && args[0] == "--timer-native-smoke") return RunTimerNativeSmoke(args[1]);
         if (args.Contains("--selection-monitor-smoke")) return RunSelectionMonitorSmoke();
         if (args.Contains("--window-hit-smoke")) return RunWindowHitSmoke();

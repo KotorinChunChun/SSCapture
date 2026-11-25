@@ -87,8 +87,10 @@ internal static partial class Program
                 await WaitUntil(() => key == 0xA2 ? session.ControlBounds == expected : session.PreviewFrame?.Bounds == expected,
                     $"固定の実キーで対象枠を取得できません（{key:X}）。");
                 var preview = session.PreviewFrame!;
-                using var before = session.Snapshot.Image.Clone(new Rectangle(expected.Location - new Size(session.Snapshot.Bounds.Location), expected.Size),
-                    System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                using var before = key == 0xA2
+                    ? session.Snapshot.Image.Clone(new Rectangle(expected.Location - new Size(session.Snapshot.Bounds.Location), expected.Size),
+                        System.Drawing.Imaging.PixelFormat.Format32bppArgb)
+                    : (Bitmap)preview.Image.Clone();
                 Equal(Pixel(before, expected, colorPoint), Pixel(preview.Image, preview.Bounds, colorPoint));
                 long inputMs = stopwatch.ElapsedMilliseconds;
                 NativeSmokeInput.RequirePointTarget(overlay.Handle, select);
@@ -115,5 +117,60 @@ internal static partial class Program
     private sealed class FrozenBackgroundFixture : Form
     {
         protected override bool ShowWithoutActivation => true;
+    }
+
+    // Uses real desktop pixels and WGC without moving the pointer, injecting keys or touching the clipboard.
+    private static int RunCoveredWindowWgcTest()
+    {
+        Point origin = Screen.PrimaryScreen!.WorkingArea.Location + new Size(70, 70);
+        Rectangle area = new(origin, new Size(240, 150));
+        Rectangle coverArea = new(origin + new Size(110, 35), new Size(102, 90));
+        Point pick = origin + new Size(12, 14), covered = coverArea.Location + new Size(15, 16);
+        using Form target = TestWindow(area, Color.RoyalBlue);
+        using Form cover = TestWindow(coverArea, Color.DarkOrange);
+        Exception? error = null;
+        target.Shown += (_, _) => target.BeginInvoke((Action)(async () =>
+        {
+            SessionController? session = null;
+            try
+            {
+                cover.TopMost = true;
+                cover.Show();
+                await Task.Delay(160);
+                CaptureNative.SynchronizeDesktop();
+                DesktopSnapshot snapshot = DesktopSnapshot.Take(captureTargets: true);
+                var window = (snapshot.FrozenTargets?.SelectableWindows ?? []).SingleOrDefault(window => window.Handle == target.Handle);
+                if (window is null || !window.Bounds.Contains(pick))
+                {
+                    snapshot.Dispose();
+                    throw new InvalidOperationException("テスト対象ウィンドウの位置を取得できません。");
+                }
+                session = new SessionController(new(CaptureMode.Rectangle, CaptureIntent.Screenshot, OutputDestination.Clipboard,
+                    FreezeFrame: true, LimitToStartingMonitor: false, ShowSelectionGuide: false), snapshot, [window.Bounds],
+                    initialPointer: pick, findWindow: point => window.Bounds.Contains(point) ? window : null);
+                Equal(Color.DarkOrange.ToArgb(), Pixel(snapshot.Image, snapshot.Bounds, covered));
+                session.ApplyPointerInput(pick, CaptureModifiers.Win);
+                await WaitUntil(() => session.PreviewFrame is not null, "WGCのプレビューが取得できません。");
+                var preview = session.PreviewFrame!;
+                Equal(Color.RoyalBlue.ToArgb(), Pixel(preview.Image, preview.Bounds, covered));
+                session.CompleteSelection(new(window.Bounds, null, OutputDestination.Clipboard, WindowHitPoint: pick));
+                using var result = await session.Completion.WaitAsync(TimeSpan.FromSeconds(4));
+                Equal(preview.Bounds, result.Selection!.Bounds);
+                Check(ReferenceEquals(preview.Image, result.Image), "WGCのプレビューが確定に使われませんでした。");
+                Console.WriteLine("WGC PASS: 固定画面は手前の色、プレビューと撮影結果は背面の色");
+            }
+            catch (Exception ex) { error = ex; }
+            finally { session?.Cancel(); cover.Close(); target.Close(); }
+        }));
+        Application.Run(target);
+        if (error is null) return 0;
+        Console.Error.WriteLine(error);
+        return 1;
+
+        static Form TestWindow(Rectangle bounds, Color color) => new()
+        {
+            StartPosition = FormStartPosition.Manual, Bounds = bounds, FormBorderStyle = FormBorderStyle.None,
+            ShowInTaskbar = false, BackColor = color, Text = WindowTitle.Create("ウィンドウ撮影の検証")
+        };
     }
 }

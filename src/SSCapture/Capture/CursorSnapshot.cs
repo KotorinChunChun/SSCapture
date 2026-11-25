@@ -91,6 +91,9 @@ internal sealed class CursorSnapshot : IDisposable
         new(screenPosition.X - hotspot.X - imageScreenOrigin.X,
             screenPosition.Y - hotspot.Y - imageScreenOrigin.Y);
 
+    internal CursorSnapshot? Copy() => image is not null ? FromImage(image, screenPosition, hotspot)
+        : FromIcon(icon!.DangerousGetHandle(), screenPosition);
+
     internal void Draw(Bitmap targetImage, Point imageScreenOrigin, Region? clip = null)
     {
         ObjectDisposedException.ThrowIf(disposed, this);

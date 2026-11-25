@@ -9,6 +9,7 @@ internal sealed class CaptureKeyEditor : UserControl
     private readonly Dictionary<CaptureModifiers, ComboBox> commands = [];
     private readonly Dictionary<MouseButtons, ComboBox> clicks = [];
     private readonly ComboBox? space;
+    private readonly ComboBox? singleClick;
     private readonly CheckBox? wheelAdjust;
     private CaptureAnchorCycle loadedSpaceCycle;
 
@@ -82,6 +83,15 @@ internal sealed class CaptureKeyEditor : UserControl
         if (beforeSelection)
         {
             AddClick(MouseButtons.Left, clickRow++, "BeforeLeft");
+            const string singleClickLabel = "左単押し";
+            table.Controls.Add(new Label { Text = singleClickLabel, AutoSize = true, Anchor = AnchorStyles.Left }, 0, clickRow);
+            SingleClickChoice[] targets = Enum.GetValues<CaptureSingleClickAction>().Select(action =>
+                new SingleClickChoice(action, action == CaptureSingleClickAction.None ? "なし" : $"ポインタ下の{CaptureMouseMap.SingleClickTarget(action)}")).ToArray();
+            singleClick = AddChoice(table, 1, clickRow++, "CaptureMouseUnmodifiedLeftClick", singleClickLabel,
+                targets, Array.FindIndex(targets, choice => choice.Action == mouse.UnmodifiedLeftClick),
+                mouse.BeforeLeftAction == CaptureClickAction.Select);
+            table.SetColumnSpan(singleClick, 4);
+            clicks[MouseButtons.Left].SelectedIndexChanged += (_, _) => singleClick.Enabled = ClickAt(MouseButtons.Left) == CaptureClickAction.Select;
             AddClick(MouseButtons.Right, clickRow++, "BeforeRight");
             AddClick(MouseButtons.Middle, clickRow, "BeforeMiddle");
         }
@@ -104,7 +114,7 @@ internal sealed class CaptureKeyEditor : UserControl
                     .Where(action => beforeSelection ? CaptureMouseMap.ValidBefore(action) : CaptureMouseMap.ValidDuring(action))
                     .Select(action => new ClickChoice(action, action switch
                     {
-                        CaptureClickAction.Select => "撮影対象を選択／確定",
+                        CaptureClickAction.Select => "選択を開始／確定",
                         CaptureClickAction.Menu => "撮影メニューを開く",
                         CaptureClickAction.Desktop => "ポインタ下のモニターを撮影",
                         CaptureClickAction.Cancel => "ドラッグを中止",
@@ -124,6 +134,11 @@ internal sealed class CaptureKeyEditor : UserControl
         public override string ToString() => Text;
     }
 
+    private sealed record SingleClickChoice(CaptureSingleClickAction Action, string Text)
+    {
+        public override string ToString() => Text;
+    }
+
     internal void ResetDraft(CaptureKeyMap map, CaptureMouseMap mouse)
     {
         foreach (var (keys, combo) in commands)
@@ -137,6 +152,8 @@ internal sealed class CaptureKeyEditor : UserControl
             var action = space is null ? mouse.Before(button) : mouse.During(button);
             combo.SelectedItem = combo.Items.Cast<ClickChoice>().First(choice => choice.Action == action);
         }
+        if (singleClick is not null)
+            singleClick.SelectedItem = singleClick.Items.Cast<SingleClickChoice>().First(choice => choice.Action == mouse.UnmodifiedLeftClick);
     }
 
     internal CaptureKeyMap Value => new(
@@ -155,6 +172,7 @@ internal sealed class CaptureKeyEditor : UserControl
     };
 
     internal CaptureClickAction ClickAt(MouseButtons button) => ((ClickChoice)clicks[button].SelectedItem!).Action;
+    internal CaptureSingleClickAction SingleClick => ((SingleClickChoice)singleClick!.SelectedItem!).Action;
 
     private CaptureKeyAction ActionAt(CaptureModifiers keys) => ((Choice)commands[keys].SelectedItem!).Action;
 

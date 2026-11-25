@@ -15,6 +15,7 @@ internal sealed record CaptureKeyDefaults(CaptureKeyMap Drag, CaptureKeyMap Befo
         Converters = { new JsonStringEnumConverter<CaptureKeyAction>(allowIntegerValues: false),
             new JsonStringEnumConverter<CaptureActivation>(allowIntegerValues: false),
             new JsonStringEnumConverter<CaptureClickAction>(allowIntegerValues: false),
+            new JsonStringEnumConverter<CaptureSingleClickAction>(allowIntegerValues: false),
             new JsonStringEnumConverter<CaptureAnchorCycle>(allowIntegerValues: false) }
     };
     private static readonly Lazy<CaptureKeyDefaults> Defaults = new(() => Load(AppContext.BaseDirectory));

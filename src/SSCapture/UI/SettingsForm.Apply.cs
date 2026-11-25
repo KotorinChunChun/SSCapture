@@ -155,6 +155,7 @@ internal sealed partial class SettingsForm
         CaptureMouse = committed.CaptureMouse with
         {
             BeforeLeftAction = captureBeforeKeys.ClickAt(MouseButtons.Left),
+            UnmodifiedLeftClick = captureBeforeKeys.SingleClick,
             BeforeRightAction = captureBeforeKeys.ClickAt(MouseButtons.Right),
             BeforeMiddleAction = captureBeforeKeys.ClickAt(MouseButtons.Middle)
         }

@@ -20,6 +20,7 @@
   },
   "Mouse": {
     "BeforeLeftAction": "Select",
+    "UnmodifiedLeftClick": "Window",
     "BeforeRightAction": "Menu",
     "BeforeMiddleAction": "ToggleMagnifier",
     "DragRightAction": "Cancel",

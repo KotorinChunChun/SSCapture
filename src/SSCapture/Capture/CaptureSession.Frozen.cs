@@ -6,6 +6,57 @@ internal sealed partial class SessionController
     private string? frozenSelectionError;
     private Rectangle? frozenControlPreviewArea;
 
+    private Rectangle CachedClickBounds(CaptureSingleClickAction action, Point point) => action switch
+    {
+        CaptureSingleClickAction.Window => gesture.WindowAt(point),
+        CaptureSingleClickAction.Desktop => gesture.MonitorAt(point),
+        CaptureSingleClickAction.Control => CachedControlAt(point)?.Bounds ?? Rectangle.Empty,
+        _ => Rectangle.Empty
+    };
+
+    private CaptureControlTarget? CachedControlAt(Point point)
+    {
+        var window = findWindow?.Invoke(point);
+        var entry = window is null ? null : Snapshot.FrozenTargets?.HitControl(window, point, SelectionMonitors);
+        return entry is null ? null : new(window!, ToRectangle(entry.Hit.Bounds), entry.Hit.Identity);
+    }
+
+    internal async void ConfirmCachedClick(CaptureSingleClickAction action, Point point)
+    {
+        var snapshot = Snapshot;
+        if (action == CaptureSingleClickAction.Control)
+        {
+            confirmingControl = true;
+            try
+            {
+                RefreshOverlays();
+                await snapshot.FrozenControlsReady;
+                if (completed || refreshing || !ReferenceEquals(snapshot, Snapshot)) return;
+                if (CachedControlAt(point) is { } control)
+                {
+                    var source = new CaptureReplaySource.Control(control.Window, control.Identity, false);
+                    CompleteSelection(new(control.Bounds, null, Destination, ControlSource: source), useStartFrame: true);
+                }
+                else frozenSelectionError = FrozenCaptureTargets.ControlUnavailable;
+            }
+            finally
+            {
+                if (ReferenceEquals(snapshot, Snapshot)) confirmingControl = false;
+                if (!completed) RefreshOverlays();
+            }
+            return;
+        }
+
+        CaptureSelection? selection = action switch
+        {
+            CaptureSingleClickAction.Window when gesture.WindowSelection(point, Destination) is { } window => ApplyWindowMargin(window),
+            CaptureSingleClickAction.Desktop => gesture.MonitorSelection(point, Destination),
+            _ => null
+        };
+        if (selection is not null) CompleteSelection(selection, entireMonitor: action == CaptureSingleClickAction.Desktop, useStartFrame: true);
+        else RefreshOverlays();
+    }
+
     private Rectangle FrozenControlPreviewArea(CaptureWindow target, Rectangle control, FrozenCaptureTargets? targets)
     {
         Rectangle window = targets?.FullBounds(target) ?? Rectangle.Empty;

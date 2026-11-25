@@ -131,6 +131,7 @@ internal sealed partial class SessionController
         }
 
         if (SelectingDesktop || HasWindowDrag || TwoPointSelection || UsesClientWindowArea
+            || pendingLeftClick is CaptureSingleClickAction.Desktop or CaptureSingleClickAction.Control or CaptureSingleClickAction.None
             || Mode is not (CaptureMode.Window or CaptureMode.Rectangle or CaptureMode.Freeform)
             || gesture.IsPressed && gesture.HasDragged) return null;
         Point point = gesture.WindowTargetPoint;
@@ -145,7 +146,7 @@ internal sealed partial class SessionController
         }
 
         Rectangle source = selectionBounds ?? Snapshot.Bounds;
-        if (window is not null && !OutputSettings.FreezeFrame && (PressedRectangleWindow || HighlightWindow))
+        if (window is not null && !OutputSettings.FreezeFrame && pendingLeftClick is null && (PressedRectangleWindow || HighlightWindow))
         {
             Rectangle liveBounds;
             try { liveBounds = captureWindowsKey ? CaptureNative.RequireCaptureWindow(window) : window.Bounds; }

@@ -1,13 +1,15 @@
 namespace SSCapture.Capture;
 
 internal enum CaptureClickAction { None, Select, Menu, Desktop, Cancel, ToggleMagnifier }
+internal enum CaptureSingleClickAction { Window, Desktop, Control, None }
 
 internal sealed record CaptureMouseMap(
     CaptureClickAction BeforeLeftAction = CaptureClickAction.Select,
     CaptureClickAction BeforeRightAction = CaptureClickAction.Menu,
     CaptureClickAction BeforeMiddleAction = CaptureClickAction.None,
     CaptureClickAction DragRightAction = CaptureClickAction.Cancel,
-    CaptureClickAction DragMiddleAction = CaptureClickAction.None)
+    CaptureClickAction DragMiddleAction = CaptureClickAction.None,
+    CaptureSingleClickAction UnmodifiedLeftClick = CaptureSingleClickAction.Window)
 {
     internal CaptureClickAction Before(MouseButtons button) => button switch
     {
@@ -25,7 +27,16 @@ internal sealed record CaptureMouseMap(
     };
 
     internal bool IsValid => ValidBefore(BeforeLeftAction) && ValidBefore(BeforeRightAction)
-        && ValidBefore(BeforeMiddleAction) && ValidDuring(DragRightAction) && ValidDuring(DragMiddleAction);
+        && ValidBefore(BeforeMiddleAction) && ValidDuring(DragRightAction) && ValidDuring(DragMiddleAction)
+        && Enum.IsDefined(UnmodifiedLeftClick);
+
+    internal static string SingleClickTarget(CaptureSingleClickAction action) => action switch
+    {
+        CaptureSingleClickAction.Window => "ウィンドウ",
+        CaptureSingleClickAction.Desktop => "モニター",
+        CaptureSingleClickAction.Control => "コントロール",
+        _ => "なし"
+    };
 
     internal const string MagnifierLabel = "拡大鏡を表示／非表示";
 

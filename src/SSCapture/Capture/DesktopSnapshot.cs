@@ -16,12 +16,13 @@ internal sealed class DesktopSnapshot : IDisposable
     internal DateTimeOffset CapturedAt { get; private init; } = DateTimeOffset.Now;
     internal Services.PointerObservation? Pointer { get; private init; }
     internal Services.CaptureContext? Context { get; set; }
+    internal CursorSnapshot? StartCursor { get; }
     internal FrozenCaptureTargets? FrozenTargets { get; }
     internal Task FrozenControlsReady { get; private set; } = Task.CompletedTask;
 
     /// <summary>Takes ownership of image. Also used with synthetic pixels for isolated overlay checks.</summary>
     internal DesktopSnapshot(Bitmap image, Rectangle bounds, IReadOnlyList<Rectangle> monitors,
-        FrozenCaptureTargets? frozenTargets = null)
+        FrozenCaptureTargets? frozenTargets = null, CursorSnapshot? startCursor = null)
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(monitors);
@@ -32,6 +33,7 @@ internal sealed class DesktopSnapshot : IDisposable
         Bounds = bounds;
         Monitors = monitors.ToArray();
         FrozenTargets = frozenTargets;
+        StartCursor = startCursor;
     }
 
     // Two bounded UIA passes bracket a single immutable pixel capture.
@@ -42,7 +44,7 @@ internal sealed class DesktopSnapshot : IDisposable
         var monitors = CaptureNative.MonitorBounds();
         Rectangle desktop = monitors.Aggregate(Rectangle.Union);
         if (CaptureNative.ReadFrozenWindows(desktop, includeControls: false) is not { } windows)
-            return Take(includeCursor, observePointer, captureTargets: true);
+            return Take(includeCursor, observePointer, captureTargets: true, keepCursor: true);
 
         Point pointer = CaptureNative.CursorPosition();
         nint foreground = CaptureNative.GetForegroundWindow();
@@ -50,7 +52,7 @@ internal sealed class DesktopSnapshot : IDisposable
             .OrderByDescending(window => window.Target.Handle == foreground)
             .ThenByDescending(window => window.Target.Bounds.Contains(pointer)).ToArray();
         var before = await ObserveLayoutsAsync(candidates);
-        var snapshot = Take(includeCursor, observePointer, captureTargets: true);
+        var snapshot = Take(includeCursor, observePointer, captureTargets: true, keepCursor: true);
         if (snapshot.FrozenTargets is { } targets && before.Count != 0)
             snapshot.FrozenControlsReady = Task.Run(() => VerifyLayoutsAsync(targets, before));
         return snapshot;
@@ -91,13 +93,14 @@ internal sealed class DesktopSnapshot : IDisposable
         return observed;
     }
 
-    internal static DesktopSnapshot Take(bool includeCursor = false, bool observePointer = false, bool captureTargets = false)
+    internal static DesktopSnapshot Take(bool includeCursor = false, bool observePointer = false, bool captureTargets = false,
+        bool keepCursor = false)
     {
         IReadOnlyList<Rectangle> monitors = CaptureNative.MonitorBounds();
         Rectangle desktop = monitors.Aggregate(Rectangle.Union);
         var before = captureTargets ? CaptureNative.ReadFrozenWindows(desktop) : null;
         DateTimeOffset pointerAt = DateTimeOffset.Now;
-        using CursorSnapshot? cursor = includeCursor || observePointer ? CursorSnapshot.Capture() : null;
+        using CursorSnapshot? cursor = includeCursor || observePointer || keepCursor ? CursorSnapshot.Capture() : null;
         Services.PointerObservation? pointer = observePointer ? new(pointerAt,
             Services.PixelPoint.From(cursor?.ScreenPosition ?? CaptureNative.CursorPosition()), cursor is not null, includeCursor && cursor is not null) : null;
         Bitmap image = new(desktop.Width, desktop.Height, PixelFormat.Format32bppArgb);
@@ -128,7 +131,8 @@ internal sealed class DesktopSnapshot : IDisposable
                     monitorClip.Union(new Rectangle(monitor.X - desktop.X, monitor.Y - desktop.Y, monitor.Width, monitor.Height));
                 cursor.Draw(image, desktop.Location, monitorClip);
             }
-            return new DesktopSnapshot(image, desktop, monitors, frozenTargets) { CapturedAt = pointerAt, Pointer = pointer };
+            return new DesktopSnapshot(image, desktop, monitors, frozenTargets, keepCursor ? cursor?.Copy() : null)
+                { CapturedAt = pointerAt, Pointer = pointer };
         }
         catch
         {
@@ -137,5 +141,9 @@ internal sealed class DesktopSnapshot : IDisposable
         }
     }
 
-    public void Dispose() => Image.Dispose();
+    public void Dispose()
+    {
+        Image.Dispose();
+        StartCursor?.Dispose();
+    }
 }

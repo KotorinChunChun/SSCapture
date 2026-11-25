@@ -41,7 +41,12 @@ internal static class SelectionGuideText
                 {
                     case CaptureClickAction.Select:
                         if (twoPoints) clicks.Add($"{label}　始点を指定");
-                        else if (mode is not (CaptureMode.FixedRegion or CaptureMode.Scroll)) clicks.Add($"{label}　ウィンドウ");
+                        else if (mode is not (CaptureMode.FixedRegion or CaptureMode.Scroll))
+                        {
+                            var target = button == MouseButtons.Left && intent == CaptureIntent.Screenshot
+                                && mode is CaptureMode.Rectangle or CaptureMode.Freeform ? mouse.UnmodifiedLeftClick : CaptureSingleClickAction.Window;
+                            if (target != CaptureSingleClickAction.None) clicks.Add($"{label}　{CaptureMouseMap.SingleClickTarget(target)}");
+                        }
                         string drag = label.Replace("クリック", "ドラッグ", StringComparison.Ordinal);
                         if (rectangle && !twoPoints)
                             clicks.Add($"{drag}　{(mode == CaptureMode.Scroll ? "スクロールする領域を選択" : "範囲選択")}");

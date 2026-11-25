@@ -49,7 +49,7 @@ internal sealed partial class SessionController
     {
         string? idleHint = controlConfirmationError ?? ModifierHint ?? (windowPreview?.Frame switch
         {
-            { IsFaulted: true } when !FrozenScreenshot => windowPreview.Frame.Exception?.GetBaseException().Message,
+            { IsFaulted: true } => windowPreview.Frame.Exception?.GetBaseException().Message,
             { IsCompleted: false } => "ウィンドウのプレビューを取得中",
             _ => null
         });
@@ -61,6 +61,8 @@ internal sealed partial class SessionController
         string operation = SelectingDesktop ? "モニター全体を撮影"
             : Mode == CaptureMode.Scroll ? "スクロールする領域を選択"
             : Mode == CaptureMode.FixedRegion ? "固定範囲を撮影"
+            : !gesture.HasDragged && pendingLeftClick is { } click ? click == CaptureSingleClickAction.None
+                ? "ドラッグで範囲選択" : $"{CaptureMouseMap.SingleClickTarget(click)}を撮影"
             : !gesture.HasDragged || Mode == CaptureMode.Window ? "ウィンドウを撮影" : "選択範囲を撮影";
         string cancel = SelectionGuideText.CancelHint(OutputSettings.CaptureMouse, pressedButton);
         if (FreeDesktopDrag) return $"{operation}　{cancel}\nドラッグ：複数デスクトップを合成";

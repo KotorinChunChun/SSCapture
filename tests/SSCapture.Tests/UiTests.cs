@@ -358,7 +358,7 @@ internal static partial class Program
                     }
                 }
                 Equal(group == 3, page.Controls.Find("CaptureKeysSpace", true).Length == 1);
-                Equal(3, Descendants(page).OfType<ComboBox>().Count(combo => combo.Name.StartsWith("CaptureMouse", StringComparison.Ordinal)));
+                Equal(group == 2 ? 4 : 3, Descendants(page).OfType<ComboBox>().Count(combo => combo.Name.StartsWith("CaptureMouse", StringComparison.Ordinal)));
             }
 
             ComboBox Choice(string name) => (ComboBox)groups.Controls.Find(name, true).Single();
@@ -384,7 +384,12 @@ internal static partial class Program
             Equal(beforeMirror.SelectedIndex, Choice("CaptureBeforeKeys5").SelectedIndex);
             Equal("なし", Choice("CaptureKeys5").Text);
 
-            Equal("撮影対象を選択／確定", Choice("CaptureMouseBeforeLeft").Text);
+            Equal("選択を開始／確定", Choice("CaptureMouseBeforeLeft").Text);
+            var singleClick = Choice("CaptureMouseUnmodifiedLeftClick");
+            Equal("ポインタ下のウィンドウ", singleClick.Text);
+            Check(singleClick.Items.Cast<object>().Select(item => item.ToString()).SequenceEqual(
+                ["ポインタ下のウィンドウ", "ポインタ下のモニター", "ポインタ下のコントロール", "なし"]), "左単押しの選択肢が不一致");
+            singleClick.SelectedIndex = 2;
             Equal("撮影メニューを開く", Choice("CaptureMouseBeforeRight").Text);
             Equal(CaptureMouseMap.MagnifierLabel, Choice("CaptureMouseBeforeMiddle").Text);
             var dragLeft = Choice("CaptureMouseDragLeft");
@@ -399,6 +404,7 @@ internal static partial class Program
             Equal(CaptureMouseMap.MagnifierLabel, dragMiddle.Text);
             Equal("ドラッグを中止", Choice("CaptureMouseDragRight").Text);
             Choice("CaptureMouseBeforeLeft").SelectedIndex = 0;
+            Check(!singleClick.Enabled, "左クリックで選択しない設定でも左単押しが有効");
             Choice("CaptureMouseBeforeRight").SelectedIndex = 0;
             Choice("CaptureMouseBeforeMiddle").SelectedIndex = 3;
             Equal("ポインタ下のモニターを撮影", Choice("CaptureMouseBeforeMiddle").Text);
@@ -413,7 +419,7 @@ internal static partial class Program
             Equal(CaptureKeyMap.BeforeDefaults with { Ctrl = CaptureKeyAction.SelectControlToggle, CtrlAlt = CaptureKeyAction.SwitchAnchor }, saved!.CaptureBeforeKeys);
             Equal(new CaptureKeyMap(Win: CaptureKeyAction.CrossMonitor, ShiftWin: CaptureKeyAction.Snap), saved.CaptureKeys);
             Equal(new CaptureMouseMap(CaptureClickAction.None, CaptureClickAction.None, CaptureClickAction.Desktop, CaptureClickAction.None,
-                CaptureClickAction.ToggleMagnifier), saved.CaptureMouse);
+                CaptureClickAction.ToggleMagnifier, CaptureSingleClickAction.Control), saved.CaptureMouse);
         });
         Run("バージョン情報は実行版・更新日・作者・概要と使い方・更新・報告への入口を表示する", () =>
         {

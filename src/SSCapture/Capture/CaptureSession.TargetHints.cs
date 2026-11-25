@@ -44,6 +44,19 @@ internal sealed partial class SessionController
             yield break;
         }
 
+        if (pendingLeftClick is { } click && click != CaptureSingleClickAction.Window && !gesture.HasDragged)
+        {
+            Point point = gesture.WindowTargetPoint;
+            if (click == CaptureSingleClickAction.Desktop && CachedClickBounds(click, point) is { IsEmpty: false } monitor)
+                yield return DescribeMonitor(monitor);
+            else if (click == CaptureSingleClickAction.Control && CachedControlAt(point) is { } control)
+            {
+                yield return DescribeWindow(control.Window);
+                yield return DescribeBounds(control.Bounds);
+            }
+            yield break;
+        }
+
         if (HasWindowDrag && targetDrag!.IncludedWindows.Count > 0)
         {
             foreach (CaptureWindow window in targetDrag.IncludedWindows) yield return DescribeWindow(window);
